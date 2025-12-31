@@ -8,6 +8,7 @@ import { join, resolve } from 'path';
 import { platform } from 'os';
 import { runtimePath } from '@/projectPath';
 import { withBunRuntimeEnv } from '@/utils/bunRuntime';
+import { logger } from '@/ui/logger';
 
 export interface RipgrepResult {
     exitCode: number
@@ -70,6 +71,7 @@ function findSystemRg(): string | null {
 
 function getBinaryPath(): string {
     if (cachedBinaryPath) {
+        logger.debug(`[ripgrep] Using cached binary path: ${cachedBinaryPath}`);
         return cachedBinaryPath;
     }
 
@@ -77,18 +79,26 @@ function getBinaryPath(): string {
     const binaryName = platformName === 'win32' ? 'rg.exe' : 'rg';
     const bundledPath = resolve(join(runtimePath(), 'tools', 'unpacked', binaryName));
 
+    logger.debug(`[ripgrep] Looking for bundled rg at: ${bundledPath}`);
+
     // Use bundled rg if available
     if (existsSync(bundledPath)) {
+        logger.debug(`[ripgrep] Found bundled rg`);
         cachedBinaryPath = bundledPath;
         return bundledPath;
     }
 
+    logger.debug(`[ripgrep] Bundled rg not found, searching for system rg...`);
+
     // Fallback to system rg
     const systemRg = findSystemRg();
     if (systemRg) {
+        logger.debug(`[ripgrep] Found system rg at: ${systemRg}`);
         cachedBinaryPath = systemRg;
         return systemRg;
     }
+
+    logger.debug(`[ripgrep] No system rg found, will fail with bundled path`);
 
     // Return bundled path anyway - will fail with clear error message
     cachedBinaryPath = bundledPath;

@@ -41,8 +41,8 @@ export function useFileSuggestions(
             const suggestions: Suggestion[] = response.files.map(file => ({
                 key: `@${file.fullPath}`,
                 text: `@${file.fullPath} `,
-                label: file.fileName,
-                description: file.filePath || undefined
+                label: `${file.fileType === 'folder' ? '📁 ' : ''}${file.fullPath}`,
+                description: undefined
             }))
 
             // Cache the results

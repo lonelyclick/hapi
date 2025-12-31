@@ -160,11 +160,25 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         }
 
         const stdout = result.stdout ?? ''
-        const files = stdout
+        const filePaths = stdout
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line.length > 0)
-            .slice(0, limit)
+
+        // Extract unique directories from file paths
+        const dirSet = new Set<string>()
+        for (const fp of filePaths) {
+            const parts = fp.split('/')
+            // Add all parent directories
+            for (let i = 1; i < parts.length; i++) {
+                dirSet.add(parts.slice(0, i).join('/'))
+            }
+        }
+
+        // Filter directories by query if provided
+        const queryLower = query.toLowerCase()
+        const matchingDirs = Array.from(dirSet)
+            .filter((dir) => !query || dir.toLowerCase().includes(queryLower))
             .map((fullPath) => {
                 const parts = fullPath.split('/')
                 const fileName = parts[parts.length - 1] || fullPath
@@ -173,11 +187,27 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
                     fileName,
                     filePath,
                     fullPath,
-                    fileType: 'file' as const
+                    fileType: 'folder' as const
                 }
             })
 
-        return c.json({ success: true, files })
+        // Map files
+        const matchingFiles = filePaths.slice(0, limit).map((fullPath) => {
+            const parts = fullPath.split('/')
+            const fileName = parts[parts.length - 1] || fullPath
+            const filePath = parts.slice(0, -1).join('/')
+            return {
+                fileName,
+                filePath,
+                fullPath,
+                fileType: 'file' as const
+            }
+        })
+
+        // Combine: folders first, then files, limited to total limit
+        const combined = [...matchingDirs, ...matchingFiles].slice(0, limit)
+
+        return c.json({ success: true, files: combined })
     })
 
     return app
