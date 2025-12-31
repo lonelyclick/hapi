@@ -1,0 +1,16 @@
+[Unit]
+Description=HAPI Server
+After=network.target
+
+[Service]
+Type=simple
+User=guang
+WorkingDirectory=/home/guang/softwares/hapi
+Environment=CLI_API_TOKEN=rDhnX0JCPIki0s6t1kNsHJkSLCvpAEt3wNCb_dkEyOc
+Environment=WEBAPP_PORT=3006
+ExecStart=/home/guang/softwares/hapi/cli/dist-exe/bun-linux-x64/hapi server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
