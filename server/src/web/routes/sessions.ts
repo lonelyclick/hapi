@@ -260,9 +260,13 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
                 model: parsed.data.model,
                 reasoningEffort: parsed.data.reasoningEffort ?? null
             })
-            await engine.applySessionConfig(sessionResult.sessionId, {
+            const applied = await engine.applySessionConfig(sessionResult.sessionId, {
                 modelMode: parsed.data.model,
                 modelReasoningEffort: parsed.data.reasoningEffort
+            })
+            console.log('[session model] applied', {
+                sessionId: sessionResult.sessionId,
+                applied
             })
             return c.json({ ok: true })
         } catch (error) {

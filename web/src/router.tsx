@@ -21,6 +21,7 @@ import { useMachines } from '@/hooks/queries/useMachines'
 import { useSession } from '@/hooks/queries/useSession'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useSlashCommands } from '@/hooks/queries/useSlashCommands'
+import { useFileSuggestions } from '@/hooks/queries/useFileSuggestions'
 import { useSendMessage } from '@/hooks/mutations/useSendMessage'
 import { queryKeys } from '@/lib/query-keys'
 import FilesPage from '@/routes/sessions/files'
@@ -147,6 +148,22 @@ function SessionPage() {
         getSuggestions: getSlashSuggestions,
     } = useSlashCommands(api, sessionId, agentType)
 
+    // File suggestions for @ mentions
+    const {
+        getSuggestions: getFileSuggestions,
+    } = useFileSuggestions(api, sessionId)
+
+    // Combined suggestions handler
+    const getAutocompleteSuggestions = useCallback(async (query: string) => {
+        if (query.startsWith('/')) {
+            return getSlashSuggestions(query)
+        }
+        if (query.startsWith('@')) {
+            return getFileSuggestions(query)
+        }
+        return []
+    }, [getSlashSuggestions, getFileSuggestions])
+
     const refreshSelectedSession = useCallback(() => {
         void refetchSession()
         void refetchMessages()
@@ -180,7 +197,7 @@ function SessionPage() {
             onLoadMore={loadMoreMessages}
             onSend={sendMessage}
             onRetryMessage={retryMessage}
-            autocompleteSuggestions={getSlashSuggestions}
+            autocompleteSuggestions={getAutocompleteSuggestions}
         />
     )
 }

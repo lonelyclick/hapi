@@ -821,7 +821,11 @@ export class SyncEngine {
             modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
             modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
         }
-    ): Promise<void> {
+    ): Promise<{
+        permissionMode?: Session['permissionMode']
+        modelMode?: Session['modelMode']
+        modelReasoningEffort?: Session['modelReasoningEffort']
+    }> {
         const result = await this.sessionRpc(sessionId, 'set-session-config', config)
         if (!result || typeof result !== 'object') {
             throw new Error('Invalid response from session config RPC')
@@ -850,7 +854,13 @@ export class SyncEngine {
                 session.modelReasoningEffort = config.modelReasoningEffort
             }
             this.emit({ type: 'session-updated', sessionId, data: session })
+            return {
+                permissionMode: session.permissionMode,
+                modelMode: session.modelMode,
+                modelReasoningEffort: session.modelReasoningEffort
+            }
         }
+        return applied
     }
 
     async spawnSession(
