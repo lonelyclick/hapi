@@ -24,12 +24,7 @@ export function useFileSuggestions(
             ? queryText.slice(1)
             : queryText
 
-        // Check cache first
         const cacheKey = searchTerm.toLowerCase()
-        const cached = cacheRef.current.get(cacheKey)
-        if (cached) {
-            return cached
-        }
 
         try {
             const response = await api.searchSessionFiles(sessionId, searchTerm, 50)

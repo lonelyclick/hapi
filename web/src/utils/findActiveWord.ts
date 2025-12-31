@@ -7,7 +7,8 @@
  */
 
 // Characters that stop the active word search
-const STOP_CHARACTERS = ['\n', ',', '(', ')', '[', ']', '{', '}', '<', '>', ';', '!', '?', '.']
+const STOP_CHARACTERS = ['\n', ',', '(', ')', '[', ']', '{', '}', '<', '>', ';', '!', '?']
+// Note: '.' is intentionally NOT a stop character to support file extensions like @file.ts
 
 interface Selection {
     start: number
