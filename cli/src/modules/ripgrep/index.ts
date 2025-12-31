@@ -3,7 +3,7 @@
  */
 
 import { spawn, spawnSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { platform } from 'os';
 import { runtimePath } from '@/projectPath';
@@ -30,7 +30,7 @@ function findSystemRg(): string | null {
         : null;
 
     // Try common locations
-    const candidates = [
+    const candidates: string[] = [
         '/usr/bin/rg',
         '/usr/local/bin/rg',
         '/opt/homebrew/bin/rg',
@@ -38,16 +38,25 @@ function findSystemRg(): string | null {
 
     // Also try claude-code vendor directory if available
     if (platformDir) {
-        const nodeModulesPaths = [
-            // Global npm/nvm installations
-            process.env.NVM_DIR && join(process.env.NVM_DIR, 'versions/node', process.version, 'lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep', platformDir, 'rg'),
-            // Local node_modules
-            join(process.cwd(), 'node_modules/@anthropic-ai/claude-code/vendor/ripgrep', platformDir, 'rg'),
-            // Home directory global
-            join(process.env.HOME || '', '.nvm/versions/node', process.version, 'lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep', platformDir, 'rg'),
-        ].filter(Boolean) as string[];
+        const nvmDir = process.env.NVM_DIR || join(process.env.HOME || '', '.nvm');
+        const nvmVersionsDir = join(nvmDir, 'versions/node');
 
-        candidates.unshift(...nodeModulesPaths);
+        // Search all nvm node versions for claude-code
+        try {
+            const versions = readdirSync(nvmVersionsDir).filter((v: string) => v.startsWith('v'));
+            for (const version of versions) {
+                candidates.unshift(
+                    join(nvmVersionsDir, version, 'lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep', platformDir, 'rg')
+                );
+            }
+        } catch {
+            // nvm not installed or no versions
+        }
+
+        // Also check local node_modules
+        candidates.unshift(
+            join(process.cwd(), 'node_modules/@anthropic-ai/claude-code/vendor/ripgrep', platformDir, 'rg')
+        );
     }
 
     for (const candidate of candidates) {
