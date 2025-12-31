@@ -23,4 +23,5 @@ export interface CodexToolResponse {
         mimeType?: string;
     }>;
     isError?: boolean;
+    error?: string;
 }

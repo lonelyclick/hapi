@@ -156,7 +156,8 @@ export function App() {
     }, [navigate, selectedSessionId])
 
     const eventSubscription = useMemo(() => {
-        if (selectedSessionId) {
+        // Exclude "new" which is a route, not a real session ID
+        if (selectedSessionId && selectedSessionId !== 'new') {
             return { sessionId: selectedSessionId }
         }
         return { all: true }

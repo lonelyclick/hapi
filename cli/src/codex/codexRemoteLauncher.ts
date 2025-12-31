@@ -559,10 +559,13 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
             pending = null;
             if (!message) {
                 const waitSignal = abortController.signal;
+                console.error('[HAPI codex] Waiting for messages...');
                 const batch = await session.queue.waitForMessagesAndGetAsString(waitSignal);
+                console.error('[HAPI codex] Got batch:', batch ? 'yes' : 'no', 'shouldExit:', shouldExit);
                 if (!batch) {
                     if (waitSignal.aborted && !shouldExit) {
                         logger.debug('[codex]: Wait aborted while idle; ignoring and continuing');
+                        console.error('[HAPI codex] Wait aborted while idle, continuing...');
                         continue;
                     }
                     logger.debug(`[codex]: batch=${!!batch}, shouldExit=${shouldExit}`);
@@ -604,6 +607,7 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
 
             messageBuffer.addMessage(message.message, 'user');
             currentModeHash = message.hash;
+            console.error('[HAPI codex] Processing message:', message.message.slice(0, 50));
 
             try {
                 if (!wasCreated) {
@@ -646,13 +650,23 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                     }
 
                     startInFlightWatchdog('start', message.message, message.hash);
-                    await client.startSession(startConfig, { signal: abortController.signal });
+                    const startResponse = await client.startSession(startConfig, { signal: abortController.signal });
+                    if (startResponse.error) {
+                        messageBuffer.addMessage(startResponse.error, 'status');
+                        session.sendSessionEvent({ type: 'message', message: startResponse.error });
+                        continue;
+                    }
                     wasCreated = true;
                     first = false;
                     syncSessionId();
                 } else {
                     startInFlightWatchdog('continue', message.message, message.hash);
-                    await client.continueSession(message.message, { signal: abortController.signal });
+                    const continueResponse = await client.continueSession(message.message, { signal: abortController.signal });
+                    if (continueResponse.error) {
+                        messageBuffer.addMessage(continueResponse.error, 'status');
+                        session.sendSessionEvent({ type: 'message', message: continueResponse.error });
+                        continue;
+                    }
                     syncSessionId();
                 }
             } catch (error) {

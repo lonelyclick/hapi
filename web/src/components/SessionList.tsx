@@ -163,11 +163,12 @@ function SessionItem(props: {
     showPath?: boolean
 }) {
     const { session: s, onSelect, showPath = true } = props
+    const inactiveClass = s.active ? '' : 'opacity-50'
     return (
         <button
             type="button"
             onClick={() => onSelect(s.id)}
-            className="session-list-item flex w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
+            className={`session-list-item flex w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] ${inactiveClass}`}
         >
             <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">

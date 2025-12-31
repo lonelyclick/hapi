@@ -38,19 +38,22 @@ async function bootstrap() {
     }
 
     const updateSW = registerSW({
+        immediate: true,
         onNeedRefresh() {
-            if (confirm('New version available! Reload to update?')) {
-                updateSW(true)
-            }
+            // Auto update without asking - especially important for Telegram Mini App
+            // where confirm() dialogs may not work properly
+            console.log('New version available, updating...')
+            updateSW(true)
         },
         onOfflineReady() {
             console.log('App ready for offline use')
         },
         onRegistered(registration) {
             if (registration) {
+                // Check for updates every 5 minutes
                 setInterval(() => {
                     registration.update()
-                }, 60 * 60 * 1000)
+                }, 5 * 60 * 1000)
             }
         },
         onRegisterError(error) {
