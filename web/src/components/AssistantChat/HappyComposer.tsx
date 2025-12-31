@@ -759,11 +759,12 @@ export function HappyComposer(props: {
                                 <button
                                     type="button"
                                     aria-label={speechToText.status === 'recording' ? 'Release to stop' : 'Hold to talk'}
-                                    className={`relative w-full touch-none overflow-hidden rounded-[16px] border px-4 py-4 text-center transition-all duration-150 ${
+                                    className={`relative w-full select-none touch-none overflow-hidden rounded-[16px] border px-4 py-4 text-center transition-all duration-150 ${
                                         speechToText.status === 'recording'
                                             ? 'border-red-400 bg-red-500/15 text-red-600 shadow-[0_0_24px_rgba(239,68,68,0.35)]'
                                             : 'border-[var(--app-divider)] bg-[var(--app-bg)]/70 text-[var(--app-hint)]'
                                     } ${speechToText.status === 'stopping' ? 'animate-pulse' : ''}`}
+                                    style={{ WebkitTouchCallout: 'none' }}
                                     onPointerDown={handleVoicePadPointerDown}
                                     onPointerUp={handleVoicePadPointerUp}
                                     onPointerCancel={handleVoicePadPointerUp}
