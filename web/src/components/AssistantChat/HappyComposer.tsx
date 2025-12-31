@@ -5,6 +5,7 @@ import {
     type KeyboardEvent as ReactKeyboardEvent,
     type PointerEvent as ReactPointerEvent,
     type SyntheticEvent as ReactSyntheticEvent,
+    type TouchEvent as ReactTouchEvent,
     useCallback,
     useEffect,
     useMemo,
@@ -458,69 +459,91 @@ export function HappyComposer(props: {
         }
     }, [controlsDisabled, speechToText, voiceMode])
 
-    // Track active pointer to handle iOS touch properly
-    const activePointerRef = useRef<number | null>(null)
+    // Track if we're currently pressing the voice button
+    const voicePressActiveRef = useRef(false)
+    // Prevent touch and pointer events from both firing
+    const touchHandledRef = useRef(false)
 
-    const handleVoicePadPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-        if (!voiceMode || controlsDisabled) return
-        // Skip if stopping, but allow if already idle (in case state is stuck)
-        if (speechToText.status === 'stopping') return
-        // Prevent duplicate pointer captures
-        if (activePointerRef.current !== null) return
+    const startVoiceCapture = useCallback(() => {
+        if (!voiceMode || controlsDisabled) return false
+        if (speechToText.status === 'stopping') return false
+        if (voicePressActiveRef.current) return false
 
-        event.preventDefault()
-        activePointerRef.current = event.pointerId
-
-        // Don't use setPointerCapture on iOS - it causes issues
-        console.log('[stt] pointer down', {
-            voiceMode,
-            status: speechToText.status,
-            pointerId: event.pointerId
-        })
+        voicePressActiveRef.current = true
+        console.log('[stt] voice capture start', { status: speechToText.status })
         handleVoicePressStart().catch(() => {})
+        return true
     }, [voiceMode, controlsDisabled, speechToText.status, handleVoicePressStart])
 
-    const handleVoicePadPointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-        if (!voiceMode || controlsDisabled) return
-        // Only handle the pointer that started the interaction
-        if (activePointerRef.current !== event.pointerId) return
-
-        event.preventDefault()
-        activePointerRef.current = null
-
-        console.log('[stt] pointer up', {
-            voiceMode,
-            status: speechToText.status,
-            pointerId: event.pointerId
-        })
+    const stopVoiceCapture = useCallback(() => {
+        if (!voicePressActiveRef.current) return
+        voicePressActiveRef.current = false
+        console.log('[stt] voice capture stop')
         handleVoicePressEnd()
-    }, [voiceMode, controlsDisabled, speechToText.status, handleVoicePressEnd])
+    }, [handleVoicePressEnd])
 
-    const handleVoicePadPointerCancel = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-        if (!voiceMode) return
-        // Only handle the pointer that started the interaction
-        if (activePointerRef.current !== event.pointerId) return
-
+    // Touch events - primary handler for iOS
+    const handleTouchStart = useCallback((event: ReactTouchEvent<HTMLButtonElement>) => {
+        touchHandledRef.current = true
         event.preventDefault()
-        activePointerRef.current = null
+        startVoiceCapture()
+    }, [startVoiceCapture])
 
-        console.log('[stt] pointer cancel', {
-            voiceMode,
-            status: speechToText.status,
-            pointerId: event.pointerId
-        })
-        handleVoicePressEnd()
-    }, [voiceMode, speechToText.status, handleVoicePressEnd])
+    const handleTouchEnd = useCallback((event: ReactTouchEvent<HTMLButtonElement>) => {
+        event.preventDefault()
+        stopVoiceCapture()
+        // Reset touch flag after a short delay
+        setTimeout(() => { touchHandledRef.current = false }, 300)
+    }, [stopVoiceCapture])
 
+    // Pointer events - fallback for desktop
+    const handleVoicePadPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+        // Skip if touch already handled this interaction
+        if (touchHandledRef.current) return
+        event.preventDefault()
+        startVoiceCapture()
+    }, [startVoiceCapture])
+
+    // Global listener to catch pointer/touch end anywhere on screen
     useEffect(() => {
         if (!voiceMode) {
-            activePointerRef.current = null
+            if (voicePressActiveRef.current) {
+                voicePressActiveRef.current = false
+                handleVoicePressEnd()
+            }
+            touchHandledRef.current = false
             return
         }
+
+        const handleGlobalEnd = (event: PointerEvent | TouchEvent) => {
+            if (!voicePressActiveRef.current) return
+            // For touch events on iOS, prevent the synthetic pointer events
+            if (event.type === 'touchend' || event.type === 'touchcancel') {
+                touchHandledRef.current = true
+                setTimeout(() => { touchHandledRef.current = false }, 300)
+            }
+            stopVoiceCapture()
+        }
+
+        // Listen on document to ensure we catch events even if finger moves off button
+        document.addEventListener('pointerup', handleGlobalEnd, { capture: true, passive: true })
+        document.addEventListener('pointercancel', handleGlobalEnd, { capture: true, passive: true })
+        document.addEventListener('touchend', handleGlobalEnd, { capture: true, passive: true })
+        document.addEventListener('touchcancel', handleGlobalEnd, { capture: true, passive: true })
+
+        return () => {
+            document.removeEventListener('pointerup', handleGlobalEnd, { capture: true })
+            document.removeEventListener('pointercancel', handleGlobalEnd, { capture: true })
+            document.removeEventListener('touchend', handleGlobalEnd, { capture: true })
+            document.removeEventListener('touchcancel', handleGlobalEnd, { capture: true })
+        }
+    }, [voiceMode, handleVoicePressEnd, stopVoiceCapture])
+
+    useEffect(() => {
         if (!active && speechToText.status === 'recording') {
             speechToText.stop()
         }
-    }, [active, speechToText, voiceMode])
+    }, [active, speechToText])
 
     const overlays = useMemo(() => {
         if (showSettings && (showPermissionSettings || showModelSettings)) {
@@ -782,9 +805,10 @@ export function HappyComposer(props: {
                                             : 'border-[var(--app-divider)] bg-[var(--app-bg)]/70 text-[var(--app-hint)]'
                                     } ${speechToText.status === 'stopping' ? 'animate-pulse' : ''}`}
                                     style={{ WebkitTouchCallout: 'none' }}
+                                    onTouchStart={handleTouchStart}
+                                    onTouchEnd={handleTouchEnd}
+                                    onTouchCancel={handleTouchEnd}
                                     onPointerDown={handleVoicePadPointerDown}
-                                    onPointerUp={handleVoicePadPointerUp}
-                                    onPointerCancel={handleVoicePadPointerCancel}
                                 >
                                     <div
                                         className={`stt-meter ${speechToText.status === 'recording' ? 'stt-meter--active' : ''}`}
