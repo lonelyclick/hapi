@@ -11,6 +11,9 @@
  * - WEBAPP_PORT: Port for Mini App HTTP server (default: 3006)
  * - WEBAPP_URL: Public URL for Telegram Mini App
  * - CORS_ORIGINS: Comma-separated CORS origins
+ * - FEISHU_APP_ID: Feishu/Lark app ID for speech-to-text
+ * - FEISHU_APP_SECRET: Feishu/Lark app secret for speech-to-text
+ * - FEISHU_BASE_URL: Feishu/Lark OpenAPI base URL (default: https://open.feishu.cn)
  * - HAPI_HOME: Data directory (default: ~/.hapi)
  * - DB_PATH: SQLite database path (default: {HAPI_HOME}/hapi.db)
  */
@@ -28,6 +31,9 @@ export interface ConfigSources {
     webappPort: ConfigSource
     webappUrl: ConfigSource
     corsOrigins: ConfigSource
+    feishuAppId: ConfigSource
+    feishuAppSecret: ConfigSource
+    feishuBaseUrl: ConfigSource
     cliApiToken: 'env' | 'file' | 'generated'
 }
 
@@ -65,6 +71,15 @@ class Configuration {
     /** Allowed CORS origins for Mini App + Socket.IO (comma-separated env override) */
     public readonly corsOrigins: string[]
 
+    /** Feishu/Lark app ID (speech-to-text) */
+    public readonly feishuAppId: string | null
+
+    /** Feishu/Lark app secret (speech-to-text) */
+    public readonly feishuAppSecret: string | null
+
+    /** Feishu/Lark OpenAPI base URL */
+    public readonly feishuBaseUrl: string
+
     /** Sources of each configuration value */
     public readonly sources: ConfigSources
 
@@ -85,6 +100,9 @@ class Configuration {
         this.webappPort = serverSettings.webappPort
         this.miniAppUrl = serverSettings.webappUrl
         this.corsOrigins = serverSettings.corsOrigins
+        this.feishuAppId = serverSettings.feishuAppId
+        this.feishuAppSecret = serverSettings.feishuAppSecret
+        this.feishuBaseUrl = serverSettings.feishuBaseUrl
 
         // CLI API token - will be set by _setCliApiToken() before create() returns
         this.cliApiToken = ''

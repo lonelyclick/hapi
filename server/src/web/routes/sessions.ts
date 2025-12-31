@@ -27,7 +27,8 @@ type SessionSummary = {
     metadata: SessionSummaryMetadata | null
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number
-    modelMode?: 'default' | 'sonnet' | 'opus'
+    modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+    modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
 }
 
 function toSessionSummary(session: Session): SessionSummary {
@@ -55,7 +56,8 @@ function toSessionSummary(session: Session): SessionSummary {
         metadata,
         todoProgress,
         pendingRequestsCount,
-        modelMode: session.modelMode
+        modelMode: session.modelMode,
+        modelReasoningEffort: session.modelReasoningEffort
     }
 }
 
@@ -64,7 +66,16 @@ const permissionModeSchema = z.object({
 })
 
 const modelModeSchema = z.object({
-    model: z.enum(['default', 'sonnet', 'opus'])
+    model: z.enum([
+        'default',
+        'sonnet',
+        'opus',
+        'gpt-5.2-codex',
+        'gpt-5.1-codex-max',
+        'gpt-5.1-codex-mini',
+        'gpt-5.2'
+    ]),
+    reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional()
 })
 
 export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
@@ -111,6 +122,30 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         return c.json({ session: sessionResult.session })
+    })
+
+    app.delete('/sessions/:id', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const shouldTerminate = sessionResult.session.active
+        try {
+            const deleted = await engine.deleteSession(sessionResult.sessionId, { terminateSession: shouldTerminate })
+            if (!deleted) {
+                return c.json({ error: 'Session not found' }, 404)
+            }
+            return c.json({ ok: true })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to terminate session'
+            return c.json({ error: message }, 409)
+        }
     })
 
     app.post('/sessions/:id/abort', async (c) => {
@@ -200,12 +235,35 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const flavor = sessionResult.session.metadata?.flavor ?? 'claude'
-        if (flavor !== 'claude') {
-            return c.json({ error: 'Model mode is only supported for Claude sessions' }, 400)
+        if (flavor === 'gemini') {
+            return c.json({ error: 'Model mode is not supported for Gemini sessions' }, 400)
+        }
+
+        const claudeModels = new Set(['default', 'sonnet', 'opus'])
+        const codexModels = new Set(['gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'])
+        const reasoningLevels = new Set(['low', 'medium', 'high', 'xhigh'])
+
+        if (flavor === 'claude' && !claudeModels.has(parsed.data.model)) {
+            return c.json({ error: 'Invalid model for Claude sessions' }, 400)
+        }
+        if (flavor === 'codex' && parsed.data.model !== 'default' && !codexModels.has(parsed.data.model)) {
+            return c.json({ error: 'Invalid model for Codex sessions' }, 400)
+        }
+        if (parsed.data.reasoningEffort && !reasoningLevels.has(parsed.data.reasoningEffort)) {
+            return c.json({ error: 'Invalid reasoning level' }, 400)
         }
 
         try {
-            await engine.applySessionConfig(sessionResult.sessionId, { modelMode: parsed.data.model })
+            console.log('[session model] apply', {
+                sessionId: sessionResult.sessionId,
+                flavor,
+                model: parsed.data.model,
+                reasoningEffort: parsed.data.reasoningEffort ?? null
+            })
+            await engine.applySessionConfig(sessionResult.sessionId, {
+                modelMode: parsed.data.model,
+                modelReasoningEffort: parsed.data.reasoningEffort
+            })
             return c.json({ ok: true })
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to apply model mode'

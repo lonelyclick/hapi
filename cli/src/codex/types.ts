@@ -10,6 +10,7 @@ export interface CodexSessionConfig {
     cwd?: string;
     'include-plan-tool'?: boolean;
     model?: string;
+    model_reasoning_effort?: 'low' | 'medium' | 'high' | 'xhigh';
     profile?: string;
     sandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
 }

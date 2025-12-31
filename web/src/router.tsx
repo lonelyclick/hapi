@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
     Navigate,
@@ -119,9 +119,11 @@ function SessionsPage() {
 function SessionPage() {
     const { api } = useAppContext()
     const goBack = useAppGoBack()
+    const navigate = useNavigate()
     const { sessionId } = useParams({ from: '/sessions/$sessionId' })
     const {
         session,
+        notFound,
         refetch: refetchSession,
     } = useSession(api, sessionId)
     const {
@@ -149,6 +151,11 @@ function SessionPage() {
         void refetchSession()
         void refetchMessages()
     }, [refetchMessages, refetchSession])
+
+    useEffect(() => {
+        if (!notFound) return
+        navigate({ to: '/sessions', replace: true })
+    }, [navigate, notFound])
 
     if (!session) {
         return (

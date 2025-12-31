@@ -36,10 +36,35 @@ function FilesIcon(props: { className?: string }) {
     )
 }
 
+function TrashIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+        </svg>
+    )
+}
+
 export function SessionHeader(props: {
     session: Session
     onBack: () => void
     onViewFiles?: () => void
+    onDelete?: () => void
+    deleteDisabled?: boolean
 }) {
     const title = useMemo(() => getSessionTitle(props.session), [props.session])
     const worktreeBranch = props.session.metadata?.worktree?.branch
@@ -84,15 +109,30 @@ export function SessionHeader(props: {
                     </div>
                 </div>
 
-                {props.onViewFiles ? (
-                    <button
-                        type="button"
-                        onClick={props.onViewFiles}
-                        className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                        title="Files"
-                    >
-                        <FilesIcon />
-                    </button>
+                {props.onViewFiles || props.onDelete ? (
+                    <div className="flex items-center gap-1">
+                        {props.onViewFiles ? (
+                            <button
+                                type="button"
+                                onClick={props.onViewFiles}
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                                title="Files"
+                            >
+                                <FilesIcon />
+                            </button>
+                        ) : null}
+                        {props.onDelete ? (
+                            <button
+                                type="button"
+                                onClick={props.onDelete}
+                                disabled={props.deleteDisabled}
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Delete session"
+                            >
+                                <TrashIcon />
+                            </button>
+                        ) : null}
+                    </div>
                 ) : null}
             </div>
         </div>

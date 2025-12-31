@@ -72,6 +72,14 @@ async function main() {
         console.log(`[Server] Telegram: enabled (${tokenSource})`)
     }
 
+    if (!config.feishuAppId || !config.feishuAppSecret) {
+        console.log('[Server] Feishu STT: disabled (missing FEISHU_APP_ID/FEISHU_APP_SECRET)')
+    } else {
+        const appIdSource = formatSource(config.sources.feishuAppId)
+        const appSecretSource = formatSource(config.sources.feishuAppSecret)
+        console.log(`[Server] Feishu STT: enabled (${appIdSource}/${appSecretSource})`)
+    }
+
     const store = new Store(config.dbPath)
     const jwtSecret = await getOrCreateJwtSecret()
 

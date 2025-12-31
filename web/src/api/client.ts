@@ -1,5 +1,6 @@
 import type {
     AuthResponse,
+    DeleteSessionResponse,
     FileReadResponse,
     FileSearchResponse,
     GitCommandResponse,
@@ -7,6 +8,8 @@ import type {
     MachinesResponse,
     MessagesResponse,
     SlashCommandsResponse,
+    SpeechToTextStreamRequest,
+    SpeechToTextStreamResponse,
     SpawnResponse,
     SessionResponse,
     SessionsResponse
@@ -105,7 +108,9 @@ export class ApiClient {
 
         if (!res.ok) {
             const body = await res.text().catch(() => '')
-            throw new Error(`HTTP ${res.status} ${res.statusText}: ${body}`)
+            const code = parseErrorCode(body)
+            const detail = body ? `: ${body}` : ''
+            throw new ApiError(`HTTP ${res.status} ${res.statusText}${detail}`, res.status, code, body || undefined)
         }
 
         return await res.json() as T
@@ -153,6 +158,12 @@ export class ApiClient {
         return await this.request<SessionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}`)
     }
 
+    async deleteSession(sessionId: string): Promise<DeleteSessionResponse> {
+        return await this.request<DeleteSessionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+            method: 'DELETE'
+        })
+    }
+
     async getMessages(sessionId: string, options: { beforeSeq?: number | null; limit?: number }): Promise<MessagesResponse> {
         const params = new URLSearchParams()
         if (options.beforeSeq !== undefined && options.beforeSeq !== null) {
@@ -165,6 +176,38 @@ export class ApiClient {
         const qs = params.toString()
         const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`
         return await this.request<MessagesResponse>(url)
+    }
+
+    async streamSpeechToText(payload: SpeechToTextStreamRequest): Promise<SpeechToTextStreamResponse> {
+        const headers = new Headers()
+        const liveToken = this.getToken ? this.getToken() : null
+        const authToken = liveToken ?? this.token
+        if (authToken) {
+            headers.set('authorization', `Bearer ${authToken}`)
+        }
+        headers.set('content-type', 'application/json')
+
+        const res = await fetch(this.buildUrl('/api/speech-to-text/stream'), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+        })
+
+        const text = await res.text().catch(() => '')
+        let data: SpeechToTextStreamResponse = {}
+        if (text) {
+            try {
+                data = JSON.parse(text) as SpeechToTextStreamResponse
+            } catch {
+                data = { error: text }
+            }
+        }
+
+        if (!res.ok && !data.error) {
+            data.error = `HTTP ${res.status} ${res.statusText}`
+        }
+
+        return data
     }
 
     async getGitStatus(sessionId: string): Promise<GitCommandResponse> {
@@ -232,10 +275,10 @@ export class ApiClient {
         })
     }
 
-    async setModelMode(sessionId: string, model: 'default' | 'sonnet' | 'opus'): Promise<void> {
+    async setModelMode(sessionId: string, payload: { model: string; reasoningEffort?: string | null }): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/model`, {
             method: 'POST',
-            body: JSON.stringify({ model })
+            body: JSON.stringify(payload)
         })
     }
 

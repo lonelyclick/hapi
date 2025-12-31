@@ -16,6 +16,9 @@ export interface ServerSettings {
     webappPort: number
     webappUrl: string
     corsOrigins: string[]
+    feishuAppId: string | null
+    feishuAppSecret: string | null
+    feishuBaseUrl: string
 }
 
 export interface ServerSettingsResult {
@@ -25,6 +28,9 @@ export interface ServerSettingsResult {
         webappPort: 'env' | 'file' | 'default'
         webappUrl: 'env' | 'file' | 'default'
         corsOrigins: 'env' | 'file' | 'default'
+        feishuAppId: 'env' | 'file' | 'default'
+        feishuAppSecret: 'env' | 'file' | 'default'
+        feishuBaseUrl: 'env' | 'file' | 'default'
     }
     savedToFile: boolean
 }
@@ -86,6 +92,9 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         webappPort: 'default',
         webappUrl: 'default',
         corsOrigins: 'default',
+        feishuAppId: 'default',
+        feishuAppSecret: 'default',
+        feishuBaseUrl: 'default',
     }
 
     // telegramBotToken: env > file > null
@@ -150,6 +159,54 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         corsOrigins = deriveCorsOrigins(webappUrl)
     }
 
+    // feishuAppId: env > file > null
+    let feishuAppId: string | null = null
+    if (process.env.FEISHU_APP_ID) {
+        feishuAppId = process.env.FEISHU_APP_ID
+        sources.feishuAppId = 'env'
+        if (settings.feishuAppId === undefined) {
+            settings.feishuAppId = feishuAppId
+            needsSave = true
+        }
+    } else if (settings.feishuAppId !== undefined) {
+        feishuAppId = settings.feishuAppId ?? null
+        sources.feishuAppId = 'file'
+    } else if (settings.appId !== undefined) {
+        feishuAppId = settings.appId ?? null
+        sources.feishuAppId = 'file'
+    }
+
+    // feishuAppSecret: env > file > null
+    let feishuAppSecret: string | null = null
+    if (process.env.FEISHU_APP_SECRET) {
+        feishuAppSecret = process.env.FEISHU_APP_SECRET
+        sources.feishuAppSecret = 'env'
+        if (settings.feishuAppSecret === undefined) {
+            settings.feishuAppSecret = feishuAppSecret
+            needsSave = true
+        }
+    } else if (settings.feishuAppSecret !== undefined) {
+        feishuAppSecret = settings.feishuAppSecret ?? null
+        sources.feishuAppSecret = 'file'
+    } else if (settings.appSecret !== undefined) {
+        feishuAppSecret = settings.appSecret ?? null
+        sources.feishuAppSecret = 'file'
+    }
+
+    // feishuBaseUrl: env > file > https://open.feishu.cn
+    let feishuBaseUrl = 'https://open.feishu.cn'
+    if (process.env.FEISHU_BASE_URL) {
+        feishuBaseUrl = process.env.FEISHU_BASE_URL
+        sources.feishuBaseUrl = 'env'
+        if (settings.feishuBaseUrl === undefined) {
+            settings.feishuBaseUrl = feishuBaseUrl
+            needsSave = true
+        }
+    } else if (settings.feishuBaseUrl !== undefined) {
+        feishuBaseUrl = settings.feishuBaseUrl || feishuBaseUrl
+        sources.feishuBaseUrl = 'file'
+    }
+
     // Save settings if any new values were added
     if (needsSave) {
         await writeSettings(settingsFile, settings)
@@ -161,6 +218,9 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
             webappPort,
             webappUrl,
             corsOrigins,
+            feishuAppId,
+            feishuAppSecret,
+            feishuBaseUrl,
         },
         sources,
         savedToFile: needsSave,

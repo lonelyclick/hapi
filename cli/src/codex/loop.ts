@@ -12,6 +12,7 @@ export type PermissionMode = 'default' | 'read-only' | 'safe-yolo' | 'yolo';
 export interface EnhancedMode {
     permissionMode: PermissionMode;
     model?: string;
+    modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
 }
 
 interface LoopOptions {

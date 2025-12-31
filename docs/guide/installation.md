@@ -107,6 +107,9 @@ On first run, HAPI:
 | `HAPI_HOME` | `~/.hapi` | Config directory path |
 | `DB_PATH` | `~/.hapi/hapi.db` | Database file path |
 | `CORS_ORIGINS` | - | Allowed CORS origins |
+| `FEISHU_APP_ID` | - | Feishu/Lark app ID (speech-to-text) |
+| `FEISHU_APP_SECRET` | - | Feishu/Lark app secret (speech-to-text) |
+| `FEISHU_BASE_URL` | `https://open.feishu.cn` | Feishu/Lark OpenAPI base URL |
 </details>
 
 ## CLI setup

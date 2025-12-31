@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { Outlet, useLocation, useMatchRoute } from '@tanstack/react-router'
+import { Outlet, useLocation, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { getTelegramWebApp } from '@/hooks/useTelegram'
 import { initializeTheme } from '@/hooks/useTheme'
@@ -8,6 +8,7 @@ import { useAuthSource } from '@/hooks/useAuthSource'
 import { useServerUrl } from '@/hooks/useServerUrl'
 import { useSSE } from '@/hooks/useSSE'
 import { useSyncingState } from '@/hooks/useSyncingState'
+import type { SyncEvent } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { AppContextProvider } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
@@ -22,6 +23,7 @@ export function App() {
     const { authSource, isLoading: isAuthSourceLoading, setAccessToken } = useAuthSource(baseUrl)
     const { token, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
     const goBack = useAppGoBack()
+    const navigate = useNavigate()
     const pathname = useLocation({ select: (location) => location.pathname })
     const matchRoute = useMatchRoute()
 
@@ -117,6 +119,13 @@ export function App() {
         } else {
             startSync()
         }
+        if (import.meta.env.DEV) {
+            console.log('[sse] connect', {
+                selectedSessionId,
+                invalidateSession: Boolean(selectedSessionId)
+            })
+        }
+
         const invalidations = [
             queryClient.invalidateQueries({ queryKey: queryKeys.sessions }),
             ...(selectedSessionId ? [
@@ -136,7 +145,15 @@ export function App() {
             })
     }, [queryClient, selectedSessionId, startSync, endSync])
 
-    const handleSseEvent = useCallback(() => {}, [])
+    const handleSseEvent = useCallback((event: SyncEvent) => {
+        if (event.type !== 'session-removed') {
+            return
+        }
+        if (!selectedSessionId || event.sessionId !== selectedSessionId) {
+            return
+        }
+        navigate({ to: '/sessions', replace: true })
+    }, [navigate, selectedSessionId])
 
     const eventSubscription = useMemo(() => {
         if (selectedSessionId) {

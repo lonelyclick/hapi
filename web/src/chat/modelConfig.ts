@@ -12,7 +12,7 @@ import type { ModelMode } from '@/types/api'
  */
 const CONTEXT_HEADROOM_TOKENS = 10_000
 
-const MODEL_CONTEXT_WINDOWS: Record<ModelMode, number> = {
+const MODEL_CONTEXT_WINDOWS: Partial<Record<ModelMode, number>> = {
     // Claude Code modes used in this app; currently treated as ~200k context.
     default: 200_000,
     sonnet: 200_000,

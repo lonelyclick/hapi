@@ -86,7 +86,8 @@ export interface Session {
     thinkingAt: number
     todos?: TodoItem[]
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-    modelMode?: 'default' | 'sonnet' | 'opus'
+    modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+    modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
 }
 
 export interface Machine {
@@ -176,6 +177,7 @@ export class SyncEngine {
     private readonly lastBroadcastAtBySessionId: Map<string, number> = new Map()
     private readonly lastBroadcastAtByMachineId: Map<string, number> = new Map()
     private readonly todoBackfillAttemptedSessionIds: Set<string> = new Set()
+    private readonly deletingSessions: Set<string> = new Set()
     private inactivityTimer: NodeJS.Timeout | null = null
 
     constructor(
@@ -269,6 +271,45 @@ export class SyncEngine {
             return undefined
         }
         return session
+    }
+
+    async deleteSession(sessionId: string, options?: { terminateSession?: boolean }): Promise<boolean> {
+        const session = this.sessions.get(sessionId)
+        this.deletingSessions.add(sessionId)
+        try {
+            if (options?.terminateSession && session?.active) {
+                await this.killSession(sessionId)
+            }
+        } catch (error) {
+            this.deletingSessions.delete(sessionId)
+            throw error
+        }
+
+        const deleted = this.store.deleteSession(sessionId)
+        if (!deleted) {
+            this.deletingSessions.delete(sessionId)
+            return false
+        }
+
+        this.sessions.delete(sessionId)
+        this.sessionMessages.delete(sessionId)
+        this.lastBroadcastAtBySessionId.delete(sessionId)
+        this.todoBackfillAttemptedSessionIds.delete(sessionId)
+        this.deletingSessions.delete(sessionId)
+        this.emit({ type: 'session-removed', sessionId })
+        return true
+    }
+
+    async killSession(sessionId: string): Promise<void> {
+        const result = await this.sessionRpc(sessionId, 'killSession', {})
+        if (!result || typeof result !== 'object') {
+            throw new Error('Invalid killSession response')
+        }
+
+        const payload = result as { success?: boolean; message?: string }
+        if (!payload.success) {
+            throw new Error(payload.message || 'Failed to kill session')
+        }
     }
 
     getActiveSessions(): Session[] {
@@ -384,8 +425,12 @@ export class SyncEngine {
         thinking?: boolean
         mode?: 'local' | 'remote'
         permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-        modelMode?: 'default' | 'sonnet' | 'opus'
+        modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+        modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     }): void {
+        if (this.deletingSessions.has(payload.sid)) {
+            return
+        }
         const t = clampAliveTime(payload.time)
         if (!t) return
 
@@ -396,6 +441,7 @@ export class SyncEngine {
         const wasThinking = session.thinking
         const previousPermissionMode = session.permissionMode
         const previousModelMode = session.modelMode
+        const previousReasoningEffort = session.modelReasoningEffort
 
         session.active = true
         session.activeAt = Math.max(session.activeAt, t)
@@ -407,10 +453,15 @@ export class SyncEngine {
         if (payload.modelMode !== undefined) {
             session.modelMode = payload.modelMode
         }
+        if (payload.modelReasoningEffort !== undefined) {
+            session.modelReasoningEffort = payload.modelReasoningEffort
+        }
 
         const now = Date.now()
         const lastBroadcastAt = this.lastBroadcastAtBySessionId.get(session.id) ?? 0
-        const modeChanged = previousPermissionMode !== session.permissionMode || previousModelMode !== session.modelMode
+        const modeChanged = previousPermissionMode !== session.permissionMode
+            || previousModelMode !== session.modelMode
+            || previousReasoningEffort !== session.modelReasoningEffort
         const shouldBroadcast = (!wasActive && session.active)
             || (wasThinking !== session.thinking)
             || modeChanged
@@ -425,13 +476,17 @@ export class SyncEngine {
                     activeAt: session.activeAt,
                     thinking: session.thinking,
                     permissionMode: session.permissionMode,
-                    modelMode: session.modelMode
+                    modelMode: session.modelMode,
+                    modelReasoningEffort: session.modelReasoningEffort
                 }
             })
         }
     }
 
     handleSessionEnd(payload: { sid: string; time: number }): void {
+        if (this.deletingSessions.has(payload.sid)) {
+            return
+        }
         const t = clampAliveTime(payload.time) ?? Date.now()
 
         const session = this.sessions.get(payload.sid) ?? this.refreshSession(payload.sid)
@@ -549,7 +604,8 @@ export class SyncEngine {
             thinkingAt: existing?.thinkingAt ?? 0,
             todos,
             permissionMode: existing?.permissionMode,
-            modelMode: existing?.modelMode
+            modelMode: existing?.modelMode,
+            modelReasoningEffort: existing?.modelReasoningEffort
         }
 
         this.sessions.set(sessionId, session)
@@ -743,10 +799,17 @@ export class SyncEngine {
         }
     }
 
-    async setModelMode(sessionId: string, model: 'default' | 'sonnet' | 'opus'): Promise<void> {
+    async setModelMode(
+        sessionId: string,
+        model: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2',
+        modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
+    ): Promise<void> {
         const session = this.sessions.get(sessionId)
         if (session) {
             session.modelMode = model
+            if (modelReasoningEffort !== undefined) {
+                session.modelReasoningEffort = modelReasoningEffort
+            }
             this.emit({ type: 'session-updated', sessionId, data: session })
         }
     }
@@ -755,14 +818,15 @@ export class SyncEngine {
         sessionId: string,
         config: {
             permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-            modelMode?: 'default' | 'sonnet' | 'opus'
+            modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+            modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
         }
     ): Promise<void> {
         const result = await this.sessionRpc(sessionId, 'set-session-config', config)
         if (!result || typeof result !== 'object') {
             throw new Error('Invalid response from session config RPC')
         }
-        const obj = result as { applied?: { permissionMode?: Session['permissionMode']; modelMode?: Session['modelMode'] } }
+        const obj = result as { applied?: { permissionMode?: Session['permissionMode']; modelMode?: Session['modelMode']; modelReasoningEffort?: Session['modelReasoningEffort'] } }
         const applied = obj.applied
         if (!applied || typeof applied !== 'object') {
             throw new Error('Missing applied session config')
@@ -775,6 +839,15 @@ export class SyncEngine {
             }
             if (applied.modelMode !== undefined) {
                 session.modelMode = applied.modelMode
+            }
+            if (applied.modelReasoningEffort !== undefined) {
+                session.modelReasoningEffort = applied.modelReasoningEffort
+            }
+            if (applied.modelMode === undefined && config.modelMode !== undefined) {
+                session.modelMode = config.modelMode
+            }
+            if (applied.modelReasoningEffort === undefined && config.modelReasoningEffort !== undefined) {
+                session.modelReasoningEffort = config.modelReasoningEffort
             }
             this.emit({ type: 'session-updated', sessionId, data: session })
         }

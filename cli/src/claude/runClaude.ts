@@ -5,7 +5,7 @@ import { ApiClient } from '@/api/api';
 import { logger } from '@/ui/logger';
 import { restoreTerminalState } from '@/ui/terminalState';
 import { loop } from '@/claude/loop';
-import { AgentState, Metadata, SessionModelMode } from '@/api/types';
+import { AgentState, Metadata, SessionModelMode, SessionModelReasoningEffort } from '@/api/types';
 import packageJson from '../../package.json';
 import { readSettings } from '@/persistence';
 import { EnhancedMode, PermissionMode } from './loop';
@@ -384,7 +384,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         if (!payload || typeof payload !== 'object') {
             throw new Error('Invalid session config payload');
         }
-        const config = payload as { permissionMode?: PermissionMode; modelMode?: SessionModelMode };
+        const config = payload as { permissionMode?: PermissionMode; modelMode?: SessionModelMode; modelReasoningEffort?: SessionModelReasoningEffort };
 
         if (config.permissionMode !== undefined) {
             const validModes: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];

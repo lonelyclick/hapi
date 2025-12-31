@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import type { ApiClient } from '@/api/client'
+import { ApiError, type ApiClient } from '@/api/client'
 import type { DecryptedMessage, MessagesResponse } from '@/types/api'
 import { mergeMessages } from '@/lib/messages'
 import { queryKeys } from '@/lib/query-keys'
@@ -27,6 +27,12 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         initialPageParam: null,
         getNextPageParam: (lastPage) =>
             lastPage.page.hasMore ? lastPage.page.nextBeforeSeq : undefined,
+        retry: (failureCount, error) => {
+            if (error instanceof ApiError && error.status === 404) {
+                return false
+            }
+            return failureCount < 2
+        },
         enabled: Boolean(api && sessionId),
     })
 

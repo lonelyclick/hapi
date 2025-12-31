@@ -13,7 +13,7 @@ import { configuration } from '@/configuration';
 import { notifyDaemonSessionStarted } from '@/daemon/controlClient';
 import { initialMachineMetadata } from '@/daemon/run';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
-import type { AgentState, Metadata } from '@/api/types';
+import type { AgentState, Metadata, SessionModelMode, SessionModelReasoningEffort } from '@/api/types';
 import packageJson from '../../package.json';
 import { runtimePath } from '@/projectPath';
 import type { CodexSession } from './session';
@@ -96,13 +96,16 @@ export async function runCodex(opts: {
 
     const messageQueue = new MessageQueue2<EnhancedMode>((mode) => hashObject({
         permissionMode: mode.permissionMode,
-        model: mode.model
+        model: mode.model,
+        modelReasoningEffort: mode.modelReasoningEffort
     }));
 
     const codexCliOverrides = parseCodexCliOverrides(opts.codexArgs);
     const sessionWrapperRef: { current: CodexSession | null } = { current: null };
 
     let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default';
+    let currentModelMode: SessionModelMode | undefined = undefined;
+    let currentModelReasoningEffort: SessionModelReasoningEffort | undefined = undefined;
 
     const syncSessionMode = () => {
         const sessionInstance = sessionWrapperRef.current;
@@ -110,7 +113,9 @@ export async function runCodex(opts: {
             return;
         }
         sessionInstance.setPermissionMode(currentPermissionMode);
-        logger.debug(`[Codex] Synced session permission mode for keepalive: ${currentPermissionMode}`);
+        sessionInstance.setModelMode(currentModelMode);
+        sessionInstance.setModelReasoningEffort(currentModelReasoningEffort);
+        logger.debug(`[Codex] Synced session mode for keepalive: permission=${currentPermissionMode}, model=${currentModelMode ?? 'unset'}, reasoning=${currentModelReasoningEffort ?? 'unset'}`);
     };
 
     session.onUserMessage((message) => {
@@ -118,7 +123,9 @@ export async function runCodex(opts: {
         logger.debug(`[Codex] User message received with permission mode: ${currentPermissionMode}`);
 
         const enhancedMode: EnhancedMode = {
-            permissionMode: messagePermissionMode ?? 'default'
+            permissionMode: messagePermissionMode ?? 'default',
+            model: currentModelMode && currentModelMode !== 'default' ? currentModelMode : undefined,
+            modelReasoningEffort: currentModelReasoningEffort
         };
         messageQueue.push(message.content.text, enhancedMode);
     });
@@ -191,7 +198,11 @@ export async function runCodex(opts: {
         if (!payload || typeof payload !== 'object') {
             throw new Error('Invalid session config payload');
         }
-        const config = payload as { permissionMode?: PermissionMode };
+        const config = payload as {
+            permissionMode?: PermissionMode;
+            modelMode?: SessionModelMode;
+            modelReasoningEffort?: SessionModelReasoningEffort;
+        };
 
         if (config.permissionMode !== undefined) {
             const validModes: PermissionMode[] = ['default', 'read-only', 'safe-yolo', 'yolo'];
@@ -201,8 +212,36 @@ export async function runCodex(opts: {
             currentPermissionMode = config.permissionMode;
         }
 
+        if (config.modelMode !== undefined) {
+            const validModels: SessionModelMode[] = [
+                'default',
+                'gpt-5.2-codex',
+                'gpt-5.1-codex-max',
+                'gpt-5.1-codex-mini',
+                'gpt-5.2'
+            ];
+            if (!validModels.includes(config.modelMode)) {
+                throw new Error('Invalid model mode');
+            }
+            currentModelMode = config.modelMode;
+        }
+
+        if (config.modelReasoningEffort !== undefined) {
+            const validEfforts: SessionModelReasoningEffort[] = ['low', 'medium', 'high', 'xhigh'];
+            if (!validEfforts.includes(config.modelReasoningEffort)) {
+                throw new Error('Invalid reasoning level');
+            }
+            currentModelReasoningEffort = config.modelReasoningEffort;
+        }
+
         syncSessionMode();
-        return { applied: { permissionMode: currentPermissionMode } };
+        return {
+            applied: {
+                permissionMode: currentPermissionMode,
+                modelMode: currentModelMode,
+                modelReasoningEffort: currentModelReasoningEffort
+            }
+        };
     });
 
     let loopError: unknown = null;

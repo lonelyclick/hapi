@@ -1,5 +1,7 @@
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-export type ModelMode = 'default' | 'sonnet' | 'opus'
+export type CodexModelMode = 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+export type ModelMode = 'default' | 'sonnet' | 'opus' | CodexModelMode
+export type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
 export type WorktreeMetadata = {
     basePath: string
@@ -65,6 +67,7 @@ export type Session = {
     todos?: TodoItem[]
     permissionMode?: PermissionMode
     modelMode?: ModelMode
+    modelReasoningEffort?: ModelReasoningEffort
 }
 
 export type SessionSummaryMetadata = {
@@ -85,6 +88,7 @@ export type SessionSummary = {
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number
     modelMode?: ModelMode
+    modelReasoningEffort?: ModelReasoningEffort
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'failed'
@@ -122,6 +126,7 @@ export type AuthResponse = {
 
 export type SessionsResponse = { sessions: SessionSummary[] }
 export type SessionResponse = { session: Session }
+export type DeleteSessionResponse = { ok: true }
 export type MessagesResponse = {
     messages: DecryptedMessage[]
     page: {
@@ -195,6 +200,25 @@ export type SlashCommandsResponse = {
     success: boolean
     commands?: SlashCommand[]
     error?: string
+}
+
+export type SpeechToTextStreamRequest = {
+    streamId: string
+    sequenceId: number
+    action: 'start' | 'continue' | 'stop' | 'cancel'
+    speech: string
+    format?: string
+    engineType?: string
+}
+
+export type SpeechToTextStreamResponse = {
+    code?: number
+    msg?: string
+    data?: {
+        recognition_text?: string
+    }
+    error?: string
+    retryAfter?: number | null
 }
 
 export type SyncEvent =

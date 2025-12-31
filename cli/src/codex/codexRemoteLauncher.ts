@@ -245,6 +245,22 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         return `${header}\n${rendered.join('\n')}`;
     }
 
+    function parseTimeoutEnv(name: string, fallback: number): number {
+        const raw = process.env[name];
+        if (!raw) {
+            return fallback;
+        }
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            logger.warn(`[Codex] Invalid ${name}=${raw}; using ${fallback}`);
+            return fallback;
+        }
+        return parsed;
+    }
+
+    const TURN_TIMEOUT_MS = parseTimeoutEnv('HAPI_CODEX_TURN_TIMEOUT_MS', 30 * 60 * 1000);
+    const TURN_COMPLETE_GRACE_MS = parseTimeoutEnv('HAPI_CODEX_TURN_COMPLETE_GRACE_MS', 5000);
+
     const permissionHandler = new CodexPermissionHandler(session.client);
     const reasoningProcessor = new ReasoningProcessor((message) => {
         session.sendCodexMessage(message);
@@ -276,9 +292,11 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         } else if (msg.type === 'task_complete') {
             messageBuffer.addMessage('Task completed', 'status');
             sendReady();
+            scheduleCompletionAbort('task_complete');
         } else if (msg.type === 'turn_aborted') {
             messageBuffer.addMessage('Turn aborted', 'status');
             sendReady();
+            scheduleCompletionAbort('turn_aborted');
         }
 
         if (msg.type === 'task_started') {
@@ -394,8 +412,84 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
     let abortController = new AbortController();
     let storedSessionIdForResume: string | null = null;
 
-    async function handleAbort() {
-        logger.debug('[Codex] Abort requested - stopping current task');
+    type InFlightTurn = {
+        kind: 'start' | 'continue';
+        message: string;
+        hash: string;
+        startedAt: number;
+    };
+
+    let inFlight: InFlightTurn | null = null;
+    let inFlightTimeout: NodeJS.Timeout | null = null;
+    let inFlightCompletionTimer: NodeJS.Timeout | null = null;
+    let inFlightAbortRequested = false;
+    let lastAbortReason: string | null = null;
+
+    function clearInFlightTimers(): void {
+        if (inFlightTimeout) {
+            clearTimeout(inFlightTimeout);
+            inFlightTimeout = null;
+        }
+        if (inFlightCompletionTimer) {
+            clearTimeout(inFlightCompletionTimer);
+            inFlightCompletionTimer = null;
+        }
+    }
+
+    function clearInFlight(): void {
+        clearInFlightTimers();
+        inFlight = null;
+        inFlightAbortRequested = false;
+    }
+
+    function startInFlightWatchdog(kind: InFlightTurn['kind'], message: string, hash: string): void {
+        clearInFlight();
+        inFlight = {
+            kind,
+            message,
+            hash,
+            startedAt: Date.now()
+        };
+        if (TURN_TIMEOUT_MS <= 0) {
+            return;
+        }
+        inFlightTimeout = setTimeout(() => {
+            requestInFlightAbort('timeout');
+        }, TURN_TIMEOUT_MS);
+    }
+
+    function scheduleCompletionAbort(reason: string): void {
+        if (!inFlight || inFlightAbortRequested || inFlightCompletionTimer) {
+            return;
+        }
+        if (TURN_COMPLETE_GRACE_MS <= 0) {
+            requestInFlightAbort(reason);
+            return;
+        }
+        inFlightCompletionTimer = setTimeout(() => {
+            requestInFlightAbort(reason);
+        }, TURN_COMPLETE_GRACE_MS);
+    }
+
+    function requestInFlightAbort(reason: string): void {
+        if (!inFlight || inFlightAbortRequested) {
+            return;
+        }
+        inFlightAbortRequested = true;
+        clearInFlightTimers();
+        const ageSeconds = Math.round((Date.now() - inFlight.startedAt) / 1000);
+        logger.warn(`[Codex] ${reason} - aborting in-flight ${inFlight.kind} turn (hash=${inFlight.hash}, age=${ageSeconds}s)`);
+        void handleAbort({ preserveQueue: true, reason });
+    }
+
+    async function handleAbort(options: { preserveQueue?: boolean; reason?: string } = {}) {
+        lastAbortReason = options.reason ?? null;
+        if (inFlight) {
+            inFlightAbortRequested = true;
+            clearInFlightTimers();
+        }
+        const reasonSuffix = options.reason ? ` (${options.reason})` : '';
+        logger.debug(`[Codex] Abort requested${reasonSuffix} - stopping current task`);
         try {
             if (client.hasActiveSession()) {
                 storedSessionIdForResume = client.storeSessionForResume();
@@ -403,7 +497,9 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
             }
 
             abortController.abort();
-            session.queue.reset();
+            if (!options.preserveQueue) {
+                session.queue.reset();
+            }
             permissionHandler.reset();
             reasoningProcessor.abort();
             diffProcessor.reset();
@@ -549,11 +645,13 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                         (startConfig.config as any).experimental_resume = resumeFile;
                     }
 
+                    startInFlightWatchdog('start', message.message, message.hash);
                     await client.startSession(startConfig, { signal: abortController.signal });
                     wasCreated = true;
                     first = false;
                     syncSessionId();
                 } else {
+                    startInFlightWatchdog('continue', message.message, message.hash);
                     await client.continueSession(message.message, { signal: abortController.signal });
                     syncSessionId();
                 }
@@ -562,8 +660,11 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                 const isAbortError = error instanceof Error && error.name === 'AbortError';
 
                 if (isAbortError) {
-                    messageBuffer.addMessage('Aborted by user', 'status');
-                    session.sendSessionEvent({ type: 'message', message: 'Aborted by user' });
+                    const abortMessage = lastAbortReason
+                        ? `Aborted (${lastAbortReason})`
+                        : 'Aborted by user';
+                    messageBuffer.addMessage(abortMessage, 'status');
+                    session.sendSessionEvent({ type: 'message', message: abortMessage });
                     wasCreated = false;
                     currentModeHash = null;
                     logger.debug('[Codex] Marked session as not created after abort for proper resume');
@@ -576,6 +677,8 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                     }
                 }
             } finally {
+                clearInFlight();
+                lastAbortReason = null;
                 permissionHandler.reset();
                 reasoningProcessor.abort();
                 diffProcessor.reset();

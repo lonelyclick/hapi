@@ -24,6 +24,12 @@ See `src/configuration.ts` for all options.
 - `TELEGRAM_BOT_TOKEN` - Token from @BotFather.
 - `WEBAPP_URL` - Public HTTPS URL for Telegram Mini App access. Also used to derive default CORS origins for the web app.
 
+### Optional (Feishu/Lark Speech-to-Text)
+
+- `FEISHU_APP_ID` - Feishu/Lark app ID (speech-to-text).
+- `FEISHU_APP_SECRET` - Feishu/Lark app secret (speech-to-text).
+- `FEISHU_BASE_URL` - Feishu/Lark OpenAPI base URL (default: https://open.feishu.cn).
+
 ### Optional
 
 - `WEBAPP_PORT` - HTTP port (default: 3006).
@@ -105,6 +111,10 @@ See `src/web/routes/` for all endpoints.
 - `GET /cli/sessions/:id` - Get session by ID.
 - `POST /cli/machines` - Create/load machine.
 - `GET /cli/machines/:id` - Get machine by ID.
+
+### Speech-to-Text (`src/web/routes/speech.ts`)
+
+- `POST /api/speech-to-text/stream` - Stream audio chunks to Feishu/Lark ASR.
 
 ## Socket.IO
 

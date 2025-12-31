@@ -1,6 +1,6 @@
 import { ApiClient, ApiSessionClient } from '@/lib';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
-import type { Metadata, SessionModelMode, SessionPermissionMode } from '@/api/types';
+import type { Metadata, SessionModelMode, SessionModelReasoningEffort, SessionPermissionMode } from '@/api/types';
 import { logger } from '@/ui/logger';
 
 export type AgentSessionBaseOptions<Mode> = {
@@ -17,6 +17,7 @@ export type AgentSessionBaseOptions<Mode> = {
     applySessionIdToMetadata: (metadata: Metadata, sessionId: string) => Metadata;
     permissionMode?: SessionPermissionMode;
     modelMode?: SessionModelMode;
+    modelReasoningEffort?: SessionModelReasoningEffort;
 };
 
 export class AgentSessionBase<Mode> {
@@ -38,6 +39,7 @@ export class AgentSessionBase<Mode> {
     private keepAliveInterval: NodeJS.Timeout | null = null;
     protected permissionMode?: SessionPermissionMode;
     protected modelMode?: SessionModelMode;
+    protected modelReasoningEffort?: SessionModelReasoningEffort;
 
     constructor(opts: AgentSessionBaseOptions<Mode>) {
         this.path = opts.path;
@@ -53,6 +55,7 @@ export class AgentSessionBase<Mode> {
         this.mode = opts.mode ?? 'local';
         this.permissionMode = opts.permissionMode;
         this.modelMode = opts.modelMode;
+        this.modelReasoningEffort = opts.modelReasoningEffort;
 
         this.client.keepAlive(this.thinking, this.mode, this.getKeepAliveRuntime());
         this.keepAliveInterval = setInterval(() => {
@@ -102,13 +105,14 @@ export class AgentSessionBase<Mode> {
         }
     };
 
-    protected getKeepAliveRuntime(): { permissionMode?: SessionPermissionMode; modelMode?: SessionModelMode } | undefined {
-        if (this.permissionMode === undefined && this.modelMode === undefined) {
+    protected getKeepAliveRuntime(): { permissionMode?: SessionPermissionMode; modelMode?: SessionModelMode; modelReasoningEffort?: SessionModelReasoningEffort } | undefined {
+        if (this.permissionMode === undefined && this.modelMode === undefined && this.modelReasoningEffort === undefined) {
             return undefined;
         }
         return {
             permissionMode: this.permissionMode,
-            modelMode: this.modelMode
+            modelMode: this.modelMode,
+            modelReasoningEffort: this.modelReasoningEffort
         };
     }
 
@@ -118,5 +122,17 @@ export class AgentSessionBase<Mode> {
 
     getModelMode(): SessionModelMode | undefined {
         return this.modelMode;
+    }
+
+    setModelMode(mode?: SessionModelMode): void {
+        this.modelMode = mode;
+    }
+
+    setModelReasoningEffort(effort?: SessionModelReasoningEffort): void {
+        this.modelReasoningEffort = effort;
+    }
+
+    getModelReasoningEffort(): SessionModelReasoningEffort | undefined {
+        return this.modelReasoningEffort;
     }
 }

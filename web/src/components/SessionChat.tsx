@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, ModelMode, PermissionMode, Session } from '@/types/api'
+import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
@@ -36,7 +36,7 @@ export function SessionChat(props: {
     const controlsDisabled = !props.session.active
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
-    const { abortSession, switchSession, setPermissionMode, setModelMode } = useSessionActions(props.api, props.session.id)
+    const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, isPending } = useSessionActions(props.api, props.session.id)
 
     useEffect(() => {
         normalizedCacheRef.current.clear()
@@ -92,9 +92,9 @@ export function SessionChat(props: {
     }, [setPermissionMode, props.onRefresh, haptic])
 
     // Model mode change handler
-    const handleModelModeChange = useCallback(async (mode: ModelMode) => {
+    const handleModelModeChange = useCallback(async (config: { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }) => {
         try {
-            await setModelMode(mode)
+            await setModelMode(config)
             haptic.notification('success')
             props.onRefresh()
         } catch (e) {
@@ -129,6 +129,23 @@ export function SessionChat(props: {
         })
     }, [navigate, props.session.id])
 
+    const handleDelete = useCallback(async () => {
+        const message = props.session.active
+            ? 'This session is still active. Delete it and remove all messages? This will stop the session.'
+            : 'Delete this session and all messages? This cannot be undone.'
+        if (!confirm(message)) {
+            return
+        }
+        try {
+            await deleteSession()
+            haptic.notification('success')
+            props.onBack()
+        } catch (error) {
+            haptic.notification('error')
+            console.error('Failed to delete session:', error)
+        }
+    }, [deleteSession, haptic, props])
+
     const runtime = useHappyRuntime({
         session: props.session,
         blocks: reconciled.blocks,
@@ -143,6 +160,8 @@ export function SessionChat(props: {
                 session={props.session}
                 onBack={props.onBack}
                 onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
+                onDelete={handleDelete}
+                deleteDisabled={isPending}
             />
 
             {controlsDisabled ? (
@@ -174,9 +193,11 @@ export function SessionChat(props: {
                     />
 
                     <HappyComposer
+                        apiClient={props.api}
                         disabled={props.isSending || controlsDisabled}
                         permissionMode={props.session.permissionMode}
                         modelMode={props.session.modelMode}
+                        modelReasoningEffort={props.session.modelReasoningEffort}
                         agentFlavor={props.session.metadata?.flavor ?? 'claude'}
                         active={props.session.active}
                         thinking={props.session.thinking}

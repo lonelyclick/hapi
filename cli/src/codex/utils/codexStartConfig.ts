@@ -59,6 +59,9 @@ export function buildCodexStartConfig(args: {
     if (args.mode.model) {
         startConfig.model = args.mode.model;
     }
+    if (args.mode.modelReasoningEffort && args.mode.model === 'gpt-5.2-codex') {
+        startConfig.model_reasoning_effort = args.mode.modelReasoningEffort;
+    }
 
     return startConfig;
 }

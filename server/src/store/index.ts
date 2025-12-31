@@ -479,6 +479,11 @@ export class Store {
         return rows.map(toStoredSession)
     }
 
+    deleteSession(id: string): boolean {
+        const result = this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+        return result.changes > 0
+    }
+
     getOrCreateMachine(id: string, metadata: unknown, daemonState: unknown, namespace: string): StoredMachine {
         const existing = this.db.prepare('SELECT * FROM machines WHERE id = ?').get(id) as DbMachineRow | undefined
         if (existing) {

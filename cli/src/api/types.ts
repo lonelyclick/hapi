@@ -16,7 +16,8 @@ export type Usage = z.infer<typeof UsageSchema>
 export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
 export type CodexPermissionMode = 'default' | 'read-only' | 'safe-yolo' | 'yolo'
 export type SessionPermissionMode = ClaudePermissionMode | CodexPermissionMode
-export type SessionModelMode = 'default' | 'sonnet' | 'opus'
+export type SessionModelMode = 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+export type SessionModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
 export type Metadata = {
     path: string
@@ -151,6 +152,7 @@ export type Session = {
     thinkingAt?: number
     permissionMode?: SessionPermissionMode
     modelMode?: SessionModelMode
+    modelReasoningEffort?: SessionModelReasoningEffort
 }
 
 export const MachineMetadataSchema = z.object({
@@ -346,6 +348,7 @@ export interface ClientToServerEvents {
         mode?: 'local' | 'remote'
         permissionMode?: SessionPermissionMode
         modelMode?: SessionModelMode
+        modelReasoningEffort?: SessionModelReasoningEffort
     }) => void
     'session-end': (data: { sid: string; time: number }) => void
     'update-metadata': (data: { sid: string; expectedVersion: number; metadata: unknown }, cb: (answer: {

@@ -21,6 +21,11 @@ export interface Settings {
     webappPort?: number
     webappUrl?: string
     corsOrigins?: string[]
+    feishuAppId?: string
+    feishuAppSecret?: string
+    feishuBaseUrl?: string
+    appId?: string
+    appSecret?: string
 }
 
 export interface CliApiTokenResult {

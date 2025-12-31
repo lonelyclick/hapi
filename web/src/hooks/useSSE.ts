@@ -85,6 +85,10 @@ export function useSSE(options: {
         eventSourceRef.current = eventSource
 
         const handleSyncEvent = (event: SyncEvent) => {
+            if (import.meta.env.DEV) {
+                const sessionId = 'sessionId' in event ? event.sessionId : undefined
+                console.log('[sse] event', event.type, sessionId)
+            }
             if (event.type === 'message-received') {
                 queryClient.setQueryData<InfiniteData<MessagesResponse>>(
                     queryKeys.messages(event.sessionId),
@@ -98,12 +102,32 @@ export function useSSE(options: {
             }
 
             if (event.type === 'session-added' || event.type === 'session-updated' || event.type === 'session-removed') {
+                if (import.meta.env.DEV) {
+                    const sessionId = 'sessionId' in event ? event.sessionId : undefined
+                    console.log('[sse] invalidate sessions', event.type, sessionId)
+                }
                 void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
                 if ('sessionId' in event) {
                     if (event.type === 'session-removed') {
+                        if (import.meta.env.DEV) {
+                            console.log('[sse] remove session queries', event.sessionId)
+                        }
                         void queryClient.removeQueries({ queryKey: queryKeys.session(event.sessionId) })
                         void queryClient.removeQueries({ queryKey: queryKeys.messages(event.sessionId) })
                     } else {
+                        if (event.type === 'session-updated') {
+                            const data = ('data' in event ? event.data : null) as { active?: boolean; thinking?: boolean } | null
+                            if (data && data.active === false && data.thinking === false) {
+                                if (import.meta.env.DEV) {
+                                    console.log('[sse] skip session invalidation (ended)', event.sessionId)
+                                }
+                                onEventRef.current(event)
+                                return
+                            }
+                        }
+                        if (import.meta.env.DEV) {
+                            console.log('[sse] invalidate session', event.sessionId)
+                        }
                         void queryClient.invalidateQueries({ queryKey: queryKeys.session(event.sessionId) })
                     }
                 }
