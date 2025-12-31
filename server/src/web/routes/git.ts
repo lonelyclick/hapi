@@ -150,9 +150,6 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         const query = parsed.data.query?.trim() ?? ''
         const limit = parsed.data.limit ?? 200
         const args = ['--files']
-        if (query) {
-            args.push('--iglob', `*${query}*`)
-        }
 
         const result = await runRpc(() => engine.runRipgrep(sessionResult.sessionId, args, sessionPath))
         if (!result.success) {
@@ -160,10 +157,12 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         }
 
         const stdout = result.stdout ?? ''
+        const queryLower = query.toLowerCase()
         const filePaths = stdout
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line.length > 0)
+            .filter((line) => !query || line.toLowerCase().includes(queryLower))
 
         // Extract unique directories from file paths
         const dirSet = new Set<string>()
@@ -176,7 +175,6 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         }
 
         // Filter directories by query if provided
-        const queryLower = query.toLowerCase()
         const matchingDirs = Array.from(dirSet)
             .filter((dir) => !query || dir.toLowerCase().includes(queryLower))
             .map((fullPath) => {
