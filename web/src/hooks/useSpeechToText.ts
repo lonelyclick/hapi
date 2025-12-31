@@ -436,6 +436,15 @@ const sampleBufferRef = useRef<number[]>([])
         console.log('[stt] stop', {
             streamId: streamIdRef.current
         })
+
+        // Timeout to recover from stuck stopping state (e.g., network failure)
+        setTimeout(() => {
+            if (stoppingRef.current) {
+                console.log('[stt] stopping timeout, forcing idle')
+                stoppingRef.current = false
+                setStatus('idle')
+            }
+        }, 5000)
     }, [flushFinalChunks, status])
 
     const toggle = useCallback(async () => {

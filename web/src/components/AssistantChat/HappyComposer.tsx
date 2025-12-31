@@ -458,48 +458,65 @@ export function HappyComposer(props: {
         }
     }, [controlsDisabled, speechToText, voiceMode])
 
+    // Track active pointer to handle iOS touch properly
+    const activePointerRef = useRef<number | null>(null)
+
     const handleVoicePadPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-        if (!voiceMode || controlsDisabled || speechToText.status === 'stopping') return
+        if (!voiceMode || controlsDisabled) return
+        // Skip if stopping, but allow if already idle (in case state is stuck)
+        if (speechToText.status === 'stopping') return
+        // Prevent duplicate pointer captures
+        if (activePointerRef.current !== null) return
+
         event.preventDefault()
-        try {
-            event.currentTarget.setPointerCapture(event.pointerId)
-        } catch {
-            // ignore
-        }
+        activePointerRef.current = event.pointerId
+
+        // Don't use setPointerCapture on iOS - it causes issues
         console.log('[stt] pointer down', {
             voiceMode,
-            status: speechToText.status
+            status: speechToText.status,
+            pointerId: event.pointerId
         })
         handleVoicePressStart().catch(() => {})
     }, [voiceMode, controlsDisabled, speechToText.status, handleVoicePressStart])
 
     const handleVoicePadPointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
         if (!voiceMode || controlsDisabled) return
+        // Only handle the pointer that started the interaction
+        if (activePointerRef.current !== event.pointerId) return
+
         event.preventDefault()
-        try {
-            event.currentTarget.releasePointerCapture(event.pointerId)
-        } catch {
-            // ignore
-        }
+        activePointerRef.current = null
+
         console.log('[stt] pointer up', {
             voiceMode,
-            status: speechToText.status
+            status: speechToText.status,
+            pointerId: event.pointerId
         })
         handleVoicePressEnd()
-    }, [voiceMode, controlsDisabled, handleVoicePressEnd])
+    }, [voiceMode, controlsDisabled, speechToText.status, handleVoicePressEnd])
 
-    const handleVoicePadPointerLeave = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-        if (!voiceMode || speechToText.status !== 'recording') return
+    const handleVoicePadPointerCancel = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+        if (!voiceMode) return
+        // Only handle the pointer that started the interaction
+        if (activePointerRef.current !== event.pointerId) return
+
         event.preventDefault()
-        console.log('[stt] pointer leave', {
+        activePointerRef.current = null
+
+        console.log('[stt] pointer cancel', {
             voiceMode,
-            status: speechToText.status
+            status: speechToText.status,
+            pointerId: event.pointerId
         })
         handleVoicePressEnd()
     }, [voiceMode, speechToText.status, handleVoicePressEnd])
 
     useEffect(() => {
-        if (!voiceMode) return
+        if (!voiceMode) {
+            activePointerRef.current = null
+            return
+        }
         if (!active && speechToText.status === 'recording') {
             speechToText.stop()
         }
@@ -767,8 +784,7 @@ export function HappyComposer(props: {
                                     style={{ WebkitTouchCallout: 'none' }}
                                     onPointerDown={handleVoicePadPointerDown}
                                     onPointerUp={handleVoicePadPointerUp}
-                                    onPointerCancel={handleVoicePadPointerUp}
-                                    onPointerLeave={handleVoicePadPointerLeave}
+                                    onPointerCancel={handleVoicePadPointerCancel}
                                 >
                                     <div
                                         className={`stt-meter ${speechToText.status === 'recording' ? 'stt-meter--active' : ''}`}
