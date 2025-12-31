@@ -141,22 +141,8 @@ export function useActiveSuggestions(
 
             setState((prev) => {
                 if (clampSelection) {
-                    // Simply clamp the selection to valid range
-                    let newSelected = prev.selected
-
-                    if (suggestions.length === 0) {
-                        newSelected = -1
-                    } else if (autoSelectFirst && prev.suggestions.length === 0) {
-                        // First time showing suggestions, auto-select first
-                        newSelected = 0
-                    } else if (prev.selected >= suggestions.length) {
-                        // Selection is out of bounds, clamp to last item
-                        newSelected = suggestions.length - 1
-                    } else if (prev.selected < 0 && suggestions.length > 0 && autoSelectFirst) {
-                        // No selection but we have suggestions
-                        newSelected = 0
-                    }
-
+                    // Always reset to first item when suggestions change (user is typing)
+                    const newSelected = suggestions.length > 0 ? 0 : -1
                     return { suggestions, selected: newSelected }
                 } else {
                     // Try to preserve selection by key (old behavior)

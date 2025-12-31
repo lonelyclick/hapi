@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 
 interface AutocompleteProps {
@@ -12,6 +12,15 @@ interface AutocompleteProps {
  */
 export const Autocomplete = memo(function Autocomplete(props: AutocompleteProps) {
     const { suggestions, selectedIndex, onSelect } = props
+    const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
+
+    // Scroll selected item into view
+    useEffect(() => {
+        if (selectedIndex >= 0) {
+            const el = itemRefs.current.get(selectedIndex)
+            el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        }
+    }, [selectedIndex])
 
     if (suggestions.length === 0) {
         return null
@@ -22,6 +31,13 @@ export const Autocomplete = memo(function Autocomplete(props: AutocompleteProps)
             {suggestions.map((suggestion, index) => (
                 <button
                     key={suggestion.key}
+                    ref={(el) => {
+                        if (el) {
+                            itemRefs.current.set(index, el)
+                        } else {
+                            itemRefs.current.delete(index)
+                        }
+                    }}
                     type="button"
                     className={`flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
                         index === selectedIndex
