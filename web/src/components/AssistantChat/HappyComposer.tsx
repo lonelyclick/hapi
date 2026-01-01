@@ -298,51 +298,10 @@ export function HappyComposer(props: {
         return CLAUDE_PERMISSION_MODES as readonly PermissionMode[]
     }, [agentFlavor])
 
-    const optimizeWithGemini = useCallback(async (text: string): Promise<string> => {
-        const GEMINI_API_KEY = 'AIzaSyCJcXM7pZD6e_cF3XWmDflbt1PFe5WmHq4'
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: `你是一个文本优化助手。请优化以下用户输入的文本：
-1. 修正语音转文字可能产生的错误（同音字、断句问题）
-2. 特别注意中英文混合识别错误：
-   - 英文单词被错误识别成中文（如 "react" 被识别成 "瑞艾克特"）
-   - 英文发音不准导致的拼写错误（如 "componet" 应为 "component"）
-   - 技术术语的识别错误（如 "API"、"TypeScript"、"Node.js" 等）
-3. 保持原意的同时使语句更通顺自然
-4. 不要添加额外信息，只优化表达
-5. 直接输出优化后的文本，不要解释
-
-用户输入：
-${text}`
-                        }]
-                    }],
-                    generationConfig: {
-                        temperature: 0.3,
-                        maxOutputTokens: 2048
-                    }
-                })
-            }
-        )
-
-        if (!response.ok) {
-            throw new Error(`Gemini API error: ${response.status}`)
-        }
-
-        const data = await response.json()
-        const optimizedText = data.candidates?.[0]?.content?.parts?.[0]?.text
-        if (!optimizedText) {
-            throw new Error('No response from Gemini')
-        }
-        return optimizedText.trim()
-    }, [])
+    const optimizeText = useCallback(async (text: string): Promise<string> => {
+        const result = await apiClient.optimizeText(text)
+        return result.optimized
+    }, [apiClient])
 
     const handleOptimizeForPreview = useCallback(async () => {
         if (controlsDisabled || !hasText || isOptimizing) return
@@ -351,16 +310,16 @@ ${text}`
         haptic('light')
 
         try {
-            const optimizedText = await optimizeWithGemini(trimmed)
+            const optimizedResult = await optimizeText(trimmed)
             // If text is the same, just send directly
-            if (optimizedText === trimmed) {
+            if (optimizedResult === trimmed) {
                 const form = textareaRef.current?.closest('form')
                 if (form) {
                     form.requestSubmit()
                 }
             } else {
                 // Show preview dialog
-                setOptimizePreview({ original: trimmed, optimized: optimizedText })
+                setOptimizePreview({ original: trimmed, optimized: optimizedResult })
             }
         } catch (error) {
             console.error('Failed to optimize text:', error)
@@ -373,7 +332,7 @@ ${text}`
         } finally {
             setIsOptimizing(false)
         }
-    }, [controlsDisabled, hasText, isOptimizing, trimmed, optimizeWithGemini, haptic])
+    }, [controlsDisabled, hasText, isOptimizing, trimmed, optimizeText, haptic])
 
     const handleKeyDown = useCallback((e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
         const key = e.key

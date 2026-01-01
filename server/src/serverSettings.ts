@@ -19,6 +19,7 @@ export interface ServerSettings {
     feishuAppId: string | null
     feishuAppSecret: string | null
     feishuBaseUrl: string
+    geminiApiKey: string | null
 }
 
 export interface ServerSettingsResult {
@@ -31,6 +32,7 @@ export interface ServerSettingsResult {
         feishuAppId: 'env' | 'file' | 'default'
         feishuAppSecret: 'env' | 'file' | 'default'
         feishuBaseUrl: 'env' | 'file' | 'default'
+        geminiApiKey: 'env' | 'file' | 'default'
     }
     savedToFile: boolean
 }
@@ -95,6 +97,7 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         feishuAppId: 'default',
         feishuAppSecret: 'default',
         feishuBaseUrl: 'default',
+        geminiApiKey: 'default',
     }
 
     // telegramBotToken: env > file > null
@@ -207,6 +210,20 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         sources.feishuBaseUrl = 'file'
     }
 
+    // geminiApiKey: env > file > null
+    let geminiApiKey: string | null = null
+    if (process.env.GEMINI_API_KEY) {
+        geminiApiKey = process.env.GEMINI_API_KEY
+        sources.geminiApiKey = 'env'
+        if (settings.geminiApiKey === undefined) {
+            settings.geminiApiKey = geminiApiKey
+            needsSave = true
+        }
+    } else if (settings.geminiApiKey !== undefined) {
+        geminiApiKey = settings.geminiApiKey ?? null
+        sources.geminiApiKey = 'file'
+    }
+
     // Save settings if any new values were added
     if (needsSave) {
         await writeSettings(settingsFile, settings)
@@ -221,6 +238,7 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
             feishuAppId,
             feishuAppSecret,
             feishuBaseUrl,
+            geminiApiKey,
         },
         sources,
         savedToFile: needsSave,

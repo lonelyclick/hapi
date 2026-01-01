@@ -17,6 +17,7 @@ import { createMachinesRoutes } from './routes/machines'
 import { createGitRoutes } from './routes/git'
 import { createCliRoutes } from './routes/cli'
 import { createSpeechRoutes } from './routes/speech'
+import { createOptimizeRoutes } from './routes/optimize'
 import type { SSEManager } from '../sse/sseManager'
 import type { Server as BunServer } from 'bun'
 import type { Server as SocketEngine } from '@socket.io/bun-engine'
@@ -85,6 +86,7 @@ function createWebApp(options: {
     app.route('/api', createMachinesRoutes(options.getSyncEngine))
     app.route('/api', createGitRoutes(options.getSyncEngine))
     app.route('/api', createSpeechRoutes())
+    app.route('/api', createOptimizeRoutes())
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap

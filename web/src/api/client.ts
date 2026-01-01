@@ -350,4 +350,11 @@ export class ApiClient {
             `/api/sessions/${encodeURIComponent(sessionId)}/slash-commands`
         )
     }
+
+    async optimizeText(text: string): Promise<{ optimized: string }> {
+        return await this.request<{ optimized: string }>('/api/optimize', {
+            method: 'POST',
+            body: JSON.stringify({ text })
+        })
+    }
 }

@@ -34,6 +34,7 @@ export interface ConfigSources {
     feishuAppId: ConfigSource
     feishuAppSecret: ConfigSource
     feishuBaseUrl: ConfigSource
+    geminiApiKey: ConfigSource
     cliApiToken: 'env' | 'file' | 'generated'
 }
 
@@ -80,6 +81,9 @@ class Configuration {
     /** Feishu/Lark OpenAPI base URL */
     public readonly feishuBaseUrl: string
 
+    /** Gemini API key (text optimization) */
+    public readonly geminiApiKey: string | null
+
     /** Sources of each configuration value */
     public readonly sources: ConfigSources
 
@@ -103,6 +107,7 @@ class Configuration {
         this.feishuAppId = serverSettings.feishuAppId
         this.feishuAppSecret = serverSettings.feishuAppSecret
         this.feishuBaseUrl = serverSettings.feishuBaseUrl
+        this.geminiApiKey = serverSettings.geminiApiKey
 
         // CLI API token - will be set by _setCliApiToken() before create() returns
         this.cliApiToken = ''
