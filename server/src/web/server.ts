@@ -44,12 +44,25 @@ function findWebappDistDir(): { distDir: string; indexHtmlPath: string } {
     return { distDir, indexHtmlPath: join(distDir, 'index.html') }
 }
 
-function serveEmbeddedAsset(asset: EmbeddedWebAsset): Response {
-    return new Response(Bun.file(asset.sourcePath), {
-        headers: {
-            'Content-Type': asset.mimeType
-        }
-    })
+function serveEmbeddedAsset(asset: EmbeddedWebAsset, isHtml: boolean = false): Response {
+    const headers: Record<string, string> = {
+        'Content-Type': asset.mimeType
+    }
+
+    if (isHtml) {
+        // HTML 文件不缓存，确保 iOS Safari PWA 能获取最新版本
+        headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        headers['Pragma'] = 'no-cache'
+        headers['Expires'] = '0'
+    } else if (asset.mimeType === 'application/javascript' && asset.sourcePath.includes('sw.js')) {
+        // Service Worker 文件也不应该被缓存
+        headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    } else {
+        // 静态资源（带 hash 的）可以长期缓存
+        headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    }
+
+    return new Response(Bun.file(asset.sourcePath), { headers })
 }
 
 function createWebApp(options: {
@@ -113,7 +126,8 @@ function createWebApp(options: {
 
             const asset = embeddedAssetMap.get(c.req.path)
             if (asset) {
-                return serveEmbeddedAsset(asset)
+                const isHtml = c.req.path.endsWith('.html') || c.req.path === '/'
+                return serveEmbeddedAsset(asset, isHtml)
             }
 
             return await next()
@@ -125,7 +139,8 @@ function createWebApp(options: {
                 return
             }
 
-            return serveEmbeddedAsset(indexHtmlAsset)
+            // index.html 作为 SPA fallback，不缓存
+            return serveEmbeddedAsset(indexHtmlAsset, true)
         })
 
         return app
@@ -143,7 +158,35 @@ function createWebApp(options: {
         return app
     }
 
+    // assets 目录下的文件带 hash，可以长期缓存
+    app.use('/assets/*', async (c, next) => {
+        await next()
+        if (c.res) {
+            c.res.headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+        }
+    })
     app.use('/assets/*', serveStatic({ root: distDir }))
+
+    // Service Worker 和 manifest 不应该被缓存
+    app.get('/sw.js', async (c) => {
+        const response = await serveStatic({ root: distDir })(c, async () => {})
+        if (response) {
+            const newResponse = new Response(response.body, response)
+            newResponse.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+            return newResponse
+        }
+        return c.notFound()
+    })
+
+    app.get('/manifest.webmanifest', async (c) => {
+        const response = await serveStatic({ root: distDir })(c, async () => {})
+        if (response) {
+            const newResponse = new Response(response.body, response)
+            newResponse.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+            return newResponse
+        }
+        return c.notFound()
+    })
 
     app.use('*', async (c, next) => {
         if (c.req.path.startsWith('/api')) {
@@ -160,7 +203,16 @@ function createWebApp(options: {
             return
         }
 
-        return await serveStatic({ root: distDir, path: 'index.html' })(c, next)
+        // HTML fallback 不缓存，确保 iOS Safari PWA 能获取最新版本
+        const response = await serveStatic({ root: distDir, path: 'index.html' })(c, next)
+        if (response) {
+            const newResponse = new Response(response.body, response)
+            newResponse.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+            newResponse.headers.set('Pragma', 'no-cache')
+            newResponse.headers.set('Expires', '0')
+            return newResponse
+        }
+        return response
     })
 
     return app
