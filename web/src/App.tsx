@@ -16,12 +16,15 @@ import { LoginPrompt } from '@/components/LoginPrompt'
 import { InstallPrompt } from '@/components/InstallPrompt'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { SyncingBanner } from '@/components/SyncingBanner'
+import { UpdateBanner } from '@/components/UpdateBanner'
 import { LoadingState } from '@/components/LoadingState'
+import { useVersionCheck } from '@/hooks/useVersionCheck'
 
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
     const { authSource, isLoading: isAuthSourceLoading, setAccessToken } = useAuthSource(baseUrl)
     const { token, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
+    const { hasUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const pathname = useLocation({ select: (location) => location.pathname })
@@ -249,6 +252,7 @@ export function App() {
 
     return (
         <AppContextProvider value={{ api, token }}>
+            {hasUpdate && <UpdateBanner onRefresh={refreshApp} onDismiss={dismissUpdate} />}
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />
             <div className="h-full flex flex-col">
