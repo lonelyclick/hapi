@@ -943,7 +943,7 @@ ${text}`
                                 ref={textareaRef}
                                 autoFocus={!controlsDisabled && !isTouch}
                                 placeholder={showContinueHint ? "Type 'continue' to resume..." : "Type a message..."}
-                                disabled={controlsDisabled || speechToText.status === 'connecting' || speechToText.status === 'recording' || speechToText.status === 'stopping'}
+                                disabled={controlsDisabled || isOptimizing || speechToText.status === 'connecting' || speechToText.status === 'recording' || speechToText.status === 'stopping'}
                                 maxRows={5}
                                 submitOnEnter
                                 cancelOnEscape={false}
@@ -1014,6 +1014,7 @@ ${text}`
                             isSwitching={isSwitching}
                             onSwitch={handleSwitch}
                             autoOptimizeEnabled={autoOptimize}
+                            isOptimizing={isOptimizing}
                         />
                     </div>
                 </ComposerPrimitive.Root>
@@ -1035,10 +1036,13 @@ ${text}`
                                 </div>
                             </div>
                             <div>
-                                <div className="mb-1 text-xs font-medium text-purple-500">Optimized</div>
-                                <div className="rounded-lg bg-purple-50 p-3 text-sm text-[var(--app-fg)] dark:bg-purple-900/20">
-                                    {optimizePreview.optimized}
-                                </div>
+                                <div className="mb-1 text-xs font-medium text-purple-500">Optimized (editable)</div>
+                                <textarea
+                                    value={optimizePreview.optimized}
+                                    onChange={(e) => setOptimizePreview(prev => prev ? { ...prev, optimized: e.target.value } : null)}
+                                    className="w-full resize-none rounded-lg bg-purple-50 p-3 text-sm text-[var(--app-fg)] focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-purple-900/20"
+                                    rows={Math.min(6, Math.max(2, optimizePreview.optimized.split('\n').length))}
+                                />
                             </div>
                         </div>
 
@@ -1062,27 +1066,9 @@ ${text}`
                                 onClick={handlePreviewConfirm}
                                 className="flex-1 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
                             >
-                                Send Optimized
+                                Send
                             </button>
                         </div>
-                    </div>
-                </div>
-            ) : null}
-
-            {/* Optimizing Overlay */}
-            {isOptimizing ? (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-                    <div className="flex items-center gap-3 rounded-2xl bg-[var(--app-bg)] px-6 py-4 shadow-xl">
-                        <svg
-                            className="h-5 w-5 animate-spin text-purple-600"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                        >
-                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeOpacity="0.25" />
-                            <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        <span className="text-sm font-medium text-[var(--app-fg)]">Optimizing...</span>
                     </div>
                 </div>
             ) : null}

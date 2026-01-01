@@ -130,6 +130,22 @@ function SendIcon() {
     )
 }
 
+function SpinnerIcon() {
+    return (
+        <svg
+            className="animate-spin"
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+        >
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+    )
+}
+
 export function ComposerButtons(props: {
     canSend: boolean
     controlsDisabled: boolean
@@ -153,6 +169,7 @@ export function ComposerButtons(props: {
     isSwitching: boolean
     onSwitch: () => void
     autoOptimizeEnabled: boolean
+    isOptimizing: boolean
 }) {
     return (
         <div className="flex items-center justify-between px-2 pb-2">
@@ -231,18 +248,20 @@ export function ComposerButtons(props: {
             </div>
 
             <ComposerPrimitive.Send
-                disabled={props.controlsDisabled || !props.canSend}
-                aria-label={props.autoOptimizeEnabled ? "Optimize and Send" : "Send"}
-                title={props.autoOptimizeEnabled ? "Optimize and Send" : "Send"}
+                disabled={props.controlsDisabled || !props.canSend || props.isOptimizing}
+                aria-label={props.isOptimizing ? "Optimizing..." : props.autoOptimizeEnabled ? "Optimize and Send" : "Send"}
+                title={props.isOptimizing ? "Optimizing..." : props.autoOptimizeEnabled ? "Optimize and Send" : "Send"}
                 className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                    props.canSend && !props.controlsDisabled
-                        ? props.autoOptimizeEnabled
-                            ? 'bg-purple-600 text-white hover:bg-purple-700'
-                            : 'bg-black text-white'
-                        : 'bg-[#C0C0C0] text-white'
+                    props.isOptimizing
+                        ? 'bg-purple-600 text-white'
+                        : props.canSend && !props.controlsDisabled
+                            ? props.autoOptimizeEnabled
+                                ? 'bg-purple-600 text-white hover:bg-purple-700'
+                                : 'bg-black text-white'
+                            : 'bg-[#C0C0C0] text-white'
                 } disabled:cursor-not-allowed`}
             >
-                <SendIcon />
+                {props.isOptimizing ? <SpinnerIcon /> : <SendIcon />}
             </ComposerPrimitive.Send>
         </div>
     )
