@@ -1,35 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ApiClient } from '@/api/client'
-import type { SpeechToTextStreamRequest } from '@/types/api'
 
-type SpeechToTextStatus = 'idle' | 'recording' | 'stopping' | 'error'
+type SpeechToTextStatus = 'idle' | 'connecting' | 'recording' | 'stopping' | 'error'
 
 type SpeechToTextOptions = {
-    api: ApiClient
     onPartial: (text: string) => void
     onFinal: (text: string) => void
     onError?: (message: string) => void
-}
-
-type QueueItem = {
-    action: SpeechToTextStreamRequest['action']
-    sequenceId: number
-    speech: string
-    streamId: string
+    wsUrl?: string
 }
 
 const TARGET_SAMPLE_RATE = 16000
-const CHUNK_DURATION_MS = 150
+const CHUNK_DURATION_MS = 300
 const CHUNK_SAMPLES = Math.floor(TARGET_SAMPLE_RATE * (CHUNK_DURATION_MS / 1000))
-const FINAL_SILENCE_SAMPLES = CHUNK_SAMPLES
 const PROCESSOR_BUFFER_SIZE = 4096
-const MIN_SEND_INTERVAL_MS = 150
-const SILENCE_RMS_THRESHOLD = 0.003
-const SILENCE_SKIP_LIMIT = 4
 const INPUT_GAIN = 4
 const VOLUME_DB_FLOOR = 60
 const VOLUME_DB_EPSILON = 0.0001
 const VOLUME_SMOOTHING = 0.7
+
+const DEFAULT_WS_URL = 'wss://whisper.yohomobile.dev'
 
 function getAudioContextCtor(): typeof AudioContext | null {
     if (typeof window === 'undefined') return null
@@ -52,33 +41,8 @@ function resampleToTarget(input: Float32Array, sourceRate: number): Float32Array
     return output
 }
 
-function floatTo16BitPCM(input: Float32Array): Int16Array {
-    const output = new Int16Array(input.length)
-    for (let i = 0; i < input.length; i += 1) {
-        const boosted = (input[i] ?? 0) * INPUT_GAIN
-        const sample = Math.max(-1, Math.min(1, boosted))
-        output[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
-    }
-    return output
-}
-
-function pcmToBase64(input: Int16Array): string {
-    const bytes = new Uint8Array(input.buffer)
-    let binary = ''
-    const chunkSize = 0x8000
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-        const slice = bytes.subarray(i, i + chunkSize)
-        binary += String.fromCharCode(...slice)
-    }
-    return btoa(binary)
-}
-
-function createSilence(samples: number): Int16Array {
-    return new Int16Array(Math.max(1, samples))
-}
-
-function getStreamId(): string {
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789_'
+function getClientUid(): string {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789'
     const length = 16
     if (typeof crypto !== 'undefined' && 'getRandomValues' in crypto) {
         const bytes = new Uint8Array(length)
@@ -97,39 +61,55 @@ function getStreamId(): string {
     return result
 }
 
+type WhisperSegment = {
+    start: number
+    end: number
+    text: string
+    completed?: boolean
+}
+
+type WhisperPayload = {
+    message?: string
+    backend?: string
+    segments?: WhisperSegment[]
+    text?: string
+    partial?: string
+    result?: string
+    is_final?: boolean
+    final?: boolean
+}
+
+type WhisperMessage = WhisperPayload & {
+    uid?: string
+    data?: WhisperPayload
+}
+
 export function useSpeechToText(options: SpeechToTextOptions) {
     const [status, setStatus] = useState<SpeechToTextStatus>('idle')
     const [error, setError] = useState<string | null>(null)
     const [volume, setVolume] = useState(0)
 
-    const apiRef = useRef(options.api)
     const onPartialRef = useRef(options.onPartial)
     const onFinalRef = useRef(options.onFinal)
     const onErrorRef = useRef(options.onError)
+    const wsUrlRef = useRef(options.wsUrl ?? DEFAULT_WS_URL)
 
-const audioContextRef = useRef<AudioContext | null>(null)
-const mediaStreamRef = useRef<MediaStream | null>(null)
-const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
-const processorRef = useRef<ScriptProcessorNode | null>(null)
-const gainRef = useRef<GainNode | null>(null)
-const preparedRef = useRef(false)
-const capturingRef = useRef(false)
-const volumeRef = useRef(0)
+    const audioContextRef = useRef<AudioContext | null>(null)
+    const mediaStreamRef = useRef<MediaStream | null>(null)
+    const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
+    const processorRef = useRef<ScriptProcessorNode | null>(null)
+    const gainRef = useRef<GainNode | null>(null)
+    const preparedRef = useRef(false)
+    const capturingRef = useRef(false)
+    const volumeRef = useRef(0)
 
-const sampleBufferRef = useRef<number[]>([])
-    const queueRef = useRef<QueueItem[]>([])
-    const sendingRef = useRef(false)
+    const wsRef = useRef<WebSocket | null>(null)
+    const clientUidRef = useRef('')
+    const sampleBufferRef = useRef<number[]>([])
     const stoppingRef = useRef(false)
     const startAttemptRef = useRef(0)
-    const lastSendAtRef = useRef(0)
-    const qpsBackoffRef = useRef(0)
-    const silentChunksRef = useRef(0)
-    const streamIdRef = useRef('')
-    const sequenceIdRef = useRef(0)
-
-    useEffect(() => {
-        apiRef.current = options.api
-    }, [options.api])
+    const lastTextRef = useRef('')
+    const completedTextRef = useRef<string[]>([])
 
     useEffect(() => {
         onPartialRef.current = options.onPartial
@@ -142,6 +122,17 @@ const sampleBufferRef = useRef<number[]>([])
     useEffect(() => {
         onErrorRef.current = options.onError
     }, [options.onError])
+
+    useEffect(() => {
+        wsUrlRef.current = options.wsUrl ?? DEFAULT_WS_URL
+    }, [options.wsUrl])
+
+    const cleanupWebSocket = useCallback(() => {
+        if (wsRef.current) {
+            wsRef.current.close()
+            wsRef.current = null
+        }
+    }, [])
 
     const cleanupAudio = useCallback(() => {
         processorRef.current?.disconnect()
@@ -165,157 +156,270 @@ const sampleBufferRef = useRef<number[]>([])
 
     const resetStreamState = useCallback(() => {
         sampleBufferRef.current = []
-        queueRef.current = []
-        sendingRef.current = false
-        stoppingRef.current = false
         capturingRef.current = false
-        streamIdRef.current = ''
-        sequenceIdRef.current = 0
+        stoppingRef.current = false
+        clientUidRef.current = ''
         volumeRef.current = 0
+        lastTextRef.current = ''
+        completedTextRef.current = []
         setVolume(0)
     }, [])
 
     const handleError = useCallback((message: string) => {
         setError(message)
         setStatus('error')
+        cleanupWebSocket()
         cleanupAudio()
         preparedRef.current = false
         resetStreamState()
         onErrorRef.current?.(message)
-    }, [cleanupAudio, resetStreamState])
+    }, [cleanupWebSocket, cleanupAudio, resetStreamState])
 
-    const processQueue = useCallback(async () => {
-        console.log('[stt] processQueue start', {
-            queueSize: queueRef.current.length,
-            sending: sendingRef.current,
-            streamId: streamIdRef.current,
-            seq: sequenceIdRef.current,
-            status,
-            stopping: stoppingRef.current,
-            capturing: capturingRef.current
-        })
-        if (sendingRef.current) return
-        sendingRef.current = true
-        while (queueRef.current.length > 0) {
-            const item = queueRef.current.shift()
-            if (!item) break
-            try {
-                const now = Date.now()
-                const waitMs = Math.max(0, lastSendAtRef.current + MIN_SEND_INTERVAL_MS - now)
-                if (waitMs > 0) {
-                    await new Promise(resolve => setTimeout(resolve, waitMs))
-                }
+    const chunkCountRef = useRef(0)
 
-                console.log('[stt] send', {
-                    action: item.action,
-                    sequenceId: item.sequenceId,
-                    streamId: item.streamId,
-                    speechSize: item.speech.length
-                })
-                const response = await apiRef.current.streamSpeechToText({
-                    streamId: item.streamId,
-                    sequenceId: item.sequenceId,
-                    action: item.action,
-                    speech: item.speech,
-                    format: 'pcm',
-                    engineType: '16k_auto'
-                })
-                console.log('[stt] response', response)
-                console.log('[stt] response.data', response.data)
-                if (response.error === 'rate_limited' || response.retryAfter) {
-                    const waitSeconds = response.retryAfter ?? 1
-                    const waitMs = Math.max(200, waitSeconds * 1000)
-                    console.log('[stt] rate limited, wait', { waitSeconds })
-                    queueRef.current.unshift(item)
-                    await new Promise(resolve => setTimeout(resolve, waitMs))
-                    continue
-                }
+    const sendAudioChunkRef = useRef((audio: Float32Array) => {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+            console.log('[stt] sendAudioChunk skipped - ws not ready', {
+                hasWs: Boolean(wsRef.current),
+                readyState: wsRef.current?.readyState
+            })
+            return
+        }
+        // Apply gain and send as Float32 (WhisperLive expects float32 normalized audio)
+        const float32 = new Float32Array(audio.length)
+        for (let i = 0; i < audio.length; i++) {
+            float32[i] = Math.max(-1, Math.min(1, (audio[i] ?? 0) * INPUT_GAIN))
+        }
+        chunkCountRef.current += 1
+        if (chunkCountRef.current <= 5 || chunkCountRef.current % 50 === 0) {
+            console.log('[stt] sendAudioChunk', {
+                chunkNum: chunkCountRef.current,
+                samples: float32.length,
+                byteLength: float32.buffer.byteLength,
+                sampleMin: Math.min(...float32),
+                sampleMax: Math.max(...float32)
+            })
+        }
+        wsRef.current.send(float32.buffer)
+    })
 
-                if (response.error) {
-                    throw new Error(response.error)
-                }
-                if (response.code && response.code !== 0) {
-                    throw new Error(response.msg || `Feishu error ${response.code}`)
-                }
+    // Use ref to track status for WebSocket callbacks (avoid stale closure)
+    const statusRef = useRef(status)
+    useEffect(() => {
+        statusRef.current = status
+    }, [status])
 
-                lastSendAtRef.current = Date.now()
-                qpsBackoffRef.current = 0
-
-                const text = response.data?.recognition_text
-                if (text && text.trim().length > 0) {
-                    if (item.action === 'stop' || item.action === 'cancel') {
-                        onFinalRef.current(text)
-                    } else {
-                        onPartialRef.current(text)
-                    }
+    const handleWebSocketPayload = useCallback((payloadText: string, allowPlainText: boolean) => {
+        let data: WhisperMessage
+        try {
+            data = JSON.parse(payloadText) as WhisperMessage
+        } catch (err) {
+            if (allowPlainText) {
+                const fallback = payloadText.trim()
+                if (fallback) {
+                    completedTextRef.current = []
+                    lastTextRef.current = fallback
+                    onPartialRef.current(fallback)
                 }
-            } catch (err) {
-                const message = err instanceof Error ? err.message : 'Speech-to-text failed'
-                if (message.includes('qps exceeded') || message.includes('"code":10024') || message.includes('10024')) {
-                    const backoff = qpsBackoffRef.current > 0 ? Math.min(qpsBackoffRef.current * 2, 2000) : 800
-                    qpsBackoffRef.current = backoff
-                    console.log('[stt] qps backoff', { backoff })
-                    queueRef.current.unshift(item)
-                    await new Promise(resolve => setTimeout(resolve, backoff))
-                    continue
-                }
-                handleError(message)
-                break
+                return
             }
-        }
-
-        sendingRef.current = false
-        console.log('[stt] processQueue done', {
-            queueSize: queueRef.current.length,
-            status,
-            stopping: stoppingRef.current,
-            capturing: capturingRef.current
-        })
-        if (stoppingRef.current && queueRef.current.length === 0) {
-            stoppingRef.current = false
-            setStatus('idle')
-        }
-    }, [handleError])
-
-    const enqueueChunk = useCallback((audio: Int16Array, action: QueueItem['action']) => {
-        if (!streamIdRef.current) {
-            streamIdRef.current = getStreamId()
-        }
-        const speech = pcmToBase64(audio)
-        queueRef.current.push({
-            action,
-            sequenceId: sequenceIdRef.current,
-            speech,
-            streamId: streamIdRef.current
-        })
-        console.log('[stt] enqueue', {
-            action,
-            sequenceId: sequenceIdRef.current,
-            streamId: streamIdRef.current,
-            pcmSamples: audio.length
-        })
-        sequenceIdRef.current += 1
-        processQueue().catch(() => {})
-    }, [processQueue])
-
-    const flushFinalChunks = useCallback(() => {
-        const remaining = sampleBufferRef.current.splice(0)
-        const remainingSamples = remaining.length > 0 ? new Int16Array(remaining) : null
-
-        if (sequenceIdRef.current === 0) {
-            enqueueChunk(remainingSamples ?? createSilence(CHUNK_SAMPLES), 'start')
-            enqueueChunk(createSilence(FINAL_SILENCE_SAMPLES), 'stop')
+            console.error('[stt] ws message parse error', err)
             return
         }
 
-        enqueueChunk(remainingSamples ?? createSilence(FINAL_SILENCE_SAMPLES), 'stop')
-    }, [enqueueChunk])
+        console.log('[stt] ws message', data)
+
+        const payload = data.data ?? data
+        const message = payload.message ?? data.message
+        const backend = payload.backend ?? data.backend
+
+        if (message === 'SERVER_READY') {
+            console.log('[stt] server ready, backend:', backend)
+            return
+        }
+
+        if (message === 'DISCONNECT') {
+            console.log('[stt] server disconnect')
+            if (statusRef.current === 'recording' || statusRef.current === 'stopping') {
+                // Collect final text
+                const finalText = [...completedTextRef.current, lastTextRef.current].join('').trim()
+                if (finalText) {
+                    onFinalRef.current(finalText)
+                }
+                setStatus('idle')
+            }
+            cleanupWebSocket()
+            return
+        }
+
+        const segments = Array.isArray(payload.segments)
+            ? payload.segments
+            : Array.isArray(data.segments)
+                ? data.segments
+                : null
+
+        if (segments && segments.length > 0) {
+            console.log('[stt] processing segments:', segments)
+            const hasCompletionFlag = segments.some(seg => seg.completed !== undefined)
+
+            if (hasCompletionFlag) {
+                // Process segments with completion flags
+                const newCompleted: string[] = []
+                let currentText = ''
+
+                for (const seg of segments) {
+                    if (seg.completed) {
+                        newCompleted.push(seg.text)
+                    } else {
+                        currentText = seg.text
+                    }
+                }
+
+                // Update completed segments
+                if (newCompleted.length > 0) {
+                    completedTextRef.current = newCompleted
+                }
+
+                lastTextRef.current = currentText
+
+                // Build full text for partial callback
+                const fullText = [...completedTextRef.current, currentText].join('').trim()
+                if (fullText) {
+                    console.log('[stt] calling onPartial with segments text:', fullText)
+                    onPartialRef.current(fullText)
+                }
+                return
+            }
+
+            const fullText = segments.map(seg => seg.text).join('').trim()
+            if (fullText) {
+                console.log('[stt] calling onPartial with joined segments:', fullText)
+                completedTextRef.current = []
+                lastTextRef.current = fullText
+                onPartialRef.current(fullText)
+            }
+            return
+        }
+
+        const text = typeof payload.text === 'string'
+            ? payload.text
+            : typeof payload.partial === 'string'
+                ? payload.partial
+                : typeof payload.result === 'string'
+                    ? payload.result
+                    : typeof data.text === 'string'
+                        ? data.text
+                        : typeof data.partial === 'string'
+                            ? data.partial
+                            : typeof data.result === 'string'
+                                ? data.result
+                                : null
+
+        if (text) {
+            const trimmed = text.trim()
+            if (trimmed) {
+                console.log('[stt] calling onPartial with text:', trimmed)
+                completedTextRef.current = []
+                lastTextRef.current = trimmed
+                onPartialRef.current(trimmed)
+            }
+        }
+    }, [cleanupWebSocket])
+
+    const handleWebSocketMessage = useCallback((event: MessageEvent) => {
+        console.log('[stt] ws raw message', {
+            dataType: typeof event.data,
+            isArrayBuffer: event.data instanceof ArrayBuffer,
+            isBlob: event.data instanceof Blob,
+            dataLength: typeof event.data === 'string' ? event.data.length : event.data?.byteLength ?? event.data?.size
+        })
+
+        if (typeof event.data === 'string') {
+            console.log('[stt] ws string data:', event.data.substring(0, 500))
+            handleWebSocketPayload(event.data, true)
+            return
+        }
+
+        if (event.data instanceof ArrayBuffer) {
+            const decoded = new TextDecoder().decode(event.data)
+            console.log('[stt] ws arraybuffer decoded:', decoded.substring(0, 500))
+            handleWebSocketPayload(decoded, false)
+            return
+        }
+
+        if (event.data instanceof Blob) {
+            event.data.text()
+                .then(text => {
+                    console.log('[stt] ws blob decoded:', text.substring(0, 500))
+                    handleWebSocketPayload(text, false)
+                })
+                .catch(err => {
+                    console.error('[stt] ws message parse error', err)
+                })
+            return
+        }
+
+        console.warn('[stt] ws message unknown payload', event.data)
+    }, [handleWebSocketPayload])
+
+    const connectWebSocket = useCallback((): Promise<boolean> => {
+        return new Promise((resolve) => {
+            clientUidRef.current = getClientUid()
+            const ws = new WebSocket(wsUrlRef.current)
+            ws.binaryType = 'arraybuffer'
+            wsRef.current = ws
+
+            const timeout = setTimeout(() => {
+                if (ws.readyState !== WebSocket.OPEN) {
+                    ws.close()
+                    resolve(false)
+                }
+            }, 10000)
+
+            ws.onopen = () => {
+                console.log('[stt] ws connected')
+                // Send configuration
+                const config = {
+                    uid: clientUidRef.current,
+                    language: 'zh',
+                    task: 'transcribe',
+                    model: 'whisper-large-v3',
+                    use_vad: true
+                }
+                ws.send(JSON.stringify(config))
+                clearTimeout(timeout)
+                resolve(true)
+            }
+
+            ws.onmessage = handleWebSocketMessage
+
+            ws.onerror = (event) => {
+                console.error('[stt] ws error', event)
+                clearTimeout(timeout)
+                resolve(false)
+            }
+
+            ws.onclose = (event) => {
+                console.log('[stt] ws closed', event.code, event.reason)
+                wsRef.current = null
+                if (statusRef.current === 'recording') {
+                    // Unexpected close
+                    const finalText = [...completedTextRef.current, lastTextRef.current].join('').trim()
+                    if (finalText) {
+                        onFinalRef.current(finalText)
+                    }
+                    setStatus('idle')
+                    resetStreamState()
+                }
+            }
+        })
+    }, [handleWebSocketMessage, resetStreamState])
 
     const prepare = useCallback(async (): Promise<boolean> => {
         console.log('[stt] prepare start', {
             prepared: preparedRef.current,
             hasStream: Boolean(mediaStreamRef.current),
-            status
+            status: statusRef.current
         })
         if (preparedRef.current && mediaStreamRef.current && audioContextRef.current) {
             return true
@@ -344,17 +448,22 @@ const sampleBufferRef = useRef<number[]>([])
                 if (!capturingRef.current || stoppingRef.current) return
                 const input = event.inputBuffer.getChannelData(0)
                 const resampled = resampleToTarget(input, audioContext.sampleRate)
-                const int16 = floatTo16BitPCM(resampled)
+
+                // Add to buffer
                 const buffer = sampleBufferRef.current
-                for (let i = 0; i < int16.length; i += 1) {
-                    buffer.push(int16[i] ?? 0)
+                for (let i = 0; i < resampled.length; i += 1) {
+                    buffer.push(resampled[i] ?? 0)
                 }
+
+                // Process chunks
                 while (buffer.length >= CHUNK_SAMPLES) {
                     const chunkSamples = buffer.splice(0, CHUNK_SAMPLES)
-                    const chunk = new Int16Array(chunkSamples)
+                    const chunk = new Float32Array(chunkSamples)
+
+                    // Calculate volume
                     let sum = 0
                     for (let i = 0; i < chunk.length; i += 1) {
-                        const sample = chunk[i] / 32768
+                        const sample = chunk[i]
                         sum += sample * sample
                     }
                     const rms = Math.sqrt(sum / chunk.length)
@@ -363,19 +472,9 @@ const sampleBufferRef = useRef<number[]>([])
                     const smoothed = volumeRef.current * VOLUME_SMOOTHING + normalized * (1 - VOLUME_SMOOTHING)
                     volumeRef.current = smoothed
                     setVolume(smoothed)
-                    const isSilent = rms < SILENCE_RMS_THRESHOLD
-                    console.log('[stt] chunk rms', { rms, isSilent, seq: sequenceIdRef.current })
-                    if (isSilent && sequenceIdRef.current !== 0) {
-                        silentChunksRef.current += 1
-                        if (silentChunksRef.current <= SILENCE_SKIP_LIMIT) {
-                            continue
-                        }
-                        silentChunksRef.current = 0
-                    } else {
-                        silentChunksRef.current = 0
-                    }
-                    const action = sequenceIdRef.current === 0 ? 'start' : 'continue'
-                    enqueueChunk(chunk, action)
+
+                    // Send chunk
+                    sendAudioChunkRef.current(chunk)
                 }
             }
 
@@ -403,80 +502,137 @@ const sampleBufferRef = useRef<number[]>([])
             handleError(message)
             return false
         }
-    }, [enqueueChunk, handleError])
+    }, [handleError])
 
     const start = useCallback(async () => {
-        if (status === 'recording' || status === 'stopping') return
+        if (status === 'recording' || status === 'stopping' || status === 'connecting') return
         setError(null)
         const attempt = startAttemptRef.current + 1
         startAttemptRef.current = attempt
-        const ok = await prepare()
-        if (!ok || attempt !== startAttemptRef.current) return
-        resetStreamState()
-        streamIdRef.current = getStreamId()
+
+        setStatus('connecting')
+
+        // Prepare audio first
+        const audioOk = await prepare()
+        if (!audioOk || attempt !== startAttemptRef.current) {
+            setStatus('idle')
+            return
+        }
+
+        // Reset state before connecting (but preserve attempt counter)
+        sampleBufferRef.current = []
+        lastTextRef.current = ''
+        completedTextRef.current = []
+        chunkCountRef.current = 0
+
+        // Connect WebSocket
+        const wsOk = await connectWebSocket()
+        if (!wsOk || attempt !== startAttemptRef.current) {
+            handleError('Failed to connect to speech server')
+            return
+        }
+
+        // Start capturing audio
         capturingRef.current = true
         volumeRef.current = 0
         setVolume(0)
         setStatus('recording')
         console.log('[stt] start', {
-            streamId: streamIdRef.current
+            clientUid: clientUidRef.current
         })
-    }, [prepare, resetStreamState, status])
+    }, [connectWebSocket, handleError, prepare, status])
 
     const stop = useCallback(() => {
-        if (status !== 'recording') return
-        setStatus('stopping')
+        if (status !== 'recording' && status !== 'connecting') return
+
+        // Increment attempt to cancel any in-progress start
+        startAttemptRef.current += 1
         stoppingRef.current = true
         capturingRef.current = false
-        startAttemptRef.current += 1
-        silentChunksRef.current = 0
         volumeRef.current = 0
         setVolume(0)
-        flushFinalChunks()
+
         console.log('[stt] stop', {
-            streamId: streamIdRef.current
+            clientUid: clientUidRef.current,
+            wasConnecting: status === 'connecting'
         })
 
-        // Timeout to recover from stuck stopping state (e.g., network failure)
+        // If we were connecting, just cancel - no final text
+        if (status === 'connecting') {
+            cleanupWebSocket()
+            stoppingRef.current = false
+            setStatus('idle')
+            return
+        }
+
+        setStatus('stopping')
+
+        // Send remaining audio buffer if any
+        const remainingBuffer = sampleBufferRef.current
+        if (remainingBuffer.length > 0) {
+            const chunk = new Float32Array(remainingBuffer)
+            sampleBufferRef.current = []
+            sendAudioChunkRef.current(chunk)
+        }
+
+        // Send empty chunk to signal end of audio (some servers expect this)
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            console.log('[stt] sending end-of-stream signal')
+            // Send end signal as JSON message
+            wsRef.current.send(JSON.stringify({ uid: clientUidRef.current, message: 'END_STREAM' }))
+        }
+
+        // Wait for server to process remaining audio and send final results
         setTimeout(() => {
-            if (stoppingRef.current) {
-                console.log('[stt] stopping timeout, forcing idle')
-                stoppingRef.current = false
-                setStatus('idle')
+            // Collect final text
+            const finalText = [...completedTextRef.current, lastTextRef.current].join('').trim()
+            console.log('[stt] final text after wait', { finalText })
+
+            // Close WebSocket
+            cleanupWebSocket()
+
+            // Notify final result
+            if (finalText) {
+                onFinalRef.current(finalText)
             }
-        }, 5000)
-    }, [flushFinalChunks, status])
+
+            stoppingRef.current = false
+            setStatus('idle')
+        }, 1500)
+    }, [cleanupWebSocket, status])
 
     const toggle = useCallback(async () => {
-        if (status === 'recording') {
+        if (status === 'recording' || status === 'connecting') {
             stop()
-        } else {
+        } else if (status === 'idle' || status === 'error') {
             await start()
         }
     }, [start, status, stop])
 
     const teardown = useCallback(() => {
-        if (status === 'recording') {
+        if (status === 'recording' || status === 'connecting') {
             stop()
         }
+        cleanupWebSocket()
         cleanupAudio()
         preparedRef.current = false
         resetStreamState()
         setStatus('idle')
         console.log('[stt] teardown')
-    }, [cleanupAudio, resetStreamState, status, stop])
+    }, [cleanupWebSocket, cleanupAudio, resetStreamState, status, stop])
 
     useEffect(() => {
         return () => {
             capturingRef.current = false
             stoppingRef.current = false
+            cleanupWebSocket()
             cleanupAudio()
             preparedRef.current = false
             resetStreamState()
             setStatus('idle')
             console.log('[stt] unmount cleanup')
         }
-    }, [cleanupAudio, resetStreamState])
+    }, [cleanupWebSocket, cleanupAudio, resetStreamState])
 
     const isSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)
 

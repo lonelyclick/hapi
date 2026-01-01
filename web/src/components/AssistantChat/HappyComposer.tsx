@@ -166,6 +166,7 @@ export function HappyComposer(props: {
     const [isSwitching, setIsSwitching] = useState(false)
     const [showContinueHint, setShowContinueHint] = useState(false)
     const [voiceMode, setVoiceMode] = useState(false)
+    const [isOptimizing, setIsOptimizing] = useState(false)
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const prevControlledByUser = useRef(controlledByUser)
@@ -405,6 +406,81 @@ export function HappyComposer(props: {
         haptic('light')
     }, [onModelModeChange, controlsDisabled, haptic])
 
+    const optimizeWithGemini = useCallback(async (text: string): Promise<string> => {
+        const GEMINI_API_KEY = 'AIzaSyCJcXM7pZD6e_cF3XWmDflbt1PFe5WmHq4'
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: `你是一个文本优化助手。请优化以下用户输入的文本：
+1. 修正语音转文字可能产生的错误（同音字、断句问题）
+2. 特别注意中英文混合识别错误：
+   - 英文单词被错误识别成中文（如 "react" 被识别成 "瑞艾克特"）
+   - 英文发音不准导致的拼写错误（如 "componet" 应为 "component"）
+   - 技术术语的识别错误（如 "API"、"TypeScript"、"Node.js" 等）
+3. 保持原意的同时使语句更通顺自然
+4. 不要添加额外信息，只优化表达
+5. 直接输出优化后的文本，不要解释
+
+用户输入：
+${text}`
+                        }]
+                    }],
+                    generationConfig: {
+                        temperature: 0.3,
+                        maxOutputTokens: 2048
+                    }
+                })
+            }
+        )
+
+        if (!response.ok) {
+            throw new Error(`Gemini API error: ${response.status}`)
+        }
+
+        const data = await response.json()
+        const optimizedText = data.candidates?.[0]?.content?.parts?.[0]?.text
+        if (!optimizedText) {
+            throw new Error('No response from Gemini')
+        }
+        return optimizedText.trim()
+    }, [])
+
+    const handleOptimizeSend = useCallback(async () => {
+        if (controlsDisabled || !hasText || isOptimizing) return
+
+        setIsOptimizing(true)
+        haptic('light')
+
+        try {
+            const optimizedText = await optimizeWithGemini(trimmed)
+            assistantApi.composer().setText(optimizedText)
+            setInputState({
+                text: optimizedText,
+                selection: { start: optimizedText.length, end: optimizedText.length }
+            })
+
+            // Trigger send after a short delay to allow state update
+            setTimeout(() => {
+                const form = textareaRef.current?.closest('form')
+                if (form) {
+                    form.requestSubmit()
+                }
+            }, 50)
+        } catch (error) {
+            console.error('Failed to optimize text:', error)
+            haptic('error')
+        } finally {
+            setIsOptimizing(false)
+        }
+    }, [controlsDisabled, hasText, isOptimizing, trimmed, optimizeWithGemini, assistantApi, haptic])
+
     const showPermissionSettings = Boolean(onPermissionModeChange && permissionModes.length > 0)
     const showModelSettings = Boolean(onModelModeChange && agentFlavor !== 'gemini')
     const showSettingsButton = Boolean(showPermissionSettings || showModelSettings)
@@ -414,7 +490,6 @@ export function HappyComposer(props: {
     const codexReasoningEffort: ModelReasoningEffort = modelReasoningEffort ?? 'medium'
     const shouldShowCodexReasoning = isCodex && codexModel === 'gpt-5.2-codex'
     const speechToText = useSpeechToText({
-        api: props.apiClient,
         onPartial: (text) => {
             const prefix = sttPrefixRef.current
             assistantApi.composer().setText(`${prefix}${text}`)
@@ -433,14 +508,14 @@ export function HappyComposer(props: {
 
     const handleVoicePressStart = useCallback(async () => {
         if (!speechToText.isSupported || controlsDisabled) return
-        if (speechToText.status === 'recording' || speechToText.status === 'stopping') return
+        if (speechToText.status === 'connecting' || speechToText.status === 'recording' || speechToText.status === 'stopping') return
         const spacer = composerText && !/\s$/.test(composerText) ? ' ' : ''
         sttPrefixRef.current = `${composerText}${spacer}`
         await speechToText.start()
     }, [composerText, controlsDisabled, speechToText])
 
     const handleVoicePressEnd = useCallback(() => {
-        if (speechToText.status === 'recording') {
+        if (speechToText.status === 'recording' || speechToText.status === 'connecting') {
             speechToText.stop()
         }
     }, [speechToText])
@@ -466,7 +541,7 @@ export function HappyComposer(props: {
 
     const startVoiceCapture = useCallback(() => {
         if (!voiceMode || controlsDisabled) return false
-        if (speechToText.status === 'stopping') return false
+        if (speechToText.status === 'connecting' || speechToText.status === 'stopping') return false
         if (voicePressActiveRef.current) return false
 
         voicePressActiveRef.current = true
@@ -782,7 +857,7 @@ export function HappyComposer(props: {
                                 ref={textareaRef}
                                 autoFocus={!controlsDisabled && !isTouch}
                                 placeholder={showContinueHint ? "Type 'continue' to resume..." : "Type a message..."}
-                                disabled={controlsDisabled || speechToText.status === 'recording' || speechToText.status === 'stopping'}
+                                disabled={controlsDisabled || speechToText.status === 'connecting' || speechToText.status === 'recording' || speechToText.status === 'stopping'}
                                 maxRows={5}
                                 submitOnEnter
                                 cancelOnEscape={false}
@@ -823,7 +898,7 @@ export function HappyComposer(props: {
                                             🎙️
                                         </span>
                                         <span className="text-sm font-semibold">
-                                            {speechToText.status === 'recording' ? '录音中，松开结束' : '按住说话'}
+                                            {speechToText.status === 'connecting' ? '连接中...' : speechToText.status === 'recording' ? '录音中，松开结束' : '按住说话'}
                                         </span>
                                     </div>
                                 </button>
@@ -852,6 +927,9 @@ export function HappyComposer(props: {
                             switchDisabled={switchDisabled}
                             isSwitching={isSwitching}
                             onSwitch={handleSwitch}
+                            canOptimizeSend={hasText && !controlsDisabled && !threadIsRunning}
+                            isOptimizing={isOptimizing}
+                            onOptimizeSend={handleOptimizeSend}
                         />
                     </div>
                 </ComposerPrimitive.Root>
