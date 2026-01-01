@@ -130,44 +130,6 @@ function SendIcon() {
     )
 }
 
-function SparklesIcon() {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-            <path d="M19 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" />
-            <path d="M5 17l0.5 1.5L7 19l-1.5 0.5L5 21l-0.5-1.5L3 19l1.5-0.5L5 17z" />
-        </svg>
-    )
-}
-
-function SpinnerIcon() {
-    return (
-        <svg
-            className="animate-spin"
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-        >
-            <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-            <path d="M12 2a10 10 0 0 1 10 10" strokeOpacity="0.75" />
-        </svg>
-    )
-}
-
 export function ComposerButtons(props: {
     canSend: boolean
     controlsDisabled: boolean
@@ -190,9 +152,6 @@ export function ComposerButtons(props: {
     switchDisabled: boolean
     isSwitching: boolean
     onSwitch: () => void
-    canOptimizeSend: boolean
-    isOptimizing: boolean
-    onOptimizeSend: () => void
 }) {
     return (
         <div className="flex items-center justify-between px-2 pb-2">
@@ -270,35 +229,18 @@ export function ComposerButtons(props: {
                 ) : null}
             </div>
 
-            <div className="flex items-center gap-1">
-                <button
-                    type="button"
-                    disabled={props.controlsDisabled || !props.canOptimizeSend || props.isOptimizing}
-                    aria-label="Optimize and send"
-                    title="AI 优化并发送"
-                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                        props.canOptimizeSend && !props.controlsDisabled && !props.isOptimizing
-                            ? 'bg-purple-600 text-white hover:bg-purple-700'
-                            : 'bg-[#C0C0C0] text-white'
-                    } disabled:cursor-not-allowed`}
-                    onClick={props.onOptimizeSend}
-                >
-                    {props.isOptimizing ? <SpinnerIcon /> : <SparklesIcon />}
-                </button>
-
-                <ComposerPrimitive.Send
-                    disabled={props.controlsDisabled || !props.canSend}
-                    aria-label="Send"
-                    title="Send"
-                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                        props.canSend && !props.controlsDisabled
-                            ? 'bg-black text-white'
-                            : 'bg-[#C0C0C0] text-white'
-                    } disabled:cursor-not-allowed`}
-                >
-                    <SendIcon />
-                </ComposerPrimitive.Send>
-            </div>
+            <ComposerPrimitive.Send
+                disabled={props.controlsDisabled || !props.canSend}
+                aria-label="Send"
+                title="Send"
+                className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                    props.canSend && !props.controlsDisabled
+                        ? 'bg-black text-white'
+                        : 'bg-[#C0C0C0] text-white'
+                } disabled:cursor-not-allowed`}
+            >
+                <SendIcon />
+            </ComposerPrimitive.Send>
         </div>
     )
 }

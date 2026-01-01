@@ -167,6 +167,13 @@ export function HappyComposer(props: {
     const [showContinueHint, setShowContinueHint] = useState(false)
     const [voiceMode, setVoiceMode] = useState(false)
     const [isOptimizing, setIsOptimizing] = useState(false)
+    const [autoOptimize, setAutoOptimize] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('hapi-auto-optimize') === 'true'
+        }
+        return false
+    })
+    const [optimizePreview, setOptimizePreview] = useState<{ original: string; optimized: string } | null>(null)
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const prevControlledByUser = useRef(controlledByUser)
@@ -336,6 +343,13 @@ export function HappyComposer(props: {
             const nextMode = permissionModes[nextIndex] ?? 'default'
             onPermissionModeChange(nextMode)
             haptic('light')
+            return
+        }
+
+        // Intercept Enter for auto-optimize
+        if (key === 'Enter' && !e.shiftKey && autoOptimize && hasText && !isOptimizing && !controlsDisabled && !threadIsRunning) {
+            e.preventDefault()
+            handleOptimizeForPreview()
         }
     }, [
         suggestions,
@@ -349,7 +363,12 @@ export function HappyComposer(props: {
         onPermissionModeChange,
         permissionMode,
         permissionModes,
-        haptic
+        haptic,
+        autoOptimize,
+        hasText,
+        isOptimizing,
+        controlsDisabled,
+        handleOptimizeForPreview
     ])
 
     useEffect(() => {
@@ -406,6 +425,15 @@ export function HappyComposer(props: {
         haptic('light')
     }, [onModelModeChange, controlsDisabled, haptic])
 
+    const handleAutoOptimizeToggle = useCallback(() => {
+        setAutoOptimize(prev => {
+            const newValue = !prev
+            localStorage.setItem('hapi-auto-optimize', String(newValue))
+            return newValue
+        })
+        haptic('light')
+    }, [haptic])
+
     const optimizeWithGemini = useCallback(async (text: string): Promise<string> => {
         const GEMINI_API_KEY = 'AIzaSyCJcXM7pZD6e_cF3XWmDflbt1PFe5WmHq4'
         const response = await fetch(
@@ -452,7 +480,7 @@ ${text}`
         return optimizedText.trim()
     }, [])
 
-    const handleOptimizeSend = useCallback(async () => {
+    const handleOptimizeForPreview = useCallback(async () => {
         if (controlsDisabled || !hasText || isOptimizing) return
 
         setIsOptimizing(true)
@@ -460,30 +488,64 @@ ${text}`
 
         try {
             const optimizedText = await optimizeWithGemini(trimmed)
-            assistantApi.composer().setText(optimizedText)
-            setInputState({
-                text: optimizedText,
-                selection: { start: optimizedText.length, end: optimizedText.length }
-            })
-
-            // Trigger send after a short delay to allow state update
-            setTimeout(() => {
+            // If text is the same, just send directly
+            if (optimizedText === trimmed) {
                 const form = textareaRef.current?.closest('form')
                 if (form) {
                     form.requestSubmit()
                 }
-            }, 50)
+            } else {
+                // Show preview dialog
+                setOptimizePreview({ original: trimmed, optimized: optimizedText })
+            }
         } catch (error) {
             console.error('Failed to optimize text:', error)
             haptic('error')
+            // On error, just send the original
+            const form = textareaRef.current?.closest('form')
+            if (form) {
+                form.requestSubmit()
+            }
         } finally {
             setIsOptimizing(false)
         }
-    }, [controlsDisabled, hasText, isOptimizing, trimmed, optimizeWithGemini, assistantApi, haptic])
+    }, [controlsDisabled, hasText, isOptimizing, trimmed, optimizeWithGemini, haptic])
+
+    const handlePreviewConfirm = useCallback(() => {
+        if (!optimizePreview) return
+        assistantApi.composer().setText(optimizePreview.optimized)
+        setInputState({
+            text: optimizePreview.optimized,
+            selection: { start: optimizePreview.optimized.length, end: optimizePreview.optimized.length }
+        })
+        setOptimizePreview(null)
+        // Send after state update
+        setTimeout(() => {
+            const form = textareaRef.current?.closest('form')
+            if (form) {
+                form.requestSubmit()
+            }
+        }, 50)
+    }, [optimizePreview, assistantApi])
+
+    const handlePreviewCancel = useCallback(() => {
+        setOptimizePreview(null)
+        // Focus back to textarea
+        textareaRef.current?.focus()
+    }, [])
+
+    const handlePreviewSendOriginal = useCallback(() => {
+        setOptimizePreview(null)
+        // Send original text
+        const form = textareaRef.current?.closest('form')
+        if (form) {
+            form.requestSubmit()
+        }
+    }, [])
 
     const showPermissionSettings = Boolean(onPermissionModeChange && permissionModes.length > 0)
     const showModelSettings = Boolean(onModelModeChange && agentFlavor !== 'gemini')
-    const showSettingsButton = Boolean(showPermissionSettings || showModelSettings)
+    const showSettingsButton = true // Always show settings for auto-optimize toggle
     const showAbortButton = true
     const isCodex = agentFlavor === 'codex'
     const codexModel = isCodex && isCodexModel(modelMode) ? modelMode : 'gpt-5.2-codex'
@@ -621,10 +683,32 @@ ${text}`
     }, [active, speechToText])
 
     const overlays = useMemo(() => {
-        if (showSettings && (showPermissionSettings || showModelSettings)) {
+        if (showSettings) {
             return (
                 <div className="absolute bottom-[100%] mb-2 w-full">
                     <FloatingOverlay maxHeight={320}>
+                        {/* Auto Optimize Toggle */}
+                        <div className="py-2">
+                            <div className="px-3 pb-1 text-xs font-semibold text-[var(--app-hint)]">
+                                AI 优化
+                            </div>
+                            <button
+                                type="button"
+                                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors cursor-pointer hover:bg-[var(--app-secondary-bg)]"
+                                onClick={handleAutoOptimizeToggle}
+                                onMouseDown={(e) => e.preventDefault()}
+                            >
+                                <span>发送前自动优化</span>
+                                <div className={`relative h-5 w-9 rounded-full transition-colors ${autoOptimize ? 'bg-purple-600' : 'bg-gray-300'}`}>
+                                    <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${autoOptimize ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                </div>
+                            </button>
+                        </div>
+
+                        {showPermissionSettings ? (
+                            <div className="mx-3 h-px bg-[var(--app-divider)]" />
+                        ) : null}
+
                         {showPermissionSettings ? (
                             <div className="py-2">
                                 <div className="px-3 pb-1 text-xs font-semibold text-[var(--app-hint)]">
@@ -825,7 +909,9 @@ ${text}`
         permissionModes,
         handlePermissionChange,
         handleModelChange,
-        handleSuggestionSelect
+        handleSuggestionSelect,
+        autoOptimize,
+        handleAutoOptimizeToggle
     ])
 
     const volumePercent = Math.max(0, Math.min(100, Math.round((speechToText.volume ?? 0) * 100)))
@@ -927,13 +1013,78 @@ ${text}`
                             switchDisabled={switchDisabled}
                             isSwitching={isSwitching}
                             onSwitch={handleSwitch}
-                            canOptimizeSend={hasText && !controlsDisabled && !threadIsRunning}
-                            isOptimizing={isOptimizing}
-                            onOptimizeSend={handleOptimizeSend}
                         />
                     </div>
                 </ComposerPrimitive.Root>
             </div>
+
+            {/* Optimize Preview Dialog */}
+            {optimizePreview ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-lg rounded-2xl bg-[var(--app-bg)] p-4 shadow-xl">
+                        <div className="mb-4 text-lg font-semibold text-[var(--app-fg)]">
+                            AI 优化结果
+                        </div>
+
+                        <div className="mb-4 space-y-3">
+                            <div>
+                                <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">原文</div>
+                                <div className="rounded-lg bg-[var(--app-secondary-bg)] p-3 text-sm text-[var(--app-fg)]/70 line-through">
+                                    {optimizePreview.original}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="mb-1 text-xs font-medium text-purple-500">优化后</div>
+                                <div className="rounded-lg bg-purple-50 p-3 text-sm text-[var(--app-fg)] dark:bg-purple-900/20">
+                                    {optimizePreview.optimized}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={handlePreviewCancel}
+                                className="flex-1 rounded-lg border border-[var(--app-divider)] px-4 py-2 text-sm font-medium text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)]"
+                            >
+                                取消
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePreviewSendOriginal}
+                                className="flex-1 rounded-lg border border-[var(--app-divider)] px-4 py-2 text-sm font-medium text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)]"
+                            >
+                                发送原文
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePreviewConfirm}
+                                className="flex-1 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+                            >
+                                发送优化版
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {/* Optimizing Overlay */}
+            {isOptimizing ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+                    <div className="flex items-center gap-3 rounded-2xl bg-[var(--app-bg)] px-6 py-4 shadow-xl">
+                        <svg
+                            className="h-5 w-5 animate-spin text-purple-600"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                        >
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeOpacity="0.25" />
+                            <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <span className="text-sm font-medium text-[var(--app-fg)]">AI 优化中...</span>
+                    </div>
+                </div>
+            ) : null}
         </div>
     )
 }
