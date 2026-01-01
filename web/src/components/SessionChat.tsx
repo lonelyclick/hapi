@@ -43,6 +43,17 @@ export function SessionChat(props: {
         blocksByIdRef.current.clear()
     }, [props.session.id])
 
+    // Update browser title with AI name
+    useEffect(() => {
+        const name = props.session.metadata?.name
+        if (name) {
+            document.title = name
+        }
+        return () => {
+            document.title = 'HAPI'
+        }
+    }, [props.session.metadata?.name])
+
     const normalizedMessages: NormalizedMessage[] = useMemo(() => {
         const cache = normalizedCacheRef.current
         const normalized: NormalizedMessage[] = []
