@@ -690,7 +690,7 @@ ${text}`
                         {/* Auto Optimize Toggle */}
                         <div className="py-2">
                             <div className="px-3 pb-1 text-xs font-semibold text-[var(--app-hint)]">
-                                AI 优化
+                                AI Optimize
                             </div>
                             <button
                                 type="button"
@@ -698,7 +698,7 @@ ${text}`
                                 onClick={handleAutoOptimizeToggle}
                                 onMouseDown={(e) => e.preventDefault()}
                             >
-                                <span>发送前自动优化</span>
+                                <span>Auto-optimize before sending</span>
                                 <div className={`relative h-5 w-9 rounded-full transition-colors ${autoOptimize ? 'bg-purple-600' : 'bg-gray-300'}`}>
                                     <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${autoOptimize ? 'translate-x-4' : 'translate-x-0.5'}`} />
                                 </div>
@@ -1013,6 +1013,7 @@ ${text}`
                             switchDisabled={switchDisabled}
                             isSwitching={isSwitching}
                             onSwitch={handleSwitch}
+                            autoOptimizeEnabled={autoOptimize}
                         />
                     </div>
                 </ComposerPrimitive.Root>
@@ -1023,18 +1024,18 @@ ${text}`
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div className="w-full max-w-lg rounded-2xl bg-[var(--app-bg)] p-4 shadow-xl">
                         <div className="mb-4 text-lg font-semibold text-[var(--app-fg)]">
-                            AI 优化结果
+                            AI Optimization Result
                         </div>
 
                         <div className="mb-4 space-y-3">
                             <div>
-                                <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">原文</div>
+                                <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">Original</div>
                                 <div className="rounded-lg bg-[var(--app-secondary-bg)] p-3 text-sm text-[var(--app-fg)]/70 line-through">
                                     {optimizePreview.original}
                                 </div>
                             </div>
                             <div>
-                                <div className="mb-1 text-xs font-medium text-purple-500">优化后</div>
+                                <div className="mb-1 text-xs font-medium text-purple-500">Optimized</div>
                                 <div className="rounded-lg bg-purple-50 p-3 text-sm text-[var(--app-fg)] dark:bg-purple-900/20">
                                     {optimizePreview.optimized}
                                 </div>
@@ -1047,21 +1048,21 @@ ${text}`
                                 onClick={handlePreviewCancel}
                                 className="flex-1 rounded-lg border border-[var(--app-divider)] px-4 py-2 text-sm font-medium text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)]"
                             >
-                                取消
+                                Cancel
                             </button>
                             <button
                                 type="button"
                                 onClick={handlePreviewSendOriginal}
                                 className="flex-1 rounded-lg border border-[var(--app-divider)] px-4 py-2 text-sm font-medium text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)]"
                             >
-                                发送原文
+                                Send Original
                             </button>
                             <button
                                 type="button"
                                 onClick={handlePreviewConfirm}
                                 className="flex-1 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
                             >
-                                发送优化版
+                                Send Optimized
                             </button>
                         </div>
                     </div>
@@ -1081,7 +1082,7 @@ ${text}`
                             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeOpacity="0.25" />
                             <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                         </svg>
-                        <span className="text-sm font-medium text-[var(--app-fg)]">AI 优化中...</span>
+                        <span className="text-sm font-medium text-[var(--app-fg)]">Optimizing...</span>
                     </div>
                 </div>
             ) : null}

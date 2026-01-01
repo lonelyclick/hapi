@@ -152,6 +152,7 @@ export function ComposerButtons(props: {
     switchDisabled: boolean
     isSwitching: boolean
     onSwitch: () => void
+    autoOptimizeEnabled: boolean
 }) {
     return (
         <div className="flex items-center justify-between px-2 pb-2">
@@ -231,11 +232,13 @@ export function ComposerButtons(props: {
 
             <ComposerPrimitive.Send
                 disabled={props.controlsDisabled || !props.canSend}
-                aria-label="Send"
-                title="Send"
+                aria-label={props.autoOptimizeEnabled ? "Optimize and Send" : "Send"}
+                title={props.autoOptimizeEnabled ? "Optimize and Send" : "Send"}
                 className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
                     props.canSend && !props.controlsDisabled
-                        ? 'bg-black text-white'
+                        ? props.autoOptimizeEnabled
+                            ? 'bg-purple-600 text-white hover:bg-purple-700'
+                            : 'bg-black text-white'
                         : 'bg-[#C0C0C0] text-white'
                 } disabled:cursor-not-allowed`}
             >
