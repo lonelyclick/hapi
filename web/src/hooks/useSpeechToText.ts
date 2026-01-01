@@ -363,6 +363,34 @@ export function useSpeechToText(options: SpeechToTextOptions) {
     }, [handleWebSocketPayload])
 
     const connectWebSocket = useCallback((): Promise<boolean> => {
+        // If we already have an open WebSocket, reuse it
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            console.log('[stt] reusing existing ws connection')
+            return Promise.resolve(true)
+        }
+
+        // If connecting, wait for it
+        if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
+            console.log('[stt] waiting for existing ws connection')
+            return new Promise((resolve) => {
+                const ws = wsRef.current!
+                const checkInterval = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        clearInterval(checkInterval)
+                        resolve(true)
+                    } else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+                        clearInterval(checkInterval)
+                        resolve(false)
+                    }
+                }, 50)
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    clearInterval(checkInterval)
+                    resolve(ws.readyState === WebSocket.OPEN)
+                }, 5000)
+            })
+        }
+
         return new Promise((resolve) => {
             clientUidRef.current = getClientUid()
             const ws = new WebSocket(wsUrlRef.current)
@@ -421,6 +449,16 @@ export function useSpeechToText(options: SpeechToTextOptions) {
             hasStream: Boolean(mediaStreamRef.current),
             status: statusRef.current
         })
+
+        // Start WebSocket connection in parallel (don't wait for it)
+        // This pre-warms the connection so it's ready when recording starts
+        if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED || wsRef.current.readyState === WebSocket.CLOSING) {
+            console.log('[stt] pre-warming WebSocket connection')
+            connectWebSocket().catch(() => {
+                console.log('[stt] pre-warm WebSocket failed, will retry on start')
+            })
+        }
+
         if (preparedRef.current && mediaStreamRef.current && audioContextRef.current) {
             return true
         }
@@ -502,7 +540,7 @@ export function useSpeechToText(options: SpeechToTextOptions) {
             handleError(message)
             return false
         }
-    }, [handleError])
+    }, [connectWebSocket, handleError])
 
     const start = useCallback(async () => {
         if (status === 'recording' || status === 'stopping' || status === 'connecting') return
@@ -558,8 +596,8 @@ export function useSpeechToText(options: SpeechToTextOptions) {
         })
 
         // If we were connecting, just cancel - no final text
+        // Don't cleanup WebSocket here - keep it warm for next recording
         if (status === 'connecting') {
-            cleanupWebSocket()
             stoppingRef.current = false
             setStatus('idle')
             return
