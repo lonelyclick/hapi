@@ -37,6 +37,15 @@ async function bootstrap() {
         await loadTelegramSdk()
     }
 
+    // Aggressive SW update: force reload when controller changes
+    let refreshing = false
+    navigator.serviceWorker?.addEventListener('controllerchange', () => {
+        if (refreshing) return
+        refreshing = true
+        console.log('New service worker activated, reloading...')
+        window.location.reload()
+    })
+
     const updateSW = registerSW({
         immediate: true,
         onNeedRefresh() {
@@ -50,10 +59,13 @@ async function bootstrap() {
         },
         onRegistered(registration) {
             if (registration) {
-                // Check for updates every 5 minutes
+                // Check for updates immediately on load
+                registration.update()
+
+                // Check for updates every 1 minute (more aggressive)
                 setInterval(() => {
                     registration.update()
-                }, 5 * 60 * 1000)
+                }, 60 * 1000)
 
                 // iOS Safari PWA: check for updates when app returns from background
                 document.addEventListener('visibilitychange', () => {
@@ -61,6 +73,18 @@ async function bootstrap() {
                         console.log('App visible, checking for updates...')
                         registration.update()
                     }
+                })
+
+                // iOS Safari: also check on focus (belt and suspenders)
+                window.addEventListener('focus', () => {
+                    console.log('Window focused, checking for updates...')
+                    registration.update()
+                })
+
+                // Check on online event (network reconnection)
+                window.addEventListener('online', () => {
+                    console.log('Back online, checking for updates...')
+                    registration.update()
                 })
             }
         },
