@@ -12,6 +12,7 @@ git push
 
 echo "Building single executable..."
 bun run build:single-exe
+sync
 
 echo "Restarting services..."
 echo "guang" | sudo -S systemctl restart hapi-daemon.service
