@@ -54,6 +54,14 @@ async function bootstrap() {
                 setInterval(() => {
                     registration.update()
                 }, 5 * 60 * 1000)
+
+                // iOS Safari PWA: check for updates when app returns from background
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        console.log('App visible, checking for updates...')
+                        registration.update()
+                    }
+                })
             }
         },
         onRegisterError(error) {
