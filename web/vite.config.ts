@@ -2,10 +2,28 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { resolve } from 'node:path'
+import { execSync } from 'node:child_process'
 
 const base = process.env.VITE_BASE_URL || '/'
 
+// Get git commit info at build time
+function getGitInfo() {
+    try {
+        const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
+        const commitMessage = execSync('git log -1 --format=%s', { encoding: 'utf-8' }).trim()
+        return { commitHash, commitMessage }
+    } catch {
+        return { commitHash: 'unknown', commitMessage: 'unknown' }
+    }
+}
+
+const gitInfo = getGitInfo()
+
 export default defineConfig({
+    define: {
+        __GIT_COMMIT_HASH__: JSON.stringify(gitInfo.commitHash),
+        __GIT_COMMIT_MESSAGE__: JSON.stringify(gitInfo.commitMessage)
+    },
     server: {
         host: true,
         allowedHosts: ['hapidev.weishu.me'],

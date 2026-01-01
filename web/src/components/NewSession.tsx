@@ -40,7 +40,7 @@ export function NewSession(props: {
     const [isDirectoryFocused, setIsDirectoryFocused] = useState(false)
     const [pathExistence, setPathExistence] = useState<Record<string, boolean>>({})
     const [agent, setAgent] = useState<AgentType>('claude')
-    const [yoloMode, setYoloMode] = useState(false)
+    const [yoloMode, setYoloMode] = useState(true)
     const [sessionType, setSessionType] = useState<SessionType>('simple')
     const [worktreeName, setWorktreeName] = useState('')
     const [error, setError] = useState<string | null>(null)

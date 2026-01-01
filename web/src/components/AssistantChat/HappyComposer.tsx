@@ -12,6 +12,7 @@ import {
     useRef,
     useState
 } from 'react'
+import { createPortal } from 'react-dom'
 import type { AgentState, ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { useActiveWord } from '@/hooks/useActiveWord'
@@ -125,6 +126,7 @@ export function HappyComposer(props: {
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
 }) {
     const {
+        apiClient,
         disabled = false,
         permissionMode: rawPermissionMode,
         modelMode: rawModelMode,
@@ -904,7 +906,7 @@ export function HappyComposer(props: {
                                 placeholder={showContinueHint ? "Type 'continue' to resume..." : "Type a message..."}
                                 disabled={controlsDisabled || isOptimizing || speechToText.status === 'connecting' || speechToText.status === 'recording' || speechToText.status === 'stopping'}
                                 maxRows={5}
-                                submitOnEnter
+                                submitOnEnter={!autoOptimize}
                                 cancelOnEscape={false}
                                 onChange={handleChange}
                                 onSelect={handleSelect}
@@ -974,13 +976,14 @@ export function HappyComposer(props: {
                             onSwitch={handleSwitch}
                             autoOptimizeEnabled={autoOptimize}
                             isOptimizing={isOptimizing}
+                            onOptimizeSend={handleOptimizeForPreview}
                         />
                     </div>
                 </ComposerPrimitive.Root>
             </div>
 
             {/* Optimize Preview Dialog */}
-            {optimizePreview ? (
+            {optimizePreview ? createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div className="w-full max-w-lg rounded-2xl bg-[var(--app-bg)] p-4 shadow-xl">
                         <div className="mb-4 text-lg font-semibold text-[var(--app-fg)]">
@@ -999,8 +1002,15 @@ export function HappyComposer(props: {
                                 <textarea
                                     value={optimizePreview.optimized}
                                     onChange={(e) => setOptimizePreview(prev => prev ? { ...prev, optimized: e.target.value } : null)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                                            e.preventDefault()
+                                            handlePreviewConfirm()
+                                        }
+                                    }}
+                                    autoFocus
+                                    rows={3}
                                     className="w-full resize-none rounded-lg bg-purple-50 p-3 text-sm text-[var(--app-fg)] focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-purple-900/20"
-                                    rows={Math.min(6, Math.max(2, optimizePreview.optimized.split('\n').length))}
                                 />
                             </div>
                         </div>
@@ -1029,7 +1039,8 @@ export function HappyComposer(props: {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             ) : null}
         </div>
     )

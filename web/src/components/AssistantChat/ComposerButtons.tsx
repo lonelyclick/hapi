@@ -170,6 +170,7 @@ export function ComposerButtons(props: {
     onSwitch: () => void
     autoOptimizeEnabled: boolean
     isOptimizing: boolean
+    onOptimizeSend?: () => void
 }) {
     return (
         <div className="flex items-center justify-between px-2 pb-2">
@@ -247,22 +248,37 @@ export function ComposerButtons(props: {
                 ) : null}
             </div>
 
-            <ComposerPrimitive.Send
-                disabled={props.controlsDisabled || !props.canSend || props.isOptimizing}
-                aria-label={props.isOptimizing ? "Optimizing..." : props.autoOptimizeEnabled ? "Optimize and Send" : "Send"}
-                title={props.isOptimizing ? "Optimizing..." : props.autoOptimizeEnabled ? "Optimize and Send" : "Send"}
-                className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                    props.isOptimizing
-                        ? 'bg-purple-600 text-white'
-                        : props.canSend && !props.controlsDisabled
-                            ? props.autoOptimizeEnabled
+            {props.autoOptimizeEnabled && props.onOptimizeSend ? (
+                <button
+                    type="button"
+                    disabled={props.controlsDisabled || !props.canSend || props.isOptimizing}
+                    aria-label={props.isOptimizing ? "Optimizing..." : "Optimize and Send"}
+                    title={props.isOptimizing ? "Optimizing..." : "Optimize and Send"}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                        props.isOptimizing
+                            ? 'bg-purple-600 text-white'
+                            : props.canSend && !props.controlsDisabled
                                 ? 'bg-purple-600 text-white hover:bg-purple-700'
-                                : 'bg-black text-white'
+                                : 'bg-[#C0C0C0] text-white'
+                    } disabled:cursor-not-allowed`}
+                    onClick={props.onOptimizeSend}
+                >
+                    {props.isOptimizing ? <SpinnerIcon /> : <SendIcon />}
+                </button>
+            ) : (
+                <ComposerPrimitive.Send
+                    disabled={props.controlsDisabled || !props.canSend || props.isOptimizing}
+                    aria-label="Send"
+                    title="Send"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                        props.canSend && !props.controlsDisabled
+                            ? 'bg-black text-white'
                             : 'bg-[#C0C0C0] text-white'
-                } disabled:cursor-not-allowed`}
-            >
-                {props.isOptimizing ? <SpinnerIcon /> : <SendIcon />}
-            </ComposerPrimitive.Send>
+                    } disabled:cursor-not-allowed`}
+                >
+                    <SendIcon />
+                </ComposerPrimitive.Send>
+            )}
         </div>
     )
 }

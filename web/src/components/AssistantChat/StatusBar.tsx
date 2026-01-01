@@ -117,6 +117,9 @@ export function StatusBar(props: {
         && permissionMode
         && permissionMode !== 'default'
 
+    const gitCommitHash = typeof __GIT_COMMIT_HASH__ !== 'undefined' ? __GIT_COMMIT_HASH__ : 'dev'
+    const gitCommitMessage = typeof __GIT_COMMIT_MESSAGE__ !== 'undefined' ? __GIT_COMMIT_MESSAGE__ : ''
+
     return (
         <div className="flex items-center justify-between px-2 pb-1">
             <div className="flex items-baseline gap-3">
@@ -133,6 +136,12 @@ export function StatusBar(props: {
                         {contextWarning.text}
                     </span>
                 ) : null}
+                <span
+                    className="text-[10px] text-[var(--app-hint)] cursor-help"
+                    title={gitCommitMessage}
+                >
+                    {gitCommitHash}
+                </span>
             </div>
 
             {shouldShowPermissionMode ? (
