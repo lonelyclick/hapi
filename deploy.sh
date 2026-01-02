@@ -33,6 +33,10 @@ fi
 
 echo "=== Build verified (age: ${AGE}s)"
 
+echo "=== Killing old processes..."
+fuser -k 3006/tcp 2>/dev/null || true
+fuser -k 3000/tcp 2>/dev/null || true
+
 echo "=== Restarting services..."
 echo "guang" | sudo -S systemctl restart hapi-daemon.service
 echo "guang" | sudo -S systemctl restart hapi-server.service
