@@ -1,12 +1,20 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { OnlineUsersResponse, SessionViewer } from '@/types/api'
+import type { ApiClient } from '@/api/client'
+import type { SessionViewer } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 
-export function useSessionViewers(sessionId: string | null): SessionViewer[] {
-    // Use the same query key as useOnlineUsers - data is fetched there or set by SSE
-    const { data } = useQuery<OnlineUsersResponse>({
+export function useSessionViewers(api: ApiClient | null, sessionId: string | null): SessionViewer[] {
+    // Query online users - uses same key as useOnlineUsers so data is shared
+    const { data } = useQuery({
         queryKey: queryKeys.onlineUsers,
+        queryFn: async () => {
+            if (!api) {
+                throw new Error('API unavailable')
+            }
+            return await api.getOnlineUsers()
+        },
+        enabled: Boolean(api),
         staleTime: Infinity,
     })
 

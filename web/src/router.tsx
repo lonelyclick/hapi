@@ -217,7 +217,7 @@ function SessionPage() {
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const { sessionId } = useParams({ from: '/sessions/$sessionId' })
-    const viewers = useSessionViewers(sessionId)
+    const viewers = useSessionViewers(api, sessionId)
     const {
         session,
         notFound,
