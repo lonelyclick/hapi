@@ -52,7 +52,7 @@ export function SessionChat(props: {
             document.title = name
         }
         return () => {
-            document.title = 'HAPI'
+            document.title = 'Yoho Remote'
         }
     }, [props.session.metadata?.name])
 

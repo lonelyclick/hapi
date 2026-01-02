@@ -92,7 +92,7 @@ export function LoginPrompt(props: LoginPromptProps) {
 
     const displayError = error || props.error
     const serverSummary = props.serverUrl ?? `${props.baseUrl} (same origin)`
-    const title = isBindMode ? 'Bind Telegram' : 'HAPI'
+    const title = isBindMode ? 'Bind Telegram' : 'Yoho Remote'
     const subtitle = isBindMode
         ? 'Enter your access token to bind this Telegram account'
         : 'Enter your access token to continue'

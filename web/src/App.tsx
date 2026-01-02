@@ -239,7 +239,25 @@ export function App() {
         // Telegram auth failed
         return (
             <div className="p-4 space-y-3">
-                <div className="text-base font-semibold">HAPI</div>
+                <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="white"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-4 w-4"
+                        >
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M2 12h20" />
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                    </div>
+                    <span className="text-lg font-bold yoho-brand-text">Yoho Remote</span>
+                </div>
                 <div className="text-sm text-red-600">
                     {authError ?? 'Not authorized'}
                 </div>

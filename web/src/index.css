@@ -265,3 +265,18 @@ html[data-theme="dark"] .shiki span {
 .animate-bounce-in {
   animation: bounce-in 0.3s ease-out;
 }
+
+/* Yoho Remote brand gradient text */
+.yoho-brand-text {
+  background: linear-gradient(to right, #4f46e5, #9333ea);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme="dark"] .yoho-brand-text {
+  background: linear-gradient(to right, #818cf8, #c084fc);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

@@ -7,6 +7,16 @@ export PATH="$HOME/.bun/bin:$PATH"
 
 EXE_PATH="cli/dist-exe/bun-linux-x64/hapi"
 
+# 解析参数
+RESTART_DAEMON=false
+for arg in "$@"; do
+    case $arg in
+        --daemon)
+            RESTART_DAEMON=true
+            ;;
+    esac
+done
+
 echo "=== Committing and pushing changes..."
 git add -A
 git commit -m "deploy" --allow-empty || true
@@ -38,7 +48,10 @@ fuser -k 3006/tcp 2>/dev/null || true
 fuser -k 3000/tcp 2>/dev/null || true
 
 echo "=== Restarting services..."
-echo "guang" | sudo -S systemctl restart hapi-daemon.service
+if [[ "$RESTART_DAEMON" == "true" ]]; then
+    echo "    (with daemon restart)"
+    echo "guang" | sudo -S systemctl restart hapi-daemon.service
+fi
 echo "guang" | sudo -S systemctl restart hapi-server.service
 
 # 等待服务启动

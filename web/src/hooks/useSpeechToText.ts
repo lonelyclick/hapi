@@ -374,75 +374,13 @@ export function useSpeechToText(options: SpeechToTextOptions) {
     }, [handleWebSocketPayload])
 
     const connectWebSocket = useCallback((): Promise<boolean> => {
-        // If we already have an open WebSocket, reuse it
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            console.log('[stt] reusing existing ws connection')
-            // Send reset signal to clear any previous session state on server
-            clientUidRef.current = getClientUid()
-            const config = {
-                uid: clientUidRef.current,
-                language: 'zh',
-                task: 'transcribe',
-                model: 'whisper-large-v3',
-                use_vad: true,
-                reset: true
-            }
-            wsRef.current.send(JSON.stringify(config))
-            return Promise.resolve(true)
-        }
-
-        // If connecting, wait for it
-        if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
-            console.log('[stt] waiting for existing ws connection')
-            return new Promise((resolve) => {
-                const ws = wsRef.current!
-                let resolved = false
-                const checkInterval = setInterval(() => {
-                    if (resolved) return
-                    if (ws.readyState === WebSocket.OPEN) {
-                        resolved = true
-                        clearInterval(checkInterval)
-                        // Send reset signal after connection is ready
-                        clientUidRef.current = getClientUid()
-                        const config = {
-                            uid: clientUidRef.current,
-                            language: 'zh',
-                            task: 'transcribe',
-                            model: 'whisper-large-v3',
-                            use_vad: true,
-                            reset: true
-                        }
-                        ws.send(JSON.stringify(config))
-                        resolve(true)
-                    } else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-                        resolved = true
-                        clearInterval(checkInterval)
-                        resolve(false)
-                    }
-                }, 50)
-                // Timeout after 5 seconds
-                setTimeout(() => {
-                    if (resolved) return
-                    resolved = true
-                    clearInterval(checkInterval)
-                    if (ws.readyState === WebSocket.OPEN) {
-                        // Send reset signal after timeout if connected
-                        clientUidRef.current = getClientUid()
-                        const config = {
-                            uid: clientUidRef.current,
-                            language: 'zh',
-                            task: 'transcribe',
-                            model: 'whisper-large-v3',
-                            use_vad: true,
-                            reset: true
-                        }
-                        ws.send(JSON.stringify(config))
-                        resolve(true)
-                    } else {
-                        resolve(false)
-                    }
-                }, 5000)
-            })
+        // Always create a fresh connection for each recording session
+        // This avoids issues with server-side session state and connection reuse
+        if (wsRef.current) {
+            console.log('[stt] closing existing ws connection before creating new one')
+            wsRef.current.onclose = null // Remove the onclose handler to avoid side effects
+            wsRef.current.close()
+            wsRef.current = null
         }
 
         return new Promise((resolve) => {
@@ -485,7 +423,7 @@ export function useSpeechToText(options: SpeechToTextOptions) {
                 console.log('[stt] ws closed', event.code, event.reason)
                 wsRef.current = null
                 if (statusRef.current === 'recording') {
-                    // Unexpected close
+                    // Unexpected close during recording
                     const finalText = [...completedTextRef.current, lastTextRef.current].join('').trim()
                     if (finalText) {
                         onFinalRef.current(finalText)
@@ -504,14 +442,9 @@ export function useSpeechToText(options: SpeechToTextOptions) {
             status: statusRef.current
         })
 
-        // Start WebSocket connection in parallel (don't wait for it)
-        // This pre-warms the connection so it's ready when recording starts
-        if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED || wsRef.current.readyState === WebSocket.CLOSING) {
-            console.log('[stt] pre-warming WebSocket connection')
-            connectWebSocket().catch(() => {
-                console.log('[stt] pre-warm WebSocket failed, will retry on start')
-            })
-        }
+        // Note: We don't pre-warm WebSocket connection anymore because
+        // we create a fresh connection for each recording session to avoid
+        // server-side session state issues
 
         if (preparedRef.current && mediaStreamRef.current && audioContextRef.current) {
             return true
