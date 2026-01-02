@@ -7,11 +7,19 @@ import { getLocalLaunchExitReason } from "@/agent/localLaunchPolicy";
 
 export async function claudeLocalLauncher(session: Session): Promise<'switch' | 'exit'> {
 
+    const updateRuntimeModelFromMessage = (message: { type: string; model?: unknown }) => {
+        if (message.type !== 'system' || typeof message.model !== 'string' || !message.model.trim()) {
+            return;
+        }
+        session.updateRuntimeModel(message.model);
+    };
+
     // Create scanner
     const scanner = await createSessionScanner({
         sessionId: session.sessionId,
         workingDirectory: session.path,
         onMessage: (message) => { 
+            updateRuntimeModelFromMessage(message as { type: string; model?: unknown });
             // Block SDK summary messages - we generate our own
             if (message.type !== 'summary') {
                 session.client.sendClaudeSessionMessage(message)

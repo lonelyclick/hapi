@@ -166,7 +166,7 @@ export function SessionHeader(props: {
                         <div className="sm:hidden relative shrink-0">
                             <button
                                 type="button"
-                                className="flex items-center gap-1 rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--app-hint)]"
+                                className="flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--app-hint)]"
                                 title={agentMeta}
                                 aria-label={agentMeta}
                                 aria-describedby={agentTipId}
@@ -179,14 +179,16 @@ export function SessionHeader(props: {
                                     }
                                 }}
                             >
-                                <span>{agentLabel}</span>
-                                <span className="text-[9px] font-semibold">i</span>
+                                <span className="leading-none">{agentLabel}</span>
+                                <span className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-current text-[8px] font-semibold leading-none">
+                                    i
+                                </span>
                             </button>
                             {showAgentTip ? (
                                 <div
                                     id={agentTipId}
                                     role="tooltip"
-                                    className="absolute right-0 top-full z-20 mt-1 max-w-[220px] rounded-md border border-[var(--app-divider)] bg-[var(--app-bg)] px-2 py-1 text-[10px] text-[var(--app-fg)] shadow-lg"
+                                    className="absolute right-0 top-full z-20 mt-1 max-w-[80vw] whitespace-nowrap rounded-md border border-[var(--app-divider)] bg-[var(--app-bg)] px-2 py-1 text-[10px] text-[var(--app-fg)] shadow-lg"
                                 >
                                     {agentMeta}
                                 </div>

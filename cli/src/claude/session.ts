@@ -21,6 +21,7 @@ export class Session extends AgentSessionBase<EnhancedMode> {
     readonly startedBy: 'daemon' | 'terminal';
     readonly startingMode: 'local' | 'remote';
     localLaunchFailure: LocalLaunchFailure | null = null;
+    private runtimeModel: string | null = null;
 
     constructor(opts: {
         api: ApiClient;
@@ -77,6 +78,18 @@ export class Session extends AgentSessionBase<EnhancedMode> {
 
     setModelMode = (mode: SessionModelMode): void => {
         this.modelMode = mode;
+    };
+
+    updateRuntimeModel = (model: string): void => {
+        const normalizedModel = model.trim();
+        if (!normalizedModel || this.runtimeModel === normalizedModel) {
+            return;
+        }
+        this.runtimeModel = normalizedModel;
+        this.client.updateMetadata((metadata) => ({
+            ...metadata,
+            runtimeModel: normalizedModel
+        }));
     };
 
     recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {

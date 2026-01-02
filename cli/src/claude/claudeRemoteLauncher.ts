@@ -6,7 +6,7 @@ import React from "react";
 import { claudeRemote } from "./claudeRemote";
 import { PermissionHandler } from "./utils/permissionHandler";
 import { Future } from "@/utils/future";
-import { SDKAssistantMessage, SDKMessage, SDKUserMessage } from "./sdk";
+import { SDKAssistantMessage, SDKMessage, SDKSystemMessage, SDKUserMessage } from "./sdk";
 import { formatClaudeMessageForInk } from "@/ui/messageFormatterInk";
 import { logger } from "@/ui/logger";
 import { SDKToLogConverter } from "./utils/sdkToLogConverter";
@@ -131,6 +131,13 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
 
         // Write to message log
         formatClaudeMessageForInk(message, messageBuffer);
+
+        if (message.type === 'system') {
+            const systemMessage = message as SDKSystemMessage;
+            if (typeof systemMessage.model === 'string' && systemMessage.model.trim()) {
+                session.updateRuntimeModel(systemMessage.model);
+            }
+        }
 
         // Write to permission handler for tool id resolving
         permissionHandler.onMessage(message);

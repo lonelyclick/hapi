@@ -16,6 +16,33 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 
+const MODEL_MODE_VALUES = new Set([
+    'default',
+    'sonnet',
+    'opus',
+    'gpt-5.2-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'gpt-5.2'
+])
+
+function coerceModelMode(value: string | null | undefined): ModelMode | undefined {
+    if (!value) {
+        return undefined
+    }
+    if (MODEL_MODE_VALUES.has(value)) {
+        return value as ModelMode
+    }
+    const normalized = value.toLowerCase()
+    if (normalized.includes('sonnet')) {
+        return 'sonnet'
+    }
+    if (normalized.includes('opus')) {
+        return 'opus'
+    }
+    return undefined
+}
+
 export function SessionChat(props: {
     api: ApiClient
     session: Session
@@ -166,6 +193,15 @@ export function SessionChat(props: {
         onSendMessage: props.onSend,
         onAbort: handleAbort
     })
+    const resolvedModelMode = useMemo(() => {
+        const fallbackMode = coerceModelMode(props.session.metadata?.runtimeModel)
+        if (props.session.modelMode && props.session.modelMode !== 'default') {
+            return props.session.modelMode
+        }
+        return fallbackMode ?? props.session.modelMode
+    }, [props.session.modelMode, props.session.metadata?.runtimeModel])
+    const resolvedReasoningEffort = props.session.modelReasoningEffort
+        ?? props.session.metadata?.runtimeModelReasoningEffort
 
     return (
         <div className="flex h-full flex-col">
@@ -239,8 +275,8 @@ export function SessionChat(props: {
                         apiClient={props.api}
                         disabled={props.isSending || controlsDisabled}
                         permissionMode={props.session.permissionMode}
-                        modelMode={props.session.modelMode}
-                        modelReasoningEffort={props.session.modelReasoningEffort}
+                        modelMode={resolvedModelMode}
+                        modelReasoningEffort={resolvedReasoningEffort}
                         agentFlavor={props.session.metadata?.flavor ?? 'claude'}
                         active={props.session.active}
                         thinking={props.session.thinking}
