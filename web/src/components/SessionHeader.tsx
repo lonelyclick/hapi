@@ -20,8 +20,8 @@ function BackIcon(props: { className?: string }) {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -39,8 +39,8 @@ function FilesIcon(props: { className?: string }) {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -59,8 +59,8 @@ function TrashIcon(props: { className?: string }) {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -105,21 +105,21 @@ export function SessionHeader(props: {
 
     return (
         <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
-            <div className="mx-auto w-full max-w-content flex items-center justify-between px-4 py-3">
+            <div className="mx-auto w-full max-w-content flex items-center justify-between px-3 py-1.5">
                 {/* Left side: Back button + Title + Agent */}
-                <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                     <button
                         type="button"
                         onClick={props.onBack}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
                     >
                         <BackIcon />
                     </button>
                     <div className="min-w-0 flex-1">
-                        <div className="truncate font-semibold text-base">
+                        <div className="truncate font-medium text-sm">
                             {title}
                         </div>
-                        <div className="text-xs text-[var(--app-hint)] truncate">
+                        <div className="text-[10px] text-[var(--app-hint)] truncate">
                             {agentLabel}
                             {worktreeBranch ? ` • ${worktreeBranch}` : ''}
                         </div>
@@ -127,12 +127,12 @@ export function SessionHeader(props: {
                 </div>
 
                 {/* Right side: Action buttons */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                     {props.onViewFiles ? (
                         <button
                             type="button"
                             onClick={props.onViewFiles}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
                             title="Files"
                         >
                             <FilesIcon />
@@ -143,7 +143,7 @@ export function SessionHeader(props: {
                             type="button"
                             onClick={props.onDelete}
                             disabled={props.deleteDisabled}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Delete session"
                         >
                             <TrashIcon />
