@@ -152,6 +152,8 @@ export function App() {
         if (event.type === 'online-users-changed') {
             // 更新在线用户缓存
             queryClient.setQueryData(queryKeys.onlineUsers, { users: event.users })
+            // 同时刷新 sessions 列表以更新 viewers
+            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
             return
         }
         if (event.type !== 'session-removed') {
