@@ -42,9 +42,76 @@ export function App() {
             event.preventDefault()
         }
 
-        const onBeforeInput = (event: InputEvent) => {
-            if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+        const lastInputValues = new WeakMap<EventTarget, string>()
+
+        const readInputValue = (target: EventTarget | null): string | null => {
+            if (!target || !(target instanceof HTMLElement)) {
+                return null
+            }
+            if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+                return target.value
+            }
+            if (target.isContentEditable) {
+                return target.textContent ?? ''
+            }
+            return null
+        }
+
+        const writeInputValue = (target: EventTarget | null, value: string): void => {
+            if (!target || !(target instanceof HTMLElement)) {
+                return
+            }
+            if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+                target.value = value
+                return
+            }
+            if (target.isContentEditable) {
+                target.textContent = value
+            }
+        }
+
+        const isHistoryInputType = (event: Event): boolean => {
+            const inputEvent = event as InputEvent
+            return inputEvent.inputType === 'historyUndo' || inputEvent.inputType === 'historyRedo'
+        }
+
+        const onBeforeInput = (event: Event) => {
+            if (isHistoryInputType(event)) {
                 event.preventDefault()
+                event.stopImmediatePropagation()
+                return
+            }
+            const value = readInputValue(event.target)
+            if (value !== null) {
+                lastInputValues.set(event.target, value)
+            }
+        }
+
+        const onInput = (event: Event) => {
+            if (isHistoryInputType(event)) {
+                const previous = lastInputValues.get(event.target)
+                if (previous !== undefined) {
+                    writeInputValue(event.target, previous)
+                }
+                return
+            }
+            const value = readInputValue(event.target)
+            if (value !== null) {
+                lastInputValues.set(event.target, value)
+            }
+        }
+
+        const docWithCommand = document as Document & { execCommand?: typeof document.execCommand }
+        const originalExecCommand = docWithCommand.execCommand?.bind(document)
+        if (originalExecCommand) {
+            docWithCommand.execCommand = (commandId: string, showUI?: boolean, value?: string) => {
+                if (typeof commandId === 'string') {
+                    const normalized = commandId.toLowerCase()
+                    if (normalized === 'undo' || normalized === 'redo') {
+                        return false
+                    }
+                }
+                return originalExecCommand(commandId, showUI, value)
             }
         }
 
@@ -66,6 +133,7 @@ export function App() {
         document.addEventListener('gesturechange', preventDefault as EventListener, { passive: false })
         document.addEventListener('gestureend', preventDefault as EventListener, { passive: false })
         document.addEventListener('beforeinput', onBeforeInput as EventListener, { capture: true })
+        document.addEventListener('input', onInput as EventListener, { capture: true })
 
         window.addEventListener('wheel', onWheel, { passive: false })
         window.addEventListener('keydown', onKeyDown)
@@ -75,9 +143,14 @@ export function App() {
             document.removeEventListener('gesturechange', preventDefault as EventListener)
             document.removeEventListener('gestureend', preventDefault as EventListener)
             document.removeEventListener('beforeinput', onBeforeInput as EventListener, { capture: true })
+            document.removeEventListener('input', onInput as EventListener, { capture: true })
 
             window.removeEventListener('wheel', onWheel)
             window.removeEventListener('keydown', onKeyDown)
+
+            if (originalExecCommand) {
+                docWithCommand.execCommand = originalExecCommand
+            }
         }
     }, [])
 
