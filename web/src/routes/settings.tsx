@@ -309,6 +309,30 @@ export default function SettingsPage() {
         removeUserMutation.mutate(email)
     }, [removeUserMutation])
 
+    const handleLogout = useCallback(async () => {
+        // 清除 localStorage
+        localStorage.clear()
+
+        // 注销 PWA service worker
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations()
+            for (const registration of registrations) {
+                await registration.unregister()
+            }
+        }
+
+        // 清除所有缓存
+        if ('caches' in window) {
+            const cacheNames = await caches.keys()
+            for (const cacheName of cacheNames) {
+                await caches.delete(cacheName)
+            }
+        }
+
+        // 跳转到首页
+        window.location.href = '/'
+    }, [])
+
     const projects = projectsData?.projects ?? []
     const users = usersData?.users ?? []
 
@@ -351,12 +375,27 @@ export default function SettingsPage() {
                                 <span className="text-sm font-mono truncate">{currentSession.email}</span>
                             </div>
                             <div className="px-3 py-2 flex items-center justify-between gap-2">
+                                <span className="text-sm text-[var(--app-hint)]">Role</span>
+                                <span className="text-sm">
+                                    {currentUserRole === 'developer' ? 'Developer' : 'Operator'}
+                                </span>
+                            </div>
+                            <div className="px-3 py-2 flex items-center justify-between gap-2">
                                 <span className="text-sm text-[var(--app-hint)]">Device</span>
                                 <span className="text-sm font-mono">{currentSession.deviceType}</span>
                             </div>
                             <div className="px-3 py-2 flex items-center justify-between gap-2">
                                 <span className="text-sm text-[var(--app-hint)]">Client ID</span>
                                 <span className="text-sm font-mono">{currentSession.clientId}</span>
+                            </div>
+                            <div className="px-3 py-2">
+                                <button
+                                    type="button"
+                                    onClick={handleLogout}
+                                    className="w-full px-3 py-2 text-sm font-medium rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                                >
+                                    Logout
+                                </button>
                             </div>
                         </div>
                     </div>
