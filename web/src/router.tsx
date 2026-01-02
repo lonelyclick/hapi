@@ -13,6 +13,7 @@ import { SessionChat } from '@/components/SessionChat'
 import { SessionList } from '@/components/SessionList'
 import { NewSession } from '@/components/NewSession'
 import { LoadingState } from '@/components/LoadingState'
+import { OnlineUsersBadge } from '@/components/OnlineUsersBadge'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { isTelegramApp } from '@/hooks/useTelegram'
@@ -166,12 +167,7 @@ function SessionsPage() {
                         </button>
                     </div>
                     <div className="flex items-center gap-2">
-                        {onlineUsers.length > 0 && (
-                            <div className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600" title={onlineUsers.map(u => u.email).join(', ')}>
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                {onlineUsers.length} online
-                            </div>
-                        )}
+                        <OnlineUsersBadge users={onlineUsers} />
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--app-subtle-bg)] text-[var(--app-hint)]">
                             {sessions.length} sessions
                         </span>

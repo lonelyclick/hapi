@@ -4,9 +4,9 @@ import type { OnlineUsersResponse, SessionViewer } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 
 export function useSessionViewers(sessionId: string | null): SessionViewer[] {
+    // Use the same query key as useOnlineUsers - data is fetched there or set by SSE
     const { data } = useQuery<OnlineUsersResponse>({
         queryKey: queryKeys.onlineUsers,
-        enabled: false, // Data is set by SSE events, not fetched
         staleTime: Infinity,
     })
 
