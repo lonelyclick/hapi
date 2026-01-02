@@ -105,6 +105,7 @@ export function SessionHeader(props: {
                     </div>
                     <div className="text-xs text-[var(--app-hint)] truncate">
                         {props.session.metadata?.path ?? props.session.id}
+                        {props.session.metadata?.flavor && ` • ${props.session.metadata.flavor === 'codex' ? 'Codex' : props.session.metadata.flavor === 'claude' ? 'Claude' : props.session.metadata.flavor === 'gemini' ? 'Gemini' : props.session.metadata.flavor}`}
                         {worktreeBranch ? ` • worktree: ${worktreeBranch}` : ''}
                     </div>
                 </div>

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { AgentState, ModelMode, PermissionMode } from '@/types/api'
 import { getContextBudgetTokens } from '@/chat/modelConfig'
 
@@ -119,6 +119,37 @@ export function StatusBar(props: {
 
     const gitCommitHash = typeof __GIT_COMMIT_HASH__ !== 'undefined' ? __GIT_COMMIT_HASH__ : 'dev'
     const gitCommitMessage = typeof __GIT_COMMIT_MESSAGE__ !== 'undefined' ? __GIT_COMMIT_MESSAGE__ : ''
+    const [isRefreshing, setIsRefreshing] = useState(false)
+
+    const handleForceRefresh = useCallback(async () => {
+        if (isRefreshing) return
+        setIsRefreshing(true)
+
+        try {
+            // Unregister all service workers
+            const registrations = await navigator.serviceWorker?.getRegistrations()
+            if (registrations) {
+                for (const registration of registrations) {
+                    await registration.unregister()
+                }
+            }
+
+            // Clear all caches
+            const cacheNames = await caches?.keys()
+            if (cacheNames) {
+                for (const cacheName of cacheNames) {
+                    await caches.delete(cacheName)
+                }
+            }
+
+            // Force reload from server
+            window.location.reload()
+        } catch (error) {
+            console.error('Force refresh failed:', error)
+            // Still try to reload
+            window.location.reload()
+        }
+    }, [isRefreshing])
 
     return (
         <div className="flex items-center justify-between px-2 pb-1">
@@ -136,12 +167,15 @@ export function StatusBar(props: {
                         {contextWarning.text}
                     </span>
                 ) : null}
-                <span
-                    className="text-[10px] text-[var(--app-hint)] cursor-help"
-                    title={gitCommitMessage}
+                <button
+                    type="button"
+                    onClick={handleForceRefresh}
+                    disabled={isRefreshing}
+                    className="text-[10px] text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:underline disabled:opacity-50"
+                    title={`${gitCommitMessage}\n\nClick to force refresh`}
                 >
-                    {gitCommitHash}
-                </span>
+                    {isRefreshing ? 'refreshing...' : gitCommitHash}
+                </button>
             </div>
 
             {shouldShowPermissionMode ? (

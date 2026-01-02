@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
     Navigate,
@@ -71,28 +71,71 @@ function SessionsPage() {
     const { api } = useAppContext()
     const navigate = useNavigate()
     const { sessions, isLoading, error, refetch } = useSessions(api)
+    const [isRefreshing, setIsRefreshing] = useState(false)
 
     const handleRefresh = useCallback(() => {
         void refetch()
     }, [refetch])
 
+    const handleForceRefresh = useCallback(async () => {
+        if (isRefreshing) return
+        setIsRefreshing(true)
+
+        try {
+            const registrations = await navigator.serviceWorker?.getRegistrations()
+            if (registrations) {
+                for (const registration of registrations) {
+                    await registration.unregister()
+                }
+            }
+
+            const cacheNames = await caches?.keys()
+            if (cacheNames) {
+                for (const cacheName of cacheNames) {
+                    await caches.delete(cacheName)
+                }
+            }
+
+            window.location.reload()
+        } catch (error) {
+            console.error('Force refresh failed:', error)
+            window.location.reload()
+        }
+    }, [isRefreshing])
+
     const projectCount = new Set(sessions.map(s => s.metadata?.path ?? 'Other')).size
+    const gitCommitHash = typeof __GIT_COMMIT_HASH__ !== 'undefined' ? __GIT_COMMIT_HASH__ : 'dev'
+    const gitCommitMessage = typeof __GIT_COMMIT_MESSAGE__ !== 'undefined' ? __GIT_COMMIT_MESSAGE__ : ''
 
     return (
         <div className="flex h-full flex-col">
             <div className="bg-[var(--app-bg)] pt-[env(safe-area-inset-top)]">
                 <div className="mx-auto w-full max-w-content flex items-center justify-between px-3 py-2">
-                    <div className="text-xs text-[var(--app-hint)]">
-                        {sessions.length} sessions in {projectCount} projects
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold">HAPI</span>
+                        <button
+                            type="button"
+                            onClick={handleForceRefresh}
+                            disabled={isRefreshing}
+                            className="text-[10px] text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:underline disabled:opacity-50"
+                            title={`${gitCommitMessage}\n\nClick to force refresh`}
+                        >
+                            {isRefreshing ? 'refreshing...' : gitCommitHash}
+                        </button>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => navigate({ to: '/sessions/new' })}
-                        className="session-list-new-button p-1.5 rounded-full text-[var(--app-link)] transition-colors"
-                        title="New Session"
-                    >
-                        <PlusIcon className="h-5 w-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--app-hint)]">
+                            {sessions.length} sessions
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => navigate({ to: '/sessions/new' })}
+                            className="session-list-new-button p-1.5 rounded-full text-[var(--app-link)] transition-colors"
+                            title="New Session"
+                        >
+                            <PlusIcon className="h-5 w-5" />
+                        </button>
+                    </div>
                 </div>
             </div>
             <div className="flex-1 overflow-y-auto">

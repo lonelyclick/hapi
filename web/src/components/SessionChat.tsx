@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
@@ -12,6 +12,7 @@ import { HappyComposer } from '@/components/AssistantChat/HappyComposer'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { SessionHeader } from '@/components/SessionHeader'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 
@@ -37,6 +38,7 @@ export function SessionChat(props: {
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
     const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, isPending } = useSessionActions(props.api, props.session.id)
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
     useEffect(() => {
         normalizedCacheRef.current.clear()
@@ -140,13 +142,12 @@ export function SessionChat(props: {
         })
     }, [navigate, props.session.id])
 
-    const handleDelete = useCallback(async () => {
-        const message = props.session.active
-            ? 'This session is still active. Delete it and remove all messages? This will stop the session.'
-            : 'Delete this session and all messages? This cannot be undone.'
-        if (!confirm(message)) {
-            return
-        }
+    const handleDeleteClick = useCallback(() => {
+        setDeleteDialogOpen(true)
+    }, [])
+
+    const handleDeleteConfirm = useCallback(async () => {
+        setDeleteDialogOpen(false)
         try {
             await deleteSession()
             haptic.notification('success')
@@ -171,9 +172,38 @@ export function SessionChat(props: {
                 session={props.session}
                 onBack={props.onBack}
                 onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
-                onDelete={handleDelete}
+                onDelete={handleDeleteClick}
                 deleteDisabled={isPending}
             />
+
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Session</DialogTitle>
+                        <DialogDescription>
+                            {props.session.active
+                                ? 'This session is still active. Delete it and remove all messages? This will stop the session.'
+                                : 'Delete this session and all messages? This cannot be undone.'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setDeleteDialogOpen(false)}
+                            className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleDeleteConfirm}
+                            className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+                        >
+                            Delete
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {controlsDisabled ? (
                 <div className="px-3 pt-3">

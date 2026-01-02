@@ -215,6 +215,11 @@ export function useSpeechToText(options: SpeechToTextOptions) {
             data = JSON.parse(payloadText) as WhisperMessage
         } catch (err) {
             if (allowPlainText) {
+                // Only process text results when recording
+                if (statusRef.current !== 'recording' && statusRef.current !== 'stopping') {
+                    console.log('[stt] ignoring plain text - not recording', statusRef.current)
+                    return
+                }
                 const fallback = payloadText.trim()
                 if (fallback) {
                     completedTextRef.current = []
@@ -249,6 +254,12 @@ export function useSpeechToText(options: SpeechToTextOptions) {
                 setStatus('idle')
             }
             cleanupWebSocket()
+            return
+        }
+
+        // Only process transcription results when recording or stopping
+        if (statusRef.current !== 'recording' && statusRef.current !== 'stopping') {
+            console.log('[stt] ignoring transcription result - not recording', statusRef.current)
             return
         }
 
@@ -366,6 +377,17 @@ export function useSpeechToText(options: SpeechToTextOptions) {
         // If we already have an open WebSocket, reuse it
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             console.log('[stt] reusing existing ws connection')
+            // Send reset signal to clear any previous session state on server
+            clientUidRef.current = getClientUid()
+            const config = {
+                uid: clientUidRef.current,
+                language: 'zh',
+                task: 'transcribe',
+                model: 'whisper-large-v3',
+                use_vad: true,
+                reset: true
+            }
+            wsRef.current.send(JSON.stringify(config))
             return Promise.resolve(true)
         }
 
@@ -374,19 +396,51 @@ export function useSpeechToText(options: SpeechToTextOptions) {
             console.log('[stt] waiting for existing ws connection')
             return new Promise((resolve) => {
                 const ws = wsRef.current!
+                let resolved = false
                 const checkInterval = setInterval(() => {
+                    if (resolved) return
                     if (ws.readyState === WebSocket.OPEN) {
+                        resolved = true
                         clearInterval(checkInterval)
+                        // Send reset signal after connection is ready
+                        clientUidRef.current = getClientUid()
+                        const config = {
+                            uid: clientUidRef.current,
+                            language: 'zh',
+                            task: 'transcribe',
+                            model: 'whisper-large-v3',
+                            use_vad: true,
+                            reset: true
+                        }
+                        ws.send(JSON.stringify(config))
                         resolve(true)
                     } else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+                        resolved = true
                         clearInterval(checkInterval)
                         resolve(false)
                     }
                 }, 50)
                 // Timeout after 5 seconds
                 setTimeout(() => {
+                    if (resolved) return
+                    resolved = true
                     clearInterval(checkInterval)
-                    resolve(ws.readyState === WebSocket.OPEN)
+                    if (ws.readyState === WebSocket.OPEN) {
+                        // Send reset signal after timeout if connected
+                        clientUidRef.current = getClientUid()
+                        const config = {
+                            uid: clientUidRef.current,
+                            language: 'zh',
+                            task: 'transcribe',
+                            model: 'whisper-large-v3',
+                            use_vad: true,
+                            reset: true
+                        }
+                        ws.send(JSON.stringify(config))
+                        resolve(true)
+                    } else {
+                        resolve(false)
+                    }
                 }, 5000)
             })
         }
@@ -483,7 +537,7 @@ export function useSpeechToText(options: SpeechToTextOptions) {
             gain.gain.value = 0
 
             processor.onaudioprocess = (event: AudioProcessingEvent) => {
-                if (!capturingRef.current || stoppingRef.current) return
+                if (!capturingRef.current) return
                 const input = event.inputBuffer.getChannelData(0)
                 const resampled = resampleToTarget(input, audioContext.sampleRate)
 
@@ -586,7 +640,6 @@ export function useSpeechToText(options: SpeechToTextOptions) {
         // Increment attempt to cancel any in-progress start
         startAttemptRef.current += 1
         stoppingRef.current = true
-        capturingRef.current = false
         volumeRef.current = 0
         setVolume(0)
 
@@ -598,6 +651,7 @@ export function useSpeechToText(options: SpeechToTextOptions) {
         // If we were connecting, just cancel - no final text
         // Don't cleanup WebSocket here - keep it warm for next recording
         if (status === 'connecting') {
+            capturingRef.current = false
             stoppingRef.current = false
             setStatus('idle')
             return
@@ -605,20 +659,25 @@ export function useSpeechToText(options: SpeechToTextOptions) {
 
         setStatus('stopping')
 
-        // Send remaining audio buffer if any
-        const remainingBuffer = sampleBufferRef.current
-        if (remainingBuffer.length > 0) {
-            const chunk = new Float32Array(remainingBuffer)
-            sampleBufferRef.current = []
-            sendAudioChunkRef.current(chunk)
-        }
+        // Delay stopping capture to allow remaining audio in the pipeline to be processed
+        // AudioContext processes audio in chunks, so we need to wait a bit
+        setTimeout(() => {
+            capturingRef.current = false
 
-        // Send empty chunk to signal end of audio (some servers expect this)
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            console.log('[stt] sending end-of-stream signal')
-            // Send end signal as JSON message
-            wsRef.current.send(JSON.stringify({ uid: clientUidRef.current, message: 'END_STREAM' }))
-        }
+            // Send remaining audio buffer if any
+            const remainingBuffer = sampleBufferRef.current
+            if (remainingBuffer.length > 0) {
+                const chunk = new Float32Array(remainingBuffer)
+                sampleBufferRef.current = []
+                sendAudioChunkRef.current(chunk)
+            }
+
+            // Send end-of-stream signal
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                console.log('[stt] sending end-of-stream signal')
+                wsRef.current.send(JSON.stringify({ uid: clientUidRef.current, message: 'END_STREAM' }))
+            }
+        }, 300) // Wait 300ms to capture remaining audio
 
         // Wait for server to process remaining audio and send final results
         setTimeout(() => {
@@ -636,7 +695,7 @@ export function useSpeechToText(options: SpeechToTextOptions) {
 
             stoppingRef.current = false
             setStatus('idle')
-        }, 1500)
+        }, 2000) // Increased from 1500 to 2000 to account for the 300ms delay
     }, [cleanupWebSocket, status])
 
     const toggle = useCallback(async () => {

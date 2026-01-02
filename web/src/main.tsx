@@ -59,32 +59,74 @@ async function bootstrap() {
         },
         onRegistered(registration) {
             if (registration) {
+                // Helper function to force activate waiting SW
+                const activateWaitingSW = () => {
+                    if (registration.waiting) {
+                        console.log('Found waiting SW, activating immediately...')
+                        registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+                    }
+                }
+
+                // Check for waiting SW on load (user may have ignored update prompt before)
+                activateWaitingSW()
+
+                // Also listen for state changes
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('New SW installed, activating...')
+                                newWorker.postMessage({ type: 'SKIP_WAITING' })
+                            }
+                        })
+                    }
+                })
+
                 // Check for updates immediately on load
                 registration.update()
 
-                // Check for updates every 1 minute (more aggressive)
+                // Check for updates every 30 seconds (more aggressive for iOS)
                 setInterval(() => {
-                    registration.update()
-                }, 60 * 1000)
+                    registration.update().then(() => {
+                        activateWaitingSW()
+                    })
+                }, 30 * 1000)
 
                 // iOS Safari PWA: check for updates when app returns from background
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'visible') {
                         console.log('App visible, checking for updates...')
-                        registration.update()
+                        registration.update().then(() => {
+                            activateWaitingSW()
+                        })
                     }
                 })
 
                 // iOS Safari: also check on focus (belt and suspenders)
                 window.addEventListener('focus', () => {
                     console.log('Window focused, checking for updates...')
-                    registration.update()
+                    registration.update().then(() => {
+                        activateWaitingSW()
+                    })
                 })
 
                 // Check on online event (network reconnection)
                 window.addEventListener('online', () => {
                     console.log('Back online, checking for updates...')
-                    registration.update()
+                    registration.update().then(() => {
+                        activateWaitingSW()
+                    })
+                })
+
+                // iOS Safari: also check on page show (for bfcache)
+                window.addEventListener('pageshow', (event) => {
+                    if (event.persisted) {
+                        console.log('Page restored from bfcache, checking for updates...')
+                        registration.update().then(() => {
+                            activateWaitingSW()
+                        })
+                    }
                 })
             }
         },
