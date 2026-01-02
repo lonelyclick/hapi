@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { SessionSummary } from '@/types/api'
 
 type SessionGroup = {
@@ -73,33 +73,12 @@ function PlusIcon(props: { className?: string }) {
     )
 }
 
-function BulbIcon(props: { className?: string }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={props.className}
-        >
-            <path d="M9 18h6" />
-            <path d="M10 22h4" />
-            <path d="M12 2a7 7 0 0 0-4 12c.6.6 1 1.2 1 2h6c0-.8.4-1.4 1-2a7 7 0 0 0-4-12Z" />
-        </svg>
-    )
-}
-
 function ChevronIcon(props: { className?: string; collapsed?: boolean }) {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -109,6 +88,25 @@ function ChevronIcon(props: { className?: string; collapsed?: boolean }) {
             className={`${props.className ?? ''} transition-transform duration-200 ${props.collapsed ? '' : 'rotate-90'}`}
         >
             <polyline points="9 18 15 12 9 6" />
+        </svg>
+    )
+}
+
+function FolderIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
         </svg>
     )
 }
@@ -135,89 +133,89 @@ function getTodoProgress(session: SessionSummary): { completed: number; total: n
 
 function getAgentLabel(session: SessionSummary): string {
     const flavor = session.metadata?.flavor?.trim()
+    if (flavor === 'claude') return 'Claude'
+    if (flavor === 'codex') return 'Codex'
+    if (flavor === 'gemini') return 'Gemini'
     if (flavor) return flavor
-    return 'unknown'
-}
-
-function getModelLabel(session: SessionSummary): string {
-    return session.modelMode ?? 'default'
+    return 'Agent'
 }
 
 function formatRelativeTime(value: number): string | null {
     const ms = value < 1_000_000_000_000 ? value * 1000 : value
     if (!Number.isFinite(ms)) return null
     const delta = Date.now() - ms
-    if (delta < 60_000) return 'just now'
+    if (delta < 60_000) return 'now'
     const minutes = Math.floor(delta / 60_000)
-    if (minutes < 60) return `${minutes}m ago`
+    if (minutes < 60) return `${minutes}m`
     const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
+    if (hours < 24) return `${hours}h`
     const days = Math.floor(hours / 24)
-    if (days < 7) return `${days}d ago`
+    if (days < 7) return `${days}d`
     return new Date(ms).toLocaleDateString()
 }
 
 function SessionItem(props: {
     session: SessionSummary
     onSelect: (sessionId: string) => void
-    showPath?: boolean
 }) {
-    const { session: s, onSelect, showPath = true } = props
-    const inactiveClass = s.active ? '' : 'opacity-50'
+    const { session: s, onSelect } = props
+    const progress = getTodoProgress(s)
+    const hasPending = s.pendingRequestsCount > 0
+
     return (
         <button
             type="button"
             onClick={() => onSelect(s.id)}
-            className={`session-list-item flex w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] ${inactiveClass}`}
+            className={`
+                group flex w-full items-center gap-3 px-3 py-2 text-left
+                transition-all duration-150
+                hover:bg-[var(--app-secondary-bg)]
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]
+                ${!s.active ? 'opacity-40' : ''}
+            `}
         >
-            <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                    <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                        <span
-                            className={`h-2 w-2 rounded-full ${s.active ? 'bg-[var(--app-badge-success-text)]' : 'bg-[var(--app-hint)]'}`}
-                        />
-                    </span>
-                    <div className="truncate text-sm font-medium">
+            {/* Status indicator */}
+            <div className="shrink-0">
+                <span
+                    className={`
+                        block h-2 w-2 rounded-full
+                        ${hasPending ? 'bg-amber-500 animate-pulse' : s.active ? 'bg-emerald-500' : 'bg-gray-400'}
+                    `}
+                />
+            </div>
+
+            {/* Main content */}
+            <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium text-[var(--app-fg)]">
                         {getSessionTitle(s)}
-                    </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 text-xs">
-                    {(() => {
-                        const progress = getTodoProgress(s)
-                        if (!progress) return null
-                        return (
-                            <span className="flex items-center gap-1 text-[var(--app-hint)]">
-                                <BulbIcon className="h-3 w-3" />
-                                {progress.completed}/{progress.total}
-                            </span>
-                        )
-                    })()}
-                    {s.pendingRequestsCount > 0 ? (
-                        <span className="text-[var(--app-badge-warning-text)]">
-                            pending {s.pendingRequestsCount}
-                        </span>
-                    ) : null}
-                    <span className="text-[var(--app-hint)]">
-                        {formatRelativeTime(s.updatedAt)}
                     </span>
+                    {hasPending && (
+                        <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600">
+                            {s.pendingRequestsCount} pending
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--app-hint)]">
+                    <span className="shrink-0">{getAgentLabel(s)}</span>
+                    {s.metadata?.worktree?.branch && (
+                        <>
+                            <span className="text-[var(--app-divider)]">•</span>
+                            <span className="truncate">{s.metadata.worktree.branch}</span>
+                        </>
+                    )}
+                    {progress && (
+                        <>
+                            <span className="text-[var(--app-divider)]">•</span>
+                            <span>{progress.completed}/{progress.total} tasks</span>
+                        </>
+                    )}
                 </div>
             </div>
-            {showPath ? (
-                <div className="truncate text-xs text-[var(--app-hint)]">
-                    {s.metadata?.path ?? s.id}
-                </div>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--app-hint)]">
-                <span className="inline-flex items-center gap-2">
-                    <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                        ❖
-                    </span>
-                    {getAgentLabel(s)}
-                </span>
-                <span>model: {getModelLabel(s)}</span>
-                {s.metadata?.worktree?.branch ? (
-                    <span>worktree: {s.metadata.worktree.branch}</span>
-                ) : null}
+
+            {/* Time */}
+            <div className="shrink-0 text-[11px] text-[var(--app-hint)]">
+                {formatRelativeTime(s.updatedAt)}
             </div>
         </button>
     )
@@ -287,41 +285,60 @@ export function SessionList(props: {
                 </div>
             ) : null}
 
-            <div className="flex flex-col">
+            <div className="flex flex-col gap-1 p-2">
                 {groups.map((group) => {
                     const isCollapsed = isGroupCollapsed(group)
+                    const activeCount = group.sessions.filter(s => s.active).length
                     return (
-                        <div key={group.directory}>
+                        <div
+                            key={group.directory}
+                            className="rounded-lg overflow-hidden bg-[var(--app-subtle-bg)]"
+                        >
+                            {/* Group header */}
                             <button
                                 type="button"
                                 onClick={() => toggleGroup(group.directory, isCollapsed)}
-                                className="sticky top-0 z-10 flex w-full items-center gap-2 px-3 py-2 text-left bg-[var(--app-bg)] border-b border-[var(--app-divider)] transition-colors hover:bg-[var(--app-secondary-bg)]"
+                                className="
+                                    flex w-full items-center gap-2 px-3 py-2
+                                    text-left transition-colors
+                                    hover:bg-[var(--app-secondary-bg)]
+                                "
                             >
                                 <ChevronIcon
-                                    className="h-4 w-4 text-[var(--app-hint)]"
+                                    className="shrink-0 text-[var(--app-hint)]"
                                     collapsed={isCollapsed}
                                 />
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <span className="font-medium text-sm break-words" title={group.directory}>
-                                        {group.displayName}
-                                    </span>
-                                    <span className="shrink-0 text-xs text-[var(--app-hint)]">
-                                        ({group.sessions.length})
+                                <FolderIcon className="shrink-0 text-[var(--app-hint)]" />
+                                <span
+                                    className="truncate text-sm font-medium"
+                                    title={group.directory}
+                                >
+                                    {group.displayName}
+                                </span>
+                                <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                                    {activeCount > 0 && (
+                                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">
+                                            {activeCount} active
+                                        </span>
+                                    )}
+                                    <span className="text-[11px] text-[var(--app-hint)]">
+                                        {group.sessions.length}
                                     </span>
                                 </div>
                             </button>
-                            {!isCollapsed ? (
-                                <div className="flex flex-col divide-y divide-[var(--app-divider)] border-b border-[var(--app-divider)]">
+
+                            {/* Sessions list */}
+                            {!isCollapsed && (
+                                <div className="border-t border-[var(--app-divider)]">
                                     {group.sessions.map((s) => (
                                         <SessionItem
                                             key={s.id}
                                             session={s}
                                             onSelect={props.onSelect}
-                                            showPath={false}
                                         />
                                     ))}
                                 </div>
-                            ) : null}
+                            )}
                         </div>
                     )
                 })}
