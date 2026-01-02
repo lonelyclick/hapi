@@ -33,6 +33,54 @@ async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserR
     }
 }
 
+async function waitForSessionOnline(engine: SyncEngine, sessionId: string, timeoutMs: number): Promise<boolean> {
+    const existing = engine.getSession(sessionId)
+    if (existing?.active) {
+        return true
+    }
+
+    return await new Promise((resolve) => {
+        let resolved = false
+        let unsubscribe = () => {}
+
+        const finalize = (result: boolean) => {
+            if (resolved) return
+            resolved = true
+            clearTimeout(timer)
+            unsubscribe()
+            resolve(result)
+        }
+
+        const timer = setTimeout(() => finalize(false), timeoutMs)
+
+        unsubscribe = engine.subscribe((event) => {
+            if (event.sessionId !== sessionId) {
+                return
+            }
+            if (event.type !== 'session-added' && event.type !== 'session-updated') {
+                return
+            }
+            const session = engine.getSession(sessionId)
+            if (session?.active) {
+                finalize(true)
+            }
+        })
+
+        const current = engine.getSession(sessionId)
+        if (current?.active) {
+            finalize(true)
+        }
+    })
+}
+
+async function sendInitPromptAfterOnline(engine: SyncEngine, sessionId: string, role: UserRole): Promise<void> {
+    const isOnline = await waitForSessionOnline(engine, sessionId, 60_000)
+    if (!isOnline) {
+        return
+    }
+    await sendInitPrompt(engine, sessionId, role)
+}
+
 export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: Store): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -74,7 +122,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             parsed.data.worktreeName
         )
 
-        // 如果 spawn 成功，发送初始化 prompt（动态生成）
+        // 如果 spawn 成功，等 session online 后发送初始化 prompt（动态生成）
         if (result.type === 'success') {
             const email = c.get('email')
             // 获取用户角色
@@ -88,7 +136,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                     }
                 }
             }
-            void sendInitPrompt(engine, result.sessionId, role)
+            void sendInitPromptAfterOnline(engine, result.sessionId, role)
         }
 
         return c.json(result)

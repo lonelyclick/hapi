@@ -20,8 +20,14 @@ import type { CodexSession } from './session';
 import type { EnhancedMode } from './loop';
 import { restoreTerminalState } from '@/ui/terminalState';
 import { hasCodexCliOverrides } from './utils/codexCliOverrides';
-import { buildCodexStartConfig } from './utils/codexStartConfig';
+import { buildCodexStartConfig, TITLE_INSTRUCTION } from './utils/codexStartConfig';
 import { convertCodexEvent } from './utils/codexEventConverter';
+
+const INIT_PROMPT_PREFIX = '#InitPrompt-';
+
+function isInitPromptMessage(message: string): boolean {
+    return message.trimStart().startsWith(INIT_PROMPT_PREFIX);
+}
 
 export async function codexRemoteLauncher(session: CodexSession): Promise<'switch' | 'exit'> {
     // Warn if CLI args were passed that won't apply in remote mode
@@ -552,6 +558,18 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         let pending: { message: string; mode: EnhancedMode; isolate: boolean; hash: string } | null = null;
         let nextExperimentalResume: string | null = null;
         let first = true;
+        let titleInstructionPending = true;
+
+        const appendTitleInstructionIfNeeded = (messageText: string): string => {
+            if (!titleInstructionPending) {
+                return messageText;
+            }
+            if (isInitPromptMessage(messageText)) {
+                return messageText;
+            }
+            titleInstructionPending = false;
+            return `${messageText}\n\n${TITLE_INSTRUCTION}`;
+        };
 
         while (!shouldExit) {
             logActiveHandles('loop-top');
@@ -608,6 +626,7 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
             messageBuffer.addMessage(message.message, 'user');
             currentModeHash = message.hash;
             console.error('[HAPI codex] Processing message:', message.message.slice(0, 50));
+            const outgoingMessage = appendTitleInstructionIfNeeded(message.message);
 
             try {
                 if (!wasCreated) {
@@ -637,12 +656,13 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                         ? buildResumeInstructionsFromFile(resumeFile)
                         : undefined;
                     const startConfig: CodexSessionConfig = buildCodexStartConfig({
-                        message: message.message,
+                        message: outgoingMessage,
                         mode: message.mode,
                         first,
                         mcpServers,
                         cliOverrides: session.codexCliOverrides,
-                        developerInstructions
+                        developerInstructions,
+                        includeTitleInstruction: false
                     });
 
                     if (resumeFile) {
@@ -661,7 +681,7 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                     syncSessionId();
                 } else {
                     startInFlightWatchdog('continue', message.message, message.hash);
-                    const continueResponse = await client.continueSession(message.message, { signal: abortController.signal });
+                    const continueResponse = await client.continueSession(outgoingMessage, { signal: abortController.signal });
                     if (continueResponse.error) {
                         messageBuffer.addMessage(continueResponse.error, 'status');
                         session.sendSessionEvent({ type: 'message', message: continueResponse.error });

@@ -3,7 +3,7 @@ import type { CodexSessionConfig } from '../types';
 import type { EnhancedMode } from '../loop';
 import type { CodexCliOverrides } from './codexCliOverrides';
 
-const TITLE_INSTRUCTION = trimIdent(`Based on this message, call functions.hapi__change_title to change chat session title that would represent the current task. If chat idea would change dramatically - call this function again to update the title.`);
+export const TITLE_INSTRUCTION = trimIdent(`Based on this message, call functions.hapi__change_title to change chat session title that would represent the current task. If chat idea would change dramatically - call this function again to update the title.`);
 
 function resolveApprovalPolicy(mode: EnhancedMode): CodexSessionConfig['approval-policy'] {
     switch (mode.permissionMode) {
@@ -36,6 +36,7 @@ export function buildCodexStartConfig(args: {
     mcpServers: Record<string, { command: string; args: string[] }>;
     cliOverrides?: CodexCliOverrides;
     developerInstructions?: string;
+    includeTitleInstruction?: boolean;
 }): CodexSessionConfig {
     const approvalPolicy = resolveApprovalPolicy(args.mode);
     const sandbox = resolveSandbox(args.mode);
@@ -44,7 +45,8 @@ export function buildCodexStartConfig(args: {
     const resolvedApprovalPolicy = cliOverrides?.approvalPolicy ?? approvalPolicy;
     const resolvedSandbox = cliOverrides?.sandbox ?? sandbox;
 
-    const prompt = args.first ? `${args.message}\n\n${TITLE_INSTRUCTION}` : args.message;
+    const shouldAddTitleInstruction = args.first && (args.includeTitleInstruction ?? true);
+    const prompt = shouldAddTitleInstruction ? `${args.message}\n\n${TITLE_INSTRUCTION}` : args.message;
     const config: Record<string, unknown> = { mcp_servers: args.mcpServers };
     if (args.developerInstructions) {
         config.developer_instructions = args.developerInstructions;
