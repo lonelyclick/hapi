@@ -1,5 +1,6 @@
 import type {
     AddEmailResponse,
+    AddProjectResponse,
     AllowedEmailsResponse,
     AuthResponse,
     DeleteSessionResponse,
@@ -10,13 +11,16 @@ import type {
     MachinesResponse,
     MessagesResponse,
     OnlineUsersResponse,
+    ProjectsResponse,
     RemoveEmailResponse,
+    RemoveProjectResponse,
     SlashCommandsResponse,
     SpeechToTextStreamRequest,
     SpeechToTextStreamResponse,
     SpawnResponse,
     SessionResponse,
-    SessionsResponse
+    SessionsResponse,
+    UpdateProjectResponse
 } from '@/types/api'
 
 type ApiClientOptions = {
@@ -382,6 +386,31 @@ export class ApiClient {
         return await this.request<RemoveEmailResponse>('/api/settings/allowed-emails', {
             method: 'DELETE',
             body: JSON.stringify({ email })
+        })
+    }
+
+    // 项目管理
+    async getProjects(): Promise<ProjectsResponse> {
+        return await this.request<ProjectsResponse>('/api/settings/projects')
+    }
+
+    async addProject(name: string, path: string, description?: string): Promise<AddProjectResponse> {
+        return await this.request<AddProjectResponse>('/api/settings/projects', {
+            method: 'POST',
+            body: JSON.stringify({ name, path, description })
+        })
+    }
+
+    async updateProject(id: string, name: string, path: string, description?: string): Promise<UpdateProjectResponse> {
+        return await this.request<UpdateProjectResponse>(`/api/settings/projects/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            body: JSON.stringify({ name, path, description })
+        })
+    }
+
+    async removeProject(id: string): Promise<RemoveProjectResponse> {
+        return await this.request<RemoveProjectResponse>(`/api/settings/projects/${encodeURIComponent(id)}`, {
+            method: 'DELETE'
         })
     }
 }

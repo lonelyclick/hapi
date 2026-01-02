@@ -273,6 +273,15 @@ export class Store {
                 email TEXT NOT NULL UNIQUE,
                 created_at INTEGER NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                description TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
         `)
 
         // Step 2: Migrate existing tables (add missing columns)
@@ -796,5 +805,82 @@ export class Store {
         }
         const normalizedEmail = email.toLowerCase().trim()
         return allowedEmails.includes(normalizedEmail)
+    }
+
+    // 项目管理
+    getProjects(): Array<{ id: string; name: string; path: string; description: string | null; createdAt: number; updatedAt: number }> {
+        const rows = this.db.prepare(
+            'SELECT id, name, path, description, created_at, updated_at FROM projects ORDER BY name ASC'
+        ).all() as Array<{ id: string; name: string; path: string; description: string | null; created_at: number; updated_at: number }>
+        return rows.map(r => ({
+            id: r.id,
+            name: r.name,
+            path: r.path,
+            description: r.description,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at
+        }))
+    }
+
+    getProject(id: string): { id: string; name: string; path: string; description: string | null; createdAt: number; updatedAt: number } | null {
+        const row = this.db.prepare(
+            'SELECT id, name, path, description, created_at, updated_at FROM projects WHERE id = ?'
+        ).get(id) as { id: string; name: string; path: string; description: string | null; created_at: number; updated_at: number } | undefined
+        if (!row) return null
+        return {
+            id: row.id,
+            name: row.name,
+            path: row.path,
+            description: row.description,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+        }
+    }
+
+    addProject(name: string, path: string, description?: string): { id: string; name: string; path: string; description: string | null; createdAt: number; updatedAt: number } | null {
+        try {
+            const id = randomUUID()
+            const now = Date.now()
+            this.db.prepare(`
+                INSERT INTO projects (id, name, path, description, created_at, updated_at)
+                VALUES (@id, @name, @path, @description, @created_at, @updated_at)
+            `).run({
+                id,
+                name: name.trim(),
+                path: path.trim(),
+                description: description?.trim() || null,
+                created_at: now,
+                updated_at: now
+            })
+            return this.getProject(id)
+        } catch {
+            return null
+        }
+    }
+
+    updateProject(id: string, name: string, path: string, description?: string): { id: string; name: string; path: string; description: string | null; createdAt: number; updatedAt: number } | null {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                UPDATE projects
+                SET name = @name, path = @path, description = @description, updated_at = @updated_at
+                WHERE id = @id
+            `).run({
+                id,
+                name: name.trim(),
+                path: path.trim(),
+                description: description?.trim() || null,
+                updated_at: now
+            })
+            if (result.changes === 0) return null
+            return this.getProject(id)
+        } catch {
+            return null
+        }
+    }
+
+    removeProject(id: string): boolean {
+        const result = this.db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+        return result.changes > 0
     }
 }

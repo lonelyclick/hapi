@@ -96,6 +96,20 @@ export type AllowedEmailsResponse = { emails: string[] }
 export type AddEmailResponse = { ok: true; emails: string[] }
 export type RemoveEmailResponse = { ok: true; emails: string[] }
 
+export type Project = {
+    id: string
+    name: string
+    path: string
+    description: string | null
+    createdAt: number
+    updatedAt: number
+}
+
+export type ProjectsResponse = { projects: Project[] }
+export type AddProjectResponse = { ok: true; project: Project; projects: Project[] }
+export type UpdateProjectResponse = { ok: true; project: Project; projects: Project[] }
+export type RemoveProjectResponse = { ok: true; projects: Project[] }
+
 export type SessionSummary = {
     id: string
     active: boolean
