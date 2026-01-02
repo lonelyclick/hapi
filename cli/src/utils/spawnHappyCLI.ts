@@ -26,10 +26,38 @@
  */
 
 import { spawn, SpawnOptions, type ChildProcess } from 'child_process';
-import { join } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { isBunCompiled, projectPath } from '@/projectPath';
 import { logger } from '@/ui/logger';
 import { existsSync } from 'node:fs';
+
+/**
+ * Check if we're running as a standalone daemon/server executable (not the main hapi CLI)
+ */
+function isStandaloneExecutable(): boolean {
+  const execName = basename(process.execPath);
+  return execName === 'hapi-daemon' || execName === 'hapi-daemon.exe' ||
+         execName === 'hapi-server' || execName === 'hapi-server.exe';
+}
+
+/**
+ * Get the path to the main hapi executable when running as standalone daemon/server
+ */
+function getMainHapiExecutable(): string | null {
+  if (!isStandaloneExecutable()) {
+    return null;
+  }
+
+  const execDir = dirname(process.execPath);
+  const isWindows = process.platform === 'win32';
+  const hapiExe = join(execDir, isWindows ? 'hapi.exe' : 'hapi');
+
+  if (existsSync(hapiExe)) {
+    return hapiExe;
+  }
+
+  return null;
+}
 
 /**
  * Resolve the TypeScript entrypoint for development mode.
@@ -51,6 +79,17 @@ export interface HappyCliCommand {
 export function getHappyCliCommand(args: string[]): HappyCliCommand {
   // Compiled binary mode: just use the executable directly
   if (isBunCompiled()) {
+    // Check if we're running as standalone daemon/server
+    // In that case, we need to use the main hapi executable for spawning sessions
+    const mainHapi = getMainHapiExecutable();
+    if (mainHapi) {
+      logger.debug(`[SPAWN HAPI CLI] Using main hapi executable: ${mainHapi}`);
+      return {
+        command: mainHapi,
+        args
+      };
+    }
+
     return {
       command: process.execPath,
       args

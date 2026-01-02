@@ -588,18 +588,28 @@ export async function startDaemon(): Promise<void> {
 
         clearInterval(restartOnStaleVersionAndHeartbeat);
 
-        // Spawn new daemon through the CLI
-        // We do not need to clean ourselves up - we will be killed by
-        // the CLI start command.
-        // 1. It will first check if daemon is running (yes in this case)
-        // 2. If the version is stale (it will read daemon.state.json file and check startedWithCliVersion) & compare it to its own version
-        // 3. Next it will start a new daemon with the latest version with daemon-sync :D
-        // Done!
+        // Spawn new daemon
+        // We do not need to clean ourselves up - we will be killed by the new daemon.
         try {
-          spawnHappyCLI(['daemon', 'start'], {
-            detached: true,
-            stdio: 'ignore'
-          });
+          // Check if we're running as standalone hapi-daemon executable
+          const isStandaloneDaemon = process.execPath.endsWith('hapi-daemon') ||
+                                      process.execPath.endsWith('hapi-daemon.exe');
+
+          if (isStandaloneDaemon) {
+            // Standalone mode: just spawn ourselves directly (no arguments needed)
+            const { spawn } = await import('child_process');
+            spawn(process.execPath, [], {
+              detached: true,
+              stdio: 'ignore',
+              env: process.env
+            }).unref();
+          } else {
+            // Unified CLI mode: use the CLI to start daemon
+            spawnHappyCLI(['daemon', 'start'], {
+              detached: true,
+              stdio: 'ignore'
+            });
+          }
         } catch (error) {
           logger.debug('[DAEMON RUN] Failed to spawn new daemon, this is quite likely to happen during integration tests as we are cleaning out dist/ directory', error);
         }

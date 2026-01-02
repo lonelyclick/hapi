@@ -171,7 +171,7 @@ function ensureEmbeddedAssetsManifest(workspaceRoot: string, includeWebAssets: b
     writeStubEmbeddedAssets(workspaceRoot);
 }
 
-async function buildTarget(projectRoot: string, target: string, outdir: string, name: string): Promise<void> {
+async function buildTarget(projectRoot: string, target: string, outdir: string, name: string, entrypoint: string): Promise<void> {
     const { platform, arch } = parseTarget(target);
     assertArchivesExist(projectRoot, platform, arch);
     const outputName = platform === 'win32' ? `${name}.exe` : name;
@@ -187,7 +187,7 @@ async function buildTarget(projectRoot: string, target: string, outdir: string, 
         `--feature=${featureFlag}`,
         `--target=${target}`,
         `--outfile=${outfile}`,
-        join(projectRoot, 'src', 'bootstrap.ts')
+        join(projectRoot, 'src', entrypoint)
     ];
 
     console.log(`[build:exe] ${cmd.join(' ')}`);
@@ -206,6 +206,13 @@ async function buildTarget(projectRoot: string, target: string, outdir: string, 
     }
 }
 
+// Map of executable names to their entrypoint files
+const ENTRYPOINTS: Record<string, string> = {
+    'hapi': 'bootstrap.ts',
+    'hapi-server': 'bootstrap-server.ts',
+    'hapi-daemon': 'bootstrap-daemon.ts'
+};
+
 async function main(): Promise<void> {
     const args = process.argv.slice(2);
     const target = getArg(args, '--target');
@@ -214,9 +221,17 @@ async function main(): Promise<void> {
     const buildAll = args.includes('--all');
     const includeWebAssets = args.includes('--with-web-assets');
 
+    // Resolve entrypoint from name
+    const entrypoint = ENTRYPOINTS[name];
+    if (!entrypoint) {
+        console.error(`Unknown executable name: ${name}`);
+        console.error(`Valid names: ${Object.keys(ENTRYPOINTS).join(', ')}`);
+        process.exit(1);
+    }
+
     if (args.includes('--target') && !target) {
-        console.error('Usage: bun run scripts/build-executable.ts [--target <bun-platform[-arch]>] [--outdir dist-exe] [--name hapi] [--with-web-assets]');
-        console.error('   or: bun run scripts/build-executable.ts --all [--outdir dist-exe] [--name hapi] [--with-web-assets]');
+        console.error('Usage: bun run scripts/build-executable.ts [--target <bun-platform[-arch]>] [--outdir dist-exe] [--name hapi|hapi-server|hapi-daemon] [--with-web-assets]');
+        console.error('   or: bun run scripts/build-executable.ts --all [--outdir dist-exe] [--name hapi|hapi-server|hapi-daemon] [--with-web-assets]');
         process.exit(1);
     }
 
@@ -234,7 +249,7 @@ async function main(): Promise<void> {
     ensureEmbeddedAssetsManifest(workspaceRoot, includeWebAssets);
 
     for (const targetName of targets) {
-        await buildTarget(projectRoot, targetName, outdir, name);
+        await buildTarget(projectRoot, targetName, outdir, name, entrypoint);
     }
 }
 

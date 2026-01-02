@@ -8,13 +8,29 @@ import { clearDaemonState, readDaemonState } from '@/persistence';
 import { Metadata } from '@/api/types';
 import packageJson from '../../package.json';
 import { existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { isBunCompiled, projectPath } from '@/projectPath';
 import { isProcessAlive, killProcess } from '@/utils/process';
 
+/**
+ * Get the mtime of the daemon executable for version checking.
+ * In split deployment mode (hapi + hapi-daemon), we always check hapi-daemon's mtime
+ * to ensure consistent version detection between daemon and sessions.
+ */
 export function getInstalledCliMtimeMs(): number | undefined {
   if (isBunCompiled()) {
     try {
+      // Check if we're in split deployment mode (hapi-daemon exists alongside hapi)
+      const execDir = dirname(process.execPath);
+      const isWindows = process.platform === 'win32';
+      const daemonExe = join(execDir, isWindows ? 'hapi-daemon.exe' : 'hapi-daemon');
+
+      // If hapi-daemon exists, use its mtime for consistent version checking
+      if (existsSync(daemonExe)) {
+        return statSync(daemonExe).mtimeMs;
+      }
+
+      // Fallback to current executable's mtime (unified deployment mode)
       return statSync(process.execPath).mtimeMs;
     } catch {
       return undefined;
