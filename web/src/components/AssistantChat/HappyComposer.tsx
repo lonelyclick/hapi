@@ -441,16 +441,6 @@ export function HappyComposer(props: {
         }))
     }, [])
 
-    // iOS PWA: Hide keyboard accessory bar by toggling inputmode attribute
-    const handleFocus = useCallback((e: ReactSyntheticEvent<HTMLTextAreaElement>) => {
-        if (!isIOSPWA) return
-        const target = e.target as HTMLTextAreaElement
-        target.setAttribute('inputmode', 'none')
-        setTimeout(() => {
-            target.setAttribute('inputmode', 'text')
-        }, 100)
-    }, [isIOSPWA])
-
     const handleSettingsToggle = useCallback(() => {
         haptic('light')
         setShowSettings(prev => !prev)
@@ -922,7 +912,6 @@ export function HappyComposer(props: {
                                 enterKeyHint="send"
                                 onChange={handleChange}
                                 onSelect={handleSelect}
-                                onFocus={handleFocus}
                                 onKeyDown={handleKeyDown}
                                 onSubmit={handleSubmit}
                                 className="flex-1 resize-none bg-transparent text-sm leading-snug text-[var(--app-fg)] placeholder-[var(--app-hint)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
