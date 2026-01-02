@@ -122,7 +122,6 @@ export function createSessionsRoutes(
                 // 添加该 session 的查看者
                 if (sseManager) {
                     const viewers = sseManager.getSessionViewers(namespace, session.id)
-                    console.log('[sessions] getSessionViewers', { sessionId: session.id, viewers })
                     if (viewers.length > 0) {
                         summary.viewers = viewers.map(v => ({
                             email: v.email,
