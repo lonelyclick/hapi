@@ -119,6 +119,15 @@ export type AddProjectResponse = { ok: true; project: Project; projects: Project
 export type UpdateProjectResponse = { ok: true; project: Project; projects: Project[] }
 export type RemoveProjectResponse = { ok: true; projects: Project[] }
 
+export type RolePrompt = {
+    role: UserRole
+    prompt: string
+    updatedAt: number
+}
+
+export type RolePromptsResponse = { prompts: RolePrompt[] }
+export type SetRolePromptResponse = { ok: true; prompts: RolePrompt[] }
+
 export type SessionSummary = {
     id: string
     active: boolean

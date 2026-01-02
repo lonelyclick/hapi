@@ -288,6 +288,12 @@ export class Store {
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS role_prompts (
+                role TEXT PRIMARY KEY,
+                prompt TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
         `)
 
         // Step 2: Migrate existing tables (add missing columns)
@@ -934,6 +940,48 @@ export class Store {
 
     removeProject(id: string): boolean {
         const result = this.db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+        return result.changes > 0
+    }
+
+    // 角色预设 Prompt 管理
+    getRolePrompt(role: UserRole): string | null {
+        const row = this.db.prepare(
+            'SELECT prompt FROM role_prompts WHERE role = ?'
+        ).get(role) as { prompt: string } | undefined
+        return row?.prompt ?? null
+    }
+
+    getAllRolePrompts(): Array<{ role: UserRole; prompt: string; updatedAt: number }> {
+        const rows = this.db.prepare(
+            'SELECT role, prompt, updated_at FROM role_prompts ORDER BY role ASC'
+        ).all() as Array<{ role: string; prompt: string; updated_at: number }>
+        return rows.map(r => ({
+            role: (r.role === 'operator' ? 'operator' : 'developer') as UserRole,
+            prompt: r.prompt,
+            updatedAt: r.updated_at
+        }))
+    }
+
+    setRolePrompt(role: UserRole, prompt: string): boolean {
+        try {
+            const now = Date.now()
+            this.db.prepare(`
+                INSERT INTO role_prompts (role, prompt, updated_at)
+                VALUES (@role, @prompt, @updated_at)
+                ON CONFLICT(role) DO UPDATE SET prompt = @prompt, updated_at = @updated_at
+            `).run({
+                role,
+                prompt: prompt.trim(),
+                updated_at: now
+            })
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    removeRolePrompt(role: UserRole): boolean {
+        const result = this.db.prepare('DELETE FROM role_prompts WHERE role = ?').run(role)
         return result.changes > 0
     }
 }

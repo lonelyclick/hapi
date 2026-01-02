@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
+import type { Store, UserRole } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireMachine } from './guards'
 
@@ -16,7 +17,7 @@ const pathsExistsSchema = z.object({
     paths: z.array(z.string().min(1)).max(1000)
 })
 
-export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
+export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: Store): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/machines', (c) => {
@@ -56,6 +57,35 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             parsed.data.sessionType,
             parsed.data.worktreeName
         )
+
+        // 如果 spawn 成功，发送角色预设 prompt
+        if (result.type === 'success') {
+            const email = c.get('email')
+            if (email) {
+                // 获取用户角色
+                let role: UserRole = 'developer'
+                const users = store.getAllowedUsers()
+                if (users.length > 0) {
+                    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase())
+                    if (user) {
+                        role = user.role
+                    }
+                }
+
+                // 获取角色预设 prompt
+                const rolePrompt = store.getRolePrompt(role)
+                if (rolePrompt) {
+                    // 异步发送预设 prompt，不阻塞返回
+                    engine.sendMessage(result.sessionId, {
+                        text: rolePrompt,
+                        sentFrom: 'webapp'
+                    }).catch(() => {
+                        // 忽略发送失败
+                    })
+                }
+            }
+        }
+
         return c.json(result)
     })
 

@@ -4,7 +4,7 @@ import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
 import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
-import type { Project, UserRole } from '@/types/api'
+import type { Project, UserRole, RolePrompt } from '@/types/api'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -167,6 +167,9 @@ export default function SettingsPage() {
     const [showAddUser, setShowAddUser] = useState(false)
     const [newUserEmail, setNewUserEmail] = useState('')
     const [newUserRole, setNewUserRole] = useState<UserRole>('developer')
+    const [promptError, setPromptError] = useState<string | null>(null)
+    const [editingPromptRole, setEditingPromptRole] = useState<UserRole | null>(null)
+    const [editingPromptText, setEditingPromptText] = useState('')
 
     // 当前会话信息
     const currentSession = useMemo(() => ({
@@ -333,8 +336,73 @@ export default function SettingsPage() {
         window.location.href = '/'
     }, [])
 
+    // Role Prompts
+    const { data: rolePromptsData, isLoading: rolePromptsLoading } = useQuery({
+        queryKey: ['role-prompts'],
+        queryFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.getRolePrompts()
+        },
+        enabled: Boolean(api)
+    })
+
+    const setRolePromptMutation = useMutation({
+        mutationFn: async ({ role, prompt }: { role: UserRole; prompt: string }) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.setRolePrompt(role, prompt)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['role-prompts'], { prompts: result.prompts })
+            setEditingPromptRole(null)
+            setEditingPromptText('')
+            setPromptError(null)
+        },
+        onError: (err) => {
+            setPromptError(err instanceof Error ? err.message : 'Failed to save prompt')
+        }
+    })
+
+    const deleteRolePromptMutation = useMutation({
+        mutationFn: async (role: UserRole) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.deleteRolePrompt(role)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['role-prompts'], { prompts: result.prompts })
+        },
+        onError: (err) => {
+            setPromptError(err instanceof Error ? err.message : 'Failed to delete prompt')
+        }
+    })
+
+    const handleStartEditPrompt = useCallback((role: UserRole, currentPrompt: string) => {
+        setEditingPromptRole(role)
+        setEditingPromptText(currentPrompt)
+        setPromptError(null)
+    }, [])
+
+    const handleSavePrompt = useCallback(() => {
+        if (!editingPromptRole) return
+        setRolePromptMutation.mutate({ role: editingPromptRole, prompt: editingPromptText })
+    }, [editingPromptRole, editingPromptText, setRolePromptMutation])
+
+    const handleCancelEditPrompt = useCallback(() => {
+        setEditingPromptRole(null)
+        setEditingPromptText('')
+        setPromptError(null)
+    }, [])
+
+    const handleDeletePrompt = useCallback((role: UserRole) => {
+        deleteRolePromptMutation.mutate(role)
+    }, [deleteRolePromptMutation])
+
     const projects = projectsData?.projects ?? []
     const users = usersData?.users ?? []
+    const rolePrompts = rolePromptsData?.prompts ?? []
+
+    const getPromptForRole = (role: UserRole): RolePrompt | undefined => {
+        return rolePrompts.find(p => p.role === role)
+    }
 
     // 判断当前用户是否为 Developer（有权限管理用户）
     // 如果用户列表为空，默认所有人都有权限；否则根据邮箱查找角色
@@ -636,6 +704,111 @@ export default function SettingsPage() {
                             </div>
                         )}
                     </div>
+
+                    {/* Role Prompts Section - Only for Developers */}
+                    {canManageUsers && (
+                        <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                            <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                                <h2 className="text-sm font-medium">Role Prompts</h2>
+                                <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                    Initial prompts sent when users create new sessions.
+                                </p>
+                            </div>
+
+                            {promptError && (
+                                <div className="px-3 py-2 text-sm text-red-500 border-b border-[var(--app-divider)]">
+                                    {promptError}
+                                </div>
+                            )}
+
+                            {rolePromptsLoading ? (
+                                <div className="px-3 py-4 flex justify-center">
+                                    <Spinner size="sm" label="Loading..." />
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-[var(--app-divider)]">
+                                    {(['developer', 'operator'] as UserRole[]).map((role) => {
+                                        const prompt = getPromptForRole(role)
+                                        const isEditing = editingPromptRole === role
+
+                                        return (
+                                            <div key={role} className="px-3 py-2">
+                                                <div className="flex items-center justify-between gap-2 mb-2">
+                                                    <span className="text-sm font-medium">
+                                                        {role === 'developer' ? 'Developer' : 'Operator'}
+                                                    </span>
+                                                    {!isEditing && (
+                                                        <div className="flex items-center gap-1">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleStartEditPrompt(role, prompt?.prompt ?? '')}
+                                                                className="px-2 py-1 text-xs rounded border border-[var(--app-border)] text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors"
+                                                            >
+                                                                {prompt ? 'Edit' : 'Add'}
+                                                            </button>
+                                                            {prompt && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleDeletePrompt(role)}
+                                                                    disabled={deleteRolePromptMutation.isPending}
+                                                                    className="flex h-6 w-6 items-center justify-center rounded text-[var(--app-hint)] hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                                                    title="Delete prompt"
+                                                                >
+                                                                    <TrashIcon />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {isEditing ? (
+                                                    <div className="space-y-2">
+                                                        <textarea
+                                                            value={editingPromptText}
+                                                            onChange={(e) => setEditingPromptText(e.target.value)}
+                                                            placeholder="Enter initial prompt for this role..."
+                                                            className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] resize-none"
+                                                            rows={4}
+                                                            disabled={setRolePromptMutation.isPending}
+                                                        />
+                                                        <div className="flex justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleCancelEditPrompt}
+                                                                disabled={setRolePromptMutation.isPending}
+                                                                className="px-3 py-1.5 text-sm rounded border border-[var(--app-border)] text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleSavePrompt}
+                                                                disabled={setRolePromptMutation.isPending}
+                                                                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] disabled:opacity-50 hover:opacity-90 transition-opacity"
+                                                            >
+                                                                {setRolePromptMutation.isPending && <Spinner size="sm" label={null} />}
+                                                                Save
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-xs text-[var(--app-hint)]">
+                                                        {prompt ? (
+                                                            <pre className="whitespace-pre-wrap font-mono bg-[var(--app-bg)] p-2 rounded border border-[var(--app-border)] max-h-24 overflow-auto">
+                                                                {prompt.prompt}
+                                                            </pre>
+                                                        ) : (
+                                                            <span className="italic">No prompt configured</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

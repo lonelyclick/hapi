@@ -13,6 +13,8 @@ import type {
     ProjectsResponse,
     RemoveProjectResponse,
     RemoveUserResponse,
+    RolePromptsResponse,
+    SetRolePromptResponse,
     SlashCommandsResponse,
     SpeechToTextStreamRequest,
     SpeechToTextStreamResponse,
@@ -423,5 +425,29 @@ export class ApiClient {
             method: 'DELETE',
             body: JSON.stringify({ email })
         })
+    }
+
+    // 角色预设 Prompt 管理
+    async getRolePrompts(): Promise<RolePromptsResponse> {
+        return await this.request<RolePromptsResponse>('/api/settings/role-prompts')
+    }
+
+    async setRolePrompt(role: 'developer' | 'operator', prompt: string): Promise<SetRolePromptResponse> {
+        return await this.request<SetRolePromptResponse>(
+            `/api/settings/role-prompts/${encodeURIComponent(role)}`,
+            {
+                method: 'PUT',
+                body: JSON.stringify({ prompt })
+            }
+        )
+    }
+
+    async deleteRolePrompt(role: 'developer' | 'operator'): Promise<SetRolePromptResponse> {
+        return await this.request<SetRolePromptResponse>(
+            `/api/settings/role-prompts/${encodeURIComponent(role)}`,
+            {
+                method: 'DELETE'
+            }
+        )
     }
 }

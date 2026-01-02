@@ -98,7 +98,7 @@ function createWebApp(options: {
     app.route('/api', createSessionsRoutes(options.getSyncEngine, options.getSseManager))
     app.route('/api', createMessagesRoutes(options.getSyncEngine))
     app.route('/api', createPermissionsRoutes(options.getSyncEngine))
-    app.route('/api', createMachinesRoutes(options.getSyncEngine))
+    app.route('/api', createMachinesRoutes(options.getSyncEngine, options.store))
     app.route('/api', createGitRoutes(options.getSyncEngine))
     app.route('/api', createSpeechRoutes())
     app.route('/api', createOptimizeRoutes())

@@ -30,6 +30,10 @@ const updateProjectSchema = z.object({
     description: z.string().max(500).optional()
 })
 
+const setRolePromptSchema = z.object({
+    prompt: z.string().max(10000)
+})
+
 export function createSettingsRoutes(store: Store): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -144,6 +148,58 @@ export function createSettingsRoutes(store: Store): Hono<WebAppEnv> {
 
         const projects = store.getProjects()
         return c.json({ ok: true, projects })
+    })
+
+    // ==================== 角色预设 Prompt ====================
+
+    // 获取所有角色的预设 Prompt
+    app.get('/settings/role-prompts', (_c) => {
+        const prompts = store.getAllRolePrompts()
+        return _c.json({ prompts })
+    })
+
+    // 获取指定角色的预设 Prompt
+    app.get('/settings/role-prompts/:role', (c) => {
+        const role = c.req.param('role')
+        if (role !== 'developer' && role !== 'operator') {
+            return c.json({ error: 'Invalid role' }, 400)
+        }
+        const prompt = store.getRolePrompt(role as UserRole)
+        return c.json({ role, prompt })
+    })
+
+    // 设置角色的预设 Prompt
+    app.put('/settings/role-prompts/:role', async (c) => {
+        const role = c.req.param('role')
+        if (role !== 'developer' && role !== 'operator') {
+            return c.json({ error: 'Invalid role' }, 400)
+        }
+
+        const json = await c.req.json().catch(() => null)
+        const parsed = setRolePromptSchema.safeParse(json)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid prompt data' }, 400)
+        }
+
+        const success = store.setRolePrompt(role as UserRole, parsed.data.prompt)
+        if (!success) {
+            return c.json({ error: 'Failed to set prompt' }, 500)
+        }
+
+        const prompts = store.getAllRolePrompts()
+        return c.json({ ok: true, prompts })
+    })
+
+    // 删除角色的预设 Prompt
+    app.delete('/settings/role-prompts/:role', (c) => {
+        const role = c.req.param('role')
+        if (role !== 'developer' && role !== 'operator') {
+            return c.json({ error: 'Invalid role' }, 400)
+        }
+
+        store.removeRolePrompt(role as UserRole)
+        const prompts = store.getAllRolePrompts()
+        return c.json({ ok: true, prompts })
     })
 
     return app
