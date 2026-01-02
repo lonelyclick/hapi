@@ -28,6 +28,21 @@ describe('convertCodexEvent', () => {
         });
     });
 
+    it('extracts model info from session_configured', () => {
+        const result = convertCodexEvent({
+            type: 'session_configured',
+            model: 'gpt-5.2-codex',
+            reasoning_effort: 'xhigh'
+        });
+
+        expect(result).toEqual({
+            modelInfo: {
+                model: 'gpt-5.2-codex',
+                reasoningEffort: 'xhigh'
+            }
+        });
+    });
+
     it('converts agent_message events', () => {
         const result = convertCodexEvent({
             type: 'event_msg',

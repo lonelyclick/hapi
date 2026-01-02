@@ -155,6 +155,14 @@ export function convertCodexEvent(rawEvent: unknown): CodexConversionResult | nu
         return { modelInfo };
     }
 
+    if (type === 'session_configured') {
+        const modelInfo = extractModelInfo(eventRecord ?? {});
+        if (!modelInfo) {
+            return null;
+        }
+        return { modelInfo };
+    }
+
     if (type === 'event_msg') {
         const eventType = asString(payloadRecord.type);
         if (!eventType) {
