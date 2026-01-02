@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { Session } from '@/types/api'
 import { isTelegramApp } from '@/hooks/useTelegram'
 
@@ -14,6 +14,25 @@ function getSessionTitle(session: Session): string {
         return parts.length > 0 ? parts[parts.length - 1] : session.id.slice(0, 8)
     }
     return session.id.slice(0, 8)
+}
+
+function BackIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <polyline points="15 18 9 12 15 6" />
+        </svg>
+    )
 }
 
 function FilesIcon(props: { className?: string }) {
@@ -59,6 +78,15 @@ function TrashIcon(props: { className?: string }) {
     )
 }
 
+function getAgentLabel(session: Session): string {
+    const flavor = session.metadata?.flavor?.trim()
+    if (flavor === 'claude') return 'Claude'
+    if (flavor === 'codex') return 'Codex'
+    if (flavor === 'gemini') return 'Gemini'
+    if (flavor) return flavor
+    return 'Agent'
+}
+
 export function SessionHeader(props: {
     session: Session
     onBack: () => void
@@ -68,6 +96,37 @@ export function SessionHeader(props: {
 }) {
     const title = useMemo(() => getSessionTitle(props.session), [props.session])
     const worktreeBranch = props.session.metadata?.worktree?.branch
+    const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
+    const [isRefreshing, setIsRefreshing] = useState(false)
+
+    const handleForceRefresh = useCallback(async () => {
+        if (isRefreshing) return
+        setIsRefreshing(true)
+
+        try {
+            const registrations = await navigator.serviceWorker?.getRegistrations()
+            if (registrations) {
+                for (const registration of registrations) {
+                    await registration.unregister()
+                }
+            }
+
+            const cacheNames = await caches?.keys()
+            if (cacheNames) {
+                for (const cacheName of cacheNames) {
+                    await caches.delete(cacheName)
+                }
+            }
+
+            window.location.reload()
+        } catch (error) {
+            console.error('Force refresh failed:', error)
+            window.location.reload()
+        }
+    }, [isRefreshing])
+
+    const gitCommitHash = typeof __GIT_COMMIT_HASH__ !== 'undefined' ? __GIT_COMMIT_HASH__ : 'dev'
+    const gitCommitMessage = typeof __GIT_COMMIT_MESSAGE__ !== 'undefined' ? __GIT_COMMIT_MESSAGE__ : ''
 
     // In Telegram, don't render header (Telegram provides its own)
     if (isTelegramApp()) {
@@ -75,66 +134,88 @@ export function SessionHeader(props: {
     }
 
     return (
-        <div className="bg-[var(--app-bg)] pt-[env(safe-area-inset-top)]">
-            <div className="mx-auto w-full max-w-content flex items-center gap-2 p-3">
-                {/* Back button */}
-                <button
-                    type="button"
-                    onClick={props.onBack}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                >
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+        <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
+            <div className="mx-auto w-full max-w-content flex items-center justify-between px-4 py-3">
+                {/* Left side: Back button + Logo + Brand + Version */}
+                <div className="flex items-center gap-3 min-w-0">
+                    <button
+                        type="button"
+                        onClick={props.onBack}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
                     >
-                        <polyline points="15 18 9 12 15 6" />
-                    </svg>
-                </button>
-
-                {/* Session info - two lines: title and path */}
-                <div className="min-w-0 flex-1">
-                    <div className="truncate font-semibold">
-                        {title}
+                        <BackIcon />
+                    </button>
+                    <div className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="white"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="h-4 w-4"
+                            >
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M2 12h20" />
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                        </div>
+                        <span className="text-lg font-bold yoho-brand-text hidden sm:inline">Yoho Remote</span>
                     </div>
-                    <div className="text-xs text-[var(--app-hint)] truncate">
-                        {props.session.metadata?.path ?? props.session.id}
-                        {props.session.metadata?.flavor && ` • ${props.session.metadata.flavor === 'codex' ? 'Codex' : props.session.metadata.flavor === 'claude' ? 'Claude' : props.session.metadata.flavor === 'gemini' ? 'Gemini' : props.session.metadata.flavor}`}
-                        {worktreeBranch ? ` • worktree: ${worktreeBranch}` : ''}
-                    </div>
+                    <button
+                        type="button"
+                        onClick={handleForceRefresh}
+                        disabled={isRefreshing}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50 shrink-0"
+                        title={`${gitCommitMessage}\n\nClick to force refresh`}
+                    >
+                        {isRefreshing ? '...' : gitCommitHash}
+                    </button>
                 </div>
 
-                {props.onViewFiles || props.onDelete ? (
-                    <div className="flex items-center gap-1">
-                        {props.onViewFiles ? (
-                            <button
-                                type="button"
-                                onClick={props.onViewFiles}
-                                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                                title="Files"
-                            >
-                                <FilesIcon />
-                            </button>
-                        ) : null}
-                        {props.onDelete ? (
-                            <button
-                                type="button"
-                                onClick={props.onDelete}
-                                disabled={props.deleteDisabled}
-                                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Delete session"
-                            >
-                                <TrashIcon />
-                            </button>
-                        ) : null}
+                {/* Right side: Session info + Actions */}
+                <div className="flex items-center gap-2 shrink-0">
+                    {/* Session title badge */}
+                    <div className="hidden sm:flex flex-col items-end">
+                        <span className="text-sm font-medium truncate max-w-[200px]" title={title}>
+                            {title}
+                        </span>
+                        <span className="text-[10px] text-[var(--app-hint)]">
+                            {agentLabel}
+                            {worktreeBranch ? ` • ${worktreeBranch}` : ''}
+                        </span>
                     </div>
-                ) : null}
+
+                    {/* Agent badge for mobile */}
+                    <span className="sm:hidden text-xs font-medium px-2 py-1 rounded-full bg-[var(--app-subtle-bg)] text-[var(--app-hint)]">
+                        {agentLabel}
+                    </span>
+
+                    {/* Action buttons */}
+                    {props.onViewFiles ? (
+                        <button
+                            type="button"
+                            onClick={props.onViewFiles}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                            title="Files"
+                        >
+                            <FilesIcon />
+                        </button>
+                    ) : null}
+                    {props.onDelete ? (
+                        <button
+                            type="button"
+                            onClick={props.onDelete}
+                            disabled={props.deleteDisabled}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Delete session"
+                        >
+                            <TrashIcon />
+                        </button>
+                    ) : null}
+                </div>
             </div>
         </div>
     )
