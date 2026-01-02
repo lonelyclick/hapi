@@ -1,41 +1,9 @@
 import { useCallback, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
-
-// 检测设备类型
-function getDeviceType(): string {
-    const ua = navigator.userAgent
-
-    // 移动设备检测
-    const isMobile = /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua)
-    const isTablet = /iPad|Android(?!.*Mobile)/i.test(ua)
-
-    // 浏览器检测
-    let browser = 'Unknown'
-    if (/Edg\//i.test(ua)) {
-        browser = 'Edge'
-    } else if (/Chrome/i.test(ua) && !/Chromium/i.test(ua)) {
-        browser = 'Chrome'
-    } else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) {
-        browser = 'Safari'
-    } else if (/Firefox/i.test(ua)) {
-        browser = 'Firefox'
-    } else if (/Opera|OPR/i.test(ua)) {
-        browser = 'Opera'
-    }
-
-    // 组合设备类型
-    if (isTablet) {
-        return `${browser} Tablet`
-    }
-    if (isMobile) {
-        return `${browser} Mobile`
-    }
-    return browser
-}
+import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -105,8 +73,8 @@ export default function SettingsPage() {
 
     // 当前会话信息
     const currentSession = useMemo(() => ({
-        email: localStorage.getItem('hapi_email') || '-',
-        clientId: localStorage.getItem('hapi_client_id') || '-',
+        email: getStoredEmail() || '-',
+        clientId: getClientId(),
         deviceType: getDeviceType()
     }), [])
 

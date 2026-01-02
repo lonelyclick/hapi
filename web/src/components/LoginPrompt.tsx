@@ -4,6 +4,7 @@ import { Spinner } from '@/components/Spinner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import type { ServerUrlResult } from '@/hooks/useServerUrl'
+import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
 
 type LoginPromptProps = {
     mode?: 'login' | 'bind'
@@ -16,59 +17,6 @@ type LoginPromptProps = {
     error?: string | null
 }
 
-// 生成随机客户端ID（大小写字母混合）
-function generateClientId(): string {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    let result = ''
-    for (let i = 0; i < 8; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
-    return result
-}
-
-// 获取或创建客户端ID
-function getClientId(): string {
-    const key = 'hapi_client_id'
-    let clientId = localStorage.getItem(key)
-    if (!clientId) {
-        clientId = generateClientId()
-        localStorage.setItem(key, clientId)
-    }
-    return clientId
-}
-
-// 检测设备类型
-function getDeviceType(): string {
-    const ua = navigator.userAgent
-
-    // 移动设备检测
-    const isMobile = /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua)
-    const isTablet = /iPad|Android(?!.*Mobile)/i.test(ua)
-
-    // 浏览器检测
-    let browser = 'Unknown'
-    if (/Edg\//i.test(ua)) {
-        browser = 'Edge'
-    } else if (/Chrome/i.test(ua) && !/Chromium/i.test(ua)) {
-        browser = 'Chrome'
-    } else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) {
-        browser = 'Safari'
-    } else if (/Firefox/i.test(ua)) {
-        browser = 'Firefox'
-    } else if (/Opera|OPR/i.test(ua)) {
-        browser = 'Opera'
-    }
-
-    // 组合设备类型
-    if (isTablet) {
-        return `${browser} Tablet`
-    }
-    if (isMobile) {
-        return `${browser} Mobile`
-    }
-    return browser
-}
-
 // 邮箱格式验证
 function isValidEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -77,7 +25,7 @@ function isValidEmail(email: string): boolean {
 
 export function LoginPrompt(props: LoginPromptProps) {
     const isBindMode = props.mode === 'bind'
-    const [email, setEmail] = useState(() => localStorage.getItem('hapi_email') || '')
+    const [email, setEmail] = useState(() => getStoredEmail() || '')
     const [accessToken, setAccessToken] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)

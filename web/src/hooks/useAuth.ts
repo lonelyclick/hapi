@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClient, ApiError } from '@/api/client'
 import type { AuthResponse } from '@/types/api'
+import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
 
 export type AuthSource =
     | { type: 'telegram'; initData: string }
@@ -26,11 +27,17 @@ function decodeJwtExpMs(token: string): number | null {
     }
 }
 
-function getAuthPayload(source: AuthSource): { initData: string } | { accessToken: string } {
+function getAuthPayload(source: AuthSource): { initData: string } | { accessToken: string; email?: string; clientId?: string; deviceType?: string } {
     if (source.type === 'telegram') {
         return { initData: source.initData }
     }
-    return { accessToken: source.token }
+    // 在 token 刷新时也带上 email/clientId/deviceType
+    return {
+        accessToken: source.token,
+        email: getStoredEmail() ?? undefined,
+        clientId: getClientId(),
+        deviceType: getDeviceType()
+    }
 }
 
 function isNotBoundError(error: unknown): boolean {
