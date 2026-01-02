@@ -288,33 +288,39 @@ function NewSessionPage() {
     }, [navigate, queryClient])
 
     return (
-        <div className="flex-1 overflow-y-auto">
-            <div className="flex items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-bg)] p-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
-                {!isTelegramApp() && (
-                    <button
-                        type="button"
-                        onClick={goBack}
-                        className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                    >
-                        <BackIcon />
-                    </button>
-                )}
-                <div className="flex-1 font-semibold">Create Session</div>
+        <div className="flex h-full flex-col">
+            <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
+                <div className="mx-auto w-full max-w-content flex items-center gap-2 px-3 py-1.5">
+                    {!isTelegramApp() && (
+                        <button
+                            type="button"
+                            onClick={goBack}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                        >
+                            <BackIcon />
+                        </button>
+                    )}
+                    <div className="flex-1 font-medium text-sm">Create Session</div>
+                </div>
             </div>
 
-            {machinesError ? (
-                <div className="p-3 text-sm text-red-600">
-                    {machinesError}
-                </div>
-            ) : null}
+            <div className="flex-1 overflow-y-auto">
+                <div className="mx-auto w-full max-w-content">
+                    {machinesError ? (
+                        <div className="p-3 text-sm text-red-600">
+                            {machinesError}
+                        </div>
+                    ) : null}
 
-            <NewSession
-                api={api}
-                machines={machines}
-                isLoading={machinesLoading}
-                onCancel={handleCancel}
-                onSuccess={handleSuccess}
-            />
+                    <NewSession
+                        api={api}
+                        machines={machines}
+                        isLoading={machinesLoading}
+                        onCancel={handleCancel}
+                        onSuccess={handleSuccess}
+                    />
+                </div>
+            </div>
         </div>
     )
 }
