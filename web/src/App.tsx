@@ -168,7 +168,8 @@ export function App() {
     const eventSubscription = useMemo(() => {
         // Exclude "new" which is a route, not a real session ID
         if (selectedSessionId && selectedSessionId !== 'new') {
-            return { sessionId: selectedSessionId }
+            // Also subscribe to all events to receive online-users-changed
+            return { sessionId: selectedSessionId, all: true }
         }
         return { all: true }
     }, [selectedSessionId])
