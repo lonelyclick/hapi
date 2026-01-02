@@ -145,9 +145,11 @@ function formatWorkflowLines(workflows: WorkflowMap | null): string {
 
 export async function buildInitPrompt(role: UserRole, options?: InitPromptOptions): Promise<string> {
     const projectRoot = normalizeProjectRoot(options?.projectRoot) ?? YOHO_PROJECT_ROOT
-    const credentialsRoot = path.join(projectRoot, 'data', 'credentials')
-    const servicesRoot = path.join(projectRoot, 'src', 'services')
-    const workflowsRoot = path.join(projectRoot, 'src', 'workflows')
+    const referenceRoot = YOHO_PROJECT_ROOT
+    const credentialsRoot = path.join(referenceRoot, 'data', 'credentials')
+    const servicesRoot = path.join(referenceRoot, 'src', 'services')
+    const workflowsRoot = path.join(referenceRoot, 'src', 'workflows')
+    const skillsRoot = path.join(referenceRoot, 'docs', 'skills')
     const [credentials, services, workflows] = await Promise.all([
         listCredentialMap(credentialsRoot),
         listServices(servicesRoot),
@@ -173,12 +175,12 @@ export async function buildInitPrompt(role: UserRole, options?: InitPromptOption
         `项目路径：${projectRoot}`,
         projectDescription,
         `凭证：${credentialsRoot}/<type>/<name>.json`,
-        `技能文档：${projectRoot}/docs/skills/*.md`,
+        `技能文档：${skillsRoot}/*.md`,
         `service目录：${servicesRoot}/`,
         `workflow目录：${workflowsRoot}/`,
         '处理相关需求时：优先在当前项目中查找实现方式与结构，再做决策或迁移',
         '优先查找顺序：凭证→skills文档→services→workflows',
-        '若对应目录不存在，以当前项目实际结构为准'
+        `上述凭证/skills/service/workflow目录固定为${YOHO_PROJECT_ROOT}`
     ].join(';')
 
     const dynamicSection = [
