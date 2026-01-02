@@ -486,6 +486,7 @@ export class SyncEngine {
                 data: {
                     activeAt: session.activeAt,
                     thinking: session.thinking,
+                    wasThinking: wasThinking && !session.thinking,
                     permissionMode: session.permissionMode,
                     modelMode: session.modelMode,
                     modelReasoningEffort: session.modelReasoningEffort
@@ -507,11 +508,12 @@ export class SyncEngine {
             return
         }
 
+        const wasThinking = session.thinking
         session.active = false
         session.thinking = false
         session.thinkingAt = t
 
-        this.emit({ type: 'session-updated', sessionId: session.id, data: { active: false, thinking: false } })
+        this.emit({ type: 'session-updated', sessionId: session.id, data: { active: false, thinking: false, wasThinking } })
     }
 
     handleMachineAlive(payload: { machineId: string; time: number }): void {

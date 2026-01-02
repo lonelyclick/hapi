@@ -8,7 +8,7 @@ import { useAuthSource } from '@/hooks/useAuthSource'
 import { useServerUrl } from '@/hooks/useServerUrl'
 import { useSSE } from '@/hooks/useSSE'
 import { useSyncingState } from '@/hooks/useSyncingState'
-import type { SyncEvent } from '@/types/api'
+import type { SyncEvent, SessionSummary } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { AppContextProvider } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
@@ -18,7 +18,9 @@ import { OfflineBanner } from '@/components/OfflineBanner'
 import { SyncingBanner } from '@/components/SyncingBanner'
 import { UpdateBanner } from '@/components/UpdateBanner'
 import { LoadingState } from '@/components/LoadingState'
+import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
+import { notifyTaskComplete } from '@/hooks/useNotification'
 
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
@@ -237,6 +239,39 @@ export function App() {
             void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
             return
         }
+
+        // 检测任务完成 (thinking: true -> false)
+        if (event.type === 'session-updated') {
+            const data = ('data' in event ? event.data : null) as { active?: boolean; thinking?: boolean; wasThinking?: boolean } | null
+            // wasThinking 表示之前是 thinking 状态，现在变成了非 thinking 状态
+            if (data?.wasThinking && data.thinking === false) {
+                const isCurrentSession = event.sessionId === selectedSessionId
+                const isAppVisible = document.visibilityState === 'visible'
+
+                // 如果是当前 session 且 app 在前台，跳过通知（用户已经在看了）
+                if (isCurrentSession && isAppVisible) {
+                    return
+                }
+
+                // 获取 session 标题
+                const sessionsData = queryClient.getQueryData<{ sessions: SessionSummary[] }>(queryKeys.sessions)
+                const session = sessionsData?.sessions.find(s => s.id === event.sessionId)
+                const title = session?.metadata?.name || session?.metadata?.path || 'Session'
+
+                notifyTaskComplete({
+                    sessionId: event.sessionId,
+                    title,
+                    onClick: () => {
+                        navigate({
+                            to: '/sessions/$sessionId',
+                            params: { sessionId: event.sessionId }
+                        })
+                    }
+                })
+            }
+            return
+        }
+
         if (event.type !== 'session-removed') {
             return
         }
@@ -366,6 +401,7 @@ export function App() {
                 <Outlet />
             </div>
             <InstallPrompt />
+            <Toaster />
         </AppContextProvider>
     )
 }

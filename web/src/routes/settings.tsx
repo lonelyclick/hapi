@@ -4,6 +4,7 @@ import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
 import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
+import { useNotificationPermission } from '@/hooks/useNotification'
 import type { Project, UserRole } from '@/types/api'
 
 function BackIcon(props: { className?: string }) {
@@ -346,6 +347,23 @@ export default function SettingsPage() {
 
     const canManageUsers = currentUserRole === 'developer'
 
+    // Notification settings
+    const {
+        permission: notificationPermission,
+        enabled: notificationEnabled,
+        setEnabled: setNotificationEnabled,
+        requestPermission,
+        isSupported: isNotificationSupported
+    } = useNotificationPermission()
+
+    const handleNotificationToggle = useCallback(async () => {
+        if (notificationPermission === 'default') {
+            await requestPermission()
+        } else if (notificationPermission === 'granted') {
+            setNotificationEnabled(!notificationEnabled)
+        }
+    }, [notificationPermission, notificationEnabled, requestPermission, setNotificationEnabled])
+
     return (
         <div className="flex h-full flex-col">
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
@@ -398,6 +416,53 @@ export default function SettingsPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Notifications Section */}
+                    {isNotificationSupported && (
+                        <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                            <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                                <h2 className="text-sm font-medium">Notifications</h2>
+                                <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                    Get notified when AI tasks complete.
+                                </p>
+                            </div>
+                            <div className="divide-y divide-[var(--app-divider)]">
+                                <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm">Push Notifications</div>
+                                        <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                            {notificationPermission === 'denied'
+                                                ? 'Blocked by browser. Enable in system settings.'
+                                                : notificationPermission === 'default'
+                                                    ? 'Click to enable notifications.'
+                                                    : 'Receive alerts when tasks finish.'}
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleNotificationToggle}
+                                        disabled={notificationPermission === 'denied'}
+                                        className={`
+                                            relative w-11 h-6 rounded-full transition-colors duration-200
+                                            ${notificationPermission === 'denied'
+                                                ? 'bg-[var(--app-border)] cursor-not-allowed opacity-50'
+                                                : notificationPermission === 'granted' && notificationEnabled
+                                                    ? 'bg-emerald-500'
+                                                    : 'bg-[var(--app-border)]'
+                                            }
+                                        `}
+                                    >
+                                        <span
+                                            className={`
+                                                absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200
+                                                ${notificationPermission === 'granted' && notificationEnabled ? 'translate-x-5' : 'translate-x-0'}
+                                            `}
+                                        />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Projects Section */}
                     <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
