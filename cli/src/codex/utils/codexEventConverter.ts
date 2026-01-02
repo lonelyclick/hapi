@@ -143,11 +143,7 @@ export function convertCodexEvent(rawEvent: unknown): CodexConversionResult | nu
         return result;
     }
 
-    if (!payloadRecord) {
-        return null;
-    }
-
-    if (type === 'turn_context') {
+    if (type === 'turn_context' || type === 'session_configured') {
         const modelInfo = extractModelInfo(payloadRecord ?? eventRecord ?? {});
         if (!modelInfo) {
             return null;
@@ -155,12 +151,8 @@ export function convertCodexEvent(rawEvent: unknown): CodexConversionResult | nu
         return { modelInfo };
     }
 
-    if (type === 'session_configured') {
-        const modelInfo = extractModelInfo(eventRecord ?? {});
-        if (!modelInfo) {
-            return null;
-        }
-        return { modelInfo };
+    if (!payloadRecord) {
+        return null;
     }
 
     if (type === 'event_msg') {
