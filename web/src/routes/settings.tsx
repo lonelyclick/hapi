@@ -312,6 +312,17 @@ export default function SettingsPage() {
     const projects = projectsData?.projects ?? []
     const users = usersData?.users ?? []
 
+    // 判断当前用户是否为 Developer（有权限管理用户）
+    // 如果用户列表为空，默认所有人都有权限；否则根据邮箱查找角色
+    const currentUserRole = useMemo(() => {
+        if (users.length === 0) return 'developer' // 无用户配置时，允许所有
+        const currentEmail = currentSession.email.toLowerCase()
+        const user = users.find(u => u.email.toLowerCase() === currentEmail)
+        return user?.role ?? 'developer' // 未找到时默认 developer（兼容性）
+    }, [users, currentSession.email])
+
+    const canManageUsers = currentUserRole === 'developer'
+
     return (
         <div className="flex h-full flex-col">
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
@@ -468,7 +479,7 @@ export default function SettingsPage() {
                                     Manage users and their roles. Leave empty to allow all.
                                 </p>
                             </div>
-                            {!showAddUser && (
+                            {canManageUsers && !showAddUser && (
                                 <button
                                     type="button"
                                     onClick={() => setShowAddUser(true)}
@@ -554,24 +565,32 @@ export default function SettingsPage() {
                                             <div className="text-sm truncate">{user.email}</div>
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
-                                            <select
-                                                value={user.role}
-                                                onChange={(e) => handleUpdateUserRole(user.email, e.target.value as UserRole)}
-                                                disabled={updateUserRoleMutation.isPending}
-                                                className="px-2 py-1 text-xs rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] disabled:opacity-50"
-                                            >
-                                                <option value="developer">Developer</option>
-                                                <option value="operator">Operator</option>
-                                            </select>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemoveUser(user.email)}
-                                                disabled={removeUserMutation.isPending}
-                                                className="flex h-7 w-7 items-center justify-center rounded text-[var(--app-hint)] hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                                                title="Remove user"
-                                            >
-                                                <TrashIcon />
-                                            </button>
+                                            {canManageUsers ? (
+                                                <>
+                                                    <select
+                                                        value={user.role}
+                                                        onChange={(e) => handleUpdateUserRole(user.email, e.target.value as UserRole)}
+                                                        disabled={updateUserRoleMutation.isPending}
+                                                        className="px-2 py-1 text-xs rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] disabled:opacity-50"
+                                                    >
+                                                        <option value="developer">Developer</option>
+                                                        <option value="operator">Operator</option>
+                                                    </select>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveUser(user.email)}
+                                                        disabled={removeUserMutation.isPending}
+                                                        className="flex h-7 w-7 items-center justify-center rounded text-[var(--app-hint)] hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                                        title="Remove user"
+                                                    >
+                                                        <TrashIcon />
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <span className="px-2 py-1 text-xs text-[var(--app-hint)]">
+                                                    {user.role === 'developer' ? 'Developer' : 'Operator'}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
