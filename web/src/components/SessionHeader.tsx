@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Session, SessionViewer } from '@/types/api'
 import { isTelegramApp } from '@/hooks/useTelegram'
 import { ViewersBadge } from './ViewersBadge'
@@ -112,6 +112,7 @@ export function SessionHeader(props: {
     const worktreeBranch = props.session.metadata?.worktree?.branch
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
     const runtimeModel = useMemo(() => formatRuntimeModel(props.session), [props.session])
+    const [showAgentTip, setShowAgentTip] = useState(false)
     const agentMeta = useMemo(
         () => {
             const parts = [agentLabel]
@@ -125,6 +126,12 @@ export function SessionHeader(props: {
         },
         [agentLabel, runtimeModel, worktreeBranch]
     )
+    const hasAgentTip = agentMeta !== agentLabel
+    const agentTipId = `session-agent-tip-${props.session.id}`
+
+    useEffect(() => {
+        setShowAgentTip(false)
+    }, [props.session.id])
 
     // In Telegram, don't render header (Telegram provides its own)
     if (isTelegramApp()) {
@@ -155,12 +162,44 @@ export function SessionHeader(props: {
 
                 {/* Right side: Viewers + Action buttons */}
                 <div className="flex shrink-0 items-center gap-1.5">
-                    <span
-                        className="sm:hidden shrink-0 rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--app-hint)]"
-                        title={agentMeta}
-                    >
-                        {agentLabel}
-                    </span>
+                    {hasAgentTip ? (
+                        <div className="sm:hidden relative shrink-0">
+                            <button
+                                type="button"
+                                className="flex items-center gap-1 rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--app-hint)]"
+                                title={agentMeta}
+                                aria-label={agentMeta}
+                                aria-describedby={agentTipId}
+                                aria-expanded={showAgentTip}
+                                onClick={() => setShowAgentTip((prev) => !prev)}
+                                onBlur={() => setShowAgentTip(false)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Escape') {
+                                        setShowAgentTip(false)
+                                    }
+                                }}
+                            >
+                                <span>{agentLabel}</span>
+                                <span className="text-[9px] font-semibold">i</span>
+                            </button>
+                            {showAgentTip ? (
+                                <div
+                                    id={agentTipId}
+                                    role="tooltip"
+                                    className="absolute right-0 top-full z-20 mt-1 max-w-[220px] rounded-md border border-[var(--app-divider)] bg-[var(--app-bg)] px-2 py-1 text-[10px] text-[var(--app-fg)] shadow-lg"
+                                >
+                                    {agentMeta}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : (
+                        <span
+                            className="sm:hidden shrink-0 rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--app-hint)]"
+                            title={agentMeta}
+                        >
+                            {agentLabel}
+                        </span>
+                    )}
                     {props.viewers && props.viewers.length > 0 && (
                         <ViewersBadge viewers={props.viewers} compact />
                     )}
