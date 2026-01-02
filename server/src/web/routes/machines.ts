@@ -20,7 +20,11 @@ const pathsExistsSchema = z.object({
 
 async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole): Promise<void> {
     try {
-        const prompt = await buildInitPrompt(role)
+        const session = engine.getSession(sessionId)
+        const projectRoot = session?.metadata?.path?.trim()
+            || session?.metadata?.worktree?.basePath?.trim()
+            || null
+        const prompt = await buildInitPrompt(role, { projectRoot })
         if (!prompt.trim()) {
             return
         }

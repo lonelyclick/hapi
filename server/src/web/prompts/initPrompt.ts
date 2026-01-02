@@ -4,17 +4,26 @@ import path from 'node:path'
 import type { UserRole } from '../../store'
 
 const YOHO_PROJECT_ROOT = '/home/guang/happy/yoho-task-v2'
-const CREDENTIALS_ROOT = path.join(YOHO_PROJECT_ROOT, 'data', 'credentials')
-const SERVICES_ROOT = path.join(YOHO_PROJECT_ROOT, 'src', 'services')
-const WORKFLOWS_ROOT = path.join(YOHO_PROJECT_ROOT, 'src', 'workflows')
 
 type CredentialMap = Record<string, string[]>
 type WorkflowMap = Record<string, string[]>
+type InitPromptOptions = { projectRoot?: string | null }
 
-async function listCredentialMap(): Promise<CredentialMap | null> {
+function normalizeProjectRoot(projectRoot?: string | null): string | null {
+    if (!projectRoot) {
+        return null
+    }
+    const trimmed = projectRoot.trim()
+    return trimmed.length > 0 ? trimmed : null
+}
+
+async function listCredentialMap(credentialsRoot: string | null): Promise<CredentialMap | null> {
+    if (!credentialsRoot) {
+        return null
+    }
     let typeEntries: Dirent[]
     try {
-        typeEntries = await readdir(CREDENTIALS_ROOT, { withFileTypes: true })
+        typeEntries = await readdir(credentialsRoot, { withFileTypes: true })
     } catch {
         return null
     }
@@ -27,7 +36,7 @@ async function listCredentialMap(): Promise<CredentialMap | null> {
 
     for (const type of types) {
         try {
-            const files = await readdir(path.join(CREDENTIALS_ROOT, type), { withFileTypes: true })
+            const files = await readdir(path.join(credentialsRoot, type), { withFileTypes: true })
             const names = files
                 .filter((file) => file.isFile() && file.name.endsWith('.json'))
                 .map((file) => path.basename(file.name, '.json'))
@@ -44,10 +53,13 @@ async function listCredentialMap(): Promise<CredentialMap | null> {
     return result
 }
 
-async function listServices(): Promise<string[] | null> {
+async function listServices(servicesRoot: string | null): Promise<string[] | null> {
+    if (!servicesRoot) {
+        return null
+    }
     let entries: Dirent[]
     try {
-        entries = await readdir(SERVICES_ROOT, { withFileTypes: true })
+        entries = await readdir(servicesRoot, { withFileTypes: true })
     } catch {
         return null
     }
@@ -58,10 +70,13 @@ async function listServices(): Promise<string[] | null> {
         .sort()
 }
 
-async function listWorkflows(): Promise<WorkflowMap | null> {
+async function listWorkflows(workflowsRoot: string | null): Promise<WorkflowMap | null> {
+    if (!workflowsRoot) {
+        return null
+    }
     let triggerEntries: Dirent[]
     try {
-        triggerEntries = await readdir(WORKFLOWS_ROOT, { withFileTypes: true })
+        triggerEntries = await readdir(workflowsRoot, { withFileTypes: true })
     } catch {
         return null
     }
@@ -73,7 +88,7 @@ async function listWorkflows(): Promise<WorkflowMap | null> {
     const result: WorkflowMap = {}
 
     for (const trigger of triggers) {
-        const triggerDir = path.join(WORKFLOWS_ROOT, trigger)
+        const triggerDir = path.join(workflowsRoot, trigger)
         try {
             const entries = await readdir(triggerDir, { withFileTypes: true })
             result[trigger] = entries
@@ -90,7 +105,7 @@ async function listWorkflows(): Promise<WorkflowMap | null> {
 
 function formatList(names: string[] | null): string {
     if (!names) {
-        return '（读取失败）'
+        return '（未找到）'
     }
     if (names.length === 0) {
         return '（空）'
@@ -100,7 +115,7 @@ function formatList(names: string[] | null): string {
 
 function formatCredentialLines(credentials: CredentialMap | null): string {
     if (!credentials) {
-        return '（读取失败）'
+        return '（未找到）'
     }
     const types = Object.keys(credentials).sort()
     if (types.length === 0) {
@@ -115,7 +130,7 @@ function formatCredentialLines(credentials: CredentialMap | null): string {
 
 function formatWorkflowLines(workflows: WorkflowMap | null): string {
     if (!workflows) {
-        return '（读取失败）'
+        return '（未找到）'
     }
     const triggers = Object.keys(workflows).sort()
     if (triggers.length === 0) {
@@ -128,12 +143,21 @@ function formatWorkflowLines(workflows: WorkflowMap | null): string {
     }).join('|')
 }
 
-export async function buildInitPrompt(role: UserRole): Promise<string> {
+export async function buildInitPrompt(role: UserRole, options?: InitPromptOptions): Promise<string> {
+    const projectRoot = normalizeProjectRoot(options?.projectRoot) ?? YOHO_PROJECT_ROOT
+    const credentialsRoot = path.join(projectRoot, 'data', 'credentials')
+    const servicesRoot = path.join(projectRoot, 'src', 'services')
+    const workflowsRoot = path.join(projectRoot, 'src', 'workflows')
     const [credentials, services, workflows] = await Promise.all([
-        listCredentialMap(),
-        listServices(),
-        listWorkflows()
+        listCredentialMap(credentialsRoot),
+        listServices(servicesRoot),
+        listWorkflows(workflowsRoot)
     ])
+
+    const isYohoProject = projectRoot === YOHO_PROJECT_ROOT
+    const projectDescription = isYohoProject
+        ? '定位：Yoho任务调度服务（TypeScript重构版），支持工作流编排、专为AI设计'
+        : '定位：以当前项目为主目录，优先复用项目内已有实现'
 
     const headerSection = [
         '#InitPrompt-Yoho开发规范（最高优先级）',
@@ -146,14 +170,15 @@ export async function buildInitPrompt(role: UserRole): Promise<string> {
 
     const contextSection = [
         '2)主要上下文（优先查找与复用）',
-        `项目路径：${YOHO_PROJECT_ROOT}`,
-        '定位：Yoho任务调度服务（TypeScript重构版），支持工作流编排、专为AI设计',
-        `凭证：${CREDENTIALS_ROOT}/<type>/<name>.json`,
-        `技能文档：${YOHO_PROJECT_ROOT}/docs/skills/*.md`,
-        `service目录：${SERVICES_ROOT}/`,
-        `workflow目录：${WORKFLOWS_ROOT}/`,
-        '处理相关需求时：优先在该项目中查找实现方式与结构，再做决策或迁移',
-        '优先查找顺序：凭证→skills文档→services→workflows'
+        `项目路径：${projectRoot}`,
+        projectDescription,
+        `凭证：${credentialsRoot}/<type>/<name>.json`,
+        `技能文档：${projectRoot}/docs/skills/*.md`,
+        `service目录：${servicesRoot}/`,
+        `workflow目录：${workflowsRoot}/`,
+        '处理相关需求时：优先在当前项目中查找实现方式与结构，再做决策或迁移',
+        '优先查找顺序：凭证→skills文档→services→workflows',
+        '若对应目录不存在，以当前项目实际结构为准'
     ].join(';')
 
     const dynamicSection = [

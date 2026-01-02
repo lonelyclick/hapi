@@ -42,6 +42,12 @@ export function App() {
             event.preventDefault()
         }
 
+        const onBeforeInput = (event: InputEvent) => {
+            if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+                event.preventDefault()
+            }
+        }
+
         const onWheel = (event: WheelEvent) => {
             if (event.ctrlKey) {
                 event.preventDefault()
@@ -59,6 +65,7 @@ export function App() {
         document.addEventListener('gesturestart', preventDefault as EventListener, { passive: false })
         document.addEventListener('gesturechange', preventDefault as EventListener, { passive: false })
         document.addEventListener('gestureend', preventDefault as EventListener, { passive: false })
+        document.addEventListener('beforeinput', onBeforeInput as EventListener, { capture: true })
 
         window.addEventListener('wheel', onWheel, { passive: false })
         window.addEventListener('keydown', onKeyDown)
@@ -67,6 +74,7 @@ export function App() {
             document.removeEventListener('gesturestart', preventDefault as EventListener)
             document.removeEventListener('gesturechange', preventDefault as EventListener)
             document.removeEventListener('gestureend', preventDefault as EventListener)
+            document.removeEventListener('beforeinput', onBeforeInput as EventListener, { capture: true })
 
             window.removeEventListener('wheel', onWheel)
             window.removeEventListener('keydown', onKeyDown)
