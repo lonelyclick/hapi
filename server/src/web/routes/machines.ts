@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { Store, UserRole } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
+import { buildInitPrompt } from '../prompts/initPrompt'
 import { requireMachine } from './guards'
 
 const spawnBodySchema = z.object({
@@ -16,6 +17,21 @@ const spawnBodySchema = z.object({
 const pathsExistsSchema = z.object({
     paths: z.array(z.string().min(1)).max(1000)
 })
+
+async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole): Promise<void> {
+    try {
+        const prompt = await buildInitPrompt(role)
+        if (!prompt.trim()) {
+            return
+        }
+        await engine.sendMessage(sessionId, {
+            text: prompt,
+            sentFrom: 'webapp'
+        })
+    } catch {
+        // Ignore failures.
+    }
+}
 
 export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: Store): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
@@ -58,12 +74,12 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             parsed.data.worktreeName
         )
 
-        // 如果 spawn 成功，发送角色预设 prompt
+        // 如果 spawn 成功，发送初始化 prompt（动态生成）
         if (result.type === 'success') {
             const email = c.get('email')
+            // 获取用户角色
+            let role: UserRole = 'developer'
             if (email) {
-                // 获取用户角色
-                let role: UserRole = 'developer'
                 const users = store.getAllowedUsers()
                 if (users.length > 0) {
                     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase())
@@ -71,19 +87,8 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                         role = user.role
                     }
                 }
-
-                // 获取角色预设 prompt
-                const rolePrompt = store.getRolePrompt(role)
-                if (rolePrompt) {
-                    // 异步发送预设 prompt，不阻塞返回
-                    engine.sendMessage(result.sessionId, {
-                        text: rolePrompt,
-                        sentFrom: 'webapp'
-                    }).catch(() => {
-                        // 忽略发送失败
-                    })
-                }
             }
+            void sendInitPrompt(engine, result.sessionId, role)
         }
 
         return c.json(result)
