@@ -111,9 +111,9 @@ export function SessionHeader(props: {
 
     return (
         <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
-            <div className="mx-auto w-full max-w-content px-3 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:py-1.5">
+            <div className="mx-auto w-full max-w-content px-3 py-2 flex items-center justify-between gap-2 sm:py-1.5">
                 {/* Left side: Back button + Title + Agent */}
-                <div className="flex w-full min-w-0 flex-1 items-center gap-2 sm:w-auto">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                     <button
                         type="button"
                         onClick={props.onBack}
@@ -122,7 +122,7 @@ export function SessionHeader(props: {
                         <BackIcon />
                     </button>
                     <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium text-sm">
+                        <div className="max-w-[180px] truncate font-medium text-sm sm:max-w-none">
                             {title}
                         </div>
                         <div className="hidden sm:block text-[10px] text-[var(--app-hint)] truncate">
@@ -132,7 +132,7 @@ export function SessionHeader(props: {
                 </div>
 
                 {/* Right side: Viewers + Action buttons */}
-                <div className="flex w-full flex-wrap items-center justify-end gap-1.5 shrink-0 sm:w-auto">
+                <div className="flex shrink-0 items-center gap-1.5">
                     <span
                         className="sm:hidden shrink-0 rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--app-hint)]"
                         title={agentMeta}

@@ -141,12 +141,12 @@ function SessionsPage() {
     return (
         <div className="flex h-full flex-col">
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
-                <div className="mx-auto w-full max-w-content px-3 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:py-1.5">
-                    <div className="flex w-full items-center gap-2 sm:w-auto">
+                <div className="mx-auto w-full max-w-content px-3 py-2 flex items-center justify-between gap-2 sm:py-1.5">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
                         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    viewBox="0 0 24 24"
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
                                     fill="none"
                                     stroke="white"
                                     strokeWidth="2"
@@ -157,10 +157,12 @@ function SessionsPage() {
                                     <circle cx="12" cy="12" r="10" />
                                     <path d="M2 12h20" />
                                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                                </svg>
-                            </div>
+                            </svg>
+                        </div>
                         <div className="flex flex-col items-start justify-center">
-                            <span className="text-sm font-bold leading-tight yoho-brand-text">Yoho Remote</span>
+                            <span className="max-w-[160px] truncate text-sm font-bold leading-tight yoho-brand-text sm:max-w-none">
+                                Yoho Remote
+                            </span>
                             <button
                                 type="button"
                                 onClick={handleForceRefresh}
@@ -172,7 +174,7 @@ function SessionsPage() {
                             </button>
                         </div>
                     </div>
-                    <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+                    <div className="flex shrink-0 items-center gap-2">
                         <OnlineUsersBadge users={onlineUsers} />
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--app-subtle-bg)] text-[var(--app-hint)]">
                             <span className="sm:hidden">{sessions.length}</span>

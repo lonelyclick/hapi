@@ -37,14 +37,23 @@ async function bootstrap() {
         await loadTelegramSdk()
     }
 
-    // Aggressive SW update: force reload when controller changes
-    let refreshing = false
-    navigator.serviceWorker?.addEventListener('controllerchange', () => {
-        if (refreshing) return
-        refreshing = true
-        console.log('New service worker activated, reloading...')
-        window.location.reload()
-    })
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    const updateIntervalMs = isIOS ? 2 * 60 * 1000 : 30 * 1000
+    const updateDisableKey = 'hapi-sw-disable-until'
+    const updateLastLoadKey = 'hapi-sw-last-load'
+    const updateLoopThresholdMs = 8_000
+    const updateLoopCooldownMs = 5 * 60 * 1000
+
+    try {
+        const now = Date.now()
+        const lastLoad = Number(sessionStorage.getItem(updateLastLoadKey) ?? 0)
+        if (lastLoad && now - lastLoad < updateLoopThresholdMs) {
+            sessionStorage.setItem(updateDisableKey, String(now + updateLoopCooldownMs))
+        }
+        sessionStorage.setItem(updateLastLoadKey, String(now))
+    } catch {
+        // Ignore if storage is unavailable.
+    }
 
     const updateSW = registerSW({
         immediate: true,
@@ -59,73 +68,56 @@ async function bootstrap() {
         },
         onRegistered(registration) {
             if (registration) {
-                // Helper function to force activate waiting SW
-                const activateWaitingSW = () => {
-                    if (registration.waiting) {
-                        console.log('Found waiting SW, activating immediately...')
-                        registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+                let lastUpdateCheckAt = 0
+                const isAutoUpdatePaused = () => {
+                    try {
+                        const disableUntil = Number(sessionStorage.getItem(updateDisableKey) ?? 0)
+                        return Date.now() < disableUntil
+                    } catch {
+                        return false
                     }
                 }
-
-                // Check for waiting SW on load (user may have ignored update prompt before)
-                activateWaitingSW()
-
-                // Also listen for state changes
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing
-                    if (newWorker) {
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                console.log('New SW installed, activating...')
-                                newWorker.postMessage({ type: 'SKIP_WAITING' })
-                            }
-                        })
-                    }
-                })
+                const checkForUpdates = () => {
+                    const now = Date.now()
+                    if (isAutoUpdatePaused()) return
+                    if (now - lastUpdateCheckAt < 10_000) return
+                    lastUpdateCheckAt = now
+                    registration.update().catch((error) => {
+                        console.warn('SW update check failed:', error)
+                    })
+                }
 
                 // Check for updates immediately on load
-                registration.update()
+                checkForUpdates()
 
-                // Check for updates every 30 seconds (more aggressive for iOS)
-                setInterval(() => {
-                    registration.update().then(() => {
-                        activateWaitingSW()
-                    })
-                }, 30 * 1000)
+                // Check for updates periodically (iOS uses a longer interval to avoid loops)
+                setInterval(checkForUpdates, updateIntervalMs)
 
                 // iOS Safari PWA: check for updates when app returns from background
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'visible') {
                         console.log('App visible, checking for updates...')
-                        registration.update().then(() => {
-                            activateWaitingSW()
-                        })
+                        checkForUpdates()
                     }
                 })
 
                 // iOS Safari: also check on focus (belt and suspenders)
                 window.addEventListener('focus', () => {
                     console.log('Window focused, checking for updates...')
-                    registration.update().then(() => {
-                        activateWaitingSW()
-                    })
+                    checkForUpdates()
                 })
 
                 // Check on online event (network reconnection)
                 window.addEventListener('online', () => {
                     console.log('Back online, checking for updates...')
-                    registration.update().then(() => {
-                        activateWaitingSW()
-                    })
+                    checkForUpdates()
                 })
 
                 // iOS Safari: also check on page show (for bfcache)
                 window.addEventListener('pageshow', (event) => {
                     if (event.persisted) {
                         console.log('Page restored from bfcache, checking for updates...')
-                        registration.update().then(() => {
-                            activateWaitingSW()
-                        })
+                        checkForUpdates()
                     }
                 })
             }
