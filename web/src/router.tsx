@@ -141,8 +141,8 @@ function SessionsPage() {
     return (
         <div className="flex h-full flex-col">
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
-                <div className="mx-auto w-full max-w-content flex items-center justify-between px-3 py-1.5">
-                    <div className="flex items-center gap-2">
+                <div className="mx-auto w-full max-w-content px-3 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:py-1.5">
+                    <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
                         <div className="flex items-center gap-2">
                             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
                                 <svg
@@ -172,10 +172,11 @@ function SessionsPage() {
                             {isRefreshing ? '...' : gitCommitHash}
                         </button>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                         <OnlineUsersBadge users={onlineUsers} />
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--app-subtle-bg)] text-[var(--app-hint)]">
-                            {sessions.length} sessions
+                            <span className="sm:hidden">{sessions.length}</span>
+                            <span className="hidden sm:inline">{sessions.length} sessions</span>
                         </span>
                         <button
                             type="button"

@@ -75,7 +75,8 @@ export function OnlineUsersBadge(props: { users: OnlineUser[] }) {
                 className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 transition-colors"
             >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {users.length} online
+                <span>{users.length}</span>
+                <span className="hidden sm:inline"> online</span>
             </button>
 
             {isOpen && (

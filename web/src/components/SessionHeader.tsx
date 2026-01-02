@@ -107,9 +107,9 @@ export function SessionHeader(props: {
 
     return (
         <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
-            <div className="mx-auto w-full max-w-content flex items-center justify-between px-3 py-1.5">
+            <div className="mx-auto w-full max-w-content px-3 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:py-1.5">
                 {/* Left side: Back button + Title + Agent */}
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="flex w-full min-w-0 flex-1 items-center gap-2 sm:w-auto">
                     <button
                         type="button"
                         onClick={props.onBack}
@@ -129,7 +129,7 @@ export function SessionHeader(props: {
                 </div>
 
                 {/* Right side: Viewers + Action buttons */}
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex w-full flex-wrap items-center justify-end gap-1.5 shrink-0 sm:w-auto">
                     {props.viewers && props.viewers.length > 0 && (
                         <ViewersBadge viewers={props.viewers} />
                     )}
