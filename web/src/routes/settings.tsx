@@ -361,7 +361,7 @@ export default function SettingsPage() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                 <div className="mx-auto w-full max-w-content p-3 space-y-4">
                     {/* Current Session Section */}
                     <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">

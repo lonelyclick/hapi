@@ -166,7 +166,7 @@ export function SessionHeader(props: {
                         <div className="sm:hidden relative shrink-0">
                             <button
                                 type="button"
-                                className="flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--app-hint)]"
+                                className="flex h-5 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--app-hint)]"
                                 title={agentMeta}
                                 aria-label={agentMeta}
                                 aria-describedby={agentTipId}
@@ -179,10 +179,10 @@ export function SessionHeader(props: {
                                     }
                                 }}
                             >
-                                <span className="leading-none">{agentLabel}</span>
-                                <span className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-current text-[8px] font-semibold leading-none">
+                                <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full border border-current text-[8px] font-semibold leading-none">
                                     i
                                 </span>
+                                <span className="leading-none">{agentLabel}</span>
                             </button>
                             {showAgentTip ? (
                                 <div
@@ -196,14 +196,14 @@ export function SessionHeader(props: {
                         </div>
                     ) : (
                         <span
-                            className="sm:hidden shrink-0 rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--app-hint)]"
+                            className="sm:hidden inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--app-hint)]"
                             title={agentMeta}
                         >
                             {agentLabel}
                         </span>
                     )}
                     {props.viewers && props.viewers.length > 0 && (
-                        <ViewersBadge viewers={props.viewers} compact />
+                        <ViewersBadge viewers={props.viewers} compact buttonClassName="h-5 leading-none" />
                     )}
                     {props.onViewFiles ? (
                         <button

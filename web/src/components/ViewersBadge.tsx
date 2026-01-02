@@ -25,8 +25,8 @@ function formatViewerName(email: string): string {
     return email.split('@')[0] ?? email
 }
 
-export function ViewersBadge(props: { viewers: SessionViewer[]; compact?: boolean }) {
-    const { viewers, compact } = props
+export function ViewersBadge(props: { viewers: SessionViewer[]; compact?: boolean; buttonClassName?: string }) {
+    const { viewers, compact, buttonClassName } = props
     const [isOpen, setIsOpen] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -92,7 +92,7 @@ export function ViewersBadge(props: { viewers: SessionViewer[]; compact?: boolea
             <button
                 type="button"
                 onClick={handleClick}
-                className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-600 hover:bg-blue-500/25 transition-colors"
+                className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-600 hover:bg-blue-500/25 transition-colors${buttonClassName ? ` ${buttonClassName}` : ''}`}
             >
                 <EyeIcon />
                 {compact ? (
