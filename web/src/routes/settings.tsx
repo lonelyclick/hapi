@@ -1,9 +1,41 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
+
+// 检测设备类型
+function getDeviceType(): string {
+    const ua = navigator.userAgent
+
+    // 移动设备检测
+    const isMobile = /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+    const isTablet = /iPad|Android(?!.*Mobile)/i.test(ua)
+
+    // 浏览器检测
+    let browser = 'Unknown'
+    if (/Edg\//i.test(ua)) {
+        browser = 'Edge'
+    } else if (/Chrome/i.test(ua) && !/Chromium/i.test(ua)) {
+        browser = 'Chrome'
+    } else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) {
+        browser = 'Safari'
+    } else if (/Firefox/i.test(ua)) {
+        browser = 'Firefox'
+    } else if (/Opera|OPR/i.test(ua)) {
+        browser = 'Opera'
+    }
+
+    // 组合设备类型
+    if (isTablet) {
+        return `${browser} Tablet`
+    }
+    if (isMobile) {
+        return `${browser} Mobile`
+    }
+    return browser
+}
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -70,6 +102,13 @@ export default function SettingsPage() {
     const queryClient = useQueryClient()
     const [newEmail, setNewEmail] = useState('')
     const [error, setError] = useState<string | null>(null)
+
+    // 当前会话信息
+    const currentSession = useMemo(() => ({
+        email: localStorage.getItem('hapi_email') || '-',
+        clientId: localStorage.getItem('hapi_client_id') || '-',
+        deviceType: getDeviceType()
+    }), [])
 
     const { data, isLoading } = useQuery({
         queryKey: ['allowed-emails'],
@@ -138,6 +177,27 @@ export default function SettingsPage() {
 
             <div className="flex-1 overflow-y-auto">
                 <div className="mx-auto w-full max-w-content p-3 space-y-4">
+                    {/* Current Session Section */}
+                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                        <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                            <h2 className="text-sm font-medium">Current Session</h2>
+                        </div>
+                        <div className="divide-y divide-[var(--app-divider)]">
+                            <div className="px-3 py-2 flex items-center justify-between gap-2">
+                                <span className="text-sm text-[var(--app-hint)]">Email</span>
+                                <span className="text-sm font-mono truncate">{currentSession.email}</span>
+                            </div>
+                            <div className="px-3 py-2 flex items-center justify-between gap-2">
+                                <span className="text-sm text-[var(--app-hint)]">Device</span>
+                                <span className="text-sm font-mono">{currentSession.deviceType}</span>
+                            </div>
+                            <div className="px-3 py-2 flex items-center justify-between gap-2">
+                                <span className="text-sm text-[var(--app-hint)]">Client ID</span>
+                                <span className="text-sm font-mono">{currentSession.clientId}</span>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Allowed Emails Section */}
                     <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
                         <div className="px-3 py-2 border-b border-[var(--app-divider)]">
