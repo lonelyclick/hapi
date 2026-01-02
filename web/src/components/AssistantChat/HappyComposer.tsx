@@ -909,6 +909,7 @@ export function HappyComposer(props: {
                                 maxRows={5}
                                 submitOnEnter={!autoOptimize}
                                 cancelOnEscape={false}
+                                enterKeyHint="send"
                                 onChange={handleChange}
                                 onSelect={handleSelect}
                                 onKeyDown={handleKeyDown}
