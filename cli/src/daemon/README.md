@@ -228,7 +228,7 @@ Graceful daemon shutdown.
   "pid": 12345,
   "httpPort": 50097,
   "startTime": "8/24/2025, 6:46:22 PM",
-  "startedWithCliVersion": "0.9.0-6",
+  "startedWithCliVersion": "v2026.01.02.1338",
   "startedWithCliMtimeMs": 1724531182000,
   "lastHeartbeat": "8/24/2025, 6:47:22 PM",
   "daemonLogPath": "/path/to/daemon.log"
@@ -339,7 +339,7 @@ Checks if machine ID exists in settings:
   "metadata": {
     "host": "MacBook-Pro.local",
     "platform": "darwin",
-    "happyCliVersion": "1.0.0",
+    "happyCliVersion": "v2026.01.02.1338",
     "homeDir": "/Users/john",
     "happyHomeDir": "/Users/john/.hapi",
     "happyLibDir": "/usr/local/lib/node_modules/hapi"
@@ -436,7 +436,7 @@ socket.emit('machine-update-metadata', {
   "metadata": {
     "host": "MacBook-Pro.local",
     "platform": "darwin",
-    "happyCliVersion": "1.0.1",
+    "happyCliVersion": "v2026.01.02.1340",
     "homeDir": "/Users/john",
     "happyHomeDir": "/Users/john/.hapi"
   },
@@ -546,3 +546,89 @@ Authorization: Bearer <CLI_API_TOKEN>
 - we loose track of children processes when daemon exits / restarts - we should write them to the same state file? At least the pids should be there for doctor & cleanup
 
 - the daemon control server binds to `127.0.0.1` on a random port; if we ever expose it beyond localhost, require an explicit auth token/header
+
+---
+
+# Split Deployment Architecture
+
+For server deployments, HAPI uses a split executable architecture that allows updating the server/frontend without restarting the daemon (and thus keeping sessions online).
+
+## Executables
+
+| Executable | Purpose | Systemd Service |
+|------------|---------|-----------------|
+| `hapi-server` | Web frontend + REST API | `hapi-server.service` |
+| `hapi-daemon` | Session management, WebSocket to server | `hapi-daemon.service` |
+| `hapi` | Main CLI, used by daemon to spawn sessions | (not a service) |
+
+## Build Commands
+
+```bash
+# In cli/ directory:
+bun run build:exe:server    # Build hapi-server (with embedded web assets)
+bun run build:exe:daemon    # Build hapi-daemon
+bun run build:exe           # Build hapi (main CLI)
+```
+
+## Version Detection
+
+In split deployment mode, version detection uses `hapi-daemon`'s mtime exclusively:
+
+- `getInstalledCliMtimeMs()` checks if `hapi-daemon` exists alongside the current executable
+- If found, returns `hapi-daemon`'s mtime (not the current executable's mtime)
+- This ensures consistent version detection whether called from `hapi` or `hapi-daemon`
+
+## Session Spawning
+
+When `hapi-daemon` needs to spawn a session:
+
+1. `spawnHappyCLI()` detects it's running as `hapi-daemon` (standalone mode)
+2. Uses the `hapi` executable in the same directory instead of `process.execPath`
+3. Spawns: `hapi claude --hapi-starting-mode remote --started-by daemon`
+
+## Deployment Script
+
+```bash
+./deploy.sh           # Build server + CLI, restart server only (sessions stay online)
+./deploy.sh --daemon  # Build all + restart daemon (sessions will disconnect)
+```
+
+### What Gets Built
+
+| Command | Builds | Restarts | Sessions |
+|---------|--------|----------|----------|
+| `./deploy.sh` | `hapi-server`, `hapi` | server only | Stay online |
+| `./deploy.sh --daemon` | `hapi-server`, `hapi`, `hapi-daemon` | server + daemon | Disconnect |
+
+### When to Use `--daemon`
+
+Only use `--daemon` when:
+- Changed daemon-specific code (`src/daemon/*.ts`)
+- Changed version detection logic
+- Changed session spawning logic
+- Need to force-restart all sessions
+
+For frontend/API changes, the default `./deploy.sh` is sufficient.
+
+## Systemd Service Configuration
+
+```ini
+# /etc/systemd/system/hapi-server.service
+[Service]
+ExecStart=/path/to/cli/dist-exe/bun-linux-x64/hapi-server
+
+# /etc/systemd/system/hapi-daemon.service
+[Service]
+ExecStart=/path/to/cli/dist-exe/bun-linux-x64/hapi-daemon
+Restart=always
+RestartSec=10
+```
+
+## Key Files Modified for Split Deployment
+
+1. **`cli/src/bootstrap-server.ts`** - Standalone server entry point
+2. **`cli/src/bootstrap-daemon.ts`** - Standalone daemon entry point
+3. **`cli/scripts/build-executable.ts`** - Supports `--name` parameter for different executables
+4. **`cli/src/daemon/controlClient.ts`** - `getInstalledCliMtimeMs()` checks `hapi-daemon` mtime
+5. **`cli/src/utils/spawnHappyCLI.ts`** - Detects standalone mode, uses correct executable
+6. **`deploy.sh`** - Selective build and restart logic
