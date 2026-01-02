@@ -6,23 +6,37 @@ import { execSync } from 'node:child_process'
 
 const base = process.env.VITE_BASE_URL || '/'
 
-// Get git commit info at build time
-function getGitInfo() {
+// Get build version (timestamp in Asia/Shanghai timezone)
+function getBuildVersion() {
     try {
-        const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
+        const now = new Date()
+        // Format: v2026.01.02.1344 (Asia/Shanghai timezone)
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Shanghai',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        })
+        const parts = formatter.formatToParts(now)
+        const get = (type: string) => parts.find(p => p.type === type)?.value || ''
+        const version = `v${get('year')}.${get('month')}.${get('day')}.${get('hour')}${get('minute')}`
+
         const commitMessage = execSync('git log -1 --format=%s', { encoding: 'utf-8' }).trim()
-        return { commitHash, commitMessage }
+        return { version, commitMessage }
     } catch {
-        return { commitHash: 'unknown', commitMessage: 'unknown' }
+        return { version: 'unknown', commitMessage: 'unknown' }
     }
 }
 
-const gitInfo = getGitInfo()
+const buildInfo = getBuildVersion()
 
 export default defineConfig({
     define: {
-        __GIT_COMMIT_HASH__: JSON.stringify(gitInfo.commitHash),
-        __GIT_COMMIT_MESSAGE__: JSON.stringify(gitInfo.commitMessage)
+        __GIT_COMMIT_HASH__: JSON.stringify(buildInfo.version),
+        __GIT_COMMIT_MESSAGE__: JSON.stringify(buildInfo.commitMessage)
     },
     server: {
         host: true,
