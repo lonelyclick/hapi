@@ -41,6 +41,8 @@ export function createEventsRoutes(
         const clientId = c.get('clientId')
         const deviceType = c.get('deviceType')
 
+        console.log('[sse] subscribe', { subscriptionId, namespace, all, sessionId, machineId, email, clientId, deviceType })
+
         if (sessionId || machineId) {
             const engine = getSyncEngine()
             if (!engine) {
