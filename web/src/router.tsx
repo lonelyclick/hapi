@@ -20,6 +20,7 @@ import { useMessages } from '@/hooks/queries/useMessages'
 import { useMachines } from '@/hooks/queries/useMachines'
 import { useSession } from '@/hooks/queries/useSession'
 import { useSessions } from '@/hooks/queries/useSessions'
+import { useOnlineUsers } from '@/hooks/queries/useOnlineUsers'
 import { useSlashCommands } from '@/hooks/queries/useSlashCommands'
 import { useFileSuggestions } from '@/hooks/queries/useFileSuggestions'
 import { useSendMessage } from '@/hooks/mutations/useSendMessage'
@@ -27,6 +28,7 @@ import { queryKeys } from '@/lib/query-keys'
 import FilesPage from '@/routes/sessions/files'
 import FilePage from '@/routes/sessions/file'
 import TerminalPage from '@/routes/sessions/terminal'
+import SettingsPage from '@/routes/settings'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -67,10 +69,31 @@ function PlusIcon(props: { className?: string }) {
     )
 }
 
+function SettingsIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+    )
+}
+
 function SessionsPage() {
     const { api } = useAppContext()
     const navigate = useNavigate()
     const { sessions, isLoading, error, refetch } = useSessions(api)
+    const { users: onlineUsers } = useOnlineUsers(api)
     const [isRefreshing, setIsRefreshing] = useState(false)
 
     const handleRefresh = useCallback(() => {
@@ -142,9 +165,23 @@ function SessionsPage() {
                         </button>
                     </div>
                     <div className="flex items-center gap-2">
+                        {onlineUsers.length > 0 && (
+                            <div className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600" title={onlineUsers.map(u => u.email).join(', ')}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                {onlineUsers.length} online
+                            </div>
+                        )}
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--app-subtle-bg)] text-[var(--app-hint)]">
                             {sessions.length} sessions
                         </span>
+                        <button
+                            type="button"
+                            onClick={() => navigate({ to: '/settings' })}
+                            className="flex items-center justify-center h-7 w-7 rounded-lg text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors"
+                            title="Settings"
+                        >
+                            <SettingsIcon />
+                        </button>
                         <button
                             type="button"
                             onClick={() => navigate({ to: '/sessions/new' })}
@@ -386,6 +423,12 @@ const newSessionRoute = createRoute({
     component: NewSessionPage,
 })
 
+const settingsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/settings',
+    component: SettingsPage,
+})
+
 export const routeTree = rootRoute.addChildren([
     indexRoute,
     sessionsRoute,
@@ -394,6 +437,7 @@ export const routeTree = rootRoute.addChildren([
     sessionFilesRoute,
     sessionFileRoute,
     newSessionRoute,
+    settingsRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']

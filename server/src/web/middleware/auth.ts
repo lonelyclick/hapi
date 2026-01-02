@@ -6,12 +6,18 @@ export type WebAppEnv = {
     Variables: {
         userId: number
         namespace: string
+        email?: string
+        clientId?: string
+        deviceType?: string
     }
 }
 
 const jwtPayloadSchema = z.object({
     uid: z.number(),
-    ns: z.string()
+    ns: z.string(),
+    em: z.string().optional(),
+    cid: z.string().optional(),
+    dt: z.string().optional()
 })
 
 export function createAuthMiddleware(jwtSecret: Uint8Array): MiddlewareHandler<WebAppEnv> {
@@ -40,6 +46,9 @@ export function createAuthMiddleware(jwtSecret: Uint8Array): MiddlewareHandler<W
 
             c.set('userId', parsed.data.uid)
             c.set('namespace', parsed.data.ns)
+            c.set('email', parsed.data.em)
+            c.set('clientId', parsed.data.cid)
+            c.set('deviceType', parsed.data.dt)
             await next()
             return
         } catch {

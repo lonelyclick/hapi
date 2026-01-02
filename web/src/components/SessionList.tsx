@@ -195,6 +195,14 @@ function SessionItem(props: {
                             {s.pendingRequestsCount} pending
                         </span>
                     )}
+                    {s.viewers && s.viewers.length > 0 && (
+                        <span
+                            className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-600"
+                            title={s.viewers.map(v => `${v.email}${v.deviceType ? ` (${v.deviceType})` : ''}`).join(', ')}
+                        >
+                            {s.viewers.length === 1 ? s.viewers[0].email.split('@')[0] : `${s.viewers.length} viewing`}
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--app-hint)]">
                     <span className="shrink-0">{getAgentLabel(s)}</span>

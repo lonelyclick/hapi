@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine, Session } from '../../sync/syncEngine'
+import type { SSEManager } from '../../sse/sseManager'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
 
@@ -19,6 +20,12 @@ type SessionSummaryMetadata = {
     }
 }
 
+type SessionViewer = {
+    email: string
+    clientId: string
+    deviceType?: string
+}
+
 type SessionSummary = {
     id: string
     active: boolean
@@ -29,6 +36,7 @@ type SessionSummary = {
     pendingRequestsCount: number
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
+    viewers?: SessionViewer[]
 }
 
 function toSessionSummary(session: Session): SessionSummary {
@@ -78,7 +86,10 @@ const modelModeSchema = z.object({
     reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional()
 })
 
-export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
+export function createSessionsRoutes(
+    getSyncEngine: () => SyncEngine | null,
+    getSseManager: () => SSEManager | null
+): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/sessions', (c) => {
@@ -90,6 +101,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         const getPendingCount = (s: Session) => s.agentState?.requests ? Object.keys(s.agentState.requests).length : 0
 
         const namespace = c.get('namespace')
+        const sseManager = getSseManager()
         const sessions = engine.getSessionsByNamespace(namespace)
             .sort((a, b) => {
                 // Active sessions first
@@ -105,7 +117,21 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
                 // Then by updatedAt
                 return b.updatedAt - a.updatedAt
             })
-            .map(toSessionSummary)
+            .map((session) => {
+                const summary = toSessionSummary(session)
+                // 添加该 session 的查看者
+                if (sseManager) {
+                    const viewers = sseManager.getSessionViewers(namespace, session.id)
+                    if (viewers.length > 0) {
+                        summary.viewers = viewers.map(v => ({
+                            email: v.email,
+                            clientId: v.clientId,
+                            deviceType: v.deviceType
+                        }))
+                    }
+                }
+                return summary
+            })
 
         return c.json({ sessions })
     })
@@ -299,6 +325,18 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
                 error: error instanceof Error ? error.message : 'Failed to list slash commands'
             })
         }
+    })
+
+    // 获取在线用户
+    app.get('/online-users', (c) => {
+        const sseManager = getSseManager()
+        if (!sseManager) {
+            return c.json({ users: [] })
+        }
+
+        const namespace = c.get('namespace')
+        const users = sseManager.getOnlineUsers(namespace)
+        return c.json({ users })
     })
 
     return app

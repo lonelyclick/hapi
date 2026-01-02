@@ -37,6 +37,9 @@ export function createEventsRoutes(
         const machineId = parseOptionalId(query.machineId)
         const subscriptionId = randomUUID()
         const namespace = c.get('namespace')
+        const email = c.get('email')
+        const clientId = c.get('clientId')
+        const deviceType = c.get('deviceType')
 
         if (sessionId || machineId) {
             const engine = getSyncEngine()
@@ -70,6 +73,9 @@ export function createEventsRoutes(
                 all,
                 sessionId,
                 machineId,
+                email,
+                clientId,
+                deviceType,
                 send: (event) => stream.writeSSE({ data: JSON.stringify(event) }),
                 sendHeartbeat: async () => {
                     await stream.write(': heartbeat\n\n')

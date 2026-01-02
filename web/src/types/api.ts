@@ -79,6 +79,23 @@ export type SessionSummaryMetadata = {
     worktree?: WorktreeMetadata
 }
 
+export type SessionViewer = {
+    email: string
+    clientId: string
+    deviceType?: string
+}
+
+export type OnlineUser = {
+    email: string
+    clientId: string
+    deviceType?: string
+    sessionId: string | null
+}
+
+export type AllowedEmailsResponse = { emails: string[] }
+export type AddEmailResponse = { ok: true; emails: string[] }
+export type RemoveEmailResponse = { ok: true; emails: string[] }
+
 export type SessionSummary = {
     id: string
     active: boolean
@@ -89,6 +106,7 @@ export type SessionSummary = {
     pendingRequestsCount: number
     modelMode?: ModelMode
     modelReasoningEffort?: ModelReasoningEffort
+    viewers?: SessionViewer[]
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'failed'
@@ -228,3 +246,6 @@ export type SyncEvent =
     | { type: 'message-received'; sessionId: string; message: DecryptedMessage; namespace?: string }
     | { type: 'machine-updated'; machineId: string; data?: unknown; namespace?: string }
     | { type: 'connection-changed'; data?: { status: string }; namespace?: string }
+    | { type: 'online-users-changed'; users: OnlineUser[]; namespace?: string }
+
+export type OnlineUsersResponse = { users: OnlineUser[] }

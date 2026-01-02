@@ -14,7 +14,10 @@ const telegramAuthSchema = z.object({
 })
 
 const accessTokenAuthSchema = z.object({
-    accessToken: z.string()
+    accessToken: z.string(),
+    email: z.string().optional(),
+    clientId: z.string().optional(),
+    deviceType: z.string().optional()
 })
 
 const authBodySchema = z.union([telegramAuthSchema, accessTokenAuthSchema])
@@ -30,10 +33,12 @@ export function createAuthRoutes(jwtSecret: Uint8Array, store: Store): Hono<WebA
         }
 
         let userId: number
-        let username: string | undefined
+        let email: string | undefined
         let firstName: string | undefined
         let lastName: string | undefined
         let namespace: string
+        let clientId: string | undefined
+        let deviceType: string | undefined
 
         // Access Token authentication (CLI_API_TOKEN)
         if ('accessToken' in parsed.data) {
@@ -41,8 +46,22 @@ export function createAuthRoutes(jwtSecret: Uint8Array, store: Store): Hono<WebA
             if (!parsedToken || !safeCompareStrings(parsedToken.baseToken, configuration.cliApiToken)) {
                 return c.json({ error: 'Invalid access token' }, 401)
             }
+
+            // 检查邮箱白名单
+            const userEmail = parsed.data.email?.toLowerCase()
+            if (userEmail) {
+                const allowedEmails = store.getAllowedEmails()
+                // 如果白名单为空，允许所有邮箱；否则检查是否在白名单中
+                if (allowedEmails.length > 0 && !allowedEmails.includes(userEmail)) {
+                    return c.json({ error: 'Email not authorized' }, 403)
+                }
+            }
+
             userId = await getOrCreateOwnerId()
-            firstName = 'Web User'
+            email = userEmail
+            firstName = userEmail?.split('@')[0] || 'Web User'
+            clientId = parsed.data.clientId
+            deviceType = parsed.data.deviceType
             namespace = parsedToken.namespace
         } else {
             if (!configuration.telegramEnabled || !configuration.telegramBotToken) {
@@ -62,13 +81,19 @@ export function createAuthRoutes(jwtSecret: Uint8Array, store: Store): Hono<WebA
             }
 
             userId = await getOrCreateOwnerId()
-            username = result.user.username
+            email = result.user.username  // Telegram uses username as email equivalent
             firstName = result.user.first_name
             lastName = result.user.last_name
             namespace = storedUser.namespace
         }
 
-        const token = await new SignJWT({ uid: userId, ns: namespace })
+        const token = await new SignJWT({
+            uid: userId,
+            ns: namespace,
+            em: email,
+            cid: clientId,
+            dt: deviceType
+        })
             .setProtectedHeader({ alg: 'HS256' })
             .setIssuedAt()
             .setExpirationTime('15m')
@@ -78,9 +103,11 @@ export function createAuthRoutes(jwtSecret: Uint8Array, store: Store): Hono<WebA
             token,
             user: {
                 id: userId,
-                username,
+                email,
                 firstName,
-                lastName
+                lastName,
+                clientId,
+                deviceType
             }
         })
     })

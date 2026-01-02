@@ -16,8 +16,68 @@ type LoginPromptProps = {
     error?: string | null
 }
 
+// 生成随机客户端ID（大小写字母混合）
+function generateClientId(): string {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    let result = ''
+    for (let i = 0; i < 8; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return result
+}
+
+// 获取或创建客户端ID
+function getClientId(): string {
+    const key = 'hapi_client_id'
+    let clientId = localStorage.getItem(key)
+    if (!clientId) {
+        clientId = generateClientId()
+        localStorage.setItem(key, clientId)
+    }
+    return clientId
+}
+
+// 检测设备类型
+function getDeviceType(): string {
+    const ua = navigator.userAgent
+
+    // 移动设备检测
+    const isMobile = /Mobile|Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+    const isTablet = /iPad|Android(?!.*Mobile)/i.test(ua)
+
+    // 浏览器检测
+    let browser = 'Unknown'
+    if (/Edg\//i.test(ua)) {
+        browser = 'Edge'
+    } else if (/Chrome/i.test(ua) && !/Chromium/i.test(ua)) {
+        browser = 'Chrome'
+    } else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) {
+        browser = 'Safari'
+    } else if (/Firefox/i.test(ua)) {
+        browser = 'Firefox'
+    } else if (/Opera|OPR/i.test(ua)) {
+        browser = 'Opera'
+    }
+
+    // 组合设备类型
+    if (isTablet) {
+        return `${browser} Tablet`
+    }
+    if (isMobile) {
+        return `${browser} Mobile`
+    }
+    return browser
+}
+
+// 邮箱格式验证
+function isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+}
+
 export function LoginPrompt(props: LoginPromptProps) {
     const isBindMode = props.mode === 'bind'
+    const [email, setEmail] = useState(() => localStorage.getItem('hapi_email') || '')
     const [accessToken, setAccessToken] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -27,6 +87,17 @@ export function LoginPrompt(props: LoginPromptProps) {
 
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault()
+
+        const trimmedEmail = email.trim().toLowerCase()
+        if (!trimmedEmail && !isBindMode) {
+            setError('Please enter your email')
+            return
+        }
+
+        if (!isBindMode && !isValidEmail(trimmedEmail)) {
+            setError('Please enter a valid email address')
+            return
+        }
 
         const trimmedToken = accessToken.trim()
         if (!trimmedToken) {
@@ -45,9 +116,20 @@ export function LoginPrompt(props: LoginPromptProps) {
                 }
                 await props.onBind(trimmedToken)
             } else {
+                // 获取客户端ID和设备类型
+                const clientId = getClientId()
+                const deviceType = getDeviceType()
+                // 存储邮箱到 localStorage
+                localStorage.setItem('hapi_email', trimmedEmail)
+
                 // Validate the token by attempting to authenticate
                 const client = new ApiClient('', { baseUrl: props.baseUrl })
-                await client.authenticate({ accessToken: trimmedToken })
+                await client.authenticate({
+                    accessToken: trimmedToken,
+                    email: trimmedEmail,
+                    clientId,
+                    deviceType
+                })
                 // If successful, pass the token to parent
                 if (!props.onLogin) {
                     setError('Login is unavailable.')
@@ -61,7 +143,7 @@ export function LoginPrompt(props: LoginPromptProps) {
         } finally {
             setIsLoading(false)
         }
-    }, [accessToken, props])
+    }, [email, accessToken, isBindMode, props])
 
     useEffect(() => {
         if (!isServerDialogOpen) {
@@ -172,6 +254,19 @@ export function LoginPrompt(props: LoginPromptProps) {
 
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    {!isBindMode && (
+                        <div>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="Company email (e.g. name@company.com)"
+                                autoComplete="email"
+                                disabled={isLoading}
+                                className="w-full px-3 py-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-2 focus:ring-[var(--app-button)] focus:border-transparent disabled:opacity-50"
+                            />
+                        </div>
+                    )}
                     <div>
                         <input
                             type="password"
@@ -192,7 +287,7 @@ export function LoginPrompt(props: LoginPromptProps) {
 
                     <button
                         type="submit"
-                        disabled={isLoading || !accessToken.trim()}
+                        disabled={isLoading || !accessToken.trim() || (!isBindMode && !email.trim())}
                         aria-busy={isLoading}
                         className="w-full py-2.5 rounded-lg bg-[var(--app-button)] text-[var(--app-button-text)] font-medium disabled:opacity-50 hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2"
                     >

@@ -1,4 +1,4 @@
-import type { SyncEvent } from '../sync/syncEngine'
+import type { SyncEvent, OnlineUser } from '../sync/syncEngine'
 
 export type SSESubscription = {
     id: string
@@ -6,6 +6,9 @@ export type SSESubscription = {
     all: boolean
     sessionId: string | null
     machineId: string | null
+    email?: string
+    clientId?: string
+    deviceType?: string
 }
 
 type SSEConnection = SSESubscription & {
@@ -28,6 +31,9 @@ export class SSEManager {
         all?: boolean
         sessionId?: string | null
         machineId?: string | null
+        email?: string
+        clientId?: string
+        deviceType?: string
         send: (event: SyncEvent) => void | Promise<void>
         sendHeartbeat: () => void | Promise<void>
     }): SSESubscription {
@@ -37,25 +43,41 @@ export class SSEManager {
             all: Boolean(options.all),
             sessionId: options.sessionId ?? null,
             machineId: options.machineId ?? null,
+            email: options.email,
+            clientId: options.clientId,
+            deviceType: options.deviceType,
             send: options.send,
             sendHeartbeat: options.sendHeartbeat
         }
 
         this.connections.set(subscription.id, subscription)
         this.ensureHeartbeat()
+
+        // 广播在线用户更新
+        this.broadcastOnlineUsers(options.namespace)
+
         return {
             id: subscription.id,
             namespace: subscription.namespace,
             all: subscription.all,
             sessionId: subscription.sessionId,
-            machineId: subscription.machineId
+            machineId: subscription.machineId,
+            email: subscription.email,
+            clientId: subscription.clientId,
+            deviceType: subscription.deviceType
         }
     }
 
     unsubscribe(id: string): void {
+        const connection = this.connections.get(id)
+        const namespace = connection?.namespace
         this.connections.delete(id)
         if (this.connections.size === 0) {
             this.stopHeartbeat()
+        }
+        // 广播在线用户更新
+        if (namespace) {
+            this.broadcastOnlineUsers(namespace)
         }
     }
 
@@ -128,5 +150,70 @@ export class SSEManager {
         }
 
         return false
+    }
+
+    /**
+     * 获取指定 namespace 的所有在线用户
+     */
+    getOnlineUsers(namespace: string): OnlineUser[] {
+        const usersMap = new Map<string, OnlineUser>()  // 用 clientId 去重
+
+        for (const conn of this.connections.values()) {
+            if (conn.namespace !== namespace) continue
+            if (!conn.email || !conn.clientId) continue
+
+            // 用 clientId 作为 key，如果有多个连接（如多个 tab），取最新的
+            usersMap.set(conn.clientId, {
+                email: conn.email,
+                clientId: conn.clientId,
+                deviceType: conn.deviceType,
+                sessionId: conn.sessionId
+            })
+        }
+
+        return Array.from(usersMap.values())
+    }
+
+    /**
+     * 获取指定 session 的所有查看者
+     */
+    getSessionViewers(namespace: string, sessionId: string): OnlineUser[] {
+        const usersMap = new Map<string, OnlineUser>()
+
+        for (const conn of this.connections.values()) {
+            if (conn.namespace !== namespace) continue
+            if (conn.sessionId !== sessionId) continue
+            if (!conn.email || !conn.clientId) continue
+
+            usersMap.set(conn.clientId, {
+                email: conn.email,
+                clientId: conn.clientId,
+                deviceType: conn.deviceType,
+                sessionId: conn.sessionId
+            })
+        }
+
+        return Array.from(usersMap.values())
+    }
+
+    /**
+     * 广播在线用户更新事件
+     */
+    private broadcastOnlineUsers(namespace: string): void {
+        const onlineUsers = this.getOnlineUsers(namespace)
+        const event: SyncEvent = {
+            type: 'online-users-changed',
+            namespace,
+            users: onlineUsers
+        }
+
+        for (const connection of this.connections.values()) {
+            if (connection.namespace !== namespace) continue
+            if (!connection.all) continue  // 只给订阅 all 的连接发送
+
+            void Promise.resolve(connection.send(event)).catch(() => {
+                this.unsubscribe(connection.id)
+            })
+        }
     }
 }

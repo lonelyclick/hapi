@@ -147,6 +147,14 @@ export type SyncEventType =
     | 'message-received'
     | 'machine-updated'
     | 'connection-changed'
+    | 'online-users-changed'
+
+export type OnlineUser = {
+    email: string
+    clientId: string
+    deviceType?: string
+    sessionId: string | null
+}
 
 export interface SyncEvent {
     type: SyncEventType
@@ -155,6 +163,7 @@ export interface SyncEvent {
     machineId?: string
     data?: unknown
     message?: DecryptedMessage
+    users?: OnlineUser[]
 }
 
 export type SyncEventListener = (event: SyncEvent) => void

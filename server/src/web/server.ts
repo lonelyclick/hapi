@@ -19,6 +19,7 @@ import { createCliRoutes } from './routes/cli'
 import { createSpeechRoutes } from './routes/speech'
 import { createOptimizeRoutes } from './routes/optimize'
 import { createVersionRoutes } from './routes/version'
+import { createSettingsRoutes } from './routes/settings'
 import type { SSEManager } from '../sse/sseManager'
 import type { Server as BunServer } from 'bun'
 import type { Server as SocketEngine } from '@socket.io/bun-engine'
@@ -94,7 +95,7 @@ function createWebApp(options: {
 
     app.use('/api/*', createAuthMiddleware(options.jwtSecret))
     app.route('/api', createEventsRoutes(options.getSseManager, options.getSyncEngine))
-    app.route('/api', createSessionsRoutes(options.getSyncEngine))
+    app.route('/api', createSessionsRoutes(options.getSyncEngine, options.getSseManager))
     app.route('/api', createMessagesRoutes(options.getSyncEngine))
     app.route('/api', createPermissionsRoutes(options.getSyncEngine))
     app.route('/api', createMachinesRoutes(options.getSyncEngine))
@@ -102,6 +103,7 @@ function createWebApp(options: {
     app.route('/api', createSpeechRoutes())
     app.route('/api', createOptimizeRoutes())
     app.route('/api', createVersionRoutes(options.embeddedAssetMap))
+    app.route('/api', createSettingsRoutes(options.store))
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap

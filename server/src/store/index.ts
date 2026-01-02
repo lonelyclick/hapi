@@ -267,6 +267,12 @@ export class Store {
                 UNIQUE(platform, platform_user_id)
             );
             CREATE INDEX IF NOT EXISTS idx_users_platform ON users(platform);
+
+            CREATE TABLE IF NOT EXISTS allowed_emails (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                created_at INTEGER NOT NULL
+            );
         `)
 
         // Step 2: Migrate existing tables (add missing columns)
@@ -747,5 +753,48 @@ export class Store {
             'DELETE FROM users WHERE platform = ? AND platform_user_id = ?'
         ).run(platform, platformUserId)
         return result.changes > 0
+    }
+
+    // 邮箱白名单管理
+    getAllowedEmails(): string[] {
+        const rows = this.db.prepare(
+            'SELECT email FROM allowed_emails ORDER BY created_at ASC'
+        ).all() as Array<{ email: string }>
+        return rows.map(r => r.email)
+    }
+
+    addAllowedEmail(email: string): boolean {
+        try {
+            const normalizedEmail = email.toLowerCase().trim()
+            const now = Date.now()
+            this.db.prepare(`
+                INSERT OR IGNORE INTO allowed_emails (email, created_at)
+                VALUES (@email, @created_at)
+            `).run({
+                email: normalizedEmail,
+                created_at: now
+            })
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    removeAllowedEmail(email: string): boolean {
+        const normalizedEmail = email.toLowerCase().trim()
+        const result = this.db.prepare(
+            'DELETE FROM allowed_emails WHERE email = ?'
+        ).run(normalizedEmail)
+        return result.changes > 0
+    }
+
+    isEmailAllowed(email: string): boolean {
+        const allowedEmails = this.getAllowedEmails()
+        // 如果白名单为空，允许所有
+        if (allowedEmails.length === 0) {
+            return true
+        }
+        const normalizedEmail = email.toLowerCase().trim()
+        return allowedEmails.includes(normalizedEmail)
     }
 }

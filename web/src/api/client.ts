@@ -1,4 +1,6 @@
 import type {
+    AddEmailResponse,
+    AllowedEmailsResponse,
     AuthResponse,
     DeleteSessionResponse,
     FileReadResponse,
@@ -7,6 +9,8 @@ import type {
     MachinePathsExistsResponse,
     MachinesResponse,
     MessagesResponse,
+    OnlineUsersResponse,
+    RemoveEmailResponse,
     SlashCommandsResponse,
     SpeechToTextStreamRequest,
     SpeechToTextStreamResponse,
@@ -116,7 +120,7 @@ export class ApiClient {
         return await res.json() as T
     }
 
-    async authenticate(auth: { initData: string } | { accessToken: string }): Promise<AuthResponse> {
+    async authenticate(auth: { initData: string } | { accessToken: string; email?: string; clientId?: string; deviceType?: string }): Promise<AuthResponse> {
         const res = await fetch(this.buildUrl('/api/auth'), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -355,6 +359,29 @@ export class ApiClient {
         return await this.request<{ optimized: string }>('/api/optimize', {
             method: 'POST',
             body: JSON.stringify({ text })
+        })
+    }
+
+    async getOnlineUsers(): Promise<OnlineUsersResponse> {
+        return await this.request<OnlineUsersResponse>('/api/online-users')
+    }
+
+    // 邮箱白名单管理
+    async getAllowedEmails(): Promise<AllowedEmailsResponse> {
+        return await this.request<AllowedEmailsResponse>('/api/settings/allowed-emails')
+    }
+
+    async addAllowedEmail(email: string): Promise<AddEmailResponse> {
+        return await this.request<AddEmailResponse>('/api/settings/allowed-emails', {
+            method: 'POST',
+            body: JSON.stringify({ email })
+        })
+    }
+
+    async removeAllowedEmail(email: string): Promise<RemoveEmailResponse> {
+        return await this.request<RemoveEmailResponse>('/api/settings/allowed-emails', {
+            method: 'DELETE',
+            body: JSON.stringify({ email })
         })
     }
 }

@@ -149,6 +149,11 @@ export function App() {
     }, [queryClient, selectedSessionId, startSync, endSync])
 
     const handleSseEvent = useCallback((event: SyncEvent) => {
+        if (event.type === 'online-users-changed') {
+            // 更新在线用户缓存
+            queryClient.setQueryData(queryKeys.onlineUsers, { users: event.users })
+            return
+        }
         if (event.type !== 'session-removed') {
             return
         }
@@ -156,7 +161,7 @@ export function App() {
             return
         }
         navigate({ to: '/sessions', replace: true })
-    }, [navigate, selectedSessionId])
+    }, [navigate, selectedSessionId, queryClient])
 
     const eventSubscription = useMemo(() => {
         // Exclude "new" which is a route, not a real session ID
