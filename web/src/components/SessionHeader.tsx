@@ -88,6 +88,18 @@ function getAgentLabel(session: Session): string {
     return 'Agent'
 }
 
+function formatRuntimeModel(session: Session): string | null {
+    const model = session.metadata?.runtimeModel?.trim()
+    if (!model) {
+        return null
+    }
+    const effort = session.metadata?.runtimeModelReasoningEffort
+    if (effort) {
+        return `${model} (${effort})`
+    }
+    return model
+}
+
 export function SessionHeader(props: {
     session: Session
     viewers?: SessionViewer[]
@@ -99,9 +111,19 @@ export function SessionHeader(props: {
     const title = useMemo(() => getSessionTitle(props.session), [props.session])
     const worktreeBranch = props.session.metadata?.worktree?.branch
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
+    const runtimeModel = useMemo(() => formatRuntimeModel(props.session), [props.session])
     const agentMeta = useMemo(
-        () => (worktreeBranch ? `${agentLabel} • ${worktreeBranch}` : agentLabel),
-        [agentLabel, worktreeBranch]
+        () => {
+            const parts = [agentLabel]
+            if (runtimeModel) {
+                parts.push(runtimeModel)
+            }
+            if (worktreeBranch) {
+                parts.push(worktreeBranch)
+            }
+            return parts.join(' • ')
+        },
+        [agentLabel, runtimeModel, worktreeBranch]
     )
 
     // In Telegram, don't render header (Telegram provides its own)

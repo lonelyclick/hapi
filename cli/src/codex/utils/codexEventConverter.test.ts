@@ -11,6 +11,23 @@ describe('convertCodexEvent', () => {
         expect(result).toEqual({ sessionId: 'session-123' });
     });
 
+    it('extracts model info from turn_context', () => {
+        const result = convertCodexEvent({
+            type: 'turn_context',
+            payload: {
+                model: 'gpt-5.2-codex',
+                effort: 'xhigh'
+            }
+        });
+
+        expect(result).toEqual({
+            modelInfo: {
+                model: 'gpt-5.2-codex',
+                reasoningEffort: 'xhigh'
+            }
+        });
+    });
+
     it('converts agent_message events', () => {
         const result = convertCodexEvent({
             type: 'event_msg',

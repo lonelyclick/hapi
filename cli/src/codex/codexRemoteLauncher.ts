@@ -278,6 +278,10 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
     client.setPermissionHandler(permissionHandler);
     client.setHandler((msg) => {
         logger.debug(`[Codex] MCP message: ${JSON.stringify(msg)}`);
+        const converted = convertCodexEvent(msg);
+        if (converted?.modelInfo) {
+            session.updateRuntimeModel(converted.modelInfo.model, converted.modelInfo.reasoningEffort ?? null);
+        }
 
         if (msg.type === 'agent_message') {
             messageBuffer.addMessage(msg.message, 'assistant');

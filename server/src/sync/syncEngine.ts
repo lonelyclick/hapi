@@ -29,6 +29,8 @@ export const MetadataSchema = z.object({
     machineId: z.string().optional(),
     tools: z.array(z.string()).optional(),
     flavor: z.string().nullish(),
+    runtimeModel: z.string().optional(),
+    runtimeModelReasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
     worktree: z.object({
         basePath: z.string(),
         branch: z.string(),

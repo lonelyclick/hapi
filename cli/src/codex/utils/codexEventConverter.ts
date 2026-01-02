@@ -38,10 +38,16 @@ export type CodexMessage = {
     id: string;
 };
 
+export type CodexModelInfo = {
+    model: string;
+    reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+};
+
 export type CodexConversionResult = {
     sessionId?: string;
     message?: CodexMessage;
     userMessage?: string;
+    modelInfo?: CodexModelInfo;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -91,6 +97,26 @@ function extractCallId(payload: Record<string, unknown>): string | null {
     return null;
 }
 
+const MODEL_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh']);
+
+function extractModelInfo(payload: Record<string, unknown>): CodexModelInfo | null {
+    const model = asString(payload.model)
+        ?? asString(payload.model_name)
+        ?? asString(payload.modelName)
+        ?? asString(payload.model_id)
+        ?? asString(payload.modelId);
+    if (!model) {
+        return null;
+    }
+
+    const effortRaw = asString(payload.effort)
+        ?? asString(payload.reasoning_effort)
+        ?? asString(payload.reasoningEffort);
+    const reasoningEffort = effortRaw && MODEL_EFFORTS.has(effortRaw) ? effortRaw as CodexModelInfo['reasoningEffort'] : undefined;
+
+    return { model, reasoningEffort };
+}
+
 export function convertCodexEvent(rawEvent: unknown): CodexConversionResult | null {
     const parsed = CodexSessionEventSchema.safeParse(rawEvent);
     if (!parsed.success) {
@@ -99,17 +125,34 @@ export function convertCodexEvent(rawEvent: unknown): CodexConversionResult | nu
 
     const { type, payload } = parsed.data;
     const payloadRecord = asRecord(payload);
+    const eventRecord = asRecord(parsed.data);
 
     if (type === 'session_meta') {
         const sessionId = payloadRecord ? asString(payloadRecord.id) : null;
-        if (!sessionId) {
+        const modelInfo = payloadRecord ? extractModelInfo(payloadRecord) : null;
+        if (!sessionId && !modelInfo) {
             return null;
         }
-        return { sessionId };
+        const result: CodexConversionResult = {};
+        if (sessionId) {
+            result.sessionId = sessionId;
+        }
+        if (modelInfo) {
+            result.modelInfo = modelInfo;
+        }
+        return result;
     }
 
     if (!payloadRecord) {
         return null;
+    }
+
+    if (type === 'turn_context') {
+        const modelInfo = extractModelInfo(payloadRecord ?? eventRecord ?? {});
+        if (!modelInfo) {
+            return null;
+        }
+        return { modelInfo };
     }
 
     if (type === 'event_msg') {

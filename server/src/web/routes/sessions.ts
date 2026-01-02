@@ -11,6 +11,8 @@ type SessionSummaryMetadata = {
     machineId?: string
     summary?: { text: string }
     flavor?: string | null
+    runtimeModel?: string
+    runtimeModelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     worktree?: {
         basePath: string
         branch: string
@@ -48,6 +50,8 @@ function toSessionSummary(session: Session): SessionSummary {
         machineId: session.metadata.machineId ?? undefined,
         summary: session.metadata.summary ? { text: session.metadata.summary.text } : undefined,
         flavor: session.metadata.flavor ?? null,
+        runtimeModel: session.metadata.runtimeModel,
+        runtimeModelReasoningEffort: session.metadata.runtimeModelReasoningEffort,
         worktree: session.metadata.worktree
     } : null
 

@@ -21,6 +21,8 @@ export type SessionMetadataSummary = {
     machineId?: string
     tools?: string[]
     flavor?: string | null
+    runtimeModel?: string
+    runtimeModelReasoningEffort?: ModelReasoningEffort
     worktree?: WorktreeMetadata
 }
 
@@ -76,6 +78,8 @@ export type SessionSummaryMetadata = {
     machineId?: string
     summary?: { text: string }
     flavor?: string | null
+    runtimeModel?: string
+    runtimeModelReasoningEffort?: ModelReasoningEffort
     worktree?: WorktreeMetadata
 }
 

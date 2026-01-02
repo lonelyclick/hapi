@@ -4,6 +4,7 @@ import { AgentSessionBase } from '@/agent/sessionBase';
 import type { EnhancedMode, PermissionMode } from './loop';
 import type { CodexCliOverrides } from './utils/codexCliOverrides';
 import type { LocalLaunchExitReason } from '@/agent/localLaunchPolicy';
+import type { SessionModelReasoningEffort } from '@/api/types';
 
 type LocalLaunchFailure = {
     message: string;
@@ -16,6 +17,8 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
     readonly startedBy: 'daemon' | 'terminal';
     readonly startingMode: 'local' | 'remote';
     localLaunchFailure: LocalLaunchFailure | null = null;
+    private runtimeModel: string | null = null;
+    private runtimeModelReasoningEffort: SessionModelReasoningEffort | null = null;
 
     constructor(opts: {
         api: ApiClient;
@@ -59,6 +62,24 @@ export class CodexSession extends AgentSessionBase<EnhancedMode> {
 
     setPermissionMode = (mode: PermissionMode): void => {
         this.permissionMode = mode;
+    };
+
+    updateRuntimeModel = (model: string, reasoningEffort?: SessionModelReasoningEffort | null): void => {
+        const normalizedModel = model.trim();
+        if (!normalizedModel) {
+            return;
+        }
+        const normalizedEffort = reasoningEffort ?? null;
+        if (this.runtimeModel === normalizedModel && this.runtimeModelReasoningEffort === normalizedEffort) {
+            return;
+        }
+        this.runtimeModel = normalizedModel;
+        this.runtimeModelReasoningEffort = normalizedEffort;
+        this.client.updateMetadata((metadata) => ({
+            ...metadata,
+            runtimeModel: normalizedModel,
+            runtimeModelReasoningEffort: normalizedEffort ?? undefined
+        }));
     };
 
     recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {
