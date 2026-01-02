@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
-import type { Session } from '@/types/api'
+import type { Session, SessionViewer } from '@/types/api'
 import { isTelegramApp } from '@/hooks/useTelegram'
+import { ViewersBadge } from './ViewersBadge'
 
 function getSessionTitle(session: Session): string {
     if (session.metadata?.name) {
@@ -89,6 +90,7 @@ function getAgentLabel(session: Session): string {
 
 export function SessionHeader(props: {
     session: Session
+    viewers?: SessionViewer[]
     onBack: () => void
     onViewFiles?: () => void
     onDelete?: () => void
@@ -126,8 +128,11 @@ export function SessionHeader(props: {
                     </div>
                 </div>
 
-                {/* Right side: Action buttons */}
+                {/* Right side: Viewers + Action buttons */}
                 <div className="flex items-center gap-1.5 shrink-0">
+                    {props.viewers && props.viewers.length > 0 && (
+                        <ViewersBadge viewers={props.viewers} />
+                    )}
                     {props.onViewFiles ? (
                         <button
                             type="button"

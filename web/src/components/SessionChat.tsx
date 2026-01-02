@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session } from '@/types/api'
+import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session, SessionViewer } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
@@ -19,6 +19,7 @@ import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 export function SessionChat(props: {
     api: ApiClient
     session: Session
+    viewers?: SessionViewer[]
     messages: DecryptedMessage[]
     messagesWarning: string | null
     hasMoreMessages: boolean
@@ -170,6 +171,7 @@ export function SessionChat(props: {
         <div className="flex h-full flex-col">
             <SessionHeader
                 session={props.session}
+                viewers={props.viewers}
                 onBack={props.onBack}
                 onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
                 onDelete={handleDeleteClick}

@@ -23,6 +23,7 @@ import { useSessions } from '@/hooks/queries/useSessions'
 import { useOnlineUsers } from '@/hooks/queries/useOnlineUsers'
 import { useSlashCommands } from '@/hooks/queries/useSlashCommands'
 import { useFileSuggestions } from '@/hooks/queries/useFileSuggestions'
+import { useSessionViewers } from '@/hooks/queries/useSessionViewers'
 import { useSendMessage } from '@/hooks/mutations/useSendMessage'
 import { queryKeys } from '@/lib/query-keys'
 import FilesPage from '@/routes/sessions/files'
@@ -220,6 +221,7 @@ function SessionPage() {
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const { sessionId } = useParams({ from: '/sessions/$sessionId' })
+    const viewers = useSessionViewers(sessionId)
     const {
         session,
         notFound,
@@ -284,6 +286,7 @@ function SessionPage() {
         <SessionChat
             api={api}
             session={session}
+            viewers={viewers}
             messages={messages}
             messagesWarning={messagesWarning}
             hasMoreMessages={messagesHasMore}
