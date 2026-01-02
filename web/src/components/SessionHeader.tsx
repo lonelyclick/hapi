@@ -99,6 +99,10 @@ export function SessionHeader(props: {
     const title = useMemo(() => getSessionTitle(props.session), [props.session])
     const worktreeBranch = props.session.metadata?.worktree?.branch
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
+    const agentMeta = useMemo(
+        () => (worktreeBranch ? `${agentLabel} • ${worktreeBranch}` : agentLabel),
+        [agentLabel, worktreeBranch]
+    )
 
     // In Telegram, don't render header (Telegram provides its own)
     if (isTelegramApp()) {
@@ -121,17 +125,22 @@ export function SessionHeader(props: {
                         <div className="truncate font-medium text-sm">
                             {title}
                         </div>
-                        <div className="text-[10px] text-[var(--app-hint)] truncate">
-                            {agentLabel}
-                            {worktreeBranch ? ` • ${worktreeBranch}` : ''}
+                        <div className="hidden sm:block text-[10px] text-[var(--app-hint)] truncate">
+                            {agentMeta}
                         </div>
                     </div>
                 </div>
 
                 {/* Right side: Viewers + Action buttons */}
                 <div className="flex w-full flex-wrap items-center justify-end gap-1.5 shrink-0 sm:w-auto">
+                    <span
+                        className="sm:hidden shrink-0 rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--app-hint)]"
+                        title={agentMeta}
+                    >
+                        {agentLabel}
+                    </span>
                     {props.viewers && props.viewers.length > 0 && (
-                        <ViewersBadge viewers={props.viewers} />
+                        <ViewersBadge viewers={props.viewers} compact />
                     )}
                     {props.onViewFiles ? (
                         <button
