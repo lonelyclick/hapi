@@ -327,12 +327,13 @@ export function SessionList(props: {
                     return (
                         <div
                             key={groupKey}
-                            className="rounded-lg overflow-hidden bg-[var(--app-subtle-bg)]"
+                            className="rounded-lg bg-[var(--app-subtle-bg)]"
                         >
                             {/* Group header */}
                             <button
                                 type="button"
                                 onClick={() => toggleGroup(group, isCollapsed)}
+                                title={group.projectPath ?? group.projectName}
                                 className="
                                     flex w-full items-center gap-2 px-3 py-2
                                     text-left transition-colors
@@ -344,10 +345,7 @@ export function SessionList(props: {
                                     collapsed={isCollapsed}
                                 />
                                 <FolderIcon className="shrink-0 text-[var(--app-hint)]" />
-                                <span
-                                    className="truncate text-sm font-medium"
-                                    title={group.projectPath ?? group.projectName}
-                                >
+                                <span className="truncate text-sm font-medium">
                                     {group.projectName}
                                 </span>
                                 <div className="flex items-center gap-1.5 ml-auto shrink-0">

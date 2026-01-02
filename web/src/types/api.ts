@@ -92,9 +92,18 @@ export type OnlineUser = {
     sessionId: string | null
 }
 
-export type AllowedEmailsResponse = { emails: string[] }
-export type AddEmailResponse = { ok: true; emails: string[] }
-export type RemoveEmailResponse = { ok: true; emails: string[] }
+export type UserRole = 'developer' | 'operator'
+
+export type User = {
+    email: string
+    role: UserRole
+    createdAt: number
+}
+
+export type UsersResponse = { users: User[] }
+export type AddUserResponse = { ok: true; users: User[] }
+export type UpdateUserRoleResponse = { ok: true; users: User[] }
+export type RemoveUserResponse = { ok: true; users: User[] }
 
 export type Project = {
     id: string

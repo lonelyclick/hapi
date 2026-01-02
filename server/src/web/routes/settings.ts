@@ -1,13 +1,20 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
-import type { Store } from '../../store'
+import type { Store, UserRole } from '../../store'
 
-const addEmailSchema = z.object({
-    email: z.string().email()
+const userRoleSchema = z.enum(['developer', 'operator'])
+
+const addUserSchema = z.object({
+    email: z.string().email(),
+    role: userRoleSchema.optional().default('developer')
 })
 
-const removeEmailSchema = z.object({
+const updateUserRoleSchema = z.object({
+    role: userRoleSchema
+})
+
+const removeUserSchema = z.object({
     email: z.string().email()
 })
 
@@ -26,44 +33,64 @@ const updateProjectSchema = z.object({
 export function createSettingsRoutes(store: Store): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
-    // 获取所有允许的邮箱
-    app.get('/settings/allowed-emails', (c) => {
-        const emails = store.getAllowedEmails()
-        return c.json({ emails })
+    // ==================== 用户管理 (合并了 Allowed Emails) ====================
+
+    // 获取所有用户
+    app.get('/settings/users', (_c) => {
+        const users = store.getAllowedUsers()
+        return _c.json({ users })
     })
 
-    // 添加允许的邮箱
-    app.post('/settings/allowed-emails', async (c) => {
+    // 添加用户
+    app.post('/settings/users', async (c) => {
         const json = await c.req.json().catch(() => null)
-        const parsed = addEmailSchema.safeParse(json)
+        const parsed = addUserSchema.safeParse(json)
         if (!parsed.success) {
-            return c.json({ error: 'Invalid email format' }, 400)
+            return c.json({ error: 'Invalid user data' }, 400)
         }
 
-        const success = store.addAllowedEmail(parsed.data.email)
+        const success = store.addAllowedEmail(parsed.data.email, parsed.data.role as UserRole)
         if (!success) {
-            return c.json({ error: 'Failed to add email' }, 500)
+            return c.json({ error: 'Failed to add user' }, 500)
         }
 
-        const emails = store.getAllowedEmails()
-        return c.json({ ok: true, emails })
+        const users = store.getAllowedUsers()
+        return c.json({ ok: true, users })
     })
 
-    // 删除允许的邮箱
-    app.delete('/settings/allowed-emails', async (c) => {
+    // 更新用户角色
+    app.put('/settings/users/:email/role', async (c) => {
+        const email = decodeURIComponent(c.req.param('email'))
         const json = await c.req.json().catch(() => null)
-        const parsed = removeEmailSchema.safeParse(json)
+        const parsed = updateUserRoleSchema.safeParse(json)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid role' }, 400)
+        }
+
+        const success = store.updateAllowedEmailRole(email, parsed.data.role as UserRole)
+        if (!success) {
+            return c.json({ error: 'User not found' }, 404)
+        }
+
+        const users = store.getAllowedUsers()
+        return c.json({ ok: true, users })
+    })
+
+    // 删除用户
+    app.delete('/settings/users', async (c) => {
+        const json = await c.req.json().catch(() => null)
+        const parsed = removeUserSchema.safeParse(json)
         if (!parsed.success) {
             return c.json({ error: 'Invalid email format' }, 400)
         }
 
         const success = store.removeAllowedEmail(parsed.data.email)
         if (!success) {
-            return c.json({ error: 'Email not found' }, 404)
+            return c.json({ error: 'User not found' }, 404)
         }
 
-        const emails = store.getAllowedEmails()
-        return c.json({ ok: true, emails })
+        const users = store.getAllowedUsers()
+        return c.json({ ok: true, users })
     })
 
     // 获取所有项目

@@ -1,7 +1,6 @@
 import type {
-    AddEmailResponse,
     AddProjectResponse,
-    AllowedEmailsResponse,
+    AddUserResponse,
     AuthResponse,
     DeleteSessionResponse,
     FileReadResponse,
@@ -12,15 +11,17 @@ import type {
     MessagesResponse,
     OnlineUsersResponse,
     ProjectsResponse,
-    RemoveEmailResponse,
     RemoveProjectResponse,
+    RemoveUserResponse,
     SlashCommandsResponse,
     SpeechToTextStreamRequest,
     SpeechToTextStreamResponse,
     SpawnResponse,
     SessionResponse,
     SessionsResponse,
-    UpdateProjectResponse
+    UpdateProjectResponse,
+    UpdateUserRoleResponse,
+    UsersResponse
 } from '@/types/api'
 
 type ApiClientOptions = {
@@ -370,25 +371,6 @@ export class ApiClient {
         return await this.request<OnlineUsersResponse>('/api/online-users')
     }
 
-    // 邮箱白名单管理
-    async getAllowedEmails(): Promise<AllowedEmailsResponse> {
-        return await this.request<AllowedEmailsResponse>('/api/settings/allowed-emails')
-    }
-
-    async addAllowedEmail(email: string): Promise<AddEmailResponse> {
-        return await this.request<AddEmailResponse>('/api/settings/allowed-emails', {
-            method: 'POST',
-            body: JSON.stringify({ email })
-        })
-    }
-
-    async removeAllowedEmail(email: string): Promise<RemoveEmailResponse> {
-        return await this.request<RemoveEmailResponse>('/api/settings/allowed-emails', {
-            method: 'DELETE',
-            body: JSON.stringify({ email })
-        })
-    }
-
     // 项目管理
     async getProjects(): Promise<ProjectsResponse> {
         return await this.request<ProjectsResponse>('/api/settings/projects')
@@ -411,6 +393,35 @@ export class ApiClient {
     async removeProject(id: string): Promise<RemoveProjectResponse> {
         return await this.request<RemoveProjectResponse>(`/api/settings/projects/${encodeURIComponent(id)}`, {
             method: 'DELETE'
+        })
+    }
+
+    // 用户管理
+    async getUsers(): Promise<UsersResponse> {
+        return await this.request<UsersResponse>('/api/settings/users')
+    }
+
+    async addUser(email: string, role: 'developer' | 'operator' = 'developer'): Promise<AddUserResponse> {
+        return await this.request<AddUserResponse>('/api/settings/users', {
+            method: 'POST',
+            body: JSON.stringify({ email, role })
+        })
+    }
+
+    async updateUserRole(email: string, role: 'developer' | 'operator'): Promise<UpdateUserRoleResponse> {
+        return await this.request<UpdateUserRoleResponse>(
+            `/api/settings/users/${encodeURIComponent(email)}/role`,
+            {
+                method: 'PUT',
+                body: JSON.stringify({ role })
+            }
+        )
+    }
+
+    async removeUser(email: string): Promise<RemoveUserResponse> {
+        return await this.request<RemoveUserResponse>('/api/settings/users', {
+            method: 'DELETE',
+            body: JSON.stringify({ email })
         })
     }
 }

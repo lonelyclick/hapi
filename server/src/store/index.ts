@@ -44,11 +44,14 @@ export type StoredMessage = {
     localId: string | null
 }
 
+export type UserRole = 'developer' | 'operator'
+
 export type StoredUser = {
     id: number
     platform: string
     platformUserId: string
     namespace: string
+    role: UserRole
     createdAt: number
 }
 
@@ -103,6 +106,7 @@ type DbUserRow = {
     platform: string
     platform_user_id: string
     namespace: string
+    role: string
     created_at: number
 }
 
@@ -168,6 +172,7 @@ function toStoredUser(row: DbUserRow): StoredUser {
         platform: row.platform,
         platformUserId: row.platform_user_id,
         namespace: row.namespace,
+        role: (row.role === 'operator' ? 'operator' : 'developer') as UserRole,
         createdAt: row.created_at
     }
 }
@@ -271,6 +276,7 @@ export class Store {
             CREATE TABLE IF NOT EXISTS allowed_emails (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT NOT NULL UNIQUE,
+                role TEXT NOT NULL DEFAULT 'developer',
                 created_at INTEGER NOT NULL
             );
 
@@ -308,6 +314,16 @@ export class Store {
         const userColumnNames = new Set(userColumns.map((c) => c.name))
         if (!userColumnNames.has('namespace')) {
             this.db.exec("ALTER TABLE users ADD COLUMN namespace TEXT NOT NULL DEFAULT 'default'")
+        }
+        if (!userColumnNames.has('role')) {
+            this.db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'developer'")
+        }
+
+        // Migrate allowed_emails table to add role column
+        const allowedEmailsColumns = this.db.prepare('PRAGMA table_info(allowed_emails)').all() as Array<{ name: string }>
+        const allowedEmailsColumnNames = new Set(allowedEmailsColumns.map((c) => c.name))
+        if (!allowedEmailsColumnNames.has('role')) {
+            this.db.exec("ALTER TABLE allowed_emails ADD COLUMN role TEXT NOT NULL DEFAULT 'developer'")
         }
 
         // Step 3: Create indexes that depend on namespace column (after migration)
@@ -735,18 +751,19 @@ export class Store {
         return rows.map(toStoredUser)
     }
 
-    addUser(platform: string, platformUserId: string, namespace: string): StoredUser {
+    addUser(platform: string, platformUserId: string, namespace: string, role: UserRole = 'developer'): StoredUser {
         const now = Date.now()
         this.db.prepare(`
             INSERT OR IGNORE INTO users (
-                platform, platform_user_id, namespace, created_at
+                platform, platform_user_id, namespace, role, created_at
             ) VALUES (
-                @platform, @platform_user_id, @namespace, @created_at
+                @platform, @platform_user_id, @namespace, @role, @created_at
             )
         `).run({
             platform,
             platform_user_id: platformUserId,
             namespace,
+            role,
             created_at: now
         })
 
@@ -757,6 +774,13 @@ export class Store {
         return row
     }
 
+    updateUserRole(platform: string, platformUserId: string, role: UserRole): boolean {
+        const result = this.db.prepare(
+            'UPDATE users SET role = ? WHERE platform = ? AND platform_user_id = ?'
+        ).run(role, platform, platformUserId)
+        return result.changes > 0
+    }
+
     removeUser(platform: string, platformUserId: string): boolean {
         const result = this.db.prepare(
             'DELETE FROM users WHERE platform = ? AND platform_user_id = ?'
@@ -764,7 +788,7 @@ export class Store {
         return result.changes > 0
     }
 
-    // 邮箱白名单管理
+    // 邮箱白名单/用户管理
     getAllowedEmails(): string[] {
         const rows = this.db.prepare(
             'SELECT email FROM allowed_emails ORDER BY created_at ASC'
@@ -772,21 +796,41 @@ export class Store {
         return rows.map(r => r.email)
     }
 
-    addAllowedEmail(email: string): boolean {
+    getAllowedUsers(): Array<{ email: string; role: UserRole; createdAt: number }> {
+        const rows = this.db.prepare(
+            'SELECT email, role, created_at FROM allowed_emails ORDER BY created_at ASC'
+        ).all() as Array<{ email: string; role: string; created_at: number }>
+        return rows.map(r => ({
+            email: r.email,
+            role: (r.role === 'operator' ? 'operator' : 'developer') as UserRole,
+            createdAt: r.created_at
+        }))
+    }
+
+    addAllowedEmail(email: string, role: UserRole = 'developer'): boolean {
         try {
             const normalizedEmail = email.toLowerCase().trim()
             const now = Date.now()
             this.db.prepare(`
-                INSERT OR IGNORE INTO allowed_emails (email, created_at)
-                VALUES (@email, @created_at)
+                INSERT OR IGNORE INTO allowed_emails (email, role, created_at)
+                VALUES (@email, @role, @created_at)
             `).run({
                 email: normalizedEmail,
+                role,
                 created_at: now
             })
             return true
         } catch {
             return false
         }
+    }
+
+    updateAllowedEmailRole(email: string, role: UserRole): boolean {
+        const normalizedEmail = email.toLowerCase().trim()
+        const result = this.db.prepare(
+            'UPDATE allowed_emails SET role = ? WHERE email = ?'
+        ).run(role, normalizedEmail)
+        return result.changes > 0
     }
 
     removeAllowedEmail(email: string): boolean {
@@ -805,6 +849,15 @@ export class Store {
         }
         const normalizedEmail = email.toLowerCase().trim()
         return allowedEmails.includes(normalizedEmail)
+    }
+
+    getEmailRole(email: string): UserRole | null {
+        const normalizedEmail = email.toLowerCase().trim()
+        const row = this.db.prepare(
+            'SELECT role FROM allowed_emails WHERE email = ?'
+        ).get(normalizedEmail) as { role: string } | undefined
+        if (!row) return null
+        return (row.role === 'operator' ? 'operator' : 'developer') as UserRole
     }
 
     // 项目管理

@@ -4,7 +4,7 @@ import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
 import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
-import type { Project } from '@/types/api'
+import type { Project, UserRole } from '@/types/api'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -160,11 +160,13 @@ export default function SettingsPage() {
     const { api } = useAppContext()
     const goBack = useAppGoBack()
     const queryClient = useQueryClient()
-    const [newEmail, setNewEmail] = useState('')
-    const [error, setError] = useState<string | null>(null)
     const [projectError, setProjectError] = useState<string | null>(null)
     const [showAddProject, setShowAddProject] = useState(false)
     const [editingProject, setEditingProject] = useState<Project | null>(null)
+    const [userError, setUserError] = useState<string | null>(null)
+    const [showAddUser, setShowAddUser] = useState(false)
+    const [newUserEmail, setNewUserEmail] = useState('')
+    const [newUserRole, setNewUserRole] = useState<UserRole>('developer')
 
     // 当前会话信息
     const currentSession = useMemo(() => ({
@@ -172,44 +174,6 @@ export default function SettingsPage() {
         clientId: getClientId(),
         deviceType: getDeviceType()
     }), [])
-
-    // Allowed Emails
-    const { data: emailsData, isLoading: emailsLoading } = useQuery({
-        queryKey: ['allowed-emails'],
-        queryFn: async () => {
-            if (!api) throw new Error('API unavailable')
-            return await api.getAllowedEmails()
-        },
-        enabled: Boolean(api)
-    })
-
-    const addEmailMutation = useMutation({
-        mutationFn: async (email: string) => {
-            if (!api) throw new Error('API unavailable')
-            return await api.addAllowedEmail(email)
-        },
-        onSuccess: (result) => {
-            queryClient.setQueryData(['allowed-emails'], { emails: result.emails })
-            setNewEmail('')
-            setError(null)
-        },
-        onError: (err) => {
-            setError(err instanceof Error ? err.message : 'Failed to add email')
-        }
-    })
-
-    const removeEmailMutation = useMutation({
-        mutationFn: async (email: string) => {
-            if (!api) throw new Error('API unavailable')
-            return await api.removeAllowedEmail(email)
-        },
-        onSuccess: (result) => {
-            queryClient.setQueryData(['allowed-emails'], { emails: result.emails })
-        },
-        onError: (err) => {
-            setError(err instanceof Error ? err.message : 'Failed to remove email')
-        }
-    })
 
     // Projects
     const { data: projectsData, isLoading: projectsLoading } = useQuery({
@@ -264,17 +228,6 @@ export default function SettingsPage() {
         }
     })
 
-    const handleAddEmail = useCallback((e: React.FormEvent) => {
-        e.preventDefault()
-        const trimmedEmail = newEmail.trim().toLowerCase()
-        if (!trimmedEmail) return
-        addEmailMutation.mutate(trimmedEmail)
-    }, [newEmail, addEmailMutation])
-
-    const handleRemoveEmail = useCallback((email: string) => {
-        removeEmailMutation.mutate(email)
-    }, [removeEmailMutation])
-
     const handleAddProject = useCallback((data: ProjectFormData) => {
         addProjectMutation.mutate(data)
     }, [addProjectMutation])
@@ -288,8 +241,76 @@ export default function SettingsPage() {
         removeProjectMutation.mutate(id)
     }, [removeProjectMutation])
 
-    const emails = emailsData?.emails ?? []
+    // Users
+    const { data: usersData, isLoading: usersLoading } = useQuery({
+        queryKey: ['users'],
+        queryFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.getUsers()
+        },
+        enabled: Boolean(api)
+    })
+
+    const addUserMutation = useMutation({
+        mutationFn: async ({ email, role }: { email: string; role: UserRole }) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.addUser(email, role)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['users'], { users: result.users })
+            setShowAddUser(false)
+            setNewUserEmail('')
+            setNewUserRole('developer')
+            setUserError(null)
+        },
+        onError: (err) => {
+            setUserError(err instanceof Error ? err.message : 'Failed to add user')
+        }
+    })
+
+    const updateUserRoleMutation = useMutation({
+        mutationFn: async ({ email, role }: { email: string; role: UserRole }) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.updateUserRole(email, role)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['users'], { users: result.users })
+        },
+        onError: (err) => {
+            setUserError(err instanceof Error ? err.message : 'Failed to update user role')
+        }
+    })
+
+    const removeUserMutation = useMutation({
+        mutationFn: async (email: string) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.removeUser(email)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['users'], { users: result.users })
+        },
+        onError: (err) => {
+            setUserError(err instanceof Error ? err.message : 'Failed to remove user')
+        }
+    })
+
+    const handleAddUser = useCallback((e: React.FormEvent) => {
+        e.preventDefault()
+        const trimmedEmail = newUserEmail.trim().toLowerCase()
+        if (!trimmedEmail) return
+        addUserMutation.mutate({ email: trimmedEmail, role: newUserRole })
+    }, [newUserEmail, newUserRole, addUserMutation])
+
+    const handleUpdateUserRole = useCallback((email: string, role: UserRole) => {
+        updateUserRoleMutation.mutate({ email, role })
+    }, [updateUserRoleMutation])
+
+    const handleRemoveUser = useCallback((email: string) => {
+        removeUserMutation.mutate(email)
+    }, [removeUserMutation])
+
     const projects = projectsData?.projects ?? []
+    const users = usersData?.users ?? []
 
     return (
         <div className="flex h-full flex-col">
@@ -438,71 +459,120 @@ export default function SettingsPage() {
                         )}
                     </div>
 
-                    {/* Allowed Emails Section */}
+                    {/* Users Section */}
                     <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                        <div className="px-3 py-2 border-b border-[var(--app-divider)]">
-                            <h2 className="text-sm font-medium">Allowed Emails</h2>
-                            <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                Only these emails can login. Leave empty to allow all.
-                            </p>
+                        <div className="px-3 py-2 border-b border-[var(--app-divider)] flex items-center justify-between">
+                            <div>
+                                <h2 className="text-sm font-medium">Users</h2>
+                                <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                    Manage users and their roles. Leave empty to allow all.
+                                </p>
+                            </div>
+                            {!showAddUser && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddUser(true)}
+                                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] hover:opacity-90 transition-opacity"
+                                >
+                                    <PlusIcon className="w-3 h-3" />
+                                    Add
+                                </button>
+                            )}
                         </div>
 
-                        {/* Add Email Form */}
-                        <form onSubmit={handleAddEmail} className="px-3 py-2 border-b border-[var(--app-divider)] flex gap-2">
-                            <input
-                                type="email"
-                                value={newEmail}
-                                onChange={(e) => setNewEmail(e.target.value)}
-                                placeholder="email@company.com"
-                                className="flex-1 px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
-                                disabled={addEmailMutation.isPending}
-                            />
-                            <button
-                                type="submit"
-                                disabled={addEmailMutation.isPending || !newEmail.trim()}
-                                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] disabled:opacity-50 hover:opacity-90 transition-opacity"
-                            >
-                                {addEmailMutation.isPending ? (
-                                    <Spinner size="sm" label={null} />
-                                ) : (
-                                    <PlusIcon />
-                                )}
-                                Add
-                            </button>
-                        </form>
+                        {/* Add User Form */}
+                        {showAddUser && (
+                            <form onSubmit={handleAddUser} className="px-3 py-2 border-b border-[var(--app-divider)] space-y-2">
+                                <input
+                                    type="email"
+                                    value={newUserEmail}
+                                    onChange={(e) => setNewUserEmail(e.target.value)}
+                                    placeholder="email@company.com"
+                                    className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                                    disabled={addUserMutation.isPending}
+                                />
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        value={newUserRole}
+                                        onChange={(e) => setNewUserRole(e.target.value as UserRole)}
+                                        className="flex-1 px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                                        disabled={addUserMutation.isPending}
+                                    >
+                                        <option value="developer">Developer (full access)</option>
+                                        <option value="operator">Operator (execute only)</option>
+                                    </select>
+                                </div>
+                                <div className="flex justify-end gap-2 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowAddUser(false)
+                                            setNewUserEmail('')
+                                            setNewUserRole('developer')
+                                            setUserError(null)
+                                        }}
+                                        disabled={addUserMutation.isPending}
+                                        className="px-3 py-1.5 text-sm rounded border border-[var(--app-border)] text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={addUserMutation.isPending || !newUserEmail.trim()}
+                                        className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] disabled:opacity-50 hover:opacity-90 transition-opacity"
+                                    >
+                                        {addUserMutation.isPending && <Spinner size="sm" label={null} />}
+                                        Add User
+                                    </button>
+                                </div>
+                            </form>
+                        )}
 
-                        {error && (
+                        {userError && (
                             <div className="px-3 py-2 text-sm text-red-500 border-b border-[var(--app-divider)]">
-                                {error}
+                                {userError}
                             </div>
                         )}
 
-                        {/* Email List */}
-                        {emailsLoading ? (
+                        {/* User List */}
+                        {usersLoading ? (
                             <div className="px-3 py-4 flex justify-center">
                                 <Spinner size="sm" label="Loading..." />
                             </div>
-                        ) : emails.length === 0 ? (
+                        ) : users.length === 0 && !showAddUser ? (
                             <div className="px-3 py-4 text-center text-sm text-[var(--app-hint)]">
-                                No emails configured. All emails are allowed.
+                                No users configured. All emails are allowed.
                             </div>
                         ) : (
                             <div className="divide-y divide-[var(--app-divider)]">
-                                {emails.map((email) => (
+                                {users.map((user) => (
                                     <div
-                                        key={email}
+                                        key={user.email}
                                         className="px-3 py-2 flex items-center justify-between gap-2"
                                     >
-                                        <span className="text-sm truncate">{email}</span>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleRemoveEmail(email)}
-                                            disabled={removeEmailMutation.isPending}
-                                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-[var(--app-hint)] hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                                            title="Remove email"
-                                        >
-                                            <TrashIcon />
-                                        </button>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-sm truncate">{user.email}</div>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <select
+                                                value={user.role}
+                                                onChange={(e) => handleUpdateUserRole(user.email, e.target.value as UserRole)}
+                                                disabled={updateUserRoleMutation.isPending}
+                                                className="px-2 py-1 text-xs rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] disabled:opacity-50"
+                                            >
+                                                <option value="developer">Developer</option>
+                                                <option value="operator">Operator</option>
+                                            </select>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveUser(user.email)}
+                                                disabled={removeUserMutation.isPending}
+                                                className="flex h-7 w-7 items-center justify-center rounded text-[var(--app-hint)] hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                                title="Remove user"
+                                            >
+                                                <TrashIcon />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
