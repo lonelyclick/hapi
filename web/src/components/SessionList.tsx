@@ -1,36 +1,56 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { SessionSummary } from '@/types/api'
+import type { Project, SessionSummary } from '@/types/api'
 import { ViewersBadge } from './ViewersBadge'
 
 type SessionGroup = {
-    directory: string
-    displayName: string
+    projectId: string | null
+    projectName: string
+    projectPath: string | null
     sessions: SessionSummary[]
     latestUpdatedAt: number
     hasActiveSession: boolean
 }
 
-function getGroupDisplayName(directory: string): string {
-    if (directory === 'Other') return directory
-    const parts = directory.split(/[\\/]+/).filter(Boolean)
-    if (parts.length === 0) return directory
-    if (parts.length === 1) return parts[0]
-    return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`
+function getSessionPath(session: SessionSummary): string | null {
+    return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
 }
 
-function groupSessionsByDirectory(sessions: SessionSummary[]): SessionGroup[] {
-    const groups = new Map<string, SessionSummary[]>()
+function matchSessionToProject(session: SessionSummary, projects: Project[]): Project | null {
+    const sessionPath = getSessionPath(session)
+    if (!sessionPath) return null
+
+    // Exact match first
+    for (const project of projects) {
+        if (project.path === sessionPath) {
+            return project
+        }
+    }
+
+    // Check if session path starts with project path (for worktrees)
+    for (const project of projects) {
+        if (sessionPath.startsWith(project.path + '/') || sessionPath.startsWith(project.path + '-')) {
+            return project
+        }
+    }
+
+    return null
+}
+
+function groupSessionsByProject(sessions: SessionSummary[], projects: Project[]): SessionGroup[] {
+    const groups = new Map<string, { project: Project | null; sessions: SessionSummary[] }>()
 
     sessions.forEach(session => {
-        const path = session.metadata?.worktree?.basePath ?? session.metadata?.path ?? 'Other'
-        if (!groups.has(path)) {
-            groups.set(path, [])
+        const project = matchSessionToProject(session, projects)
+        const key = project?.id ?? '__other__'
+
+        if (!groups.has(key)) {
+            groups.set(key, { project, sessions: [] })
         }
-        groups.get(path)!.push(session)
+        groups.get(key)!.sessions.push(session)
     })
 
     return Array.from(groups.entries())
-        .map(([directory, groupSessions]) => {
+        .map(([key, { project, sessions: groupSessions }]) => {
             const sortedSessions = [...groupSessions].sort((a, b) => {
                 const rankA = a.active ? (a.pendingRequestsCount > 0 ? 0 : 1) : 2
                 const rankB = b.active ? (b.pendingRequestsCount > 0 ? 0 : 1) : 2
@@ -42,9 +62,15 @@ function groupSessionsByDirectory(sessions: SessionSummary[]): SessionGroup[] {
                 -Infinity
             )
             const hasActiveSession = groupSessions.some(s => s.active)
-            const displayName = getGroupDisplayName(directory)
 
-            return { directory, displayName, sessions: sortedSessions, latestUpdatedAt, hasActiveSession }
+            return {
+                projectId: project?.id ?? null,
+                projectName: project?.name ?? 'Other',
+                projectPath: project?.path ?? null,
+                sessions: sortedSessions,
+                latestUpdatedAt,
+                hasActiveSession
+            }
         })
         .sort((a, b) => {
             if (a.hasActiveSession !== b.hasActiveSession) {
@@ -227,6 +253,7 @@ function SessionItem(props: {
 
 export function SessionList(props: {
     sessions: SessionSummary[]
+    projects: Project[]
     onSelect: (sessionId: string) => void
     onNewSession: () => void
     onRefresh: () => void
@@ -235,22 +262,25 @@ export function SessionList(props: {
 }) {
     const { renderHeader = true } = props
     const groups = useMemo(
-        () => groupSessionsByDirectory(props.sessions),
-        [props.sessions]
+        () => groupSessionsByProject(props.sessions, props.projects),
+        [props.sessions, props.projects]
     )
     const [collapseOverrides, setCollapseOverrides] = useState<Map<string, boolean>>(
         () => new Map()
     )
+    const getGroupKey = (group: SessionGroup): string => group.projectId ?? '__other__'
+
     const isGroupCollapsed = (group: SessionGroup): boolean => {
-        const override = collapseOverrides.get(group.directory)
+        const override = collapseOverrides.get(getGroupKey(group))
         if (override !== undefined) return override
         return !group.hasActiveSession
     }
 
-    const toggleGroup = (directory: string, isCollapsed: boolean) => {
+    const toggleGroup = (group: SessionGroup, isCollapsed: boolean) => {
+        const key = getGroupKey(group)
         setCollapseOverrides(prev => {
             const next = new Map(prev)
-            next.set(directory, !isCollapsed)
+            next.set(key, !isCollapsed)
             return next
         })
     }
@@ -259,11 +289,11 @@ export function SessionList(props: {
         setCollapseOverrides(prev => {
             if (prev.size === 0) return prev
             const next = new Map(prev)
-            const knownGroups = new Set(groups.map(group => group.directory))
+            const knownGroups = new Set(groups.map(getGroupKey))
             let changed = false
-            for (const directory of next.keys()) {
-                if (!knownGroups.has(directory)) {
-                    next.delete(directory)
+            for (const key of next.keys()) {
+                if (!knownGroups.has(key)) {
+                    next.delete(key)
                     changed = true
                 }
             }
@@ -293,15 +323,16 @@ export function SessionList(props: {
                 {groups.map((group) => {
                     const isCollapsed = isGroupCollapsed(group)
                     const activeCount = group.sessions.filter(s => s.active).length
+                    const groupKey = getGroupKey(group)
                     return (
                         <div
-                            key={group.directory}
+                            key={groupKey}
                             className="rounded-lg overflow-hidden bg-[var(--app-subtle-bg)]"
                         >
                             {/* Group header */}
                             <button
                                 type="button"
-                                onClick={() => toggleGroup(group.directory, isCollapsed)}
+                                onClick={() => toggleGroup(group, isCollapsed)}
                                 className="
                                     flex w-full items-center gap-2 px-3 py-2
                                     text-left transition-colors
@@ -315,9 +346,9 @@ export function SessionList(props: {
                                 <FolderIcon className="shrink-0 text-[var(--app-hint)]" />
                                 <span
                                     className="truncate text-sm font-medium"
-                                    title={group.directory}
+                                    title={group.projectPath ?? group.projectName}
                                 >
-                                    {group.displayName}
+                                    {group.projectName}
                                 </span>
                                 <div className="flex items-center gap-1.5 ml-auto shrink-0">
                                     {activeCount > 0 && (

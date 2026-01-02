@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     Navigate,
     createRootRoute,
@@ -97,6 +97,12 @@ function SessionsPage() {
     const { sessions, isLoading, error, refetch } = useSessions(api)
     const { users: onlineUsers } = useOnlineUsers(api)
     const [isRefreshing, setIsRefreshing] = useState(false)
+
+    const { data: projectsData } = useQuery({
+        queryKey: ['projects'],
+        queryFn: async () => api.getProjects()
+    })
+    const projects = projectsData?.projects ?? []
 
     const handleRefresh = useCallback(() => {
         void refetch()
@@ -198,6 +204,7 @@ function SessionsPage() {
                 ) : null}
                 <SessionList
                     sessions={sessions}
+                    projects={projects}
                     onSelect={(sessionId) => navigate({
                         to: '/sessions/$sessionId',
                         params: { sessionId },
