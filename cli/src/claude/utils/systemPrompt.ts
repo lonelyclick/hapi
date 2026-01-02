@@ -16,9 +16,9 @@ const CO_AUTHORED_CREDITS = (() => trimIdent(`
 
     <main commit message>
 
-    via [HAPI](https://hapi.run)
+    via [Yoho Remote](https://yoho.run)
 
-    Co-Authored-By: HAPI <noreply@hapi.run>
+    Co-Authored-By: Yoho Remote <it@yohomobile.com>
 `))();
 
 /**
