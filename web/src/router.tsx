@@ -110,10 +110,10 @@ function SessionsPage() {
     return (
         <div className="flex h-full flex-col">
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
-                <div className="mx-auto w-full max-w-content flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-3">
+                <div className="mx-auto w-full max-w-content flex items-center justify-between px-3 py-1.5">
+                    <div className="flex items-center gap-2">
                         <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     viewBox="0 0 24 24"
@@ -122,14 +122,14 @@ function SessionsPage() {
                                     strokeWidth="2"
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
-                                    className="h-4 w-4"
+                                    className="h-3.5 w-3.5"
                                 >
                                     <circle cx="12" cy="12" r="10" />
                                     <path d="M2 12h20" />
                                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                                 </svg>
                             </div>
-                            <span className="text-lg font-bold yoho-brand-text">Yoho Remote</span>
+                            <span className="text-sm font-bold yoho-brand-text">Yoho Remote</span>
                         </div>
                         <button
                             type="button"
@@ -138,20 +138,20 @@ function SessionsPage() {
                             className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50"
                             title={`${gitCommitMessage}\n\nClick to force refresh`}
                         >
-                            {isRefreshing ? 'refreshing...' : gitCommitHash}
+                            {isRefreshing ? '...' : gitCommitHash}
                         </button>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <span className="text-xs font-medium px-2 py-1 rounded-full bg-[var(--app-subtle-bg)] text-[var(--app-hint)]">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--app-subtle-bg)] text-[var(--app-hint)]">
                             {sessions.length} sessions
                         </span>
                         <button
                             type="button"
                             onClick={() => navigate({ to: '/sessions/new' })}
-                            className="session-list-new-button flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-sm hover:shadow-md transition-all hover:scale-105"
+                            className="session-list-new-button flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-sm hover:shadow-md transition-all hover:scale-105"
                             title="New Session"
                         >
-                            <PlusIcon className="h-5 w-5" />
+                            <PlusIcon className="h-4 w-4" />
                         </button>
                     </div>
                 </div>
