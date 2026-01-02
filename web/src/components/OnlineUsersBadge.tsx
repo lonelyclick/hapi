@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { OnlineUser } from '@/types/api'
 
 function formatViewerName(email: string): string {
-    const localPart = email.split('@')[0] ?? email
-    return localPart.charAt(0).toUpperCase() + localPart.slice(1)
+    return email.split('@')[0] ?? email
 }
 
 function formatSessionName(sessionId: string | null): string {

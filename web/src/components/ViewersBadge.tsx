@@ -22,9 +22,7 @@ function EyeIcon(props: { className?: string }) {
 }
 
 function formatViewerName(email: string): string {
-    const localPart = email.split('@')[0] ?? email
-    // Capitalize first letter
-    return localPart.charAt(0).toUpperCase() + localPart.slice(1)
+    return email.split('@')[0] ?? email
 }
 
 export function ViewersBadge(props: { viewers: SessionViewer[] }) {
