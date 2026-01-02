@@ -205,7 +205,8 @@ export function HappyComposer(props: {
     const { haptic: platformHaptic, isTouch } = usePlatform()
     const { isStandalone, isIOS } = usePWAInstall()
     const isIOSPWA = isIOS && isStandalone
-    const bottomPaddingClass = isIOSPWA ? 'pb-0' : 'pb-3'
+    // iOS PWA 使用 safe-area-inset-bottom 适配底部安全距离，同时保证最小 padding
+    const bottomPaddingClass = isIOSPWA ? 'pb-[max(env(safe-area-inset-bottom),0.75rem)]' : 'pb-3'
     const activeWord = useActiveWord(inputState.text, inputState.selection, autocompletePrefixes)
     const [suggestions, selectedIndex, moveUp, moveDown, clearSuggestions] = useActiveSuggestions(
         activeWord,
