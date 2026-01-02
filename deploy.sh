@@ -23,6 +23,20 @@ git add -A
 git commit -m "deploy" --allow-empty || true
 git push
 
+# 生成东八区时间戳版本号 (v2026.01.02.1344)
+VERSION="v$(TZ='Asia/Shanghai' date '+%Y.%m.%d.%H%M')"
+echo "=== Updating version to $VERSION..."
+cd cli
+# 使用 node 来更新 package.json 的版本号
+node -e "
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+pkg.version = '$VERSION';
+fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+console.log('Updated cli/package.json version to $VERSION');
+"
+cd ..
+
 # 构建 web 前端
 echo "=== Building web assets..."
 bun run build:web
