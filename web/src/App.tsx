@@ -20,7 +20,7 @@ import { UpdateBanner } from '@/components/UpdateBanner'
 import { LoadingState } from '@/components/LoadingState'
 import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
-import { notifyTaskComplete } from '@/hooks/useNotification'
+import { notifyTaskComplete, getPendingNotification, clearPendingNotification } from '@/hooks/useNotification'
 
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
@@ -310,6 +310,31 @@ export function App() {
         onConnect: handleSseConnect,
         onEvent: handleSseEvent,
     })
+
+    // 处理从通知点击恢复 app 时的自动跳转
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                const pending = getPendingNotification()
+                if (pending) {
+                    console.log('[notification] handling pending notification', pending.sessionId)
+                    clearPendingNotification()
+                    navigate({
+                        to: '/sessions/$sessionId',
+                        params: { sessionId: pending.sessionId }
+                    })
+                }
+            }
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        // 初始检查（防止 app 刚启动时有 pending）
+        handleVisibilityChange()
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+        }
+    }, [navigate])
 
     // Loading auth source
     if (isAuthSourceLoading) {

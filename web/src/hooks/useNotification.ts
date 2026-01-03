@@ -3,6 +3,47 @@ import { toast } from 'sonner'
 import { getPlatform } from './usePlatform'
 
 const NOTIFICATION_PERMISSION_KEY = 'hapi-notification-enabled'
+const PENDING_NOTIFICATION_KEY = 'hapi-pending-notification'
+
+export type PendingNotification = {
+    sessionId: string
+    timestamp: number
+}
+
+export function getPendingNotification(): PendingNotification | null {
+    try {
+        const raw = localStorage.getItem(PENDING_NOTIFICATION_KEY)
+        if (!raw) return null
+        const pending = JSON.parse(raw) as PendingNotification
+        // 5分钟内有效
+        if (Date.now() - pending.timestamp > 5 * 60 * 1000) {
+            localStorage.removeItem(PENDING_NOTIFICATION_KEY)
+            return null
+        }
+        return pending
+    } catch {
+        return null
+    }
+}
+
+export function clearPendingNotification(): void {
+    try {
+        localStorage.removeItem(PENDING_NOTIFICATION_KEY)
+    } catch {
+        // ignore
+    }
+}
+
+function setPendingNotification(sessionId: string): void {
+    try {
+        localStorage.setItem(PENDING_NOTIFICATION_KEY, JSON.stringify({
+            sessionId,
+            timestamp: Date.now()
+        }))
+    } catch {
+        // ignore
+    }
+}
 
 export type NotificationPermissionState = 'default' | 'granted' | 'denied' | 'unsupported'
 
@@ -96,11 +137,11 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
         platform.haptic.notification('success')
         toast.success(project || 'Task completed', {
             description: title,
-            action: onClick ? {
-                label: 'View',
-                onClick,
-            } : undefined,
             id: `task-complete-${sessionId}`,
+            onClick: onClick ? () => {
+                onClick()
+                toast.dismiss(`task-complete-${sessionId}`)
+            } : undefined,
         })
     } else if (isEnabled && hasNotificationAPI && notificationPermission === 'granted') {
         // App 在后台 - 显示系统通知
@@ -114,15 +155,18 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
         }
         console.log('[notification] creating system notification', { body, options })
         try {
+            // 存储待跳转信息，用于 iOS PWA 点击通知后恢复 app 时自动跳转
+            setPendingNotification(sessionId)
+
             const notif = new Notification('Task Completed', options)
             console.log('[notification] system notification created', notif)
 
-            if (onClick) {
-                notif.onclick = () => {
-                    window.focus()
-                    onClick()
-                    notif.close()
-                }
+            notif.onclick = () => {
+                console.log('[notification] system notification clicked')
+                clearPendingNotification()
+                window.focus()
+                onClick?.()
+                notif.close()
             }
         } catch (error) {
             console.error('[notification] failed to create notification', error)
