@@ -2,6 +2,7 @@ import type {
     AgentBackend,
     AgentMessage,
     AgentSessionConfig,
+    HistoryMessage,
     PermissionRequest,
     PermissionResponse,
     PromptContent
@@ -186,5 +187,21 @@ export class NimBackend implements AgentBackend {
         }
         this.sessions.clear();
         logger.debug('[NIM] Disconnected');
+    }
+
+    restoreHistory(sessionId: string, messages: HistoryMessage[]): void {
+        const session = this.sessions.get(sessionId);
+        if (!session) {
+            logger.debug(`[NIM] Cannot restore history: session not found: ${sessionId}`);
+            return;
+        }
+
+        for (const msg of messages) {
+            session.messages.push({
+                role: msg.role,
+                content: msg.content
+            });
+        }
+        logger.debug(`[NIM] Restored ${messages.length} history messages for session: ${sessionId}`);
     }
 }

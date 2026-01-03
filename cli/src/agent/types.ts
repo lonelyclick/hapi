@@ -56,6 +56,11 @@ export type PermissionResponse =
     | { outcome: 'selected'; optionId: string }
     | { outcome: 'cancelled' };
 
+export type HistoryMessage = {
+    role: 'user' | 'assistant';
+    content: string;
+};
+
 export interface AgentBackend {
     initialize(): Promise<void>;
     newSession(config: AgentSessionConfig): Promise<string>;
@@ -64,6 +69,8 @@ export interface AgentBackend {
     respondToPermission(sessionId: string, request: PermissionRequest, response: PermissionResponse): Promise<void>;
     onPermissionRequest(handler: (request: PermissionRequest) => void): void;
     disconnect(): Promise<void>;
+    /** Optional: restore history messages into the session */
+    restoreHistory?(sessionId: string, messages: HistoryMessage[]): void;
 }
 
 export type AgentBackendFactory = () => AgentBackend;

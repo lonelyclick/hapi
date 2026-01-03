@@ -1,10 +1,18 @@
 import axios from 'axios'
-import type { AgentState, CreateMachineResponse, CreateSessionResponse, DaemonState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
-import { AgentStateSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, DaemonStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
+import type { AgentState, CliMessagesResponse, CreateMachineResponse, CreateSessionResponse, DaemonState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
+import { AgentStateSchema, CliMessagesResponseSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, DaemonStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
 import { configuration } from '@/configuration'
 import { getAuthToken } from '@/api/auth'
 import { ApiMachineClient } from './apiMachine'
 import { ApiSessionClient } from './apiSession'
+
+export type StoredMessage = {
+    id: string
+    seq: number
+    createdAt: number
+    localId?: string | null
+    content: unknown
+}
 
 export class ApiClient {
     static async create(): Promise<ApiClient> {
@@ -127,5 +135,40 @@ export class ApiClient {
 
     machineSyncClient(machine: Machine): ApiMachineClient {
         return new ApiMachineClient(this.token, machine)
+    }
+
+    async getSessionMessages(sessionId: string, opts?: { afterSeq?: number; limit?: number }): Promise<StoredMessage[]> {
+        const params: Record<string, unknown> = {}
+        if (opts?.afterSeq !== undefined) {
+            params.afterSeq = opts.afterSeq
+        }
+        if (opts?.limit !== undefined) {
+            params.limit = opts.limit
+        }
+
+        const response = await axios.get<CliMessagesResponse>(
+            `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(sessionId)}/messages`,
+            {
+                params,
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15_000
+            }
+        )
+
+        const parsed = CliMessagesResponseSchema.safeParse(response.data)
+        if (!parsed.success) {
+            throw new Error('Invalid /cli/sessions/:id/messages response')
+        }
+
+        return parsed.data.messages.map(m => ({
+            id: m.id,
+            seq: m.seq,
+            createdAt: m.createdAt,
+            localId: m.localId,
+            content: m.content
+        }))
     }
 }

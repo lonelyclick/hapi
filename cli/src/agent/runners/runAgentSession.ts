@@ -2,7 +2,7 @@ import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
-import { ApiClient } from '@/api/api';
+import { ApiClient, type StoredMessage } from '@/api/api';
 import type { AgentState, Metadata } from '@/api/types';
 import { logger } from '@/ui/logger';
 import packageJson from '../../../package.json';
@@ -14,13 +14,37 @@ import { hashObject } from '@/utils/deterministicJson';
 import { AgentRegistry } from '@/agent/AgentRegistry';
 import { convertAgentMessage } from '@/agent/messageConverter';
 import { PermissionAdapter } from '@/agent/permissionAdapter';
-import type { AgentBackend, PromptContent } from '@/agent/types';
+import type { AgentBackend, HistoryMessage, PromptContent } from '@/agent/types';
 import { notifyDaemonSessionStarted } from '@/daemon/controlClient';
 import { initialMachineMetadata } from '@/daemon/run';
 import { startHappyServer } from '@/claude/utils/startHappyServer';
 import { getHappyCliCommand } from '@/utils/spawnHappyCLI';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
 import { readWorktreeEnv } from '@/utils/worktreeEnv';
+
+function extractHistoryFromStoredMessages(messages: StoredMessage[]): HistoryMessage[] {
+    const history: HistoryMessage[] = [];
+
+    for (const msg of messages) {
+        const content = msg.content as Record<string, unknown> | null;
+        if (!content || typeof content !== 'object') continue;
+
+        const role = content.role;
+        const innerContent = content.content as Record<string, unknown> | null;
+        if (!innerContent || typeof innerContent !== 'object') continue;
+
+        if (role === 'user' && innerContent.type === 'text' && typeof innerContent.text === 'string') {
+            history.push({ role: 'user', content: innerContent.text });
+        } else if (role === 'agent' && innerContent.type === 'codex') {
+            const data = innerContent.data as Record<string, unknown> | null;
+            if (data && data.type === 'message' && typeof data.message === 'string') {
+                history.push({ role: 'assistant', content: data.message });
+            }
+        }
+    }
+
+    return history;
+}
 
 function emitReadyIfIdle(props: {
     queueSize: () => number;
@@ -120,6 +144,20 @@ export async function runAgentSession(opts: {
         cwd: process.cwd(),
         mcpServers
     });
+
+    // Restore history messages if the backend supports it
+    if (backend.restoreHistory) {
+        try {
+            const storedMessages = await api.getSessionMessages(response.id, { afterSeq: 0, limit: 200 });
+            const history = extractHistoryFromStoredMessages(storedMessages);
+            if (history.length > 0) {
+                backend.restoreHistory(agentSessionId, history);
+                logger.debug(`[START] Restored ${history.length} history messages from server`);
+            }
+        } catch (error) {
+            logger.debug('[START] Failed to restore history messages', error);
+        }
+    }
 
     let thinking = false;
     let shouldExit = false;
