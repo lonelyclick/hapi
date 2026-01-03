@@ -66,6 +66,7 @@ export function useNotificationPermission() {
 export type TaskCompleteNotification = {
     sessionId: string
     title: string
+    project?: string
     onClick?: () => void
 }
 
@@ -75,7 +76,7 @@ export type TaskCompleteNotification = {
  * - App 在后台时：显示系统推送通知
  */
 export function notifyTaskComplete(notification: TaskCompleteNotification): void {
-    const { sessionId, title, onClick } = notification
+    const { sessionId, title, project, onClick } = notification
     const platform = getPlatform()
     const isVisible = document.visibilityState === 'visible'
     const isEnabled = getStoredPreference()
@@ -84,7 +85,7 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
         // App 在前台 - 显示 Toast（始终显示，不受 enabled 开关控制）
         platform.haptic.notification('success')
         toast.success(title, {
-            description: 'Task completed',
+            description: project || 'Task completed',
             action: onClick ? {
                 label: 'View',
                 onClick,
@@ -93,8 +94,9 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
         })
     } else if (isEnabled && 'Notification' in window && Notification.permission === 'granted') {
         // App 在后台 - 显示系统通知
+        const body = project ? `${title}\n${project}` : title
         const options: NotificationOptions & { renotify?: boolean } = {
-            body: title,
+            body,
             icon: '/pwa-192x192.png',
             badge: '/pwa-64x64.png',
             tag: `task-complete-${sessionId}`,

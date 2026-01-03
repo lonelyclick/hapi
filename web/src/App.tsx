@@ -8,7 +8,7 @@ import { useAuthSource } from '@/hooks/useAuthSource'
 import { useServerUrl } from '@/hooks/useServerUrl'
 import { useSSE } from '@/hooks/useSSE'
 import { useSyncingState } from '@/hooks/useSyncingState'
-import type { SyncEvent, SessionSummary } from '@/types/api'
+import type { SyncEvent, SessionSummary, Project } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { AppContextProvider } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
@@ -256,15 +256,24 @@ export function App() {
                     return
                 }
 
-                // 获取 session 标题
+                // 获取 session 标题和项目
                 const sessionsData = queryClient.getQueryData<{ sessions: SessionSummary[] }>(queryKeys.sessions)
                 const session = sessionsData?.sessions.find(s => s.id === event.sessionId)
-                const title = session?.metadata?.name || session?.metadata?.path || 'Session'
-                console.log('[notification] showing notification', { title, sessionId: event.sessionId })
+                const title = session?.metadata?.summary?.text || session?.metadata?.name || 'Task completed'
+
+                // 查找匹配的项目
+                const projectsData = queryClient.getQueryData<{ projects: Project[] }>(['projects'])
+                const sessionPath = session?.metadata?.path
+                const project = sessionPath
+                    ? projectsData?.projects.find(p => sessionPath.startsWith(p.path))
+                    : undefined
+
+                console.log('[notification] showing notification', { title, project: project?.name, sessionId: event.sessionId })
 
                 notifyTaskComplete({
                     sessionId: event.sessionId,
                     title,
+                    project: project?.name,
                     onClick: () => {
                         navigate({
                             to: '/sessions/$sessionId',
