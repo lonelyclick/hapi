@@ -179,6 +179,56 @@ import { getCliArgs } from './utils/cliArgs'
       process.exit(1)
     }
     return;
+  } else if (subcommand === 'glm') {
+    // Handle glm command (NVIDIA NIM GLM-4.7)
+    try {
+      let startedBy: 'daemon' | 'terminal' | undefined = undefined;
+      for (let i = 1; i < args.length; i++) {
+        if (args[i] === '--started-by') {
+          startedBy = args[++i] as 'daemon' | 'terminal';
+        }
+      }
+
+      const { registerGlmAgent } = await import('./agent/runners/glm');
+      const { runAgentSession } = await import('./agent/runners/runAgentSession');
+      registerGlmAgent();
+
+      await initializeToken();
+      await authAndSetupMachineIfNeeded();
+      await runAgentSession({ agentType: 'glm', startedBy });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
+      if (process.env.DEBUG) {
+        console.error(error)
+      }
+      process.exit(1)
+    }
+    return;
+  } else if (subcommand === 'minimax') {
+    // Handle minimax command (NVIDIA NIM MiniMax-M2.1)
+    try {
+      let startedBy: 'daemon' | 'terminal' | undefined = undefined;
+      for (let i = 1; i < args.length; i++) {
+        if (args[i] === '--started-by') {
+          startedBy = args[++i] as 'daemon' | 'terminal';
+        }
+      }
+
+      const { registerMinimaxAgent } = await import('./agent/runners/minimax');
+      const { runAgentSession } = await import('./agent/runners/runAgentSession');
+      registerMinimaxAgent();
+
+      await initializeToken();
+      await authAndSetupMachineIfNeeded();
+      await runAgentSession({ agentType: 'minimax', startedBy });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
+      if (process.env.DEBUG) {
+        console.error(error)
+      }
+      process.exit(1)
+    }
+    return;
   } else if (subcommand === 'logout') {
     // Keep for backward compatibility - redirect to auth logout
     console.log(chalk.yellow('Note: "hapi logout" is deprecated. Use "hapi auth logout" instead.\n'));
