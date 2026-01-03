@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react'
-import { toast } from 'sonner'
+import { createElement, useCallback, useState } from 'react'
+import toast from 'react-hot-toast'
 import { getPlatform } from './usePlatform'
 
 const NOTIFICATION_PERMISSION_KEY = 'hapi-notification-enabled'
@@ -135,14 +135,98 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
     if (isVisible) {
         // App 在前台 - 显示 Toast（始终显示，不受 enabled 开关控制）
         platform.haptic.notification('success')
-        toast.success(project || 'Task completed', {
-            description: title,
-            action: onClick ? {
-                label: 'View',
-                onClick,
-            } : undefined,
-            id: `task-complete-${sessionId}`,
-        })
+        const toastId = `task-complete-${sessionId}`
+        toast.custom(
+            (t) => createElement(
+                'div',
+                {
+                    onClick: () => {
+                        toast.dismiss(t.id)
+                        onClick?.()
+                    },
+                    style: {
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px',
+                        background: 'var(--app-bg)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                        cursor: 'pointer',
+                        maxWidth: '350px',
+                        width: '100%',
+                    }
+                },
+                // 成功图标
+                createElement(
+                    'div',
+                    {
+                        style: {
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            background: '#10b981',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                        }
+                    },
+                    createElement(
+                        'svg',
+                        {
+                            width: '12',
+                            height: '12',
+                            viewBox: '0 0 12 12',
+                            fill: 'none',
+                            style: { color: 'white' }
+                        },
+                        createElement('path', {
+                            d: 'M10 3L4.5 8.5L2 6',
+                            stroke: 'currentColor',
+                            strokeWidth: '2',
+                            strokeLinecap: 'round',
+                            strokeLinejoin: 'round'
+                        })
+                    )
+                ),
+                // 内容
+                createElement(
+                    'div',
+                    { style: { flex: 1, minWidth: 0 } },
+                    createElement(
+                        'div',
+                        {
+                            style: {
+                                fontSize: '14px',
+                                fontWeight: 500,
+                                color: 'var(--app-fg)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }
+                        },
+                        project || 'Task completed'
+                    ),
+                    createElement(
+                        'div',
+                        {
+                            style: {
+                                fontSize: '12px',
+                                color: 'var(--app-hint)',
+                                marginTop: '2px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }
+                        },
+                        title
+                    )
+                )
+            ),
+            { id: toastId, duration: 4000 }
+        )
     } else if (isEnabled && hasNotificationAPI && notificationPermission === 'granted') {
         // App 在后台 - 显示系统通知
         const body = project ? `${title}\n${project}` : title

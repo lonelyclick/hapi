@@ -26,5 +26,8 @@
         "concurrently": "^9.2.1",
         "react-devtools-core": "^7.0.1",
         "vite-plugin-pwa": "^1.2.0"
+    },
+    "dependencies": {
+        "react-hot-toast": "^2.6.0"
     }
 }
