@@ -243,7 +243,6 @@ export function App() {
         // 检测任务完成 (thinking: true -> false)
         if (event.type === 'session-updated') {
             const data = ('data' in event ? event.data : null) as { active?: boolean; thinking?: boolean; wasThinking?: boolean } | null
-            console.log('[notification] session-updated', event.sessionId, data)
             // wasThinking 表示之前是 thinking 状态，现在变成了非 thinking 状态
             if (data?.wasThinking && data.thinking === false) {
                 const isCurrentSession = event.sessionId === selectedSessionId
