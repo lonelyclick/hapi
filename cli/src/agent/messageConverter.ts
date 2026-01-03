@@ -2,6 +2,7 @@ import type { AgentMessage, PlanItem } from './types';
 
 export type CodexMessage =
     | { type: 'message'; message: string }
+    | { type: 'reasoning'; message: string }
     | { type: 'tool-call'; name: string; callId: string; input: unknown }
     | { type: 'tool-call-result'; callId: string; output: unknown }
     | { type: 'plan'; entries: PlanItem[] }
@@ -11,6 +12,8 @@ export function convertAgentMessage(message: AgentMessage): CodexMessage | null 
     switch (message.type) {
         case 'text':
             return { type: 'message', message: message.text };
+        case 'reasoning':
+            return { type: 'reasoning', message: message.text };
         case 'tool_call':
             return {
                 type: 'tool-call',

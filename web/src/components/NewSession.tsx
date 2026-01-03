@@ -26,10 +26,10 @@ export function NewSession(props: {
     const { haptic } = usePlatform()
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
     const isFormDisabled = isPending || props.isLoading
-    const { getLastUsedMachineId, setLastUsedMachineId } = useRecentPaths()
+    const { getRecentPaths, addRecentPath, getLastUsedMachineId, setLastUsedMachineId } = useRecentPaths()
 
     const [machineId, setMachineId] = useState<string | null>(null)
-    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+    const [projectPath, setProjectPath] = useState('')
     const [agent, setAgent] = useState<AgentType>('claude')
     const [error, setError] = useState<string | null>(null)
 
@@ -43,11 +43,27 @@ export function NewSession(props: {
 
     const projects = projectsData?.projects ?? []
 
-    // Get selected project
     const selectedProject = useMemo(
-        () => projects.find((p) => p.id === selectedProjectId) ?? null,
-        [projects, selectedProjectId]
+        () => projects.find((p) => p.path === projectPath.trim()) ?? null,
+        [projects, projectPath]
     )
+
+    const recentPaths = useMemo(() => getRecentPaths(machineId), [getRecentPaths, machineId])
+    const projectSuggestions = useMemo(() => {
+        const seen = new Set<string>()
+        const suggestions: Array<{ value: string; label?: string }> = []
+        for (const recent of recentPaths) {
+            if (seen.has(recent)) continue
+            seen.add(recent)
+            suggestions.push({ value: recent })
+        }
+        for (const project of projects) {
+            if (seen.has(project.path)) continue
+            seen.add(project.path)
+            suggestions.push({ value: project.path, label: project.name })
+        }
+        return suggestions
+    }, [projects, recentPaths])
 
     // Initialize with last used machine or first available
     useEffect(() => {
@@ -64,25 +80,34 @@ export function NewSession(props: {
         }
     }, [props.machines, machineId, getLastUsedMachineId])
 
-    // Auto-select first project when projects load
     useEffect(() => {
-        if (projects.length > 0 && !selectedProjectId) {
-            setSelectedProjectId(projects[0].id)
+        if (projectPath.trim()) return
+
+        const recent = machineId ? getRecentPaths(machineId) : []
+        if (recent.length > 0) {
+            setProjectPath(recent[0])
+            return
         }
-    }, [projects, selectedProjectId])
+
+        if (projects.length > 0) {
+            setProjectPath(projects[0].path)
+        }
+    }, [projectPath, machineId, getRecentPaths, projects])
 
     const handleMachineChange = useCallback((newMachineId: string) => {
         setMachineId(newMachineId)
     }, [])
 
     async function handleCreate() {
-        if (!machineId || !selectedProject) return
+        if (!machineId) return
+        const directory = projectPath.trim()
+        if (!directory) return
 
         setError(null)
         try {
             const result = await spawnSession({
                 machineId,
-                directory: selectedProject.path,
+                directory,
                 agent,
                 yolo: true,
                 sessionType: 'simple'
@@ -90,6 +115,7 @@ export function NewSession(props: {
 
             if (result.type === 'success') {
                 haptic.notification('success')
+                addRecentPath(machineId, directory)
                 setLastUsedMachineId(machineId)
                 props.onSuccess(result.sessionId)
                 return
@@ -103,7 +129,7 @@ export function NewSession(props: {
         }
     }
 
-    const canCreate = machineId && selectedProject && !isFormDisabled
+    const canCreate = Boolean(machineId && projectPath.trim() && !isFormDisabled)
 
     return (
         <div className="flex flex-col divide-y divide-[var(--app-divider)]">
@@ -138,27 +164,37 @@ export function NewSession(props: {
                 <label className="text-xs font-medium text-[var(--app-hint)]">
                     Project
                 </label>
-                <select
-                    value={selectedProjectId ?? ''}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                    disabled={isFormDisabled || projectsLoading}
+                <input
+                    type="text"
+                    value={projectPath}
+                    onChange={(e) => setProjectPath(e.target.value)}
+                    disabled={isFormDisabled}
+                    placeholder="/path/to/project"
+                    list="project-path-suggestions"
                     className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
-                >
-                    {projectsLoading && (
-                        <option value="">Loading projects…</option>
-                    )}
-                    {!projectsLoading && projects.length === 0 && (
-                        <option value="">No projects available</option>
-                    )}
-                    {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                            {p.name}
-                        </option>
+                />
+                <datalist id="project-path-suggestions">
+                    {projectSuggestions.map((suggestion) => (
+                        <option key={suggestion.value} value={suggestion.value} label={suggestion.label} />
                     ))}
-                </select>
+                </datalist>
+                {projectsLoading ? (
+                    <div className="text-xs text-[var(--app-hint)]">
+                        Loading projects…
+                    </div>
+                ) : projects.length === 0 ? (
+                    <div className="text-xs text-[var(--app-hint)]">
+                        No saved projects yet.
+                    </div>
+                ) : (
+                    <div className="text-xs text-[var(--app-hint)]">
+                        Type a path or pick a saved project.
+                    </div>
+                )}
                 {selectedProject && (
-                    <div className="text-xs text-[var(--app-hint)] font-mono truncate mt-1">
-                        {selectedProject.path}
+                    <div className="text-xs text-[var(--app-hint)] mt-1">
+                        <span className="font-medium">{selectedProject.name}</span>
+                        {selectedProject.description ? ` — ${selectedProject.description}` : ''}
                     </div>
                 )}
             </div>

@@ -64,7 +64,11 @@ ${text}`
                 return c.json({ error: 'Gemini API error' }, 502)
             }
 
-            const data = await response.json()
+            const data = await response.json() as {
+                candidates?: Array<{
+                    content?: { parts?: Array<{ text?: string }> }
+                }>
+            }
             const optimizedText = data.candidates?.[0]?.content?.parts?.[0]?.text
             if (!optimizedText) {
                 return c.json({ error: 'No response from Gemini' }, 502)

@@ -83,23 +83,35 @@ export function App() {
                 event.stopImmediatePropagation()
                 return
             }
-            const value = readInputValue(event.target)
+            const target = event.target
+            if (!target) {
+                return
+            }
+            const value = readInputValue(target)
             if (value !== null) {
-                lastInputValues.set(event.target, value)
+                lastInputValues.set(target, value)
             }
         }
 
         const onInput = (event: Event) => {
             if (isHistoryInputType(event)) {
-                const previous = lastInputValues.get(event.target)
+                const target = event.target
+                if (!target) {
+                    return
+                }
+                const previous = lastInputValues.get(target)
                 if (previous !== undefined) {
-                    writeInputValue(event.target, previous)
+                    writeInputValue(target, previous)
                 }
                 return
             }
-            const value = readInputValue(event.target)
+            const target = event.target
+            if (!target) {
+                return
+            }
+            const value = readInputValue(target)
             if (value !== null) {
-                lastInputValues.set(event.target, value)
+                lastInputValues.set(target, value)
             }
         }
 

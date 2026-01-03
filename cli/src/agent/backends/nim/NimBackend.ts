@@ -100,7 +100,8 @@ export class NimBackend implements AgentBackend {
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            let fullText = '';
+            let contentText = '';
+            let reasoningText = '';
             let buffer = '';
 
             while (true) {
@@ -119,11 +120,13 @@ export class NimBackend implements AgentBackend {
                         try {
                             const parsed = JSON.parse(data);
                             const choice = parsed.choices?.[0]?.delta;
-                            // Support both regular content and reasoning_content (for reasoning models like GLM-4.7)
-                            const delta = choice?.content || choice?.reasoning_content;
-                            if (delta) {
-                                fullText += delta;
-                                onUpdate({ type: 'text', text: delta });
+                            const contentDelta = typeof choice?.content === 'string' ? choice.content : '';
+                            const reasoningDelta = typeof choice?.reasoning_content === 'string' ? choice.reasoning_content : '';
+                            if (reasoningDelta) {
+                                reasoningText += reasoningDelta;
+                            }
+                            if (contentDelta) {
+                                contentText += contentDelta;
                             }
                         } catch {
                             // Skip invalid JSON
@@ -132,7 +135,14 @@ export class NimBackend implements AgentBackend {
                 }
             }
 
-            session.messages.push({ role: 'assistant', content: fullText });
+            const finalContent = contentText.length > 0 ? contentText : reasoningText;
+            if (reasoningText && contentText) {
+                onUpdate({ type: 'reasoning', text: reasoningText });
+            }
+            if (finalContent) {
+                onUpdate({ type: 'text', text: finalContent });
+                session.messages.push({ role: 'assistant', content: finalContent });
+            }
             onUpdate({ type: 'turn_complete', stopReason: 'end_turn' });
 
         } catch (error) {

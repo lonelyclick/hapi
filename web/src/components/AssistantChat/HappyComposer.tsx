@@ -80,7 +80,14 @@ function isCodexModel(mode: ModelMode | undefined): mode is typeof CODEX_MODELS[
     return Boolean(mode && CODEX_MODEL_IDS.has(mode as typeof CODEX_MODELS[number]['id']))
 }
 
-const CODEX_REASONING_LEVELS = [
+type CodexReasoningLevel = {
+    id: ModelReasoningEffort
+    label: string
+    description: string
+    warning?: string
+}
+
+const CODEX_REASONING_LEVELS: CodexReasoningLevel[] = [
     {
         id: 'low',
         label: 'Low',

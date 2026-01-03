@@ -345,7 +345,7 @@ export class ApiClient {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent?: 'claude' | 'codex' | 'gemini',
+        agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string

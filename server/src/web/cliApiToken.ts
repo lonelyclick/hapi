@@ -26,6 +26,7 @@ export interface Settings {
     feishuBaseUrl?: string
     appId?: string
     appSecret?: string
+    geminiApiKey?: string
 }
 
 export interface CliApiTokenResult {
