@@ -19,6 +19,7 @@ interface LoopOptions {
     path: string;
     startingMode?: 'local' | 'remote';
     startedBy?: 'daemon' | 'terminal';
+    sessionId?: string | null;
     onModeChange: (mode: 'local' | 'remote') => void;
     messageQueue: MessageQueue2<EnhancedMode>;
     session: ApiSessionClient;
@@ -37,7 +38,7 @@ export async function loop(opts: LoopOptions): Promise<void> {
         api: opts.api,
         client: opts.session,
         path: opts.path,
-        sessionId: null,
+        sessionId: opts.sessionId ?? null,
         logPath,
         messageQueue: opts.messageQueue,
         onModeChange: opts.onModeChange,

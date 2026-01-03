@@ -1,4 +1,4 @@
-import { createElement, useCallback, useState } from 'react'
+import { createElement, useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { getPlatform } from './usePlatform'
 
@@ -55,6 +55,14 @@ function getStoredPreference(): boolean {
     }
 }
 
+function hasStoredPreference(): boolean {
+    try {
+        return localStorage.getItem(NOTIFICATION_PERMISSION_KEY) !== null
+    } catch {
+        return false
+    }
+}
+
 function setStoredPreference(enabled: boolean): void {
     try {
         localStorage.setItem(NOTIFICATION_PERMISSION_KEY, String(enabled))
@@ -71,6 +79,13 @@ export function useNotificationPermission() {
         return Notification.permission as NotificationPermissionState
     })
     const [enabled, setEnabled] = useState(() => getStoredPreference())
+
+    useEffect(() => {
+        if (permission !== 'granted') return
+        if (hasStoredPreference()) return
+        setEnabled(true)
+        setStoredPreference(true)
+    }, [permission])
 
     const requestPermission = useCallback(async () => {
         if (!('Notification' in window)) {
@@ -236,25 +251,49 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
             badge: '/pwa-64x64.png',
             tag: `task-complete-${sessionId}`,
             renotify: true,
+            data: { sessionId }
         }
         console.log('[notification] creating system notification', { notifTitle, options })
-        try {
-            // 存储待跳转信息，用于 iOS PWA 点击通知后恢复 app 时自动跳转
-            setPendingNotification(sessionId)
+        void (async () => {
+            try {
+                // 存储待跳转信息，用于 iOS PWA 点击通知后恢复 app 时自动跳转
+                setPendingNotification(sessionId)
 
-            const notif = new Notification(notifTitle, options)
-            console.log('[notification] system notification created', notif)
+                if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+                    let registration = await navigator.serviceWorker.getRegistration()
+                    if (!registration) {
+                        try {
+                            registration = await Promise.race([
+                                navigator.serviceWorker.ready,
+                                new Promise<ServiceWorkerRegistration | undefined>((resolve) => {
+                                    setTimeout(() => resolve(undefined), 2000)
+                                })
+                            ]) as ServiceWorkerRegistration | undefined
+                        } catch {
+                            registration = undefined
+                        }
+                    }
+                    if (registration?.showNotification) {
+                        await registration.showNotification(notifTitle, options)
+                        console.log('[notification] service worker notification created')
+                        return
+                    }
+                }
 
-            notif.onclick = () => {
-                console.log('[notification] system notification clicked')
-                clearPendingNotification()
-                window.focus()
-                onClick?.()
-                notif.close()
+                const notif = new Notification(notifTitle, options)
+                console.log('[notification] system notification created', notif)
+
+                notif.onclick = () => {
+                    console.log('[notification] system notification clicked')
+                    clearPendingNotification()
+                    window.focus()
+                    onClick?.()
+                    notif.close()
+                }
+            } catch (error) {
+                console.error('[notification] failed to create notification', error)
             }
-        } catch (error) {
-            console.error('[notification] failed to create notification', error)
-        }
+        })()
     }
 }
 

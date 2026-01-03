@@ -13,6 +13,7 @@ import type {
     ProjectsResponse,
     RemoveProjectResponse,
     RemoveUserResponse,
+    ResumeSessionResponse,
     RolePromptsResponse,
     SetRolePromptResponse,
     SlashCommandsResponse,
@@ -274,6 +275,13 @@ export class ApiClient {
 
     async switchSession(sessionId: string): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, {
+            method: 'POST',
+            body: JSON.stringify({})
+        })
+    }
+
+    async resumeSession(sessionId: string): Promise<ResumeSessionResponse> {
+        return await this.request<ResumeSessionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/resume`, {
             method: 'POST',
             body: JSON.stringify({})
         })

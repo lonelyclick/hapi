@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
 import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session, SessionViewer } from '@/types/api'
@@ -15,6 +16,7 @@ import { SessionHeader } from '@/components/SessionHeader'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
+import { queryKeys } from '@/lib/query-keys'
 
 const MODEL_MODE_VALUES = new Set([
     'default',
@@ -62,15 +64,22 @@ export function SessionChat(props: {
 }) {
     const { haptic } = usePlatform()
     const navigate = useNavigate()
+    const queryClient = useQueryClient()
     const controlsDisabled = !props.session.active
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
     const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, isPending } = useSessionActions(props.api, props.session.id)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [isResuming, setIsResuming] = useState(false)
+    const [resumeError, setResumeError] = useState<string | null>(null)
+    const pendingMessageRef = useRef<string | null>(null)
 
     useEffect(() => {
         normalizedCacheRef.current.clear()
         blocksByIdRef.current.clear()
+        setIsResuming(false)
+        setResumeError(null)
+        pendingMessageRef.current = null
     }, [props.session.id])
 
     // Update browser title with AI name
@@ -186,11 +195,88 @@ export function SessionChat(props: {
         }
     }, [deleteSession, haptic, props])
 
+    const sendPendingMessage = useCallback(async (sessionId: string, text: string) => {
+        const trimmed = text.trim()
+        if (!trimmed) return
+        if (sessionId === props.session.id) {
+            props.onSend(trimmed)
+            return
+        }
+        await props.api.sendMessage(sessionId, trimmed)
+    }, [props.api, props.onSend, props.session.id])
+
+    const resumeSession = useCallback(async (pendingText?: string) => {
+        if (pendingText) {
+            pendingMessageRef.current = pendingText
+        }
+        if (isResuming) {
+            return
+        }
+        if (props.session.active) {
+            const queued = pendingMessageRef.current
+            pendingMessageRef.current = null
+            if (queued) {
+                void sendPendingMessage(props.session.id, queued)
+            }
+            return
+        }
+
+        setIsResuming(true)
+        setResumeError(null)
+        try {
+            const result = await props.api.resumeSession(props.session.id)
+            await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+            props.onRefresh()
+
+            const queued = pendingMessageRef.current
+            pendingMessageRef.current = null
+            if (queued) {
+                await sendPendingMessage(result.sessionId, queued)
+            }
+
+            if (result.type === 'created' && result.sessionId !== props.session.id) {
+                navigate({
+                    to: '/sessions/$sessionId',
+                    params: { sessionId: result.sessionId }
+                })
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to resume session'
+            setResumeError(message)
+            haptic.notification('error')
+            console.error('Failed to resume session:', error)
+        } finally {
+            setIsResuming(false)
+        }
+    }, [
+        haptic,
+        isResuming,
+        navigate,
+        props.api,
+        props.onRefresh,
+        props.session.active,
+        props.session.id,
+        queryClient,
+        sendPendingMessage
+    ])
+
+    const handleResumeRequest = useCallback(() => {
+        void resumeSession()
+    }, [resumeSession])
+
+    const handleSendMessage = useCallback((text: string) => {
+        if (props.session.active) {
+            props.onSend(text)
+            return
+        }
+        void resumeSession(text)
+    }, [props.session.active, props.onSend, resumeSession])
+
     const runtime = useHappyRuntime({
         session: props.session,
         blocks: reconciled.blocks,
         isSending: props.isSending,
-        onSendMessage: props.onSend,
+        onSendMessage: handleSendMessage,
         onAbort: handleAbort
     })
     const resolvedModelMode = useMemo(() => {
@@ -246,7 +332,11 @@ export function SessionChat(props: {
             {controlsDisabled ? (
                 <div className="px-3 pt-3">
                     <div className="mx-auto w-full max-w-content rounded-md bg-[var(--app-subtle-bg)] p-3 text-sm text-[var(--app-hint)]">
-                        Session is inactive. Controls are disabled.
+                        {isResuming
+                            ? 'Resuming session...'
+                            : resumeError
+                                ? 'Resume failed. Tap the composer to retry.'
+                                : 'Session is inactive. Tap the composer to resume.'}
                     </div>
                 </div>
             ) : null}
@@ -273,7 +363,7 @@ export function SessionChat(props: {
 
                     <HappyComposer
                         apiClient={props.api}
-                        disabled={props.isSending || controlsDisabled}
+                        disabled={props.isSending || isResuming || controlsDisabled}
                         permissionMode={props.session.permissionMode}
                         modelMode={resolvedModelMode}
                         modelReasoningEffort={resolvedReasoningEffort}
@@ -283,6 +373,9 @@ export function SessionChat(props: {
                         agentState={props.session.agentState}
                         contextSize={reduced.latestUsage?.contextSize}
                         controlledByUser={props.session.agentState?.controlledByUser === true}
+                        onRequestResume={handleResumeRequest}
+                        resumePending={isResuming}
+                        resumeError={resumeError}
                         onPermissionModeChange={handlePermissionModeChange}
                         onModelModeChange={handleModelModeChange}
                         onSwitchToRemote={handleSwitchToRemote}

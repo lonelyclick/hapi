@@ -26,6 +26,8 @@ export async function runCodex(opts: {
     startedBy?: 'daemon' | 'terminal';
     codexArgs?: string[];
     permissionMode?: PermissionMode;
+    hapiSessionId?: string;
+    resumeSessionId?: string;
 }): Promise<void> {
     const workingDirectory = process.cwd();
     const sessionTag = randomUUID();
@@ -72,8 +74,29 @@ export async function runCodex(opts: {
         worktree: worktreeInfo ?? undefined
     };
 
-    const response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
+    let response: Awaited<ReturnType<typeof api.getOrCreateSession>> | null = null;
+    const hapiSessionId = opts.hapiSessionId?.trim() || null;
+    if (hapiSessionId) {
+        try {
+            response = await api.getSession(hapiSessionId);
+            logger.debug(`Session loaded: ${response.id}`);
+        } catch (error) {
+            logger.debug(`[codex] Failed to load session ${hapiSessionId}, creating new one`, error);
+        }
+    }
+    if (!response) {
+        response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
+    }
     const session = api.sessionSyncClient(response);
+    if (hapiSessionId) {
+        session.updateMetadata((current) => ({
+            ...current,
+            ...metadata,
+            summary: current.summary ?? metadata.summary,
+            claudeSessionId: current.claudeSessionId ?? metadata.claudeSessionId,
+            codexSessionId: current.codexSessionId ?? metadata.codexSessionId
+        }));
+    }
 
     try {
         logger.debug(`[START] Reporting session ${response.id} to daemon`);
@@ -244,11 +267,14 @@ export async function runCodex(opts: {
         };
     });
 
+    const resumeSessionId = (opts.resumeSessionId ?? response.metadata?.codexSessionId ?? null) || null;
+
     let loopError: unknown = null;
     try {
         await loop({
             path: workingDirectory,
             startingMode,
+            sessionId: resumeSessionId,
             messageQueue,
             api,
             session,

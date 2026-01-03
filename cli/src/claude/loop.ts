@@ -26,6 +26,7 @@ interface LoopOptions {
     permissionMode?: PermissionMode
     startingMode?: 'local' | 'remote'
     startedBy?: 'daemon' | 'terminal'
+    sessionId?: string | null
     onModeChange: (mode: 'local' | 'remote') => void
     mcpServers: Record<string, any>
     session: ApiSessionClient
@@ -51,7 +52,7 @@ export async function loop(opts: LoopOptions) {
         api: opts.api,
         client: opts.session,
         path: opts.path,
-        sessionId: null,
+        sessionId: opts.sessionId ?? null,
         claudeEnvVars: opts.claudeEnvVars,
         claudeArgs: opts.claudeArgs,
         mcpServers: opts.mcpServers,

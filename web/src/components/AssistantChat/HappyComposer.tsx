@@ -125,6 +125,9 @@ export function HappyComposer(props: {
     contextSize?: number
     controlledByUser?: boolean
     agentFlavor?: string | null
+    onRequestResume?: () => void
+    resumePending?: boolean
+    resumeError?: string | null
     onPermissionModeChange?: (mode: PermissionMode) => void
     onModelModeChange?: (config: { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }) => void
     onSwitchToRemote?: () => void
@@ -144,6 +147,9 @@ export function HappyComposer(props: {
         contextSize,
         controlledByUser = false,
         agentFlavor,
+        onRequestResume,
+        resumePending = false,
+        resumeError = null,
         onPermissionModeChange,
         onModelModeChange,
         onSwitchToRemote,
@@ -165,6 +171,12 @@ export function HappyComposer(props: {
     const trimmed = composerText.trim()
     const hasText = trimmed.length > 0
     const canSend = hasText && !controlsDisabled && !threadIsRunning
+    const showResumeOverlay = !active && Boolean(onRequestResume)
+    const resumeLabel = resumePending
+        ? 'Resuming...'
+        : resumeError
+            ? 'Resume failed. Tap to retry.'
+            : 'Tap to resume session'
 
     const [inputState, setInputState] = useState<TextInputState>({
         text: '',
@@ -895,6 +907,16 @@ export function HappyComposer(props: {
             <div className="mx-auto w-full max-w-content">
                 <ComposerPrimitive.Root className="relative">
                     {overlays}
+                    {showResumeOverlay ? (
+                        <button
+                            type="button"
+                            disabled={resumePending}
+                            onClick={resumePending ? undefined : onRequestResume}
+                            className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-[20px] bg-[var(--app-bg)]/80 text-sm font-medium text-[var(--app-hint)] backdrop-blur-sm"
+                        >
+                            {resumeLabel}
+                        </button>
+                    ) : null}
 
                     <StatusBar
                         active={active}

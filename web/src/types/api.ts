@@ -72,6 +72,13 @@ export type Session = {
     modelReasoningEffort?: ModelReasoningEffort
 }
 
+export type ResumeSessionResponse = {
+    type: 'already-active' | 'resumed' | 'created'
+    sessionId: string
+    resumedFrom?: string
+    usedResume?: boolean
+}
+
 export type SessionSummaryMetadata = {
     name?: string
     path: string

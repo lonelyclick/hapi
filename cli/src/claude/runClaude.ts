@@ -36,6 +36,8 @@ export interface StartOptions {
     claudeEnvVars?: Record<string, string>
     claudeArgs?: string[]
     startedBy?: 'daemon' | 'terminal'
+    hapiSessionId?: string
+    resumeSessionId?: string
 }
 
 export async function runClaude(options: StartOptions = {}): Promise<void> {
@@ -96,8 +98,20 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         flavor: 'claude',
         worktree: worktreeInfo ?? undefined
     };
-    const response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
-    logger.debug(`Session created: ${response.id}`);
+    let response: Awaited<ReturnType<typeof api.getOrCreateSession>> | null = null;
+    const hapiSessionId = options.hapiSessionId?.trim() || null;
+    if (hapiSessionId) {
+        try {
+            response = await api.getSession(hapiSessionId);
+            logger.debug(`Session loaded: ${response.id}`);
+        } catch (error) {
+            logger.debug(`[START] Failed to load session ${hapiSessionId}, creating new one`, error);
+        }
+    }
+    if (!response) {
+        response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
+        logger.debug(`Session created: ${response.id}`);
+    }
 
     // Always report to daemon if it exists
     try {
@@ -130,6 +144,15 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
 
     // Create realtime session
     const session = api.sessionSyncClient(response);
+    if (hapiSessionId) {
+        session.updateMetadata((current) => ({
+            ...current,
+            ...metadata,
+            summary: current.summary ?? metadata.summary,
+            claudeSessionId: current.claudeSessionId ?? metadata.claudeSessionId,
+            codexSessionId: current.codexSessionId ?? metadata.codexSessionId
+        }));
+    }
 
     // Start HAPI MCP server
     const happyServer = await startHappyServer(session);
@@ -399,12 +422,15 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         return { applied: { permissionMode: currentPermissionMode, modelMode: currentModelMode } };
     });
 
+    const resumeSessionId = (options.resumeSessionId ?? response.metadata?.claudeSessionId ?? null) || null;
+
     // Create claude loop
     await loop({
         path: workingDirectory,
         model: options.model,
         permissionMode: options.permissionMode,
         startingMode,
+        sessionId: resumeSessionId,
         messageQueue,
         api,
         allowedTools: happyServer.toolNames.map(toolName => `mcp__hapi__${toolName}`),

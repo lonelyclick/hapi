@@ -112,22 +112,28 @@ import { getCliArgs } from './utils/cliArgs'
       process.exit(1)
     }
     return;
-  } else if (subcommand === 'codex') {
-    // Handle codex command
-    try {
-      const { runCodex } = await import('@/codex/runCodex');
+    } else if (subcommand === 'codex') {
+      // Handle codex command
+      try {
+        const { runCodex } = await import('@/codex/runCodex');
 
       // Parse known arguments and collect unknown ones for passthrough
       const options: {
         startedBy?: 'daemon' | 'terminal';
         codexArgs?: string[];
         permissionMode?: 'default' | 'read-only' | 'safe-yolo' | 'yolo';
+        hapiSessionId?: string;
+        resumeSessionId?: string;
       } = {};
       const unknownArgs: string[] = [];
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg === '--started-by') {
           options.startedBy = args[++i] as 'daemon' | 'terminal';
+        } else if (arg === '--hapi-session-id') {
+          options.hapiSessionId = args[++i];
+        } else if (arg === '--hapi-resume-session-id') {
+          options.resumeSessionId = args[++i];
         } else if (arg === '--yolo' || arg === '--dangerously-bypass-approvals-and-sandbox') {
           options.permissionMode = 'yolo';
           unknownArgs.push(arg);
@@ -382,6 +388,10 @@ ${chalk.bold('To clean up runaway processes:')} Use ${chalk.cyan('hapi doctor cl
         unknownArgs.push(arg)
       } else if (arg === '--hapi-starting-mode') {
         options.startingMode = z.enum(['local', 'remote']).parse(args[++i])
+      } else if (arg === '--hapi-session-id') {
+        options.hapiSessionId = args[++i]
+      } else if (arg === '--hapi-resume-session-id') {
+        options.resumeSessionId = args[++i]
       } else if (arg === '--yolo') {
         // Shortcut for --dangerously-skip-permissions
         options.permissionMode = 'bypassPermissions'

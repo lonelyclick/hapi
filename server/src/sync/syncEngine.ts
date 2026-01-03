@@ -887,13 +887,28 @@ export class SyncEngine {
         agent: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' = 'claude',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
-        worktreeName?: string
+        worktreeName?: string,
+        options?: {
+            sessionId?: string
+            resumeSessionId?: string
+            token?: string
+        }
     ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         try {
             const result = await this.machineRpc(
                 machineId,
                 'spawn-happy-session',
-                { type: 'spawn-in-directory', directory, agent, yolo, sessionType, worktreeName }
+                {
+                    type: 'spawn-in-directory',
+                    directory,
+                    agent,
+                    yolo,
+                    sessionType,
+                    worktreeName,
+                    sessionId: options?.sessionId,
+                    resumeSessionId: options?.resumeSessionId,
+                    token: options?.token
+                }
             )
             if (result && typeof result === 'object') {
                 const obj = result as Record<string, unknown>

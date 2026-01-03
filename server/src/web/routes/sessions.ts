@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import type { SyncEngine, Session } from '../../sync/syncEngine'
+import type { DecryptedMessage, Session, SyncEngine } from '../../sync/syncEngine'
 import type { SSEManager } from '../../sse/sseManager'
+import type { Store, UserRole } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
+import { buildInitPrompt } from '../prompts/initPrompt'
 
 type SessionSummaryMetadata = {
     name?: string
@@ -90,9 +92,246 @@ const modelModeSchema = z.object({
     reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional()
 })
 
+const RESUME_TIMEOUT_MS = 60_000
+const RESUME_CONTEXT_MAX_LINES = 20
+const RESUME_CONTEXT_MAX_CHARS = 16_000
+
+function resolveUserRole(store: Store, email?: string): UserRole {
+    if (!email) return 'developer'
+    const users = store.getAllowedUsers()
+    if (users.length === 0) return 'developer'
+    const match = users.find(u => u.email.toLowerCase() === email.toLowerCase())
+    return match?.role ?? 'developer'
+}
+
+async function waitForSessionOnline(engine: SyncEngine, sessionId: string, timeoutMs: number): Promise<boolean> {
+    const existing = engine.getSession(sessionId)
+    if (existing?.active) {
+        return true
+    }
+
+    return await new Promise((resolve) => {
+        let resolved = false
+        let unsubscribe = () => {}
+
+        const finalize = (result: boolean) => {
+            if (resolved) return
+            resolved = true
+            clearTimeout(timer)
+            unsubscribe()
+            resolve(result)
+        }
+
+        const timer = setTimeout(() => finalize(false), timeoutMs)
+
+        unsubscribe = engine.subscribe((event) => {
+            if (event.sessionId !== sessionId) {
+                return
+            }
+            if (event.type !== 'session-added' && event.type !== 'session-updated') {
+                return
+            }
+            const session = engine.getSession(sessionId)
+            if (session?.active) {
+                finalize(true)
+            }
+        })
+
+        const current = engine.getSession(sessionId)
+        if (current?.active) {
+            finalize(true)
+        }
+    })
+}
+
+async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole): Promise<void> {
+    try {
+        const session = engine.getSession(sessionId)
+        const projectRoot = session?.metadata?.path?.trim()
+            || session?.metadata?.worktree?.basePath?.trim()
+            || null
+        const prompt = await buildInitPrompt(role, { projectRoot })
+        if (!prompt.trim()) {
+            return
+        }
+        await engine.sendMessage(sessionId, {
+            text: prompt,
+            sentFrom: 'webapp'
+        })
+    } catch {
+        // Ignore failures.
+    }
+}
+
+async function resolveSpawnTarget(
+    engine: SyncEngine,
+    machineId: string,
+    session: Session
+): Promise<{ ok: true; directory: string; sessionType?: 'simple' | 'worktree'; worktreeName?: string } | { ok: false; error: string }> {
+    const metadata = session.metadata
+    if (!metadata) {
+        return { ok: false, error: 'Session metadata missing' }
+    }
+
+    const worktree = metadata.worktree
+    const worktreePath = worktree?.worktreePath?.trim()
+    if (worktreePath) {
+        try {
+            const exists = await engine.checkPathsExist(machineId, [worktreePath])
+            if (exists[worktreePath]) {
+                return { ok: true, directory: worktreePath, sessionType: 'simple' }
+            }
+        } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : 'Failed to check worktree path' }
+        }
+    }
+
+    const worktreeBase = worktree?.basePath?.trim()
+    if (worktreeBase) {
+        try {
+            const exists = await engine.checkPathsExist(machineId, [worktreeBase])
+            if (!exists[worktreeBase]) {
+                return { ok: false, error: `Worktree base path not found: ${worktreeBase}` }
+            }
+        } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : 'Failed to check worktree base path' }
+        }
+        return { ok: true, directory: worktreeBase, sessionType: 'worktree', worktreeName: worktree?.name }
+    }
+
+    const sessionPath = metadata.path?.trim()
+    if (!sessionPath) {
+        return { ok: false, error: 'Session path missing' }
+    }
+
+    try {
+        const exists = await engine.checkPathsExist(machineId, [sessionPath])
+        if (!exists[sessionPath]) {
+            return { ok: false, error: `Session path not found: ${sessionPath}` }
+        }
+    } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : 'Failed to check session path' }
+    }
+
+    return { ok: true, directory: sessionPath, sessionType: 'simple' }
+}
+
+function extractUserText(content: unknown): string | null {
+    if (!content || typeof content !== 'object') {
+        return null
+    }
+    const record = content as Record<string, unknown>
+    if (record.role !== 'user') {
+        return null
+    }
+    const body = record.content as Record<string, unknown> | string | undefined
+    if (!body) {
+        return null
+    }
+    if (typeof body === 'string') {
+        return body.trim() || null
+    }
+    if (typeof body === 'object' && body.type === 'text' && typeof body.text === 'string') {
+        return body.text.trim() || null
+    }
+    return null
+}
+
+function extractAgentText(content: unknown): string | null {
+    if (!content || typeof content !== 'object') {
+        return null
+    }
+    const record = content as Record<string, unknown>
+    if (record.role !== 'agent') {
+        return null
+    }
+    const payload = record.content as Record<string, unknown> | undefined
+    const data = payload?.data
+    if (!data || (typeof data !== 'object' && typeof data !== 'string')) {
+        return null
+    }
+    if (typeof data === 'string') {
+        return data.trim() || null
+    }
+    const dataRecord = data as Record<string, unknown>
+    if (typeof dataRecord.message === 'string') {
+        return dataRecord.message.trim() || null
+    }
+    if (dataRecord.type === 'message' && typeof dataRecord.message === 'string') {
+        return dataRecord.message.trim() || null
+    }
+    if (dataRecord.type === 'assistant' && typeof dataRecord.message === 'object') {
+        const message = dataRecord.message as Record<string, unknown>
+        const contentValue = message.content
+        if (typeof contentValue === 'string') {
+            return contentValue.trim() || null
+        }
+        if (Array.isArray(contentValue)) {
+            const texts = contentValue
+                .map((item) => {
+                    if (!item || typeof item !== 'object') return null
+                    const itemRecord = item as Record<string, unknown>
+                    if (itemRecord.type === 'text' && typeof itemRecord.text === 'string') {
+                        return itemRecord.text.trim()
+                    }
+                    return null
+                })
+                .filter((text): text is string => Boolean(text))
+            if (texts.length > 0) {
+                return texts.join('\n')
+            }
+        }
+    }
+    return null
+}
+
+function buildResumeContextMessage(session: Session, messages: DecryptedMessage[]): string | null {
+    const summary = session.metadata?.summary?.text?.trim()
+    const lines: string[] = [
+        '#InitPrompt-ResumeContext',
+        '以下是从旧会话自动迁移的上下文（可能不完整）：'
+    ]
+    if (summary) {
+        lines.push(`摘要：${summary}`)
+    }
+
+    const dialogLines: string[] = []
+    for (const message of messages) {
+        const userText = extractUserText(message.content)
+        if (userText) {
+            dialogLines.push(`用户：${userText}`)
+            continue
+        }
+        const agentText = extractAgentText(message.content)
+        if (agentText) {
+            dialogLines.push(`助手：${agentText}`)
+        }
+    }
+
+    if (dialogLines.length > RESUME_CONTEXT_MAX_LINES) {
+        dialogLines.splice(0, dialogLines.length - RESUME_CONTEXT_MAX_LINES)
+    }
+
+    if (dialogLines.length > 0) {
+        lines.push('最近对话片段：')
+        lines.push(...dialogLines)
+    }
+
+    if (lines.length <= 2) {
+        return null
+    }
+
+    const content = lines.join('\n')
+    if (content.length <= RESUME_CONTEXT_MAX_CHARS) {
+        return content
+    }
+    return `${content.slice(0, RESUME_CONTEXT_MAX_CHARS)}...`
+}
+
 export function createSessionsRoutes(
     getSyncEngine: () => SyncEngine | null,
-    getSseManager: () => SSEManager | null
+    getSseManager: () => SSEManager | null,
+    store: Store
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -208,6 +447,107 @@ export function createSessionsRoutes(
 
         await engine.switchSession(sessionResult.sessionId, 'remote')
         return c.json({ ok: true })
+    })
+
+    app.post('/sessions/:id/resume', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const sessionId = sessionResult.sessionId
+        const session = sessionResult.session
+
+        if (session.active) {
+            return c.json({ type: 'already-active', sessionId })
+        }
+
+        const flavor = session.metadata?.flavor ?? 'claude'
+        if (flavor !== 'claude' && flavor !== 'codex') {
+            return c.json({ error: 'Resume not supported for this session flavor' }, 400)
+        }
+
+        const machineId = session.metadata?.machineId?.trim()
+        if (!machineId) {
+            return c.json({ error: 'Session machine not found' }, 409)
+        }
+
+        const machine = engine.getMachineByNamespace(machineId, c.get('namespace'))
+        if (!machine || !machine.active) {
+            return c.json({ error: 'Machine is offline' }, 409)
+        }
+
+        const spawnTarget = await resolveSpawnTarget(engine, machineId, session)
+        if (!spawnTarget.ok) {
+            return c.json({ error: spawnTarget.error }, 409)
+        }
+
+        const resumeAttempt = await engine.spawnSession(
+            machineId,
+            spawnTarget.directory,
+            flavor,
+            undefined,
+            spawnTarget.sessionType,
+            spawnTarget.worktreeName,
+            { sessionId }
+        )
+
+        if (resumeAttempt.type === 'success') {
+            const online = await waitForSessionOnline(engine, sessionId, RESUME_TIMEOUT_MS)
+            if (online) {
+                return c.json({ type: 'resumed', sessionId })
+            }
+        }
+
+        const resumeSessionId = (() => {
+            const value = flavor === 'claude'
+                ? session.metadata?.claudeSessionId
+                : session.metadata?.codexSessionId
+            return typeof value === 'string' && value.trim() ? value : undefined
+        })()
+
+        const fallbackResult = await engine.spawnSession(
+            machineId,
+            spawnTarget.directory,
+            flavor,
+            undefined,
+            spawnTarget.sessionType,
+            spawnTarget.worktreeName,
+            { resumeSessionId }
+        )
+
+        if (fallbackResult.type !== 'success') {
+            return c.json({ error: fallbackResult.message }, 409)
+        }
+
+        const newSessionId = fallbackResult.sessionId
+        const online = await waitForSessionOnline(engine, newSessionId, RESUME_TIMEOUT_MS)
+        if (!online) {
+            return c.json({ error: 'Session resume timed out' }, 409)
+        }
+
+        const role = resolveUserRole(store, c.get('email'))
+        await sendInitPrompt(engine, newSessionId, role)
+
+        if (!resumeSessionId) {
+            const page = engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
+            const contextMessage = buildResumeContextMessage(session, page.messages)
+            if (contextMessage) {
+                await engine.sendMessage(newSessionId, { text: contextMessage, sentFrom: 'webapp' })
+            }
+        }
+
+        return c.json({
+            type: 'created',
+            sessionId: newSessionId,
+            resumedFrom: sessionId,
+            usedResume: Boolean(resumeSessionId)
+        })
     })
 
     app.post('/sessions/:id/permission-mode', async (c) => {

@@ -346,12 +346,15 @@ export async function startDaemon(): Promise<void> {
           '--hapi-starting-mode', 'remote',
           '--started-by', 'daemon'
         ];
+        if (options.sessionId) {
+          args.push('--hapi-session-id', options.sessionId);
+        }
+        if (options.resumeSessionId) {
+          args.push('--hapi-resume-session-id', options.resumeSessionId);
+        }
         if (yolo) {
           args.push('--yolo');
         }
-
-        // TODO: In future, sessionId could be used with --resume to continue existing sessions
-        // For now, we ignore it - each spawn creates a new session
         const MAX_TAIL_CHARS = 4000;
         let stderrTail = '';
         const appendTail = (current: string, chunk: Buffer | string): string => {
