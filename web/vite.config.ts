@@ -56,7 +56,7 @@ export default defineConfig({
         react(),
         VitePWA({
             registerType: 'autoUpdate',
-            includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'mask-icon.svg'],
+            includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'pwa-192x192.png'],
             manifest: {
                 name: 'Yoho Remote',
                 short_name: 'Yoho',
