@@ -241,7 +241,8 @@ export class SyncEngine {
                 type: event.type,
                 namespace,
                 sessionId: event.sessionId,
-                machineId: event.machineId
+                machineId: event.machineId,
+                data: event.data
             }
 
         this.sseManager.broadcast(webappEvent)
