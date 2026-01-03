@@ -243,13 +243,16 @@ export function App() {
         // 检测任务完成 (thinking: true -> false)
         if (event.type === 'session-updated') {
             const data = ('data' in event ? event.data : null) as { active?: boolean; thinking?: boolean; wasThinking?: boolean } | null
+            console.log('[notification] session-updated', event.sessionId, data)
             // wasThinking 表示之前是 thinking 状态，现在变成了非 thinking 状态
             if (data?.wasThinking && data.thinking === false) {
                 const isCurrentSession = event.sessionId === selectedSessionId
                 const isAppVisible = document.visibilityState === 'visible'
+                console.log('[notification] task complete detected', { isCurrentSession, isAppVisible, selectedSessionId })
 
                 // 如果是当前 session 且 app 在前台，跳过通知（用户已经在看了）
                 if (isCurrentSession && isAppVisible) {
+                    console.log('[notification] skipping - current session in foreground')
                     return
                 }
 
@@ -257,6 +260,7 @@ export function App() {
                 const sessionsData = queryClient.getQueryData<{ sessions: SessionSummary[] }>(queryKeys.sessions)
                 const session = sessionsData?.sessions.find(s => s.id === event.sessionId)
                 const title = session?.metadata?.name || session?.metadata?.path || 'Session'
+                console.log('[notification] showing notification', { title, sessionId: event.sessionId })
 
                 notifyTaskComplete({
                     sessionId: event.sessionId,
