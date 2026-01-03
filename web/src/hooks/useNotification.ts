@@ -229,20 +229,20 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
         )
     } else if (isEnabled && hasNotificationAPI && notificationPermission === 'granted') {
         // App 在后台 - 显示系统通知
-        const body = project ? `${title}\n${project}` : title
+        const notifTitle = project || 'Task Completed'
         const options: NotificationOptions & { renotify?: boolean } = {
-            body,
+            body: title,
             icon: '/pwa-192x192.png',
             badge: '/pwa-64x64.png',
             tag: `task-complete-${sessionId}`,
             renotify: true,
         }
-        console.log('[notification] creating system notification', { body, options })
+        console.log('[notification] creating system notification', { notifTitle, options })
         try {
             // 存储待跳转信息，用于 iOS PWA 点击通知后恢复 app 时自动跳转
             setPendingNotification(sessionId)
 
-            const notif = new Notification('Task Completed', options)
+            const notif = new Notification(notifTitle, options)
             console.log('[notification] system notification created', notif)
 
             notif.onclick = () => {
