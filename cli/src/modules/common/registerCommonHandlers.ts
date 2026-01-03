@@ -122,7 +122,7 @@ export interface SpawnSessionOptions {
     directory: string;
     sessionId?: string;
     approvedNewDirectoryCreation?: boolean;
-    agent?: 'claude' | 'codex' | 'gemini';
+    agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax';
     yolo?: boolean;
     token?: string;
     sessionType?: 'simple' | 'worktree';

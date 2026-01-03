@@ -332,11 +332,15 @@ export async function startDaemon(): Promise<void> {
         }
 
         // Construct arguments for the CLI
-        const agentCommand = agent === 'codex'
-          ? 'codex'
-          : agent === 'gemini'
-            ? 'gemini'
-            : 'claude';
+        const agentCommand = (() => {
+          switch (agent) {
+            case 'codex': return 'codex';
+            case 'gemini': return 'gemini';
+            case 'glm': return 'glm';
+            case 'minimax': return 'minimax';
+            default: return 'claude';
+          }
+        })();
         const args = [
           agentCommand,
           '--hapi-starting-mode', 'remote',
