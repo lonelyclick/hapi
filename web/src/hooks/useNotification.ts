@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { createElement, useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { getPlatform } from './usePlatform'
 
@@ -137,27 +137,39 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
         platform.haptic.notification('success')
         const toastId = `task-complete-${sessionId}`
         toast.custom(
-            (t) => (
-                <div
-                    onClick={() => {
+            (t) => createElement(
+                'div',
+                {
+                    onClick: () => {
                         onClick?.()
                         toast.dismiss(t)
-                    }}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl shadow-lg border border-emerald-500/30 bg-emerald-500/5 backdrop-blur-sm cursor-pointer active:opacity-80"
-                    style={{
+                    },
+                    className: 'w-full flex items-center gap-3 p-3 rounded-xl shadow-lg border backdrop-blur-sm cursor-pointer active:opacity-80',
+                    style: {
                         backgroundColor: 'var(--app-bg)',
                         borderColor: 'rgba(16, 185, 129, 0.3)',
-                    }}
-                >
-                    <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate" style={{ color: 'var(--app-fg)' }}>
-                            {project || 'Task completed'}
-                        </div>
-                        <div className="text-xs truncate mt-0.5" style={{ color: 'var(--app-hint)' }}>
-                            {title}
-                        </div>
-                    </div>
-                </div>
+                    }
+                },
+                createElement(
+                    'div',
+                    { className: 'flex-1 min-w-0' },
+                    createElement(
+                        'div',
+                        {
+                            className: 'text-sm font-medium truncate',
+                            style: { color: 'var(--app-fg)' }
+                        },
+                        project || 'Task completed'
+                    ),
+                    createElement(
+                        'div',
+                        {
+                            className: 'text-xs truncate mt-0.5',
+                            style: { color: 'var(--app-hint)' }
+                        },
+                        title
+                    )
+                )
             ),
             { id: toastId }
         )
