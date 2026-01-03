@@ -80,6 +80,16 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
     const platform = getPlatform()
     const isVisible = document.visibilityState === 'visible'
     const isEnabled = getStoredPreference()
+    const hasNotificationAPI = 'Notification' in window
+    const notificationPermission = hasNotificationAPI ? Notification.permission : 'unsupported'
+
+    console.log('[notification] notifyTaskComplete', {
+        isVisible,
+        isEnabled,
+        hasNotificationAPI,
+        notificationPermission,
+        sessionId
+    })
 
     if (isVisible) {
         // App 在前台 - 显示 Toast（始终显示，不受 enabled 开关控制）
@@ -92,7 +102,7 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
             } : undefined,
             id: `task-complete-${sessionId}`,
         })
-    } else if (isEnabled && 'Notification' in window && Notification.permission === 'granted') {
+    } else if (isEnabled && hasNotificationAPI && notificationPermission === 'granted') {
         // App 在后台 - 显示系统通知
         const body = project ? `${title}\n${project}` : title
         const options: NotificationOptions & { renotify?: boolean } = {
