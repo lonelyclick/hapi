@@ -416,6 +416,8 @@ ${chalk.bold('Usage:')}
   hapi auth              Manage authentication
   hapi codex             Start Codex mode
   hapi gemini            Start Gemini ACP mode
+  hapi glm               Start GLM-4.7 mode (NVIDIA NIM)
+  hapi minimax           Start MiniMax-M2.1 mode (NVIDIA NIM)
   hapi mcp               Start MCP stdio bridge
   hapi connect           (not available in direct-connect mode)
   hapi notify            (not available in direct-connect mode)
