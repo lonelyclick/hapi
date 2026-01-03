@@ -229,9 +229,9 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
         )
     } else if (isEnabled && hasNotificationAPI && notificationPermission === 'granted') {
         // App 在后台 - 显示系统通知
-        const notifTitle = project || 'Task Completed'
+        const notifTitle = title
         const options: NotificationOptions & { renotify?: boolean } = {
-            body: title,
+            body: project || 'Task completed',
             icon: '/pwa-192x192.png',
             badge: '/pwa-64x64.png',
             tag: `task-complete-${sessionId}`,
