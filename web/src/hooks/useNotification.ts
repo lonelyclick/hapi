@@ -84,8 +84,8 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
     if (isVisible) {
         // App 在前台 - 显示 Toast（始终显示，不受 enabled 开关控制）
         platform.haptic.notification('success')
-        toast.success(title, {
-            description: project || 'Task completed',
+        toast.success(project || 'Task completed', {
+            description: title,
             action: onClick ? {
                 label: 'View',
                 onClick,
