@@ -112,14 +112,20 @@ export function notifyTaskComplete(notification: TaskCompleteNotification): void
             tag: `task-complete-${sessionId}`,
             renotify: true,
         }
-        const notif = new Notification('Task Completed', options)
+        console.log('[notification] creating system notification', { body, options })
+        try {
+            const notif = new Notification('Task Completed', options)
+            console.log('[notification] system notification created', notif)
 
-        if (onClick) {
-            notif.onclick = () => {
-                window.focus()
-                onClick()
-                notif.close()
+            if (onClick) {
+                notif.onclick = () => {
+                    window.focus()
+                    onClick()
+                    notif.close()
+                }
             }
+        } catch (error) {
+            console.error('[notification] failed to create notification', error)
         }
     }
 }
