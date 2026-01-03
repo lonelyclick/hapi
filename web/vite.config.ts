@@ -58,8 +58,8 @@ export default defineConfig({
             registerType: 'autoUpdate',
             includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'mask-icon.svg'],
             manifest: {
-                name: 'HAPI',
-                short_name: 'HAPI',
+                name: 'Yoho Remote',
+                short_name: 'Yoho',
                 description: 'AI-powered development assistant',
                 theme_color: '#ffffff',
                 background_color: '#ffffff',
