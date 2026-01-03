@@ -179,6 +179,29 @@ See `src/store/index.ts` for SQLite persistence:
 - Todo extraction from messages.
 - Users table for Telegram bindings (includes namespace).
 
+## Cleanup offline sessions
+
+Use this Node script to list or delete offline sessions shown in the web UI (it talks to the running server API):
+
+```bash
+node server/scripts/cleanup-offline-sessions.js
+```
+
+Options:
+- `--delete` actually deletes; default is dry-run.
+- `--force` passes `force=1` to remove SyncEngine in-memory sessions even if the DB row is gone.
+- `--min-idle-minutes=N` filters by idle time.
+- `--namespace=NAME` targets a specific namespace when using a base token.
+
+Examples:
+
+```bash
+node server/scripts/cleanup-offline-sessions.js --min-idle-minutes=60
+node server/scripts/cleanup-offline-sessions.js --delete --force --yes
+```
+
+The script uses `CLI_API_TOKEN` (or `~/.hapi/settings.json`) to authenticate and defaults to `http://localhost:3006`.
+
 ## Source structure
 
 - `src/web/` - HTTP server and routes.

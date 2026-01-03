@@ -285,7 +285,7 @@ export class SyncEngine {
         return session
     }
 
-    async deleteSession(sessionId: string, options?: { terminateSession?: boolean }): Promise<boolean> {
+    async deleteSession(sessionId: string, options?: { terminateSession?: boolean; force?: boolean }): Promise<boolean> {
         const session = this.sessions.get(sessionId)
         this.deletingSessions.add(sessionId)
         try {
@@ -298,7 +298,11 @@ export class SyncEngine {
         }
 
         const deleted = this.store.deleteSession(sessionId)
-        if (!deleted) {
+        if (!deleted && !options?.force) {
+            this.deletingSessions.delete(sessionId)
+            return false
+        }
+        if (!deleted && !session) {
             this.deletingSessions.delete(sessionId)
             return false
         }
@@ -309,7 +313,7 @@ export class SyncEngine {
         this.todoBackfillAttemptedSessionIds.delete(sessionId)
         this.deletingSessions.delete(sessionId)
         this.emit({ type: 'session-removed', sessionId })
-        return true
+        return deleted || Boolean(session)
     }
 
     async killSession(sessionId: string): Promise<void> {

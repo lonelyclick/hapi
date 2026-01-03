@@ -26,6 +26,8 @@ import { resolve } from 'node:path';
 import type { Session } from './session';
 import { readWorktreeEnv } from '@/utils/worktreeEnv';
 
+const INIT_PROMPT_PREFIX = '#InitPrompt-';
+
 export interface StartOptions {
     model?: string
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
@@ -272,41 +274,6 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             logger.debug(`[loop] User message received with no disallowed tools override, using current: ${currentDisallowedTools ? currentDisallowedTools.join(', ') : 'none'}`);
         }
 
-        // Check for special commands before processing
-        const specialCommand = parseSpecialCommand(message.content.text);
-
-        if (specialCommand.type === 'compact') {
-            logger.debug('[start] Detected /compact command');
-            const enhancedMode: EnhancedMode = {
-                permissionMode: messagePermissionMode ?? 'default',
-                model: messageModel,
-                fallbackModel: messageFallbackModel,
-                customSystemPrompt: messageCustomSystemPrompt,
-                appendSystemPrompt: messageAppendSystemPrompt,
-                allowedTools: messageAllowedTools,
-                disallowedTools: messageDisallowedTools
-            };
-            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || message.content.text, enhancedMode);
-            logger.debugLargeJson('[start] /compact command pushed to queue:', message);
-            return;
-        }
-
-        if (specialCommand.type === 'clear') {
-            logger.debug('[start] Detected /clear command');
-            const enhancedMode: EnhancedMode = {
-                permissionMode: messagePermissionMode ?? 'default',
-                model: messageModel,
-                fallbackModel: messageFallbackModel,
-                customSystemPrompt: messageCustomSystemPrompt,
-                appendSystemPrompt: messageAppendSystemPrompt,
-                allowedTools: messageAllowedTools,
-                disallowedTools: messageDisallowedTools
-            };
-            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || message.content.text, enhancedMode);
-            logger.debugLargeJson('[start] /compact command pushed to queue:', message);
-            return;
-        }
-
         // Push with resolved permission mode, model, system prompts, and tools
         const enhancedMode: EnhancedMode = {
             permissionMode: messagePermissionMode ?? 'default',
@@ -317,6 +284,31 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             allowedTools: messageAllowedTools,
             disallowedTools: messageDisallowedTools
         };
+
+        const trimmedMessage = message.content.text.trimStart();
+        if (trimmedMessage.startsWith(INIT_PROMPT_PREFIX)) {
+            messageQueue.pushIsolate(message.content.text, enhancedMode);
+            logger.debugLargeJson('[start] Init prompt pushed to queue:', message);
+            return;
+        }
+
+        // Check for special commands before processing
+        const specialCommand = parseSpecialCommand(message.content.text);
+
+        if (specialCommand.type === 'compact') {
+            logger.debug('[start] Detected /compact command');
+            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || message.content.text, enhancedMode);
+            logger.debugLargeJson('[start] /compact command pushed to queue:', message);
+            return;
+        }
+
+        if (specialCommand.type === 'clear') {
+            logger.debug('[start] Detected /clear command');
+            messageQueue.pushIsolateAndClear(specialCommand.originalMessage || message.content.text, enhancedMode);
+            logger.debugLargeJson('[start] /compact command pushed to queue:', message);
+            return;
+        }
+
         messageQueue.push(message.content.text, enhancedMode);
         logger.debugLargeJson('User message pushed to queue:', message)
     });

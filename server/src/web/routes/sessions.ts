@@ -166,8 +166,10 @@ export function createSessionsRoutes(
         }
 
         const shouldTerminate = sessionResult.session.active
+        const forceParam = c.req.query('force')
+        const force = forceParam === '1' || forceParam === 'true'
         try {
-            const deleted = await engine.deleteSession(sessionResult.sessionId, { terminateSession: shouldTerminate })
+            const deleted = await engine.deleteSession(sessionResult.sessionId, { terminateSession: shouldTerminate, force })
             if (!deleted) {
                 return c.json({ error: 'Session not found' }, 404)
             }

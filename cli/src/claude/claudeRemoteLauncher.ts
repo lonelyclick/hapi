@@ -17,6 +17,13 @@ import { OutgoingMessageQueue } from "./utils/OutgoingMessageQueue";
 import { getToolName } from "./utils/getToolName";
 import { restoreTerminalState } from "@/ui/terminalState";
 
+const INIT_PROMPT_PREFIX = '#InitPrompt-';
+const TITLE_INSTRUCTION = 'Based on this message, call mcp__hapi__change_title to change chat session title that would represent the current task. If chat idea would change dramatically - call this function again to update the title.';
+
+function isInitPromptMessage(message: string): boolean {
+    return message.trimStart().startsWith(INIT_PROMPT_PREFIX);
+}
+
 interface PermissionsField {
     date: number;
     result: 'approved' | 'denied';
@@ -126,6 +133,22 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     // Handle messages
     let planModeToolCalls = new Set<string>();
     let ongoingToolCalls = new Map<string, { parentToolCallId: string | null }>();
+    let titleInstructionPending = true;
+
+    const appendTitleInstructionIfNeeded = (messageText: string): string => {
+        if (!titleInstructionPending) {
+            return messageText;
+        }
+        if (isInitPromptMessage(messageText)) {
+            return messageText;
+        }
+        const trimmed = messageText.trim();
+        if (trimmed === '/clear' || trimmed === '/compact' || trimmed.startsWith('/compact ')) {
+            return messageText;
+        }
+        titleInstructionPending = false;
+        return `${messageText}\n\n${TITLE_INSTRUCTION}`;
+    };
 
     function onMessage(message: SDKMessage) {
 
@@ -325,6 +348,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                 permissionHandler.reset(); // Reset permissions before starting new session
                 sdkToLogConverter.resetParentChain(); // Reset parent chain for new conversation
                 logger.debug(`[remote]: New session detected (previous: ${previousSessionId}, current: ${session.sessionId})`);
+                titleInstructionPending = true;
             } else {
                 messageBuffer.addMessage('Continuing Claude session...', 'status');
                 logger.debug(`[remote]: Continuing existing session: ${session.sessionId}`);
@@ -352,7 +376,10 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             let p = pending;
                             pending = null;
                             permissionHandler.handleModeChange(p.mode.permissionMode);
-                            return p;
+                            return {
+                                ...p,
+                                message: appendTitleInstructionIfNeeded(p.message)
+                            };
                         }
 
                         let msg = await session.queue.waitForMessagesAndGetAsString(controller.signal);
@@ -368,7 +395,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             mode = msg.mode;
                             permissionHandler.handleModeChange(mode.permissionMode);
                             return {
-                                message: msg.message,
+                                message: appendTitleInstructionIfNeeded(msg.message),
                                 mode: msg.mode
                             }
                         }
