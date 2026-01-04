@@ -108,7 +108,9 @@ export class AdvisorScheduler {
             console.log(`[AdvisorScheduler] Advisor session spawned: ${this.advisorSessionId}`)
 
             // 6. 发送 init prompt（仅在首次）
+            // 等待 CLI 完全连接（CLI 可能需要一点时间来加入 Socket.IO room）
             if (!this.initPromptSent.has(this.advisorSessionId)) {
+                await new Promise(resolve => setTimeout(resolve, 2000))
                 await this.sendInitPrompt(workingDir)
                 this.initPromptSent.add(this.advisorSessionId)
             }
