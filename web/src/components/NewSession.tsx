@@ -32,6 +32,7 @@ export function NewSession(props: {
     const [projectPath, setProjectPath] = useState('')
     const [agent, setAgent] = useState<AgentType>('claude')
     const [error, setError] = useState<string | null>(null)
+    const [isCustomPath, setIsCustomPath] = useState(false)
 
     // Fetch projects
     const { data: projectsData, isLoading: projectsLoading } = useQuery({
@@ -161,41 +162,53 @@ export function NewSession(props: {
 
             {/* Project Selector */}
             <div className="flex flex-col gap-1.5 px-3 py-3">
-                <label className="text-xs font-medium text-[var(--app-hint)]">
-                    Project
-                </label>
-                <input
-                    type="text"
-                    value={projectPath}
-                    onChange={(e) => setProjectPath(e.target.value)}
-                    disabled={isFormDisabled}
-                    placeholder="/path/to/project"
-                    list="project-path-suggestions"
-                    className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
-                />
-                <datalist id="project-path-suggestions">
-                    {projectSuggestions.map((suggestion) => (
-                        <option key={suggestion.value} value={suggestion.value} label={suggestion.label} />
-                    ))}
-                </datalist>
-                {projectsLoading ? (
-                    <div className="text-xs text-[var(--app-hint)]">
-                        Loading projects…
-                    </div>
-                ) : projects.length === 0 ? (
-                    <div className="text-xs text-[var(--app-hint)]">
-                        No saved projects yet.
-                    </div>
+                <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-[var(--app-hint)]">
+                        Project
+                    </label>
+                    <button
+                        type="button"
+                        onClick={() => setIsCustomPath(!isCustomPath)}
+                        className="text-xs text-[var(--app-link)] hover:underline"
+                    >
+                        {isCustomPath ? 'Select from list' : 'Custom path'}
+                    </button>
+                </div>
+                {isCustomPath ? (
+                    <input
+                        type="text"
+                        value={projectPath}
+                        onChange={(e) => setProjectPath(e.target.value)}
+                        disabled={isFormDisabled}
+                        placeholder="/path/to/project"
+                        className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
+                    />
                 ) : (
-                    <div className="text-xs text-[var(--app-hint)]">
-                        Type a path or pick a saved project.
-                    </div>
-                )}
-                {selectedProject && (
-                    <div className="text-xs text-[var(--app-hint)] mt-1">
-                        <span className="font-medium">{selectedProject.name}</span>
-                        {selectedProject.description ? ` — ${selectedProject.description}` : ''}
-                    </div>
+                    <>
+                        <select
+                            value={projectPath}
+                            onChange={(e) => setProjectPath(e.target.value)}
+                            disabled={isFormDisabled || projectsLoading}
+                            className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
+                        >
+                            {projectsLoading && (
+                                <option value="">Loading projects…</option>
+                            )}
+                            {!projectsLoading && projectSuggestions.length === 0 && (
+                                <option value="">No projects available</option>
+                            )}
+                            {projectSuggestions.map((suggestion) => (
+                                <option key={suggestion.value} value={suggestion.value}>
+                                    {suggestion.label ? `${suggestion.label} (${suggestion.value})` : suggestion.value}
+                                </option>
+                            ))}
+                        </select>
+                        {selectedProject?.description && (
+                            <div className="text-xs text-[var(--app-hint)]">
+                                {selectedProject.description}
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
