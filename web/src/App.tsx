@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Outlet, useLocation, useMatchRoute, useNavigate } from '@tanstack/react-router'
-import { useQueryClient, useQuery } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { getTelegramWebApp } from '@/hooks/useTelegram'
 import { initializeTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/hooks/useAuth'
@@ -25,7 +25,6 @@ import { addAlert } from '@/hooks/useAdvisorAlert'
 import { addIdleSuggestion, setMinimaxStart, setMinimaxComplete, setMinimaxError } from '@/hooks/useIdleSuggestion'
 import { AdvisorAlertBanner } from '@/components/AdvisorAlertBanner'
 import { useAiSuggestionSetting } from '@/hooks/useAiSuggestionSetting'
-import { getClientId } from '@/lib/client-identity'
 
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
@@ -41,23 +40,6 @@ export function App() {
     const navigate = useNavigate()
     const pathname = useLocation({ select: (location) => location.pathname })
     const matchRoute = useMatchRoute()
-
-    // 获取当前用户的订阅列表，用于过滤通知
-    const tg = getTelegramWebApp()
-    const currentChatId = tg?.initDataUnsafe?.user?.id?.toString() ?? null
-    const currentClientId = getClientId()
-    const { data: mySubscriptions } = useQuery({
-        queryKey: ['my-subscriptions', currentChatId, currentClientId],
-        queryFn: async () => {
-            if (!api) return { sessionIds: [] }
-            const options = currentChatId ? { chatId: currentChatId } : { clientId: currentClientId }
-            return await api.getMySubscriptions(options)
-        },
-        enabled: !!api,
-        staleTime: 30000,
-        refetchOnWindowFocus: true
-    })
-    const subscribedSessionIds = useMemo(() => new Set(mySubscriptions?.sessionIds ?? []), [mySubscriptions])
 
     useEffect(() => {
         const tg = getTelegramWebApp()
@@ -322,12 +304,6 @@ export function App() {
                 // 如果是当前 session 且 app 在前台，跳过通知（用户已经在看了）
                 if (isCurrentSession && isAppVisible) {
                     console.log('[notification] skipping - current session in foreground')
-                    return
-                }
-
-                // 检查是否订阅了这个 session（小铃铛状态）
-                if (!subscribedSessionIds.has(event.sessionId)) {
-                    console.log('[notification] skipping - not subscribed to session:', event.sessionId)
                     return
                 }
 
