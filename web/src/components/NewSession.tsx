@@ -217,11 +217,11 @@ export function NewSession(props: {
                 <label className="text-xs font-medium text-[var(--app-hint)]">
                     Agent
                 </label>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-x-3 gap-y-2">
                     {(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok'] as const).map((agentType) => (
                         <label
                             key={agentType}
-                            className="flex items-center gap-1.5 cursor-pointer"
+                            className="flex items-center gap-1 cursor-pointer"
                         >
                             <input
                                 type="radio"
@@ -230,9 +230,9 @@ export function NewSession(props: {
                                 checked={agent === agentType}
                                 onChange={() => setAgent(agentType)}
                                 disabled={isFormDisabled}
-                                className="accent-[var(--app-link)]"
+                                className="accent-[var(--app-link)] w-3.5 h-3.5"
                             />
-                            <span className="text-sm capitalize">{agentType}</span>
+                            <span className="text-xs capitalize">{agentType}</span>
                         </label>
                     ))}
                 </div>
