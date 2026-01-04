@@ -9,5 +9,14 @@ export { buildAdvisorInitPrompt, type AdvisorContext } from './advisorPrompt'
 export { AdvisorTelegramNotifierImpl, createAdvisorTelegramNotifier } from './advisorTelegram'
 export { AutoIterationService } from './autoIteration'
 export { MemoryExtractor, createMemoryExtractor, extractMemoriesFromSession, type ExtractedMemory, type MemoryExtractorConfig } from './memoryExtractor'
-export { getMemoriesForInjection, formatMemoriesForPrompt, type InjectedMemory } from './memoryInjector'
+export {
+    MemoryInjector,
+    createMemoryInjector,
+    getMemoryPromptFragment,
+    getMemoriesForInjection,
+    formatMemoriesForPrompt,
+    type MemoryInjectorConfig,
+    type InjectedMemory,
+    type MemoryInjectionResult
+} from './memoryInjector'
 export * from './types'

@@ -25,6 +25,7 @@ import type { AutoIterationService } from './autoIteration'
 import type { ActionRequest } from './autoIteration/types'
 import { findBestProfileForTask } from './profileMatcher'
 import { MemoryExtractor } from './memoryExtractor'
+import { getMemoryPromptFragment } from './memoryInjector'
 
 export interface AdvisorServiceConfig {
     namespace: string
@@ -1837,8 +1838,8 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
                     aiProfileId
                 })
 
-                // 8. 等待会话就绪后发送任务消息
-                await this.waitAndSendTask(result.sessionId, output.taskDescription, advisorSessionId)
+                // 8. 等待会话就绪后发送任务消息（包含记忆注入）
+                await this.waitAndSendTask(result.sessionId, output.taskDescription, advisorSessionId, aiProfileId)
 
                 // 9. 标记任务开始运行
                 this.taskTracker.markSessionRunning(result.sessionId)
@@ -1853,19 +1854,32 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     /**
      * 等待会话就绪并发送任务消息
      */
-    private async waitAndSendTask(sessionId: string, taskDescription: string, parentSessionId: string): Promise<void> {
+    private async waitAndSendTask(sessionId: string, taskDescription: string, parentSessionId: string, aiProfileId?: string): Promise<void> {
         const maxWaitMs = 15000
         const startTime = Date.now()
 
         while (Date.now() - startTime < maxWaitMs) {
             const session = this.syncEngine.getSession(sessionId)
             if (session?.active) {
+                // 获取 AI Profile 的记忆注入
+                let memoryFragment = ''
+                if (aiProfileId) {
+                    try {
+                        memoryFragment = getMemoryPromptFragment(this.store, this.namespace, aiProfileId)
+                        if (memoryFragment) {
+                            console.log(`[AdvisorService] Injected memories for profile ${aiProfileId} into session ${sessionId}`)
+                        }
+                    } catch (error) {
+                        console.warn(`[AdvisorService] Failed to inject memories for profile ${aiProfileId}:`, error)
+                    }
+                }
+
                 // 会话已就绪，发送任务
                 const taskMessage = `[由 Advisor 自动创建的任务会话]
 
 父会话: ${parentSessionId.slice(0, 8)}
 创建时间: ${new Date().toISOString()}
-
+${memoryFragment ? `\n${memoryFragment}` : ''}
 ## 任务描述
 
 ${taskDescription}
