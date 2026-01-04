@@ -28,10 +28,14 @@ export class MinimaxService {
      * 审查会话并生成建议芯片
      */
     async reviewSession(request: MinimaxReviewRequest): Promise<MinimaxReviewResponse> {
+        console.log(`[MinimaxService] Starting review for session ${request.sessionId}`)
         try {
             const prompt = this.buildPrompt(request.summary)
+            console.log(`[MinimaxService] Calling Gemini CLI...`)
             const response = await this.callApi(prompt)
+            console.log(`[MinimaxService] Got response (${response.length} chars)`)
             const chips = this.parseResponse(response, request.sessionId)
+            console.log(`[MinimaxService] Parsed ${chips.length} chips`)
             return { chips }
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown error'
