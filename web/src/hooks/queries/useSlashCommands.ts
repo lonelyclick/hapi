@@ -19,6 +19,14 @@ const BUILTIN_COMMANDS: Record<string, SlashCommand[]> = {
         { name: 'plan', description: 'View or open the current session plan', source: 'builtin' },
         { name: 'stats', description: 'Open usage statistics page', source: 'builtin' },
         { name: 'status', description: 'Open usage statistics page', source: 'builtin' },
+        // Project action commands
+        { name: 'deploy', description: 'Build and deploy the project', source: 'builtin' },
+        { name: 'test', description: 'Run the test suite', source: 'builtin' },
+        { name: 'review', description: 'Review recent changes and suggest improvements', source: 'builtin' },
+        { name: 'pr', description: 'Create a pull request for current changes', source: 'builtin' },
+        { name: 'commit', description: 'Stage and commit changes with a generated message', source: 'builtin' },
+        { name: 'fix', description: 'Fix lint errors and type issues', source: 'builtin' },
+        { name: 'update', description: 'Update project dependencies', source: 'builtin' },
     ],
     codex: [
         { name: 'review', description: 'Review current changes and find issues', source: 'builtin' },
@@ -27,12 +35,27 @@ const BUILTIN_COMMANDS: Record<string, SlashCommand[]> = {
         { name: 'undo', description: 'Ask Codex to undo a turn', source: 'builtin' },
         { name: 'diff', description: 'Show git diff including untracked files', source: 'builtin' },
         { name: 'status', description: 'Show current session configuration and token usage', source: 'builtin' },
+        // Project action commands
+        { name: 'deploy', description: 'Build and deploy the project', source: 'builtin' },
+        { name: 'test', description: 'Run the test suite', source: 'builtin' },
+        { name: 'pr', description: 'Create a pull request for current changes', source: 'builtin' },
+        { name: 'commit', description: 'Stage and commit changes with a generated message', source: 'builtin' },
+        { name: 'fix', description: 'Fix lint errors and type issues', source: 'builtin' },
+        { name: 'update', description: 'Update project dependencies', source: 'builtin' },
     ],
     gemini: [
         { name: 'about', description: 'Show version info', source: 'builtin' },
         { name: 'clear', description: 'Clear the screen and conversation history', source: 'builtin' },
         { name: 'compress', description: 'Compress the context by replacing it with a summary', source: 'builtin' },
         { name: 'stats', description: 'Check session stats', source: 'builtin' },
+        // Project action commands
+        { name: 'deploy', description: 'Build and deploy the project', source: 'builtin' },
+        { name: 'test', description: 'Run the test suite', source: 'builtin' },
+        { name: 'review', description: 'Review recent changes and suggest improvements', source: 'builtin' },
+        { name: 'pr', description: 'Create a pull request for current changes', source: 'builtin' },
+        { name: 'commit', description: 'Stage and commit changes with a generated message', source: 'builtin' },
+        { name: 'fix', description: 'Fix lint errors and type issues', source: 'builtin' },
+        { name: 'update', description: 'Update project dependencies', source: 'builtin' },
     ],
 }
 

@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
+import { getAiSuggestionsEnabled } from '@/lib/ai-suggestions'
 
 export interface SuggestionChip {
     id: string
@@ -21,7 +22,7 @@ export interface IdleSuggestion {
     createdAt: number
 }
 
-// MiniMax 审查状态
+// Grok 审查状态
 export type MinimaxStatus = 'idle' | 'reviewing' | 'complete' | 'error'
 
 interface StoredIdleSuggestion {
@@ -30,7 +31,7 @@ interface StoredIdleSuggestion {
     createdAt: number
     viewedAt?: number
     usedChipIds?: string[]  // 已使用的芯片 ID
-    // MiniMax Layer 2 状态
+    // Grok Layer 2 状态
     minimaxStatus: MinimaxStatus
     minimaxChips?: SuggestionChip[]
     minimaxError?: string
@@ -47,6 +48,7 @@ function notifyListeners() {
 }
 
 function loadFromStorage(sessionId: string): StoredIdleSuggestion | null {
+    if (!getAiSuggestionsEnabled()) return null
     try {
         const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${sessionId}`)
         if (!raw) return null
@@ -82,6 +84,7 @@ function removeFromStorage(sessionId: string): void {
  * 添加空闲建议（供 SSE 事件处理调用）- Layer 1
  */
 export function addIdleSuggestion(suggestion: IdleSuggestion): void {
+    if (!getAiSuggestionsEnabled()) return
     const stored: StoredIdleSuggestion = {
         suggestion,
         status: 'pending',
@@ -95,9 +98,10 @@ export function addIdleSuggestion(suggestion: IdleSuggestion): void {
 }
 
 /**
- * 设置 MiniMax 审查开始状态
+ * 设置 Grok 审查开始状态
  */
 export function setMinimaxStart(sessionId: string): void {
+    if (!getAiSuggestionsEnabled()) return
     const stored = globalSuggestions.get(sessionId)
     if (stored) {
         const updated = { ...stored, minimaxStatus: 'reviewing' as MinimaxStatus }
@@ -111,7 +115,7 @@ export function setMinimaxStart(sessionId: string): void {
                 suggestionId: `minimax_${Date.now()}`,
                 sessionId,
                 chips: [],
-                reason: 'MiniMax 审查中',
+                reason: 'Grok 审查中',
                 createdAt: Date.now()
             },
             status: 'pending',
@@ -126,9 +130,10 @@ export function setMinimaxStart(sessionId: string): void {
 }
 
 /**
- * 设置 MiniMax 审查完成
+ * 设置 Grok 审查完成
  */
 export function setMinimaxComplete(sessionId: string, chips: SuggestionChip[]): void {
+    if (!getAiSuggestionsEnabled()) return
     const stored = globalSuggestions.get(sessionId)
     if (stored) {
         const updated = {
@@ -143,9 +148,10 @@ export function setMinimaxComplete(sessionId: string, chips: SuggestionChip[]): 
 }
 
 /**
- * 设置 MiniMax 审查错误
+ * 设置 Grok 审查错误
  */
 export function setMinimaxError(sessionId: string, error: string): void {
+    if (!getAiSuggestionsEnabled()) return
     const stored = globalSuggestions.get(sessionId)
     if (stored) {
         const updated = {
@@ -237,12 +243,12 @@ export function useIdleSuggestion(sessionId: string | null) {
         saveToStorage(sessionId, updated)
     }, [sessionId, stored])
 
-    // MiniMax 芯片（未使用的）
+    // Grok 芯片（未使用的）
     const minimaxChips = stored?.minimaxChips
         ? stored.minimaxChips.filter(chip => !stored.usedChipIds?.includes(chip.id))
         : []
 
-    // 应用 MiniMax 芯片
+    // 应用 Grok 芯片
     const applyMinimaxChip = useCallback((chipId: string): string | undefined => {
         if (!sessionId || !stored || !stored.minimaxChips) return undefined
         const chip = stored.minimaxChips.find(c => c.id === chipId)
@@ -266,11 +272,28 @@ export function useIdleSuggestion(sessionId: string | null) {
         applyChip,
         dismiss,
         markViewed,
-        // MiniMax Layer 2 状态
+        // Grok Layer 2 状态
         minimaxStatus: stored?.minimaxStatus ?? 'idle',
         minimaxChips,
         minimaxError: stored?.minimaxError,
         hasMinimaxChips: minimaxChips.length > 0,
         applyMinimaxChip
     }
+}
+
+export function clearAllIdleSuggestions(): void {
+    globalSuggestions.clear()
+    try {
+        const keysToRemove: string[] = []
+        for (let i = 0; i < localStorage.length; i += 1) {
+            const key = localStorage.key(i)
+            if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
+                keysToRemove.push(key)
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key))
+    } catch {
+        // ignore
+    }
+    notifyListeners()
 }

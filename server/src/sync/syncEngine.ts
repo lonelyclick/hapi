@@ -155,6 +155,7 @@ export type SyncEventType =
     | 'session-updated'
     | 'session-removed'
     | 'message-received'
+    | 'messages-cleared'
     | 'machine-updated'
     | 'connection-changed'
     | 'online-users-changed'
@@ -493,6 +494,22 @@ export class SyncEngine {
             content: m.content,
             createdAt: m.createdAt
         }))
+    }
+
+    getMessageCount(sessionId: string): number {
+        return this.store.getMessageCount(sessionId)
+    }
+
+    clearSessionMessages(sessionId: string, keepCount: number = 30): { deleted: number; remaining: number } {
+        const result = this.store.clearMessages(sessionId, keepCount)
+
+        // Clear the in-memory cache for this session
+        this.sessionMessages.delete(sessionId)
+
+        // Emit an event to notify clients
+        this.emit({ type: 'messages-cleared', sessionId })
+
+        return result
     }
 
     handleRealtimeEvent(event: SyncEvent): void {

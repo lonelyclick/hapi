@@ -24,12 +24,14 @@ import { notifyTaskComplete, getPendingNotification, clearPendingNotification, u
 import { addAlert } from '@/hooks/useAdvisorAlert'
 import { addIdleSuggestion, setMinimaxStart, setMinimaxComplete, setMinimaxError } from '@/hooks/useIdleSuggestion'
 import { AdvisorAlertBanner } from '@/components/AdvisorAlertBanner'
+import { useAiSuggestionSetting } from '@/hooks/useAiSuggestionSetting'
 
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
     const { authSource, isLoading: isAuthSourceLoading, setAccessToken } = useAuthSource(baseUrl)
     const { token, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
     const { hasUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
+    const { enabled: aiSuggestionsEnabled } = useAiSuggestionSetting()
 
     // Subscribe to Web Push notifications when authenticated
     // This enables true background push on iOS 16.4+ and other platforms
@@ -267,24 +269,24 @@ export function App() {
         }
 
         // 处理空闲建议事件（芯片格式）- Layer 1
-        if (event.type === 'advisor-idle-suggestion' && event.idleSuggestion) {
+        if (aiSuggestionsEnabled && event.type === 'advisor-idle-suggestion' && event.idleSuggestion) {
             console.log('[advisor] idle suggestion received', event.idleSuggestion)
             addIdleSuggestion(event.idleSuggestion)
             return
         }
 
-        // 处理 MiniMax 审查事件 - Layer 2
-        if (event.type === 'advisor-minimax-start' && event.sessionId) {
+        // 处理 Grok 审查事件 - Layer 2
+        if (aiSuggestionsEnabled && event.type === 'advisor-minimax-start' && event.sessionId) {
             console.log('[advisor] minimax review started', event.sessionId)
             setMinimaxStart(event.sessionId)
             return
         }
-        if (event.type === 'advisor-minimax-complete' && event.minimaxComplete) {
+        if (aiSuggestionsEnabled && event.type === 'advisor-minimax-complete' && event.minimaxComplete) {
             console.log('[advisor] minimax review completed', event.minimaxComplete)
             setMinimaxComplete(event.minimaxComplete.sessionId, event.minimaxComplete.chips)
             return
         }
-        if (event.type === 'advisor-minimax-error' && event.minimaxError) {
+        if (aiSuggestionsEnabled && event.type === 'advisor-minimax-error' && event.minimaxError) {
             console.log('[advisor] minimax review error', event.minimaxError)
             setMinimaxError(event.minimaxError.sessionId, event.minimaxError.error)
             return
@@ -348,7 +350,7 @@ export function App() {
             return
         }
         navigate({ to: '/sessions', replace: true })
-    }, [navigate, selectedSessionId, queryClient])
+    }, [aiSuggestionsEnabled, navigate, selectedSessionId, queryClient])
 
     const eventSubscription = useMemo(() => {
         // Exclude "new" which is a route, not a real session ID

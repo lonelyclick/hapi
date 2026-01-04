@@ -7,6 +7,7 @@ import type {
     AutoIterationData,
     AutoIterationLogsResponse,
     AutoIterationNotificationLevel,
+    ClearMessagesResponse,
     DeleteSessionResponse,
     FileReadResponse,
     FileSearchResponse,
@@ -15,6 +16,7 @@ import type {
     InputPresetsResponse,
     MachinePathsExistsResponse,
     MachinesResponse,
+    MessageCountResponse,
     MessagesResponse,
     OnlineUsersResponse,
     ProjectsResponse,
@@ -197,6 +199,22 @@ export class ApiClient {
         const qs = params.toString()
         const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ''}`
         return await this.request<MessagesResponse>(url)
+    }
+
+    async getMessageCount(sessionId: string): Promise<MessageCountResponse> {
+        return await this.request<MessageCountResponse>(
+            `/api/sessions/${encodeURIComponent(sessionId)}/messages/count`
+        )
+    }
+
+    async clearMessages(sessionId: string, keepCount: number = 30): Promise<ClearMessagesResponse> {
+        return await this.request<ClearMessagesResponse>(
+            `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
+            {
+                method: 'DELETE',
+                body: JSON.stringify({ keepCount })
+            }
+        )
     }
 
     async streamSpeechToText(payload: SpeechToTextStreamRequest): Promise<SpeechToTextStreamResponse> {

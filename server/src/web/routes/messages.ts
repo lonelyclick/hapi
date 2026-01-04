@@ -14,6 +14,10 @@ const sendMessageBodySchema = z.object({
     localId: z.string().min(1).optional()
 })
 
+const clearMessagesBodySchema = z.object({
+    keepCount: z.coerce.number().int().min(0).max(100).optional()
+})
+
 export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -55,6 +59,42 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
 
         await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: 'webapp' })
         return c.json({ ok: true })
+    })
+
+    // Get message count for a session
+    app.get('/sessions/:id/messages/count', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const count = engine.getMessageCount(sessionResult.sessionId)
+        return c.json({ count })
+    })
+
+    // Clear messages for a session, keeping the most recent N messages
+    app.delete('/sessions/:id/messages', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const body = await c.req.json().catch(() => ({}))
+        const parsed = clearMessagesBodySchema.safeParse(body)
+        const keepCount = parsed.success ? (parsed.data.keepCount ?? 30) : 30
+
+        const result = engine.clearSessionMessages(sessionResult.sessionId, keepCount)
+        return c.json({ ok: true, ...result })
     })
 
     return app

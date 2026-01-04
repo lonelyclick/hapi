@@ -9,6 +9,7 @@ import { HappySystemMessage } from '@/components/AssistantChat/messages/SystemMe
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/Spinner'
 import { useIdleSuggestion } from '@/hooks/useIdleSuggestion'
+import { useAiSuggestionSetting } from '@/hooks/useAiSuggestionSetting'
 import type { SuggestionChip, MinimaxStatus } from '@/hooks/useIdleSuggestion'
 
 function NewMessagesIndicator(props: { count: number; onClick: () => void }) {
@@ -38,7 +39,7 @@ function InlineSuggestionChips(props: {
     reason?: string
     onSelect: (chipId: string) => void
     onDismiss: () => void
-    // MiniMax Layer 2
+    // Grok Layer 2
     minimaxStatus?: MinimaxStatus
     minimaxChips?: SuggestionChip[]
     minimaxError?: string
@@ -112,20 +113,20 @@ function InlineSuggestionChips(props: {
                     </div>
                 )}
 
-                {/* Layer 2: MiniMax 审查状态 */}
+                {/* Layer 2: Grok 审查状态 */}
                 {isMinimaxReviewing && (
                     <div className={`flex items-center gap-2 text-xs text-[var(--app-hint)] ${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
                         <Spinner className="w-3 h-3" />
-                        <span>MiniMax 正在审查...</span>
+                        <span>Grok 正在审查...</span>
                     </div>
                 )}
 
-                {/* Layer 2: MiniMax 芯片 */}
+                {/* Layer 2: Grok 芯片 */}
                 {hasLayer2Chips && (
                     <div className={`${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
                         <div className="flex items-center gap-1 mb-2 text-xs text-[var(--app-hint)]">
                             <span>✨</span>
-                            <span>MiniMax 建议</span>
+                            <span>Grok 建议</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                             {props.minimaxChips!.map((chip) => (
@@ -150,11 +151,11 @@ function InlineSuggestionChips(props: {
                     </div>
                 )}
 
-                {/* Layer 2: MiniMax 错误 */}
+                {/* Layer 2: Grok 错误 */}
                 {hasMinimaxError && (
                     <div className={`flex items-center gap-2 text-xs text-orange-600 dark:text-orange-400 ${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
                         <span>⚠️</span>
-                        <span>MiniMax 审查失败{props.minimaxError ? `：${props.minimaxError}` : ''}</span>
+                        <span>Grok 审查失败{props.minimaxError ? `：${props.minimaxError}` : ''}</span>
                     </div>
                 )}
             </div>
@@ -309,6 +310,8 @@ export function HappyThread(props: {
         hasBootstrappedRef.current = false
     }, [props.sessionId])
 
+    const { enabled: aiSuggestionsEnabled } = useAiSuggestionSetting()
+
     // Idle suggestion chips (Layer 1 + Layer 2)
     const {
         suggestion: idleSuggestion,
@@ -317,7 +320,7 @@ export function HappyThread(props: {
         applyChip: applyIdleChip,
         dismiss: dismissIdleSuggestion,
         markViewed: markIdleSuggestionViewed,
-        // MiniMax Layer 2
+        // Grok Layer 2
         minimaxStatus,
         minimaxChips,
         minimaxError,
@@ -327,10 +330,13 @@ export function HappyThread(props: {
 
     // Mark suggestion as viewed when displayed
     useEffect(() => {
+        if (!aiSuggestionsEnabled) {
+            return
+        }
         if (hasIdleChips || minimaxStatus !== 'idle') {
             markIdleSuggestionViewed()
         }
-    }, [hasIdleChips, minimaxStatus, markIdleSuggestionViewed])
+    }, [aiSuggestionsEnabled, hasIdleChips, minimaxStatus, markIdleSuggestionViewed])
 
     const handleChipSelect = useCallback((chipId: string) => {
         // 先尝试 Layer 1 芯片
@@ -345,7 +351,8 @@ export function HappyThread(props: {
     }, [applyIdleChip, applyMinimaxChip, props.onApplyChip])
 
     // 是否显示建议区域（Layer 1 有芯片 或 Layer 2 正在审查/有芯片/有错误）
-    const showSuggestionArea = hasIdleChips || minimaxStatus === 'reviewing' || hasMinimaxChips || minimaxStatus === 'error'
+    const showSuggestionArea = aiSuggestionsEnabled
+        && (hasIdleChips || minimaxStatus === 'reviewing' || hasMinimaxChips || minimaxStatus === 'error')
 
     const handleLoadMore = useCallback(() => {
         if (props.isLoadingMessages || !props.hasMoreMessages || props.isLoadingMoreMessages || loadLockRef.current) {

@@ -205,6 +205,8 @@ export type AuthResponse = {
 export type SessionsResponse = { sessions: SessionSummary[] }
 export type SessionResponse = { session: Session }
 export type DeleteSessionResponse = { ok: true }
+export type ClearMessagesResponse = { ok: true; deleted: number; remaining: number }
+export type MessageCountResponse = { count: number }
 export type MessagesResponse = {
     messages: DecryptedMessage[]
     page: {
@@ -344,7 +346,7 @@ export type AdvisorIdleSuggestionData = {
     createdAt: number
 }
 
-// MiniMax 审查相关数据 (Layer 2)
+// Grok 审查相关数据 (Layer 2)
 export type AdvisorMinimaxStartData = {
     sessionId: string
 }
@@ -364,6 +366,7 @@ export type SyncEvent =
     | { type: 'session-updated'; sessionId: string; data?: unknown; namespace?: string }
     | { type: 'session-removed'; sessionId: string; namespace?: string }
     | { type: 'message-received'; sessionId: string; message: DecryptedMessage; namespace?: string }
+    | { type: 'messages-cleared'; sessionId: string; namespace?: string }
     | { type: 'machine-updated'; machineId: string; data?: unknown; namespace?: string }
     | { type: 'connection-changed'; data?: { status: string }; namespace?: string }
     | { type: 'online-users-changed'; users: OnlineUser[]; namespace?: string }

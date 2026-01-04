@@ -1248,6 +1248,41 @@ export class Store {
         return rows.map(toStoredMessage)
     }
 
+    getMessageCount(sessionId: string): number {
+        const row = this.db.prepare(
+            'SELECT COUNT(*) AS count FROM messages WHERE session_id = ?'
+        ).get(sessionId) as { count: number }
+        return row.count
+    }
+
+    clearMessages(sessionId: string, keepCount: number = 30): { deleted: number; remaining: number } {
+        const safeKeepCount = Math.max(0, keepCount)
+
+        // Get the seq threshold - messages with seq > threshold will be kept
+        const thresholdRow = this.db.prepare(`
+            SELECT seq FROM messages
+            WHERE session_id = ?
+            ORDER BY seq DESC
+            LIMIT 1 OFFSET ?
+        `).get(sessionId, safeKeepCount - 1) as { seq: number } | undefined
+
+        if (!thresholdRow) {
+            // Not enough messages to delete
+            const count = this.getMessageCount(sessionId)
+            return { deleted: 0, remaining: count }
+        }
+
+        const thresholdSeq = thresholdRow.seq
+
+        // Delete messages older than threshold
+        const result = this.db.prepare(
+            'DELETE FROM messages WHERE session_id = ? AND seq < ?'
+        ).run(sessionId, thresholdSeq)
+
+        const remaining = this.getMessageCount(sessionId)
+        return { deleted: result.changes, remaining }
+    }
+
     getUser(platform: string, platformUserId: string): StoredUser | null {
         const row = this.db.prepare(
             'SELECT * FROM users WHERE platform = ? AND platform_user_id = ? LIMIT 1'
