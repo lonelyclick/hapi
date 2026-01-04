@@ -780,5 +780,81 @@ export function createSessionsRoutes(
         return c.json({ ok: true, sessionId: sessionResult.sessionId, autoIterEnabled: config.autoIterEnabled })
     })
 
+    // ==================== Session Notification Subscriptions ====================
+
+    /**
+     * 订阅 session 通知
+     * POST /sessions/:id/subscribe
+     * Body: { chatId: string }
+     */
+    app.post('/:id/subscribe', async (c) => {
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+        const body = await c.req.json().catch(() => null)
+
+        if (!body || typeof body.chatId !== 'string') {
+            return c.json({ error: 'Invalid body, expected { chatId: string }' }, 400)
+        }
+
+        const subscription = store.subscribeToSessionNotifications(sessionId, body.chatId, namespace)
+        if (!subscription) {
+            return c.json({ error: 'Failed to subscribe' }, 500)
+        }
+
+        return c.json({ ok: true, subscription })
+    })
+
+    /**
+     * 取消订阅 session 通知
+     * DELETE /sessions/:id/subscribe
+     * Body: { chatId: string }
+     */
+    app.delete('/:id/subscribe', async (c) => {
+        const sessionId = c.req.param('id')
+        const body = await c.req.json().catch(() => null)
+
+        if (!body || typeof body.chatId !== 'string') {
+            return c.json({ error: 'Invalid body, expected { chatId: string }' }, 400)
+        }
+
+        const success = store.unsubscribeFromSessionNotifications(sessionId, body.chatId)
+        return c.json({ ok: success })
+    })
+
+    /**
+     * 获取 session 的所有订阅者
+     * GET /sessions/:id/subscribers
+     */
+    app.get('/:id/subscribers', async (c) => {
+        const sessionId = c.req.param('id')
+        const subscribers = store.getSessionNotificationSubscribers(sessionId)
+        const creatorChatId = store.getSessionCreatorChatId(sessionId)
+
+        return c.json({
+            sessionId,
+            creatorChatId,
+            subscribers,
+            totalRecipients: store.getSessionNotificationRecipients(sessionId).length
+        })
+    })
+
+    /**
+     * 设置 session 的创建者 chatId
+     * POST /sessions/:id/creator
+     * Body: { chatId: string }
+     */
+    app.post('/:id/creator', async (c) => {
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+        const body = await c.req.json().catch(() => null)
+
+        if (!body || typeof body.chatId !== 'string') {
+            return c.json({ error: 'Invalid body, expected { chatId: string }' }, 400)
+        }
+
+        const success = store.setSessionCreatorChatId(sessionId, body.chatId, namespace)
+        return c.json({ ok: success })
+    })
+
     return app
 }
