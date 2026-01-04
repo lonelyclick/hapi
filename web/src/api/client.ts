@@ -464,7 +464,7 @@ export class ApiClient {
         return await this.request<{ publicKey: string | null }>('/api/push/vapid-public-key')
     }
 
-    async subscribePush(subscription: { endpoint: string; keys: { p256dh: string; auth: string } }): Promise<{ ok: boolean; subscriptionId?: number }> {
+    async subscribePush(subscription: { endpoint: string; keys: { p256dh: string; auth: string }; clientId?: string }): Promise<{ ok: boolean; subscriptionId?: number }> {
         return await this.request<{ ok: boolean; subscriptionId?: number }>('/api/push/subscribe', {
             method: 'POST',
             body: JSON.stringify(subscription)

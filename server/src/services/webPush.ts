@@ -124,6 +124,58 @@ export class WebPushService {
     }
 
     /**
+     * Send a push notification to subscriptions for a specific client
+     */
+    async sendToClient(
+        namespace: string,
+        clientId: string,
+        payload: PushNotificationPayload
+    ): Promise<SendResult> {
+        if (!this.isConfigured()) {
+            console.warn('[webpush] not configured, skipping notification')
+            return { success: 0, failed: 0, removed: 0 }
+        }
+
+        const subscriptions = this.store.getPushSubscriptionsByClientId(namespace, clientId)
+        if (subscriptions.length === 0) {
+            console.log('[webpush] no subscriptions for client:', clientId)
+            return { success: 0, failed: 0, removed: 0 }
+        }
+
+        console.log('[webpush] sending to', subscriptions.length, 'subscriptions for client:', clientId)
+
+        const results = await Promise.allSettled(
+            subscriptions.map(sub => this.sendToSubscription(sub, payload))
+        )
+
+        let success = 0
+        let failed = 0
+        let removed = 0
+
+        for (let i = 0; i < results.length; i++) {
+            const result = results[i]
+            const sub = subscriptions[i]
+
+            if (result.status === 'fulfilled') {
+                if (result.value.success) {
+                    success++
+                } else if (result.value.shouldRemove) {
+                    this.store.removePushSubscriptionById(sub.id)
+                    removed++
+                } else {
+                    failed++
+                }
+            } else {
+                failed++
+                console.error('[webpush] unexpected error:', result.reason)
+            }
+        }
+
+        console.log('[webpush] sent to client:', { clientId, success, failed, removed })
+        return { success, failed, removed }
+    }
+
+    /**
      * Send a push notification to a specific subscription
      */
     async sendToSubscription(
@@ -174,9 +226,17 @@ export class WebPushService {
         namespace: string,
         endpoint: string,
         keys: { p256dh: string; auth: string },
-        userAgent?: string
+        userAgent?: string,
+        clientId?: string
     ): StoredPushSubscription | null {
-        return this.store.addOrUpdatePushSubscription(namespace, endpoint, keys, userAgent)
+        return this.store.addOrUpdatePushSubscription(namespace, endpoint, keys, userAgent, clientId)
+    }
+
+    /**
+     * Get subscriptions for a specific client
+     */
+    getSubscriptionsByClientId(namespace: string, clientId: string): StoredPushSubscription[] {
+        return this.store.getPushSubscriptionsByClientId(namespace, clientId)
     }
 
     /**

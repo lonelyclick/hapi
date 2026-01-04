@@ -1,6 +1,7 @@
 import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { getPlatform } from './usePlatform'
+import { getClientId } from '@/lib/client-identity'
 import type { ApiClient } from '@/api/client'
 
 const NOTIFICATION_PERMISSION_KEY = 'hapi-notification-enabled'
@@ -452,7 +453,8 @@ export function useWebPushSubscription(apiClient: ApiClient | null) {
                 keys: {
                     p256dh: arrayBufferToBase64(p256dh),
                     auth: arrayBufferToBase64(auth)
-                }
+                },
+                clientId: getClientId()
             })
 
             if (result.ok) {

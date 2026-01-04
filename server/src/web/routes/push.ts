@@ -14,7 +14,8 @@ const subscribeSchema = z.object({
     keys: z.object({
         p256dh: z.string().min(1),
         auth: z.string().min(1)
-    })
+    }),
+    clientId: z.string().optional()
 })
 
 const unsubscribeSchema = z.object({
@@ -50,12 +51,14 @@ export function createPushRoutes(): Hono<WebAppEnv> {
 
         const namespace = c.get('namespace') || 'default'
         const userAgent = c.req.header('user-agent')
+        const clientId = parsed.data.clientId
 
         const subscription = webPush.subscribe(
             namespace,
             parsed.data.endpoint,
             parsed.data.keys,
-            userAgent
+            userAgent,
+            clientId
         )
 
         if (!subscription) {

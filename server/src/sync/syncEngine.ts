@@ -509,6 +509,7 @@ export class SyncEngine {
 
     /**
      * Send push notification when a task completes
+     * Only sends to users who were viewing this session
      */
     private sendTaskCompletePushNotification(session: Session): void {
         const webPush = getWebPushService()
@@ -519,7 +520,18 @@ export class SyncEngine {
         const title = session.metadata?.summary?.text || session.metadata?.name || 'Task completed'
         const projectName = session.metadata?.path?.split('/').pop() || 'Session'
 
-        webPush.sendToNamespace(session.namespace, {
+        // 获取正在查看这个 session 的用户
+        const viewers = this.sseManager.getSessionViewers(session.namespace, session.id)
+        const clientIds = viewers.map(v => v.clientId).filter(Boolean)
+
+        if (clientIds.length === 0) {
+            console.log('[webpush] no viewers for session:', session.id)
+            return
+        }
+
+        console.log('[webpush] sending to viewers:', clientIds)
+
+        const payload = {
             title: `${projectName}: Task completed`,
             body: title,
             icon: '/pwa-192x192.png',
@@ -530,9 +542,14 @@ export class SyncEngine {
                 sessionId: session.id,
                 url: `/sessions/${session.id}`
             }
-        }).catch(error => {
-            console.error('[webpush] failed to send notification:', error)
-        })
+        }
+
+        // 给每个 viewer 的设备发送通知
+        for (const clientId of clientIds) {
+            webPush.sendToClient(session.namespace, clientId, payload).catch(error => {
+                console.error('[webpush] failed to send notification to client:', clientId, error)
+            })
+        }
     }
 
     handleSessionEnd(payload: { sid: string; time: number }): void {

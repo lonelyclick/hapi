@@ -55,6 +55,7 @@ export type StoredPushSubscription = {
         auth: string
     }
     userAgent: string | null
+    clientId: string | null
     createdAt: number
     updatedAt: number
 }
@@ -315,10 +316,12 @@ export class Store {
                 keys_p256dh TEXT NOT NULL,
                 keys_auth TEXT NOT NULL,
                 user_agent TEXT,
+                client_id TEXT,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_push_subscriptions_namespace ON push_subscriptions(namespace);
+            CREATE INDEX IF NOT EXISTS idx_push_subscriptions_client_id ON push_subscriptions(client_id);
         `)
 
         // Step 2: Migrate existing tables (add missing columns)
@@ -355,6 +358,13 @@ export class Store {
         const allowedEmailsColumnNames = new Set(allowedEmailsColumns.map((c) => c.name))
         if (!allowedEmailsColumnNames.has('role')) {
             this.db.exec("ALTER TABLE allowed_emails ADD COLUMN role TEXT NOT NULL DEFAULT 'developer'")
+        }
+
+        // Migrate push_subscriptions table to add client_id column
+        const pushSubColumns = this.db.prepare('PRAGMA table_info(push_subscriptions)').all() as Array<{ name: string }>
+        const pushSubColumnNames = new Set(pushSubColumns.map((c) => c.name))
+        if (!pushSubColumnNames.has('client_id')) {
+            this.db.exec('ALTER TABLE push_subscriptions ADD COLUMN client_id TEXT')
         }
 
         // Step 3: Create indexes that depend on namespace column (after migration)
@@ -1013,7 +1023,7 @@ export class Store {
     // Push 订阅管理
     getPushSubscriptions(namespace: string): StoredPushSubscription[] {
         const rows = this.db.prepare(
-            'SELECT id, namespace, endpoint, keys_p256dh, keys_auth, user_agent, created_at, updated_at FROM push_subscriptions WHERE namespace = ? ORDER BY created_at ASC'
+            'SELECT id, namespace, endpoint, keys_p256dh, keys_auth, user_agent, client_id, created_at, updated_at FROM push_subscriptions WHERE namespace = ? ORDER BY created_at ASC'
         ).all(namespace) as Array<{
             id: number
             namespace: string
@@ -1021,6 +1031,7 @@ export class Store {
             keys_p256dh: string
             keys_auth: string
             user_agent: string | null
+            client_id: string | null
             created_at: number
             updated_at: number
         }>
@@ -1033,6 +1044,36 @@ export class Store {
                 auth: r.keys_auth
             },
             userAgent: r.user_agent,
+            clientId: r.client_id,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at
+        }))
+    }
+
+    getPushSubscriptionsByClientId(namespace: string, clientId: string): StoredPushSubscription[] {
+        const rows = this.db.prepare(
+            'SELECT id, namespace, endpoint, keys_p256dh, keys_auth, user_agent, client_id, created_at, updated_at FROM push_subscriptions WHERE namespace = ? AND client_id = ? ORDER BY created_at ASC'
+        ).all(namespace, clientId) as Array<{
+            id: number
+            namespace: string
+            endpoint: string
+            keys_p256dh: string
+            keys_auth: string
+            user_agent: string | null
+            client_id: string | null
+            created_at: number
+            updated_at: number
+        }>
+        return rows.map(r => ({
+            id: r.id,
+            namespace: r.namespace,
+            endpoint: r.endpoint,
+            keys: {
+                p256dh: r.keys_p256dh,
+                auth: r.keys_auth
+            },
+            userAgent: r.user_agent,
+            clientId: r.client_id,
             createdAt: r.created_at,
             updatedAt: r.updated_at
         }))
@@ -1040,7 +1081,7 @@ export class Store {
 
     getPushSubscriptionByEndpoint(endpoint: string): StoredPushSubscription | null {
         const row = this.db.prepare(
-            'SELECT id, namespace, endpoint, keys_p256dh, keys_auth, user_agent, created_at, updated_at FROM push_subscriptions WHERE endpoint = ?'
+            'SELECT id, namespace, endpoint, keys_p256dh, keys_auth, user_agent, client_id, created_at, updated_at FROM push_subscriptions WHERE endpoint = ?'
         ).get(endpoint) as {
             id: number
             namespace: string
@@ -1048,6 +1089,7 @@ export class Store {
             keys_p256dh: string
             keys_auth: string
             user_agent: string | null
+            client_id: string | null
             created_at: number
             updated_at: number
         } | undefined
@@ -1061,6 +1103,7 @@ export class Store {
                 auth: row.keys_auth
             },
             userAgent: row.user_agent,
+            clientId: row.client_id,
             createdAt: row.created_at,
             updatedAt: row.updated_at
         }
@@ -1070,18 +1113,20 @@ export class Store {
         namespace: string,
         endpoint: string,
         keys: { p256dh: string; auth: string },
-        userAgent?: string
+        userAgent?: string,
+        clientId?: string
     ): StoredPushSubscription | null {
         try {
             const now = Date.now()
             this.db.prepare(`
-                INSERT INTO push_subscriptions (namespace, endpoint, keys_p256dh, keys_auth, user_agent, created_at, updated_at)
-                VALUES (@namespace, @endpoint, @keys_p256dh, @keys_auth, @user_agent, @created_at, @updated_at)
+                INSERT INTO push_subscriptions (namespace, endpoint, keys_p256dh, keys_auth, user_agent, client_id, created_at, updated_at)
+                VALUES (@namespace, @endpoint, @keys_p256dh, @keys_auth, @user_agent, @client_id, @created_at, @updated_at)
                 ON CONFLICT(endpoint) DO UPDATE SET
                     namespace = @namespace,
                     keys_p256dh = @keys_p256dh,
                     keys_auth = @keys_auth,
                     user_agent = @user_agent,
+                    client_id = @client_id,
                     updated_at = @updated_at
             `).run({
                 namespace,
@@ -1089,6 +1134,7 @@ export class Store {
                 keys_p256dh: keys.p256dh,
                 keys_auth: keys.auth,
                 user_agent: userAgent ?? null,
+                client_id: clientId ?? null,
                 created_at: now,
                 updated_at: now
             })
