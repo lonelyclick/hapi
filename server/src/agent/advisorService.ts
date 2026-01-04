@@ -192,20 +192,33 @@ export class AdvisorService {
         }
 
         // 获取或创建 session state
-        let sessionState = this.store.getAgentSessionState(sessionId)
+        const sessionState = this.store.getAgentSessionState(sessionId)
         const lastSeq = sessionState?.lastSeq ?? 0
 
         // 获取增量消息
-        const messages = this.syncEngine.getMessagesAfter(sessionId, { afterSeq: lastSeq, limit: 200 })
-        if (messages.length === 0) {
+        const incrementalMessages = this.syncEngine.getMessagesAfter(sessionId, { afterSeq: lastSeq, limit: 200 })
+        if (incrementalMessages.length === 0) {
             return
         }
 
-        // 构建摘要
-        const summary = this.buildSummary(session, messages)
+        // 构建摘要 - 使用增量消息，同时传入之前的摘要作为上下文
+        const previousSummary = sessionState?.summary ? JSON.parse(sessionState.summary) as SessionSummary : null
+        const summary = this.buildSummary(session, incrementalMessages, previousSummary)
+
+        // 如果摘要没有有意义的内容，跳过投递
+        if (!summary.recentActivity && summary.codeChanges.length === 0 && summary.errors.length === 0) {
+            // 但仍然更新 lastSeq 避免重复处理相同消息
+            const newSeq = incrementalMessages[incrementalMessages.length - 1]?.seq ?? lastSeq
+            this.store.upsertAgentSessionState(sessionId, session.namespace, {
+                lastSeq: newSeq,
+                summary: sessionState?.summary  // 保留之前的摘要
+            })
+            this.pendingMessageCounts.set(sessionId, 0)
+            return
+        }
 
         // 更新 session state
-        const newSeq = messages[messages.length - 1]?.seq ?? lastSeq
+        const newSeq = incrementalMessages[incrementalMessages.length - 1]?.seq ?? lastSeq
         this.store.upsertAgentSessionState(sessionId, session.namespace, {
             lastSeq: newSeq,
             summary: JSON.stringify(summary)
@@ -221,16 +234,16 @@ export class AdvisorService {
     /**
      * 构建摘要
      */
-    private buildSummary(session: Session, messages: DecryptedMessage[]): SessionSummary {
+    private buildSummary(session: Session, messages: DecryptedMessage[], previousSummary?: SessionSummary | null): SessionSummary {
         const metadata = session.metadata
         const workDir = metadata?.path || 'unknown'
         const project = workDir.split('/').pop() || 'unknown'
 
-        // 提取活动摘要
+        // 从之前的摘要继承内容（如果有）
         const activities: string[] = []
-        const errors: string[] = []
-        const decisions: string[] = []
-        const codeChanges: string[] = []
+        const errors: string[] = previousSummary?.errors ? [...previousSummary.errors] : []
+        const decisions: string[] = previousSummary?.decisions ? [...previousSummary.decisions] : []
+        const codeChanges: string[] = previousSummary?.codeChanges ? [...previousSummary.codeChanges] : []
 
         for (const msg of messages) {
             const content = msg.content as Record<string, unknown> | null
@@ -293,12 +306,17 @@ export class AdvisorService {
             }
         }
 
+        // 如果当前增量没有活动，使用之前的活动
+        const finalActivity = activities.length > 0
+            ? activities.slice(-5).join('\n')
+            : (previousSummary?.recentActivity || '')
+
         return {
             sessionId: session.id,
             namespace: session.namespace,
             workDir,
             project,
-            recentActivity: activities.slice(-5).join('\n'),
+            recentActivity: finalActivity,
             todos: session.todos,
             codeChanges: codeChanges.slice(-5),
             errors: errors.slice(-3),
