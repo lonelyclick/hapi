@@ -28,8 +28,6 @@ import { FloatingOverlay } from '@/components/ChatInput/FloatingOverlay'
 import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { StatusBar } from '@/components/AssistantChat/StatusBar'
 import { ComposerButtons } from '@/components/AssistantChat/ComposerButtons'
-import { IdleSuggestionCard } from '@/components/IdleSuggestionCard'
-import { useIdleSuggestion } from '@/hooks/useIdleSuggestion'
 import type { ApiClient } from '@/api/client'
 
 export interface TextInputState {
@@ -184,6 +182,7 @@ export function HappyComposer(props: {
     autocompletePrefixes?: string[]
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
     otherUserTyping?: TypingUser | null
+    setTextRef?: React.MutableRefObject<((text: string) => void) | null>
 }) {
     const {
         apiClient,
@@ -261,14 +260,6 @@ export function HappyComposer(props: {
     // Session 草稿管理
     const { getDraft, setDraft, clearDraft } = useSessionDraft(sessionId)
 
-    // 空闲建议管理
-    const {
-        suggestion: idleSuggestion,
-        hasPendingSuggestion,
-        apply: applyIdleSuggestion,
-        dismiss: dismissIdleSuggestion,
-        markViewed: markIdleSuggestionViewed
-    } = useIdleSuggestion(sessionId)
     const draftLoadedRef = useRef(false)
     const prevSessionIdRef = useRef(sessionId)
 
@@ -421,28 +412,26 @@ export function HappyComposer(props: {
         haptic('light')
     }, [assistantApi, suggestions, inputState, autocompletePrefixes, haptic])
 
-    // 处理空闲建议应用
-    const handleIdleSuggestionApply = useCallback(() => {
-        const suggestedText = applyIdleSuggestion()
-        if (suggestedText) {
-            assistantApi.composer().setText(suggestedText)
-            setInputState({
-                text: suggestedText,
-                selection: { start: suggestedText.length, end: suggestedText.length }
-            })
-            setTimeout(() => {
-                textareaRef.current?.focus()
-            }, 0)
-        }
-        haptic('success')
-    }, [applyIdleSuggestion, assistantApi, haptic])
-
-    // 标记空闲建议已查看
+    // 暴露 setText 方法供外部调用（用于芯片选择）
     useEffect(() => {
-        if (hasPendingSuggestion) {
-            markIdleSuggestionViewed()
+        if (props.setTextRef) {
+            props.setTextRef.current = (text: string) => {
+                assistantApi.composer().setText(text)
+                setInputState({
+                    text,
+                    selection: { start: text.length, end: text.length }
+                })
+                setTimeout(() => {
+                    textareaRef.current?.focus()
+                }, 0)
+            }
         }
-    }, [hasPendingSuggestion, markIdleSuggestionViewed])
+        return () => {
+            if (props.setTextRef) {
+                props.setTextRef.current = null
+            }
+        }
+    }, [assistantApi, props.setTextRef])
 
     const abortDisabled = controlsDisabled || isAborting || !threadIsRunning
     const switchDisabled = controlsDisabled || isSwitching || !controlledByUser
@@ -1229,19 +1218,6 @@ export function HappyComposer(props: {
             )
         }
 
-        // 空闲建议卡片（当无设置面板和自动补全时显示）
-        if (hasPendingSuggestion && idleSuggestion) {
-            return (
-                <div className="absolute bottom-[100%] mb-2 w-full px-1">
-                    <IdleSuggestionCard
-                        suggestion={idleSuggestion}
-                        onApply={handleIdleSuggestionApply}
-                        onDismiss={dismissIdleSuggestion}
-                    />
-                </div>
-            )
-        }
-
         return null
     }, [
         showSettings,
@@ -1263,11 +1239,7 @@ export function HappyComposer(props: {
         handleModelChange,
         handleSuggestionSelect,
         autoOptimize,
-        handleAutoOptimizeToggle,
-        hasPendingSuggestion,
-        idleSuggestion,
-        handleIdleSuggestionApply,
-        dismissIdleSuggestion
+        handleAutoOptimizeToggle
     ])
 
     const volumePercent = Math.max(0, Math.min(100, Math.round((speechToText.volume ?? 0) * 100)))

@@ -3,7 +3,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { SyncEngine, SyncEvent, DecryptedMessage, Session, AdvisorAlertData, AdvisorIdleSuggestionData } from '../sync/syncEngine'
+import type { SyncEngine, SyncEvent, DecryptedMessage, Session, AdvisorAlertData, AdvisorIdleSuggestionData, SuggestionChip } from '../sync/syncEngine'
 import type { Store, StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { AdvisorScheduler } from './advisorScheduler'
 import { SuggestionEvaluator } from './suggestionEvaluator'
@@ -251,6 +251,7 @@ export class AdvisorService {
             const todos = session.todos as Array<{ content?: string; status?: string; activeForm?: string }>
             const inProgressTodos = todos.filter(t => t.status === 'in_progress')
             const pendingTodos = todos.filter(t => t.status === 'pending')
+            const completedTodos = todos.filter(t => t.status === 'completed')
             const incompleteTodos = [...inProgressTodos, ...pendingTodos]
 
             if (incompleteTodos.length > 0) {
@@ -262,26 +263,53 @@ export class AdvisorService {
                         ? `有 ${inProgressTodos.length} 个任务正在进行中: ${todoTitles}`
                         : `有 ${pendingTodos.length} 个待处理任务: ${todoTitles}`,
                     severity,
-                    data: { inProgressCount: inProgressTodos.length, pendingCount: pendingTodos.length, titles: todoTitles }
+                    data: {
+                        inProgressCount: inProgressTodos.length,
+                        pendingCount: pendingTodos.length,
+                        completedCount: completedTodos.length,
+                        totalCount: todos.length,
+                        titles: todoTitles,
+                        todos: incompleteTodos.slice(0, 5)
+                    }
                 })
             }
         }
 
-        // 2. 检查最近消息中的错误
+        // 2. 检查最近消息中的错误和警告
         const recentMessages = this.syncEngine.getMessagesAfter(session.id, {
-            afterSeq: Math.max(0, session.seq - 20),
-            limit: 20
+            afterSeq: Math.max(0, session.seq - 30),
+            limit: 30
         })
 
         let errorCount = 0
+        let warningCount = 0
         let lastError = ''
+        let lastWarning = ''
+        let hasTypeError = false
+        let hasTestFailure = false
+        let hasBuildError = false
+
         for (const msg of recentMessages) {
             const content = msg.content as Record<string, unknown>
             const text = this.extractMessageText(content)
+
+            // 检测错误
             if (/error|failed|exception|crash|错误|失败|异常/i.test(text)) {
                 errorCount++
                 if (!lastError && text.length < 200) {
                     lastError = text.slice(0, 100)
+                }
+                // 检测特定错误类型
+                if (/typescript|type\s*error|类型错误/i.test(text)) hasTypeError = true
+                if (/test.*fail|测试.*失败|jest|vitest|mocha/i.test(text)) hasTestFailure = true
+                if (/build.*fail|编译.*失败|compile.*error/i.test(text)) hasBuildError = true
+            }
+
+            // 检测警告
+            if (/warning|warn|警告|deprecated/i.test(text) && !/error/i.test(text)) {
+                warningCount++
+                if (!lastWarning && text.length < 200) {
+                    lastWarning = text.slice(0, 100)
                 }
             }
         }
@@ -291,7 +319,16 @@ export class AdvisorService {
                 type: 'recent_errors',
                 description: `最近有 ${errorCount} 条消息包含错误信息`,
                 severity: errorCount >= 3 ? 'high' : 'medium',
-                data: { errorCount, lastError }
+                data: { errorCount, lastError, hasTypeError, hasTestFailure, hasBuildError }
+            })
+        }
+
+        if (warningCount > 0) {
+            issues.push({
+                type: 'recent_warnings',
+                description: `最近有 ${warningCount} 条警告信息`,
+                severity: 'low',
+                data: { warningCount, lastWarning }
             })
         }
 
@@ -306,6 +343,30 @@ export class AdvisorService {
                     data: { duration: thinkingDuration }
                 })
             }
+        }
+
+        // 4. 检查会话空闲时间
+        const idleTime = Date.now() - session.updatedAt
+        if (idleTime > 60_000) {  // 超过1分钟空闲
+            issues.push({
+                type: 'session_idle',
+                description: `会话已空闲 ${Math.floor(idleTime / 60000)} 分钟`,
+                severity: 'low',
+                data: { idleTime, lastActivity: session.updatedAt }
+            })
+        }
+
+        // 5. 检查项目路径提取信息
+        const metadata = session.metadata
+        if (metadata?.path) {
+            const projectPath = metadata.path
+            const projectName = projectPath.split('/').pop() || 'unknown'
+            issues.push({
+                type: 'project_context',
+                description: `当前项目: ${projectName}`,
+                severity: 'low',
+                data: { projectPath, projectName, host: metadata.host }
+            })
         }
 
         return issues
@@ -334,60 +395,302 @@ export class AdvisorService {
     }
 
     /**
-     * 生成空闲建议
+     * 生成空闲建议（多个芯片）
      */
     private async generateIdleSuggestion(
         sessionId: string,
         session: Session,
         issues: Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }>
     ): Promise<void> {
-        const primaryIssue = issues[0]
-        if (!primaryIssue) return
+        if (issues.length === 0) return
 
-        // 根据问题类型生成建议
-        const categoryMap: Record<string, 'todo_check' | 'error_analysis' | 'code_review' | 'general'> = {
-            'incomplete_todos': 'todo_check',
-            'recent_errors': 'error_analysis',
-            'stalled_task': 'general'
+        const chips: SuggestionChip[] = []
+
+        // 根据问题类型生成芯片
+        for (const issue of issues) {
+            const newChips = this.generateChipsForIssue(issue, session)
+            chips.push(...newChips)
         }
 
-        const titleMap: Record<string, string> = {
-            'incomplete_todos': '继续未完成的任务',
-            'recent_errors': '处理检测到的错误',
-            'stalled_task': '检查任务运行状态'
-        }
+        // 添加通用建议芯片
+        chips.push(...this.generateGeneralChips(session, issues))
 
-        const suggestedTextMap: Record<string, (data: unknown) => string> = {
-            'incomplete_todos': (data) => {
-                const d = data as { titles?: string; inProgressCount?: number; pendingCount?: number }
-                if (d?.inProgressCount && d.inProgressCount > 0) {
-                    return `请继续完成任务: ${d?.titles || '进行中的任务'}`
-                }
-                return `请处理待办任务: ${d?.titles || '待处理任务'}`
-            },
-            'recent_errors': (data) => {
-                const d = data as { lastError?: string }
-                return d?.lastError
-                    ? `请检查并修复错误: ${d.lastError}`
-                    : '请检查最近的错误并修复'
-            },
-            'stalled_task': () => '任务似乎卡住了，请检查运行状态或考虑重启'
-        }
+        // 限制芯片数量（最多 6 个）
+        const finalChips = chips.slice(0, 6)
+
+        if (finalChips.length === 0) return
 
         const suggestion: AdvisorIdleSuggestionData = {
             suggestionId: randomUUID(),
             sessionId,
-            title: titleMap[primaryIssue.type] || '会话检查建议',
-            detail: issues.map(i => i.description).join('\n'),
-            reason: `会话静默 30 秒，检测到 ${issues.length} 个待处理项`,
-            category: categoryMap[primaryIssue.type] || 'general',
-            severity: primaryIssue.severity,
-            suggestedText: suggestedTextMap[primaryIssue.type]?.(primaryIssue.data),
+            chips: finalChips,
+            reason: `检测到 ${issues.length} 个待处理项`,
             createdAt: Date.now()
         }
 
         // 广播建议
         await this.broadcastIdleSuggestion(suggestion)
+    }
+
+    /**
+     * 根据问题类型生成芯片
+     */
+    private generateChipsForIssue(
+        issue: { type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown },
+        session: Session
+    ): SuggestionChip[] {
+        const chips: SuggestionChip[] = []
+
+        switch (issue.type) {
+            case 'incomplete_todos': {
+                const data = issue.data as {
+                    titles?: string
+                    inProgressCount?: number
+                    pendingCount?: number
+                    completedCount?: number
+                    totalCount?: number
+                    todos?: Array<{ content?: string; activeForm?: string }>
+                }
+                if (data?.inProgressCount && data.inProgressCount > 0) {
+                    chips.push({
+                        id: randomUUID(),
+                        label: '继续任务',
+                        text: `请继续完成进行中的任务`,
+                        category: 'todo_check',
+                        icon: '▶️'
+                    })
+                }
+                if (data?.pendingCount && data.pendingCount > 0) {
+                    // 添加第一个待办任务的具体芯片
+                    const firstTodo = data.todos?.[0]
+                    if (firstTodo) {
+                        const todoName = firstTodo.content || firstTodo.activeForm || '待处理任务'
+                        chips.push({
+                            id: randomUUID(),
+                            label: todoName.slice(0, 12) + (todoName.length > 12 ? '...' : ''),
+                            text: `请处理任务: ${todoName}`,
+                            category: 'todo_check',
+                            icon: '📋'
+                        })
+                    }
+                    // 如果有多个待办，添加"处理所有"芯片
+                    if (data.pendingCount > 1) {
+                        chips.push({
+                            id: randomUUID(),
+                            label: `全部 ${data.pendingCount} 项`,
+                            text: `请依次处理剩余的 ${data.pendingCount} 个待办任务`,
+                            category: 'todo_check',
+                            icon: '📝'
+                        })
+                    }
+                }
+                break
+            }
+            case 'recent_errors': {
+                const data = issue.data as {
+                    lastError?: string
+                    errorCount?: number
+                    hasTypeError?: boolean
+                    hasTestFailure?: boolean
+                    hasBuildError?: boolean
+                }
+                // 根据错误类型生成更具体的芯片
+                if (data?.hasTypeError) {
+                    chips.push({
+                        id: randomUUID(),
+                        label: '修复类型',
+                        text: '请检查并修复 TypeScript 类型错误',
+                        category: 'error_analysis',
+                        icon: '🔷'
+                    })
+                }
+                if (data?.hasTestFailure) {
+                    chips.push({
+                        id: randomUUID(),
+                        label: '修复测试',
+                        text: '请检查失败的测试用例并修复',
+                        category: 'error_analysis',
+                        icon: '🧪'
+                    })
+                }
+                if (data?.hasBuildError) {
+                    chips.push({
+                        id: randomUUID(),
+                        label: '修复构建',
+                        text: '请修复构建/编译错误',
+                        category: 'error_analysis',
+                        icon: '🔨'
+                    })
+                }
+                // 通用错误修复
+                if (!data?.hasTypeError && !data?.hasTestFailure && !data?.hasBuildError) {
+                    chips.push({
+                        id: randomUUID(),
+                        label: '修复错误',
+                        text: data?.lastError
+                            ? `请检查并修复错误: ${data.lastError}`
+                            : '请检查最近的错误并修复',
+                        category: 'error_analysis',
+                        icon: '🔧'
+                    })
+                }
+                if (data?.errorCount && data.errorCount > 1) {
+                    chips.push({
+                        id: randomUUID(),
+                        label: '分析全部',
+                        text: `分析最近的 ${data.errorCount} 个错误并给出修复建议`,
+                        category: 'error_analysis',
+                        icon: '🔍'
+                    })
+                }
+                break
+            }
+            case 'recent_warnings': {
+                const data = issue.data as { warningCount?: number; lastWarning?: string }
+                chips.push({
+                    id: randomUUID(),
+                    label: '处理警告',
+                    text: data?.lastWarning
+                        ? `请处理警告: ${data.lastWarning}`
+                        : `请检查并处理 ${data?.warningCount || ''} 个警告`,
+                    category: 'code_review',
+                    icon: '⚠️'
+                })
+                break
+            }
+            case 'stalled_task': {
+                const data = issue.data as { duration?: number }
+                const minutes = data?.duration ? Math.floor(data.duration / 60000) : 0
+                chips.push({
+                    id: randomUUID(),
+                    label: '检查状态',
+                    text: `任务已运行 ${minutes} 分钟，请检查是否卡住`,
+                    category: 'general',
+                    icon: '⏸️'
+                })
+                chips.push({
+                    id: randomUUID(),
+                    label: '重试任务',
+                    text: '如果任务卡住，请考虑中断并重试',
+                    category: 'general',
+                    icon: '🔄'
+                })
+                break
+            }
+            case 'session_idle': {
+                // 空闲时不生成特定芯片，由通用芯片处理
+                break
+            }
+            case 'project_context': {
+                // 项目上下文不生成芯片，仅用于辅助生成其他建议
+                break
+            }
+        }
+
+        return chips
+    }
+
+    /**
+     * 生成通用建议芯片
+     */
+    private generateGeneralChips(
+        session: Session,
+        issues: Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }>
+    ): SuggestionChip[] {
+        const chips: SuggestionChip[] = []
+
+        // 获取项目信息
+        const projectContext = issues.find(i => i.type === 'project_context')
+        const projectData = projectContext?.data as { projectName?: string; projectPath?: string } | undefined
+
+        // 如果有 Todos，添加进度相关芯片
+        if (session.todos && Array.isArray(session.todos) && session.todos.length > 0) {
+            const todos = session.todos as Array<{ status?: string; content?: string }>
+            const completedCount = todos.filter(t => t.status === 'completed').length
+            const totalCount = todos.length
+
+            if (completedCount > 0 && completedCount < totalCount) {
+                chips.push({
+                    id: randomUUID(),
+                    label: '总结进度',
+                    text: `当前任务进度: ${completedCount}/${totalCount} 已完成。请总结已完成的工作并继续剩余任务。`,
+                    category: 'general',
+                    icon: '📊'
+                })
+            }
+
+            // 如果全部完成
+            if (completedCount === totalCount && totalCount > 0) {
+                chips.push({
+                    id: randomUUID(),
+                    label: '任务完成',
+                    text: '所有任务已完成！请总结本次工作成果。',
+                    category: 'general',
+                    icon: '✅'
+                })
+            }
+        }
+
+        // 常用开发操作建议
+        const hasErrors = issues.some(i => i.type === 'recent_errors')
+        const hasTodos = issues.some(i => i.type === 'incomplete_todos')
+
+        // 如果没有明显问题，提供通用建议
+        if (!hasErrors && !hasTodos) {
+            chips.push({
+                id: randomUUID(),
+                label: '运行测试',
+                text: '请运行测试确保代码正常工作',
+                category: 'code_review',
+                icon: '🧪'
+            })
+
+            chips.push({
+                id: randomUUID(),
+                label: '代码审查',
+                text: '请检查最近的代码变更，确保代码质量',
+                category: 'code_review',
+                icon: '👀'
+            })
+
+            if (projectData?.projectName) {
+                chips.push({
+                    id: randomUUID(),
+                    label: '提交代码',
+                    text: `请检查 ${projectData.projectName} 的改动并提交代码`,
+                    category: 'general',
+                    icon: '💾'
+                })
+            }
+        }
+
+        // 空闲时间较长时的建议
+        const idleIssue = issues.find(i => i.type === 'session_idle')
+        if (idleIssue) {
+            const idleData = idleIssue.data as { idleTime?: number }
+            const idleMinutes = idleData?.idleTime ? Math.floor(idleData.idleTime / 60000) : 0
+
+            if (idleMinutes >= 5) {
+                chips.push({
+                    id: randomUUID(),
+                    label: '继续工作',
+                    text: '会话已空闲一段时间，请继续之前的工作',
+                    category: 'general',
+                    icon: '💪'
+                })
+            }
+
+            // 提供下一步建议
+            chips.push({
+                id: randomUUID(),
+                label: '下一步？',
+                text: '请告诉我接下来需要做什么',
+                category: 'general',
+                icon: '❓'
+            })
+        }
+
+        return chips
     }
 
     /**
@@ -402,7 +705,7 @@ export class AdvisorService {
         }
 
         this.syncEngine.emit(event)
-        console.log(`[AdvisorService] Idle suggestion broadcasted: ${suggestion.suggestionId} - ${suggestion.title}`)
+        console.log(`[AdvisorService] Idle suggestion broadcasted: ${suggestion.suggestionId} - ${suggestion.chips.length} chips`)
     }
 
     /**

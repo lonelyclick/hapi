@@ -266,35 +266,10 @@ export function App() {
             return
         }
 
-        // 处理空闲建议事件
+        // 处理空闲建议事件（芯片格式）
         if (event.type === 'advisor-idle-suggestion' && event.idleSuggestion) {
             console.log('[advisor] idle suggestion received', event.idleSuggestion)
             addIdleSuggestion(event.idleSuggestion)
-
-            // 检查是否需要通知
-            const isCurrentSession = event.sessionId === selectedSessionId
-            const isAppVisible = document.visibilityState === 'visible'
-
-            if (!isCurrentSession || !isAppVisible) {
-                // 用户不在当前页面，发送浏览器通知
-                // TODO: 可以在这里添加浏览器通知逻辑
-                console.log('[advisor] user not viewing session, may notify', {
-                    sessionId: event.sessionId,
-                    isCurrentSession,
-                    isAppVisible
-                })
-
-                // 高优先级时也显示全局提示条
-                if (event.idleSuggestion.severity === 'high' || event.idleSuggestion.severity === 'critical') {
-                    addAlert({
-                        suggestionId: event.idleSuggestion.suggestionId,
-                        title: `💡 ${event.idleSuggestion.title}`,
-                        detail: event.idleSuggestion.reason,
-                        severity: event.idleSuggestion.severity as 'high' | 'critical',
-                        sourceSessionId: event.sessionId
-                    })
-                }
-            }
             return
         }
 

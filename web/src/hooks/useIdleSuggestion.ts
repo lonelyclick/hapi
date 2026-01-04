@@ -1,19 +1,23 @@
 /**
  * 空闲建议状态管理 Hook
- * 用于管理会话静默后的 Advisor 建议
+ * 用于管理会话静默后的 Advisor 建议芯片
  */
 
 import { useState, useCallback, useEffect } from 'react'
 
+export interface SuggestionChip {
+    id: string
+    label: string           // 简短标签（如 "继续任务"）
+    text: string            // 点击后填入输入框的完整文本
+    category: 'todo_check' | 'error_analysis' | 'code_review' | 'general'
+    icon?: string           // 可选图标（emoji）
+}
+
 export interface IdleSuggestion {
     suggestionId: string
     sessionId: string
-    title: string
-    detail: string
-    reason: string
-    category: 'todo_check' | 'error_analysis' | 'code_review' | 'general'
-    severity: 'low' | 'medium' | 'high' | 'critical'
-    suggestedText?: string
+    chips: SuggestionChip[]  // 多个建议芯片
+    reason: string           // 触发原因
     createdAt: number
 }
 
@@ -22,6 +26,7 @@ interface StoredIdleSuggestion {
     status: 'pending' | 'applied' | 'dismissed'
     createdAt: number
     viewedAt?: number
+    usedChipIds?: string[]  // 已使用的芯片 ID
 }
 
 const STORAGE_KEY_PREFIX = 'hapi:idle-suggestion:'
@@ -73,7 +78,8 @@ export function addIdleSuggestion(suggestion: IdleSuggestion): void {
     const stored: StoredIdleSuggestion = {
         suggestion,
         status: 'pending',
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        usedChipIds: []
     }
     globalSuggestions.set(suggestion.sessionId, stored)
     saveToStorage(suggestion.sessionId, stored)
@@ -117,15 +123,32 @@ export function useIdleSuggestion(sessionId: string | null) {
     const stored = sessionId ? globalSuggestions.get(sessionId) : null
     const hasPendingSuggestion = stored?.status === 'pending'
 
-    const apply = useCallback(() => {
+    // 获取未使用的芯片
+    const availableChips = hasPendingSuggestion && stored?.suggestion.chips
+        ? stored.suggestion.chips.filter(chip => !stored.usedChipIds?.includes(chip.id))
+        : []
+
+    // 应用指定芯片
+    const applyChip = useCallback((chipId: string): string | undefined => {
         if (!sessionId || !stored) return undefined
-        const updated = { ...stored, status: 'applied' as const }
+        const chip = stored.suggestion.chips.find(c => c.id === chipId)
+        if (!chip) return undefined
+
+        const usedChipIds = [...(stored.usedChipIds || []), chipId]
+        const remainingChips = stored.suggestion.chips.filter(c => !usedChipIds.includes(c.id))
+
+        // 如果所有芯片都已使用，标记为已应用
+        const newStatus = remainingChips.length === 0 ? 'applied' as const : 'pending' as const
+        const updated = { ...stored, status: newStatus, usedChipIds }
+
         globalSuggestions.set(sessionId, updated)
         saveToStorage(sessionId, updated)
         notifyListeners()
-        return stored.suggestion.suggestedText
+
+        return chip.text
     }, [sessionId, stored])
 
+    // 关闭所有建议
     const dismiss = useCallback(() => {
         if (!sessionId) return
         globalSuggestions.delete(sessionId)
@@ -133,6 +156,7 @@ export function useIdleSuggestion(sessionId: string | null) {
         notifyListeners()
     }, [sessionId])
 
+    // 标记已查看
     const markViewed = useCallback(() => {
         if (!sessionId || !stored || stored.viewedAt) return
         const updated = { ...stored, viewedAt: Date.now() }
@@ -142,8 +166,10 @@ export function useIdleSuggestion(sessionId: string | null) {
 
     return {
         suggestion: hasPendingSuggestion ? stored.suggestion : null,
+        chips: availableChips,
+        hasChips: availableChips.length > 0,
         hasPendingSuggestion,
-        apply,
+        applyChip,
         dismiss,
         markViewed
     }

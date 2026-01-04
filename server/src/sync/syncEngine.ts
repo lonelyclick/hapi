@@ -185,15 +185,19 @@ export type AdvisorAlertData = {
     sourceSessionId?: string
 }
 
+export type SuggestionChip = {
+    id: string
+    label: string           // 简短标签（如 "继续任务"）
+    text: string            // 点击后填入输入框的完整文本
+    category: 'todo_check' | 'error_analysis' | 'code_review' | 'general'
+    icon?: string           // 可选图标（emoji）
+}
+
 export type AdvisorIdleSuggestionData = {
     suggestionId: string
     sessionId: string
-    title: string
-    detail: string
-    reason: string
-    category: 'todo_check' | 'error_analysis' | 'code_review' | 'general'
-    severity: 'low' | 'medium' | 'high' | 'critical'
-    suggestedText?: string
+    chips: SuggestionChip[]  // 多个建议芯片
+    reason: string           // 触发原因
     createdAt: number
 }
 

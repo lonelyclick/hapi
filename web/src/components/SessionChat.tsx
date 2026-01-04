@@ -74,6 +74,7 @@ export function SessionChat(props: {
     const [isResuming, setIsResuming] = useState(false)
     const [resumeError, setResumeError] = useState<string | null>(null)
     const pendingMessageRef = useRef<string | null>(null)
+    const composerSetTextRef = useRef<((text: string) => void) | null>(null)
 
     useEffect(() => {
         normalizedCacheRef.current.clear()
@@ -273,6 +274,13 @@ export function SessionChat(props: {
         void resumeSession(text)
     }, [props.session.active, props.onSend, resumeSession])
 
+    // Handle chip selection from HappyThread
+    const handleApplyChip = useCallback((text: string) => {
+        if (composerSetTextRef.current) {
+            composerSetTextRef.current(text)
+        }
+    }, [])
+
     const runtime = useHappyRuntime({
         session: props.session,
         blocks: reconciled.blocks,
@@ -362,6 +370,7 @@ export function SessionChat(props: {
                         rawMessagesCount={props.messages.length}
                         normalizedMessagesCount={normalizedMessages.length}
                         renderedMessagesCount={reconciled.blocks.length}
+                        onApplyChip={handleApplyChip}
                     />
 
                     <HappyComposer
@@ -386,6 +395,7 @@ export function SessionChat(props: {
                         onTerminal={props.session.active ? handleViewTerminal : undefined}
                         autocompleteSuggestions={props.autocompleteSuggestions}
                         otherUserTyping={props.otherUserTyping}
+                        setTextRef={composerSetTextRef}
                     />
                 </div>
             </AssistantRuntimeProvider>
