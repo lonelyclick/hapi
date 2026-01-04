@@ -563,6 +563,13 @@ export class ApiClient {
         })
     }
 
+    async testPush(): Promise<{ ok: boolean; sent: number; failed: number; removed: number }> {
+        return await this.request<{ ok: boolean; sent: number; failed: number; removed: number }>('/api/push/test', {
+            method: 'POST',
+            body: JSON.stringify({})
+        })
+    }
+
     // Usage 数据
     async getUsage(): Promise<{
         claude: {

@@ -743,7 +743,7 @@ export default function SettingsPage() {
                                                 type="button"
                                                 onClick={async () => {
                                                     try {
-                                                        const res = await api.post('/push/test')
+                                                        const res = await api.testPush()
                                                         alert(`Server push sent!\nSuccess: ${res.sent}, Failed: ${res.failed}`)
                                                     } catch (err) {
                                                         alert('Error: ' + (err instanceof Error ? err.message : String(err)))
