@@ -495,6 +495,25 @@ export class ApiClient {
         codex: {
             error?: string
         } | null
+        local: {
+            today: {
+                inputTokens: number
+                outputTokens: number
+                cacheCreationTokens: number
+                cacheReadTokens: number
+                totalTokens: number
+                sessions: number
+            }
+            total: {
+                inputTokens: number
+                outputTokens: number
+                cacheCreationTokens: number
+                cacheReadTokens: number
+                totalTokens: number
+                sessions: number
+            }
+            error?: string
+        } | null
         timestamp: number
     }> {
         return await this.request('/api/usage')

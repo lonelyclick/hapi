@@ -90,6 +90,58 @@ function UsageBar(props: { utilization: number; label: string; resetsAt: string 
     )
 }
 
+function formatTokens(tokens: number): string {
+    if (tokens >= 1_000_000) {
+        return `${(tokens / 1_000_000).toFixed(2)}M`
+    }
+    if (tokens >= 1_000) {
+        return `${(tokens / 1_000).toFixed(1)}K`
+    }
+    return tokens.toLocaleString()
+}
+
+function TokenStats(props: {
+    label: string
+    data: {
+        inputTokens: number
+        outputTokens: number
+        cacheCreationTokens: number
+        cacheReadTokens: number
+        totalTokens: number
+        sessions: number
+    }
+}) {
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+                <span className="text-[var(--app-hint)]">{props.label}</span>
+                <span className="font-mono text-[var(--app-fg)]">{formatTokens(props.data.totalTokens)} tokens</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="flex justify-between">
+                    <span className="text-[var(--app-hint)]">Input</span>
+                    <span className="font-mono">{formatTokens(props.data.inputTokens)}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-[var(--app-hint)]">Output</span>
+                    <span className="font-mono">{formatTokens(props.data.outputTokens)}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-[var(--app-hint)]">Cache Create</span>
+                    <span className="font-mono">{formatTokens(props.data.cacheCreationTokens)}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-[var(--app-hint)]">Cache Read</span>
+                    <span className="font-mono">{formatTokens(props.data.cacheReadTokens)}</span>
+                </div>
+            </div>
+            <div className="text-[10px] text-[var(--app-hint)]">
+                {props.data.sessions} session{props.data.sessions !== 1 ? 's' : ''}
+            </div>
+        </div>
+    )
+}
+
 export default function UsagePage() {
     const { api } = useAppContext()
     const goBack = useAppGoBack()
@@ -177,6 +229,25 @@ export default function UsagePage() {
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Local Token Statistics */}
+                                {data?.local && !data.local.error && (
+                                    <div className="px-3 py-3">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                                                <span className="text-white text-xs font-bold">#</span>
+                                            </div>
+                                            <span className="text-sm font-medium">Token Statistics</span>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <TokenStats label="Today" data={data.local.today} />
+                                            <div className="border-t border-[var(--app-divider)] pt-3">
+                                                <TokenStats label="All Time" data={data.local.total} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Codex Usage */}
                                 <div className="px-3 py-3">

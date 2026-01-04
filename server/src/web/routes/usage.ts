@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { createReadStream } from 'node:fs'
+import { createInterface } from 'node:readline'
 
 interface ClaudeUsageData {
     fiveHour: {
@@ -21,9 +23,30 @@ interface CodexUsageData {
     error?: string
 }
 
+interface LocalUsageData {
+    today: {
+        inputTokens: number
+        outputTokens: number
+        cacheCreationTokens: number
+        cacheReadTokens: number
+        totalTokens: number
+        sessions: number
+    }
+    total: {
+        inputTokens: number
+        outputTokens: number
+        cacheCreationTokens: number
+        cacheReadTokens: number
+        totalTokens: number
+        sessions: number
+    }
+    error?: string
+}
+
 interface UsageResponse {
     claude: ClaudeUsageData | null
     codex: CodexUsageData | null
+    local: LocalUsageData | null
     timestamp: number
 }
 
@@ -100,14 +123,162 @@ async function getClaudeUsage(): Promise<ClaudeUsageData> {
 }
 
 /**
+ * Parse a JSONL file and extract usage data
+ */
+async function parseJsonlFile(filePath: string, todayStart: number): Promise<{
+    today: { input: number; output: number; cacheCreate: number; cacheRead: number }
+    total: { input: number; output: number; cacheCreate: number; cacheRead: number }
+    hasToday: boolean
+}> {
+    const result = {
+        today: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 },
+        total: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 },
+        hasToday: false
+    }
+
+    try {
+        const fileStream = createReadStream(filePath)
+        const rl = createInterface({
+            input: fileStream,
+            crlfDelay: Infinity
+        })
+
+        for await (const line of rl) {
+            if (!line.trim()) continue
+            try {
+                const entry = JSON.parse(line) as {
+                    type?: string
+                    timestamp?: string
+                    message?: {
+                        usage?: {
+                            input_tokens?: number
+                            output_tokens?: number
+                            cache_creation_input_tokens?: number
+                            cache_read_input_tokens?: number
+                        }
+                    }
+                }
+
+                if (entry.type === 'assistant' && entry.message?.usage) {
+                    const usage = entry.message.usage
+                    const input = usage.input_tokens ?? 0
+                    const output = usage.output_tokens ?? 0
+                    const cacheCreate = usage.cache_creation_input_tokens ?? 0
+                    const cacheRead = usage.cache_read_input_tokens ?? 0
+
+                    result.total.input += input
+                    result.total.output += output
+                    result.total.cacheCreate += cacheCreate
+                    result.total.cacheRead += cacheRead
+
+                    // Check if this entry is from today
+                    if (entry.timestamp) {
+                        const entryTime = new Date(entry.timestamp).getTime()
+                        if (entryTime >= todayStart) {
+                            result.today.input += input
+                            result.today.output += output
+                            result.today.cacheCreate += cacheCreate
+                            result.today.cacheRead += cacheRead
+                            result.hasToday = true
+                        }
+                    }
+                }
+            } catch {
+                // Skip invalid JSON lines
+            }
+        }
+    } catch {
+        // File read error, skip
+    }
+
+    return result
+}
+
+/**
+ * Get local usage data from Claude Code JSONL files
+ */
+async function getLocalUsage(): Promise<LocalUsageData> {
+    try {
+        const projectsDir = join(homedir(), '.claude', 'projects')
+
+        // Get today's start timestamp (midnight local time)
+        const now = new Date()
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+
+        const today = { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, sessions: 0 }
+        const total = { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, sessions: 0 }
+
+        // Read all project directories
+        let projectDirs: string[]
+        try {
+            projectDirs = await readdir(projectsDir)
+        } catch {
+            return { today, total, error: 'No Claude Code projects found' }
+        }
+
+        for (const projectDir of projectDirs) {
+            const projectPath = join(projectsDir, projectDir)
+
+            try {
+                const projectStat = await stat(projectPath)
+                if (!projectStat.isDirectory()) continue
+
+                // Read all JSONL files in the project
+                const files = await readdir(projectPath)
+                for (const file of files) {
+                    if (!file.endsWith('.jsonl')) continue
+
+                    const filePath = join(projectPath, file)
+                    const fileStat = await stat(filePath)
+                    if (!fileStat.isFile() || fileStat.size === 0) continue
+
+                    const result = await parseJsonlFile(filePath, todayStart)
+
+                    total.inputTokens += result.total.input
+                    total.outputTokens += result.total.output
+                    total.cacheCreationTokens += result.total.cacheCreate
+                    total.cacheReadTokens += result.total.cacheRead
+                    total.sessions += 1
+
+                    if (result.hasToday) {
+                        today.inputTokens += result.today.input
+                        today.outputTokens += result.today.output
+                        today.cacheCreationTokens += result.today.cacheCreate
+                        today.cacheReadTokens += result.today.cacheRead
+                        today.sessions += 1
+                    }
+                }
+            } catch {
+                // Skip inaccessible directories
+            }
+        }
+
+        today.totalTokens = today.inputTokens + today.outputTokens + today.cacheCreationTokens + today.cacheReadTokens
+        total.totalTokens = total.inputTokens + total.outputTokens + total.cacheCreationTokens + total.cacheReadTokens
+
+        return { today, total }
+    } catch (error) {
+        return {
+            today: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, sessions: 0 },
+            total: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, sessions: 0 },
+            error: error instanceof Error ? error.message : 'Unknown error'
+        }
+    }
+}
+
+/**
  * Get usage data directly (server-side, no RPC)
  */
 async function getUsageDirectly(): Promise<UsageResponse> {
-    const claude = await getClaudeUsage()
+    const [claude, local] = await Promise.all([
+        getClaudeUsage(),
+        getLocalUsage()
+    ])
 
     return {
         claude,
-        codex: { error: 'Codex usage API not yet implemented' },
+        codex: { error: 'Codex usage API not available' },
+        local,
         timestamp: Date.now()
     }
 }
