@@ -32,6 +32,19 @@ const addMemberSchema = z.object({
     agentType: z.string().max(50).optional()
 })
 
+const agentTypeSchema = z.enum(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok', 'openrouter', 'aider-cli'])
+
+const spawnMemberSchema = z.object({
+    machineId: z.string(),
+    directory: z.string(),
+    agentType: agentTypeSchema,
+    role: memberRoleSchema.optional().default('member'),
+    claudeAgent: z.string().optional(),
+    openrouterModel: z.string().optional(),
+    permissionMode: z.string().optional(),
+    modelMode: z.string().optional()
+})
+
 const sendMessageSchema = z.object({
     content: z.string().min(1).max(50000),
     sourceSessionId: z.string().uuid().optional(),
@@ -369,6 +382,86 @@ export function createGroupRoutes(
                 results
             }
         })
+    })
+
+    // POST /groups/:id/spawn-member - 创建新 AI 并加入群组
+    app.post('/groups/:id/spawn-member', async (c) => {
+        const groupId = c.req.param('id')
+        const group = store.getAgentGroup(groupId)
+
+        if (!group) {
+            return c.json({ error: 'Group not found' }, 404)
+        }
+
+        if (!syncEngine) {
+            return c.json({ error: 'Sync engine not available' }, 503)
+        }
+
+        const json = await c.req.json().catch(() => null)
+        const parsed = spawnMemberSchema.safeParse(json)
+
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid spawn data', details: parsed.error.issues }, 400)
+        }
+
+        const { machineId, directory, agentType, role, claudeAgent, openrouterModel, permissionMode, modelMode } = parsed.data
+
+        // Check if machine is online
+        const namespace = c.get('namespace') || 'default'
+        const machine = syncEngine.getMachineByNamespace(machineId, namespace)
+        if (!machine || !machine.active) {
+            return c.json({ error: 'Machine is offline' }, 409)
+        }
+
+        try {
+            // Spawn the session
+            const spawnResult = await syncEngine.spawnSession(
+                machineId,
+                directory,
+                agentType,
+                undefined, // yolo
+                'simple', // sessionType
+                undefined, // worktreeName
+                {
+                    claudeAgent,
+                    openrouterModel,
+                    permissionMode: permissionMode as 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | undefined,
+                    modelMode: modelMode as 'default' | 'sonnet' | 'opus' | undefined
+                }
+            )
+
+            if (spawnResult.type !== 'success') {
+                return c.json({ error: spawnResult.message || 'Failed to spawn session' }, 500)
+            }
+
+            const sessionId = spawnResult.sessionId
+
+            // Wait a bit for session to be registered
+            await new Promise(resolve => setTimeout(resolve, 1000))
+
+            // Add to group
+            store.addGroupMember(groupId, sessionId, role as GroupMemberRole, agentType)
+
+            const members = store.getGroupMembers(groupId)
+            const membersWithDetails = members.map(m => {
+                const session = syncEngine?.getSession(m.sessionId)
+                return {
+                    ...m,
+                    sessionName: session?.metadata?.name || `Session ${m.sessionId.slice(0, 8)}`,
+                    sessionActive: session?.active || false,
+                    agentType: m.agentType || session?.metadata?.agent || 'unknown'
+                }
+            })
+
+            return c.json({
+                ok: true,
+                sessionId,
+                members: membersWithDetails
+            })
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to spawn session'
+            return c.json({ error: errorMessage }, 500)
+        }
     })
 
     // GET /groups/:id/events - SSE 订阅群组事件

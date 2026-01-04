@@ -42,6 +42,8 @@ import type {
     SlashCommandsResponse,
     SpeechToTextStreamRequest,
     SpeechToTextStreamResponse,
+    SpawnAgentType,
+    SpawnMemberResponse,
     SpawnResponse,
     SessionResponse,
     SessionsResponse,

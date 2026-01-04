@@ -494,3 +494,22 @@ export type BroadcastResponse = {
         results: Array<{ sessionId: string; success: boolean; error?: string }>
     }
 }
+
+export type SpawnAgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli'
+
+export type SpawnMemberRequest = {
+    machineId: string
+    directory: string
+    agentType: SpawnAgentType
+    role?: GroupMemberRole
+    claudeAgent?: string
+    openrouterModel?: string
+    permissionMode?: string
+    modelMode?: string
+}
+
+export type SpawnMemberResponse = {
+    ok: true
+    sessionId: string
+    members: AgentGroupMember[]
+}
