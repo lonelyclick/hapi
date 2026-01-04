@@ -26,6 +26,7 @@ export interface AdvisorServiceConfig {
     summaryThreshold?: number      // 触发摘要的消息数阈值
     summaryIdleTimeoutMs?: number  // 空闲多久后触发摘要
     evaluationIntervalMs?: number  // 评估建议状态的间隔
+    summaryDeliveryEnabled?: boolean  // 是否启用 Summary 推送给 Advisor（默认 false）
 }
 
 export class AdvisorService {
@@ -47,6 +48,7 @@ export class AdvisorService {
     private evaluationTimer: NodeJS.Timeout | null = null
     private telegramNotifier: AdvisorTelegramNotifier | null = null
     private autoIterationService: AutoIterationService | null = null
+    private summaryDeliveryEnabled: boolean = false                // Summary 推送开关（默认关闭）
 
     // 空闲检查配置
     private readonly idleCheckTimeoutMs = 30_000  // 30秒静默后触发检查
@@ -72,6 +74,7 @@ export class AdvisorService {
         this.summaryThreshold = config.summaryThreshold ?? 10
         this.summaryIdleTimeoutMs = config.summaryIdleTimeoutMs ?? 60_000
         this.evaluationIntervalMs = config.evaluationIntervalMs ?? 300_000  // 5分钟
+        this.summaryDeliveryEnabled = config.summaryDeliveryEnabled ?? false  // 默认关闭
         this.evaluator = new SuggestionEvaluator(store, syncEngine)
         this.minimaxService = new MinimaxService()
     }
@@ -1237,6 +1240,11 @@ export class AdvisorService {
      * 投递摘要给 Advisor
      */
     private async deliverToAdvisor(summary: SessionSummary): Promise<void> {
+        // Summary 推送功能已暂停（默认关闭），等待进一步优化
+        if (!this.summaryDeliveryEnabled) {
+            return
+        }
+
         const advisorSessionId = this.scheduler.getAdvisorSessionId()
         if (!advisorSessionId) {
             console.log('[AdvisorService] No advisor session, skip summary delivery')

@@ -461,127 +461,87 @@ export class AdvisorScheduler {
         const today = new Date().toISOString().split('T')[0]
 
         return `[[DAILY_REVIEW]]
-# 每日自迭代审查 - ${today}
+# 每日自迭代 - ${today}
 
-你是 HAPI 项目的自迭代引擎。**你必须执行实际的代码改进，而不仅仅是提出建议。**
+你是 HAPI 项目的自迭代引擎。**你的使命是让这个项目持续进化，添加新功能，拥抱 AI 时代。**
 
 工作目录: ${workingDir}
 
-## 你的任务
+## 项目背景
 
-1. **阅读代码，找到一个可以改进的地方**
-   - 先运行 \`git log --oneline -20\` 看看最近的开发动态
-   - 浏览 server/src 或 web/src 下的代码
-   - 找到可以优化的代码、缺失的功能、或可以自动化的流程
+HAPI 是一个 AI 编程助手的远程协作平台，核心功能：
+- 让多个 AI Agent（Claude、Codex、Gemini 等）在远程服务器上执行编程任务
+- 通过 Web/Telegram 界面远程监控和交互
+- 自动迭代系统（就是你）可以主动改进项目
 
-2. **选择一个具体的改进并执行**
-   - 优先选择可以直接实现的小改进（1-3个文件的修改）
-   - 比如：添加日志、优化错误处理、补充类型定义、改进注释、简化逻辑
+## 你的任务：推动项目进化
 
-3. **输出 ActionRequest 让系统自动执行**
+**不要只修复 bug 或优化代码质量！** 你应该：
 
-## ActionRequest 输出格式（必须使用）
+### 1. 添加新功能
+思考用户可能需要什么新功能：
+- 更智能的会话管理（自动归档、智能分组）
+- 更强的 AI 能力（多 Agent 协作、任务分解）
+- 更好的用户体验（快捷操作、智能提示）
+- 更多自动化（自动部署、自动测试）
 
-当你确定了要做的改进，输出如下格式：
+### 2. 升级现有功能
+让现有功能更现代化、更智能：
+- 利用最新的 AI 能力（如 Claude 的 computer use、Codex 的推理）
+- 添加缺失的功能点
+- 提升交互体验
 
-\`\`\`
-[[HAPI_ADVISOR]]
-{
-  "type": "action_request",
-  "id": "action-${Date.now()}",
-  "actionType": "refactor",
-  "reason": "简要说明为什么要做这个改进",
-  "expectedOutcome": "改进后的预期效果",
-  "targetProject": "${workingDir}",
-  "reversible": true,
-  "steps": [
-    {
-      "type": "edit",
-      "description": "修改 xxx 文件的 xxx 函数",
-      "filePath": "server/src/xxx.ts",
-      "oldContent": "要替换的原代码片段",
-      "newContent": "替换后的新代码片段"
-    }
-  ]
-}
-\`\`\`
+### 3. 拥抱 AI 时代趋势
+- MCP (Model Context Protocol) 集成
+- Agent 工具调用优化
+- 上下文管理改进
+- 多模态支持
 
-## ActionRequest 示例
+## 执行方式
 
-### 示例 1: 添加错误日志
-\`\`\`
-[[HAPI_ADVISOR]]
-{
-  "type": "action_request",
-  "id": "action-add-error-logging",
-  "actionType": "refactor",
-  "reason": "syncEngine.ts 的 handleError 方法缺少详细日志，难以调试问题",
-  "expectedOutcome": "错误发生时会记录完整的错误栈和上下文信息",
-  "targetProject": "${workingDir}",
-  "reversible": true,
-  "steps": [
-    {
-      "type": "edit",
-      "description": "在 handleError 方法中添加详细日志",
-      "filePath": "server/src/sync/syncEngine.ts",
-      "oldContent": "console.error('[SyncEngine] Error:', error)",
-      "newContent": "console.error('[SyncEngine] Error:', error)\\nconsole.error('[SyncEngine] Error stack:', error instanceof Error ? error.stack : 'N/A')"
-    }
-  ]
-}
-\`\`\`
+当你确定要实现一个功能，你可以**直接开始编写代码**！
 
-### 示例 2: 优化类型定义
-\`\`\`
-[[HAPI_ADVISOR]]
-{
-  "type": "action_request",
-  "id": "action-fix-types",
-  "actionType": "fix_type_errors",
-  "reason": "SessionMetadata 类型过于宽松，使用 Record<string, unknown> 缺少类型安全",
-  "expectedOutcome": "更精确的类型定义，减少运行时错误",
-  "targetProject": "${workingDir}",
-  "reversible": true,
-  "steps": [
-    {
-      "type": "edit",
-      "description": "为 SessionMetadata 添加具体类型",
-      "filePath": "server/src/types.ts",
-      "oldContent": "type SessionMetadata = Record<string, unknown>",
-      "newContent": "type SessionMetadata = {\\n  path?: string\\n  host?: string\\n  version?: string\\n}"
-    }
-  ]
-}
-\`\`\`
+你是一个 Claude Agent，拥有完整的文件操作能力（Read、Edit、Write、Bash）。
+请直接使用这些工具来实现你的想法，而不是只输出建议。
 
-## 重要要求
+### 推荐流程：
+1. 运行 \`git log --oneline -10\` 了解最近动态
+2. 阅读相关代码，理解现有架构
+3. 选择一个有价值的改进
+4. **直接编写代码实现它**
+5. 完成后输出一个 Suggestion 记录你做了什么
 
-1. **必须输出至少一个 ActionRequest** - 不要只输出 Suggestion
-2. **改进要具体可执行** - steps 里要有真实的 oldContent 和 newContent
-3. **从小处着手** - 一次只改一个小功能，确保改动可控
-4. **先读后写** - 在输出 ActionRequest 之前，先用工具读取相关文件确认代码内容
-
-## 可选：Suggestion 输出（用于大改动）
-
-对于需要人工确认的大改动，可以同时输出 Suggestion：
+### 如果改动较大，可以输出 Suggestion 让人工确认：
 
 \`\`\`
 [[HAPI_ADVISOR]]
 {
   "type": "suggestion",
   "id": "suggest-${Date.now()}",
-  "title": "建议标题",
-  "detail": "详细说明",
-  "category": "architecture",
-  "severity": "medium",
-  "confidence": 0.8,
+  "title": "功能标题",
+  "detail": "详细说明这个功能的价值和实现思路",
+  "category": "feature",
+  "severity": "high",
+  "confidence": 0.9,
   "scope": "module"
 }
 \`\`\`
 
+## 本次迭代方向参考
+
+请从以下方向中选择一个，或者提出你自己的想法：
+
+1. **会话智能分组** - 自动按项目/时间/状态对会话进行分组展示
+2. **快捷命令系统** - 在输入框支持 /deploy /test /review 等快捷命令
+3. **Agent 协作** - 让多个 Agent 可以协作完成复杂任务
+4. **智能上下文** - 自动为 Agent 提供相关代码上下文
+5. **自动化工作流** - 定义可重复执行的工作流（如：PR -> Review -> Merge）
+6. **监控大盘** - 展示所有 Agent 的状态、资源使用、任务进度
+7. **你的想法** - 任何你认为有价值的改进
+
 ---
 
-**现在开始审查，找到一个具体的代码改进并输出 ActionRequest。**`
+**现在开始！阅读代码，选择一个方向，直接实现它。**`
     }
 
     /**
