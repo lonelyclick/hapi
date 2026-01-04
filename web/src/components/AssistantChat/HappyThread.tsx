@@ -113,20 +113,20 @@ function InlineSuggestionChips(props: {
                     </div>
                 )}
 
-                {/* Layer 2: Grok 审查状态 */}
+                {/* Layer 2: AI 审查状态 */}
                 {isMinimaxReviewing && (
                     <div className={`flex items-center gap-2 text-xs text-[var(--app-hint)] ${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
                         <Spinner className="w-3 h-3" />
-                        <span>Grok 正在审查...</span>
+                        <span>AI 正在审查...</span>
                     </div>
                 )}
 
-                {/* Layer 2: Grok 芯片 */}
+                {/* Layer 2: AI 芯片 */}
                 {hasLayer2Chips && (
                     <div className={`${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
                         <div className="flex items-center gap-1 mb-2 text-xs text-[var(--app-hint)]">
                             <span>✨</span>
-                            <span>Grok 建议</span>
+                            <span>AI 建议</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                             {props.minimaxChips!.map((chip) => (
@@ -151,11 +151,11 @@ function InlineSuggestionChips(props: {
                     </div>
                 )}
 
-                {/* Layer 2: Grok 错误 */}
+                {/* Layer 2: AI 错误 */}
                 {hasMinimaxError && (
                     <div className={`flex items-center gap-2 text-xs text-orange-600 dark:text-orange-400 ${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
                         <span>⚠️</span>
-                        <span>Grok 审查失败{props.minimaxError ? `：${props.minimaxError}` : ''}</span>
+                        <span>AI 审查失败{props.minimaxError ? `：${props.minimaxError}` : ''}</span>
                     </div>
                 )}
             </div>
