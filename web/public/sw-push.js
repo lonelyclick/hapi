@@ -33,18 +33,13 @@ self.addEventListener('push', (event) => {
         }
     }
 
+    // iOS Safari doesn't support actions, so keep options minimal for compatibility
     const options = {
         body: data.body,
         icon: data.icon,
         badge: data.badge,
         tag: data.tag,
-        renotify: true,
-        requireInteraction: false,
-        data: data.data,
-        actions: [
-            { action: 'open', title: 'Open' },
-            { action: 'dismiss', title: 'Dismiss' }
-        ]
+        data: data.data
     }
 
     console.log('[sw-push] showing notification:', data.title, options)
