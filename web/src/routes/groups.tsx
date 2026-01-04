@@ -613,15 +613,8 @@ export default function GroupsPage() {
         <div className="flex h-full flex-col">
             {/* Header */}
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
-                <div className="mx-auto w-full max-w-content flex items-center gap-2 px-3 py-1.5">
-                    <button
-                        type="button"
-                        onClick={goBack}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                    >
-                        <BackIcon />
-                    </button>
-                    <div className="flex-1 font-medium text-sm">Agent 群组</div>
+                <div className="mx-auto w-full max-w-content flex items-center gap-2 px-3 py-2">
+                    <div className="flex-1 font-medium text-sm">Chat</div>
                     {!showCreateForm && (
                         <button
                             onClick={() => setShowCreateForm(true)}
