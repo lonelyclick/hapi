@@ -127,9 +127,25 @@ export class AcpSdkBackend implements AgentBackend {
             `ACP session/new timed out after ${this.initTimeoutMs}ms`
         );
 
+        // Check for authentication errors
+        if (isObject(response) && response.error) {
+            const errorObj = response.error as Record<string, unknown>;
+            const errorMessage = asString(errorObj.message) ?? 'Unknown error';
+            const errorCode = errorObj.code;
+
+            // Provide helpful hints for common auth errors
+            if (errorMessage.includes('auth') || errorMessage.includes('API key') ||
+                errorMessage.includes('credentials') || errorCode === 401) {
+                throw new Error(`Authentication failed: ${errorMessage}. ` +
+                    `For Gemini, set GEMINI_API_KEY environment variable.`);
+            }
+            throw new Error(`ACP session creation failed: ${errorMessage}`);
+        }
+
         const sessionId = isObject(response) ? asString(response.sessionId) : null;
         if (!sessionId) {
-            throw new Error('Invalid session/new response from ACP agent');
+            const responseStr = JSON.stringify(response).slice(0, 200);
+            throw new Error(`Invalid session/new response from ACP agent: ${responseStr}`);
         }
 
         this.activeSessionId = sessionId;
