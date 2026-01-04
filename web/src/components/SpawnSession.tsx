@@ -42,7 +42,8 @@ export function SpawnSession(props: {
                 machineId: props.machineId,
                 directory: trimmed,
                 sessionType,
-                worktreeName: sessionType === 'worktree' ? (worktreeName.trim() || undefined) : undefined
+                worktreeName: sessionType === 'worktree' ? (worktreeName.trim() || undefined) : undefined,
+                advisorMode
             })
             if (result.type === 'success') {
                 haptic.notification('success')
@@ -141,6 +142,23 @@ export function SpawnSession(props: {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+
+                        {/* CTO/Advisor Mode 选项 */}
+                        <div className="flex flex-col gap-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={advisorMode}
+                                    onChange={(e) => setAdvisorMode(e.target.checked)}
+                                    disabled={isPending}
+                                    className="accent-[var(--app-link)] w-4 h-4"
+                                />
+                                <span className="text-sm font-medium">CTO 模式</span>
+                                <span className="text-xs text-[var(--app-hint)]">
+                                    以技术总管视角思考和规划
+                                </span>
+                            </label>
                         </div>
 
                         {(error ?? spawnError) ? (
