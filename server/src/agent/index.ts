@@ -43,4 +43,18 @@ export {
     type ProtocolContext,
     type ProtocolMessage
 } from './collaborationProtocol'
+export {
+    TaskOpportunityDiscoverer,
+    AutonomousDecisionEngine,
+    WorkPriorityScheduler,
+    AutonomousAgentManager,
+    type TaskOpportunity,
+    type TaskOpportunityType,
+    type Decision,
+    type DecisionType,
+    type DecisionContext,
+    type DecisionRule,
+    type WorkItem,
+    type ConfidenceLevel
+} from './autonomousAgent'
 export * from './types'
