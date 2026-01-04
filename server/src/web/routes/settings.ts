@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
-import type { Store, UserRole } from '../../store'
+import type { Store, UserRole, AutoIterExecutionStatus, AutoIterActionType } from '../../store'
+import type { AutoIterationService } from '../../agent/autoIteration'
 
 const userRoleSchema = z.enum(['developer', 'operator'])
 
@@ -46,7 +47,41 @@ const updateInputPresetSchema = z.object({
     prompt: z.string().min(1).max(50000)
 })
 
-export function createSettingsRoutes(store: Store): Hono<WebAppEnv> {
+// ==================== 自动迭代相关 Schema ====================
+
+const executionPolicySchema = z.enum([
+    'auto_execute', 'notify_then_execute', 'require_confirm', 'always_manual', 'disabled'
+])
+
+const actionTypeSchema = z.enum([
+    'format_code', 'fix_lint', 'add_comments', 'run_tests',
+    'fix_type_errors', 'update_deps', 'refactor', 'optimize',
+    'edit_config', 'create_file', 'delete_file',
+    'git_commit', 'git_push', 'deploy', 'custom'
+])
+
+const notificationLevelSchema = z.enum(['all', 'errors_only', 'none'])
+
+const updateAutoIterationConfigSchema = z.object({
+    enabled: z.boolean().optional(),
+    policy: z.record(actionTypeSchema, executionPolicySchema).optional(),
+    allowedProjects: z.array(z.string()).optional(),
+    notificationLevel: notificationLevelSchema.optional(),
+    keepLogsDays: z.number().min(1).max(365).optional()
+})
+
+const autoIterationLogsQuerySchema = z.object({
+    status: z.union([
+        z.enum(['pending', 'approved', 'executing', 'completed', 'failed', 'rejected', 'cancelled', 'timeout']),
+        z.array(z.enum(['pending', 'approved', 'executing', 'completed', 'failed', 'rejected', 'cancelled', 'timeout']))
+    ]).optional(),
+    actionType: actionTypeSchema.optional(),
+    projectPath: z.string().optional(),
+    limit: z.coerce.number().min(1).max(100).optional(),
+    offset: z.coerce.number().min(0).optional()
+})
+
+export function createSettingsRoutes(store: Store, autoIterationService?: AutoIterationService): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     // ==================== 用户管理 (合并了 Allowed Emails) ====================

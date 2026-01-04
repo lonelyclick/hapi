@@ -14,9 +14,12 @@ import type {
     AdvisorSuggestionOutput,
     AdvisorMemoryOutput,
     AdvisorEventMessage,
-    AdvisorEventData
+    AdvisorEventData,
+    AdvisorActionRequestOutput
 } from './types'
 import { ADVISOR_OUTPUT_PATTERN } from './types'
+import type { AutoIterationService } from './autoIteration'
+import type { ActionRequest } from './autoIteration/types'
 
 export interface AdvisorServiceConfig {
     namespace: string
@@ -43,6 +46,7 @@ export class AdvisorService {
     private broadcastedSet: Set<string> = new Set()                // 已广播的 suggestionId:status:sessionId
     private evaluationTimer: NodeJS.Timeout | null = null
     private telegramNotifier: AdvisorTelegramNotifier | null = null
+    private autoIterationService: AutoIterationService | null = null
 
     // 空闲检查配置
     private readonly idleCheckTimeoutMs = 30_000  // 30秒静默后触发检查
@@ -77,6 +81,14 @@ export class AdvisorService {
      */
     setTelegramNotifier(notifier: AdvisorTelegramNotifier): void {
         this.telegramNotifier = notifier
+    }
+
+    /**
+     * 设置自动迭代服务
+     */
+    setAutoIterationService(service: AutoIterationService): void {
+        this.autoIterationService = service
+        console.log('[AdvisorService] AutoIterationService connected')
     }
 
     /**
@@ -1241,8 +1253,7 @@ export class AdvisorService {
                 this.handleMemory(output)
                 break
             case 'action_request':
-                // 仅记录，不执行
-                console.log('[AdvisorService] Action request received (not executed):', output)
+                this.handleActionRequest(advisorSessionId, output as AdvisorActionRequestOutput)
                 break
         }
     }
@@ -1297,6 +1308,47 @@ export class AdvisorService {
         if (memory) {
             console.log(`[AdvisorService] Memory created: ${memory.type} - ${output.content.slice(0, 50)}...`)
         }
+    }
+
+    /**
+     * 处理执行请求（自动迭代）
+     */
+    private handleActionRequest(advisorSessionId: string, output: AdvisorActionRequestOutput): void {
+        console.log(`[AdvisorService] Action request received: ${output.actionType}`)
+
+        // 检查是否连接了自动迭代服务
+        if (!this.autoIterationService) {
+            console.log('[AdvisorService] AutoIterationService not connected, action request ignored')
+            return
+        }
+
+        // 检查自动迭代是否启用
+        if (!this.autoIterationService.isEnabled()) {
+            console.log('[AdvisorService] AutoIteration is disabled, action request ignored')
+            return
+        }
+
+        // 转换为 ActionRequest 格式
+        const actionRequest: ActionRequest = {
+            type: 'action_request',
+            id: output.id || `act_${Date.now()}_${randomUUID().slice(0, 8)}`,
+            actionType: output.actionType,
+            targetSessionId: output.targetSessionId,
+            targetProject: output.targetProject,
+            steps: output.steps || [],
+            reason: output.reason || '',
+            expectedOutcome: output.expectedOutcome || '',
+            riskLevel: output.riskLevel || 'medium',
+            reversible: output.reversible ?? true,
+            dependsOn: output.dependsOn,
+            sourceSessionId: output.sourceSessionId || advisorSessionId,
+            confidence: output.confidence ?? 0.7
+        }
+
+        // 发送给自动迭代服务处理
+        this.autoIterationService.handleActionRequest(actionRequest).catch(error => {
+            console.error('[AdvisorService] Failed to handle action request:', error)
+        })
     }
 
     /**

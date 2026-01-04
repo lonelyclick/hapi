@@ -24,14 +24,39 @@ export interface AdvisorSuggestionOutput {
     suggestedActions?: string[]
 }
 
+// 操作步骤类型
+export interface AdvisorActionStep {
+    type: 'command' | 'edit' | 'create' | 'delete' | 'message'
+    command?: string
+    filePath?: string
+    oldContent?: string
+    newContent?: string
+    content?: string
+    message?: string
+    description: string
+}
+
+// 操作类型
+export type AdvisorActionType =
+    | 'format_code' | 'fix_lint' | 'add_comments' | 'run_tests'
+    | 'fix_type_errors' | 'update_deps' | 'refactor' | 'optimize'
+    | 'edit_config' | 'create_file' | 'delete_file'
+    | 'git_commit' | 'git_push' | 'deploy' | 'custom'
+
 export interface AdvisorActionRequestOutput {
     type: 'action_request'
-    intent: 'run' | 'notify' | 'escalate'
+    id?: string
+    actionType: AdvisorActionType
     targetSessionId?: string
-    steps: string[]
+    targetProject?: string
+    steps: AdvisorActionStep[]
     reason: string
-    urgency: 'low' | 'medium' | 'high'
-    requiresApproval: boolean
+    expectedOutcome?: string
+    riskLevel?: 'low' | 'medium' | 'high'
+    reversible?: boolean
+    dependsOn?: string[]
+    sourceSessionId?: string
+    confidence?: number
 }
 
 export interface AdvisorMemoryOutput {

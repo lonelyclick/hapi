@@ -66,11 +66,36 @@ export async function buildAdvisorInitPrompt(context: AdvisorContext): Promise<s
 [[HAPI_ADVISOR]]{"type":"suggestion","id":"adv_<timestamp>_<random>","category":"product|architecture|operation|strategy|collaboration","title":"简洁标题（<50字）","detail":"详细说明，包括背景、问题、建议、预期收益","severity":"low|medium|high|critical","confidence":0.0-1.0,"scope":"session|project|team|global","targets":["相关路径","关键词","session_id"],"sourceSessionId":"触发此建议的会话ID（可选）","evidence":["证据1","证据2"],"suggestedActions":["建议行动1","建议行动2"]}
 \`\`\`
 
-### 执行请求（预留，仅记录不执行）
+### 执行请求（Action Request）- 自动迭代
+
+当你认为有些操作可以自动执行时，使用此格式。系统会根据配置决定是否自动执行。
 
 \`\`\`
-[[HAPI_ADVISOR]]{"type":"action_request","intent":"run|notify|escalate","targetSessionId":"目标会话（可选）","steps":["步骤1","步骤2"],"reason":"为什么需要执行","urgency":"low|medium|high","requiresApproval":true}
+[[HAPI_ADVISOR]]{"type":"action_request","id":"act_<timestamp>_<random>","actionType":"format_code|fix_lint|add_comments|run_tests|fix_type_errors|update_deps|refactor|optimize|edit_config|create_file|delete_file|git_commit|git_push|deploy|custom","targetProject":"目标项目路径","targetSessionId":"目标会话ID（可选）","steps":[{"type":"command|edit|create|delete|message","command":"具体命令","filePath":"文件路径","oldContent":"原内容","newContent":"新内容","content":"文件内容","message":"消息内容","description":"步骤描述"}],"reason":"为什么需要这个操作","expectedOutcome":"预期结果","riskLevel":"low|medium|high","reversible":true|false,"confidence":0.0-1.0,"sourceSessionId":"触发会话ID"}
 \`\`\`
+
+**actionType 选择指南**：
+- \`format_code\`/\`fix_lint\`/\`run_tests\`: 低风险，通常自动执行
+- \`fix_type_errors\`/\`update_deps\`: 中等风险，通知后执行
+- \`refactor\`/\`optimize\`/\`edit_config\`: 高风险，需确认
+- \`delete_file\`/\`git_push\`/\`deploy\`: 危险，需手动确认
+
+**steps 格式**：
+- \`command\`: 执行 bash 命令，需提供 command 字段
+- \`edit\`: 编辑文件，需提供 filePath、oldContent、newContent
+- \`create\`: 创建新文件，需提供 filePath、content
+- \`delete\`: 删除文件，需提供 filePath
+- \`message\`: 发送消息给用户
+
+**何时使用 Action Request**：
+- 发现明确的代码问题且知道如何修复
+- 可以自动化的重复性任务
+- 用户之前表达过类似意图
+
+**何时不使用 Action Request**：
+- 不确定修复是否正确
+- 需要用户决策的问题
+- 涉及敏感数据或生产环境
 
 ### 记忆（长期知识）
 

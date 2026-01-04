@@ -6,10 +6,10 @@
 import type { SessionSummary } from './types'
 import type { SuggestionChip } from '../sync/syncEngine'
 
-// 暂时硬编码 API Key，后续可迁移到凭证系统
-const MINIMAX_API_KEY = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJHcm91cE5hbWUiOiJ5b2hvIiwiVXNlck5hbWUiOiJ5b2hvIiwiQWNjb3VudCI6IiIsIlN1YmplY3RJRCI6IjE4NDM1NjI5OTQ1OTU4MTMxNzgiLCJQaG9uZSI6IjEzNjMyMDQxNzA2IiwiR3JvdXBJRCI6IjE4NDM1NjI5OTQ1OTE2MTg4NzAiLCJQYWdlTmFtZSI6IiIsIk1haWwiOiIiLCJDcmVhdGVUaW1lIjoiMjAyNS0wMS0wNCAxNDoyNTozMCIsIlRva2VuVHlwZSI6MSwiaXNzIjoibWluaW1heCJ9.dFcPmYW7x7WFv3Pu0WVqvyMvh8bXVNfAErlE6urZFn-Cqxa1k31kXKDnCDN5zR6W_OW4yKm13l6_eUoUuJVHsOqNI_A-p1cU_3vGVJvb2BFDNiNsH_4gL_Bs2OP-m3-A-X8mcWH4bQlsrSL8_tDxUYwfCLwH_fzqDLcxZx40_hphLPJFD_Qz_RYLHhXNKq_xI5QPLDLcXv0S9dZ8bfpUvvkgAMUhCfJYWjP__bJw3tV6wLHxdF9fkXZ6tLtXU4rVs2rR_TdrAOq4e0BqH3m8vP3I2c0qXlLfJYl0MvXGH5tO0vnJKHy7K3Q5eFZ1dC6K9rPBqZVLpIu0f7vJnH2Hcw'
-const MINIMAX_API_URL = 'https://api.minimax.chat/v1/text/chatcompletion_v2'
-const MINIMAX_MODEL = 'abab5.5-chat'
+// 使用 NVIDIA NIM API 调用 MiniMax 模型
+const NIM_API_URL = 'https://integrate.api.nvidia.com/v1/chat/completions'
+const NIM_API_KEY = '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'
+const MINIMAX_MODEL = 'minimaxai/minimax-m2.1'
 const MINIMAX_TIMEOUT_MS = 60_000
 
 export interface MinimaxReviewRequest {
@@ -22,16 +22,17 @@ export interface MinimaxReviewResponse {
     error?: string
 }
 
-interface MinimaxApiResponse {
-    base_resp?: {
-        status_code: number
-        status_msg: string
-    }
+// NIM API 使用 OpenAI 兼容格式
+interface NimApiResponse {
     choices?: Array<{
         message?: {
             content: string
         }
     }>
+    error?: {
+        message: string
+        type?: string
+    }
 }
 
 export class MinimaxService {
@@ -106,17 +107,17 @@ ${todos}
     }
 
     /**
-     * 调用 MiniMax API
+     * 调用 NIM API (MiniMax 模型)
      */
     private async callApi(prompt: string): Promise<string> {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), MINIMAX_TIMEOUT_MS)
 
         try {
-            const response = await fetch(MINIMAX_API_URL, {
+            const response = await fetch(NIM_API_URL, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${MINIMAX_API_KEY}`,
+                    'Authorization': `Bearer ${NIM_API_KEY}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
@@ -133,13 +134,14 @@ ${todos}
             clearTimeout(timeoutId)
 
             if (!response.ok) {
-                throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+                const errorText = await response.text()
+                throw new Error(`API request failed: ${response.status} ${errorText}`)
             }
 
-            const data = await response.json() as MinimaxApiResponse
+            const data = await response.json() as NimApiResponse
 
-            if (data.base_resp?.status_code !== 0) {
-                throw new Error(`API error: ${data.base_resp?.status_msg || 'Unknown error'}`)
+            if (data.error) {
+                throw new Error(`API error: ${data.error.message}`)
             }
 
             const content = data.choices?.[0]?.message?.content
@@ -151,7 +153,7 @@ ${todos}
         } catch (error) {
             clearTimeout(timeoutId)
             if (error instanceof Error && error.name === 'AbortError') {
-                throw new Error('API request timeout')
+                throw new Error('API request timeout (60s)')
             }
             throw error
         }

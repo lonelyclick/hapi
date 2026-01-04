@@ -70,6 +70,57 @@ export type MemoryType = 'insight' | 'pattern' | 'decision' | 'lesson'
 export type FeedbackSource = 'user' | 'auto' | 'advisor'
 export type FeedbackAction = 'accept' | 'reject' | 'defer' | 'supersede'
 
+// Auto-Iteration 相关类型
+export type AutoIterActionType =
+    | 'format_code' | 'fix_lint' | 'add_comments' | 'run_tests'
+    | 'fix_type_errors' | 'update_deps' | 'refactor' | 'optimize'
+    | 'edit_config' | 'create_file' | 'delete_file'
+    | 'git_commit' | 'git_push' | 'deploy' | 'custom'
+
+export type AutoIterExecutionPolicy =
+    | 'auto_execute' | 'notify_then_execute' | 'require_confirm' | 'always_manual' | 'disabled'
+
+export type AutoIterExecutionStatus =
+    | 'pending' | 'approved' | 'executing' | 'completed' | 'failed' | 'rejected' | 'cancelled' | 'timeout'
+
+export type AutoIterApprovalMethod = 'auto' | 'manual' | 'timeout'
+export type AutoIterNotificationLevel = 'all' | 'errors_only' | 'none'
+
+export type StoredAutoIterationConfig = {
+    namespace: string
+    enabled: boolean
+    policyJson: Partial<Record<AutoIterActionType, AutoIterExecutionPolicy>> | null
+    allowedProjects: string[]
+    notificationLevel: AutoIterNotificationLevel
+    keepLogsDays: number
+    createdAt: number
+    updatedAt: number
+    updatedBy: string | null
+}
+
+export type StoredAutoIterationLog = {
+    id: string
+    namespace: string
+    sourceSuggestionId: string | null
+    sourceSessionId: string | null
+    projectPath: string | null
+    actionType: AutoIterActionType
+    actionDetail: unknown | null
+    reason: string | null
+    executionStatus: AutoIterExecutionStatus
+    approvalMethod: AutoIterApprovalMethod | null
+    approvedBy: string | null
+    approvedAt: number | null
+    resultJson: unknown | null
+    errorMessage: string | null
+    rollbackAvailable: boolean
+    rollbackData: unknown | null
+    rolledBack: boolean
+    rolledBackAt: number | null
+    createdAt: number
+    executedAt: number | null
+}
+
 export type StoredAdvisorState = {
     namespace: string
     advisorSessionId: string | null
@@ -251,6 +302,41 @@ type DbAgentFeedbackRow = {
     created_at: number
 }
 
+type DbAutoIterationConfigRow = {
+    namespace: string
+    enabled: number
+    policy_json: string | null
+    allowed_projects: string
+    notification_level: string
+    keep_logs_days: number
+    created_at: number
+    updated_at: number
+    updated_by: string | null
+}
+
+type DbAutoIterationLogRow = {
+    id: string
+    namespace: string
+    source_suggestion_id: string | null
+    source_session_id: string | null
+    project_path: string | null
+    action_type: string
+    action_detail: string | null
+    reason: string | null
+    execution_status: string
+    approval_method: string | null
+    approved_by: string | null
+    approved_at: number | null
+    result_json: string | null
+    error_message: string | null
+    rollback_available: number
+    rollback_data: string | null
+    rolled_back: number
+    rolled_back_at: number | null
+    created_at: number
+    executed_at: number | null
+}
+
 function safeJsonParse(value: string | null): unknown | null {
     if (value === null) return null
     try {
@@ -384,6 +470,46 @@ function toStoredAgentFeedback(row: DbAgentFeedbackRow): StoredAgentFeedback {
         evidenceJson: safeJsonParse(row.evidence_json),
         comment: row.comment,
         createdAt: row.created_at
+    }
+}
+
+// Auto-Iteration 转换函数
+function toStoredAutoIterationConfig(row: DbAutoIterationConfigRow): StoredAutoIterationConfig {
+    return {
+        namespace: row.namespace,
+        enabled: row.enabled === 1,
+        policyJson: safeJsonParse(row.policy_json) as Partial<Record<AutoIterActionType, AutoIterExecutionPolicy>> | null,
+        allowedProjects: safeJsonParse(row.allowed_projects) as string[] || [],
+        notificationLevel: (row.notification_level as AutoIterNotificationLevel) || 'all',
+        keepLogsDays: row.keep_logs_days,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        updatedBy: row.updated_by
+    }
+}
+
+function toStoredAutoIterationLog(row: DbAutoIterationLogRow): StoredAutoIterationLog {
+    return {
+        id: row.id,
+        namespace: row.namespace,
+        sourceSuggestionId: row.source_suggestion_id,
+        sourceSessionId: row.source_session_id,
+        projectPath: row.project_path,
+        actionType: row.action_type as AutoIterActionType,
+        actionDetail: safeJsonParse(row.action_detail),
+        reason: row.reason,
+        executionStatus: (row.execution_status as AutoIterExecutionStatus) || 'pending',
+        approvalMethod: row.approval_method as AutoIterApprovalMethod | null,
+        approvedBy: row.approved_by,
+        approvedAt: row.approved_at,
+        resultJson: safeJsonParse(row.result_json),
+        errorMessage: row.error_message,
+        rollbackAvailable: row.rollback_available === 1,
+        rollbackData: safeJsonParse(row.rollback_data),
+        rolledBack: row.rolled_back === 1,
+        rolledBackAt: row.rolled_back_at,
+        createdAt: row.created_at,
+        executedAt: row.executed_at
     }
 }
 
@@ -1892,5 +2018,274 @@ export class Store {
             'SELECT * FROM agent_feedback WHERE suggestion_id = ? ORDER BY created_at ASC'
         ).all(suggestionId) as DbAgentFeedbackRow[]
         return rows.map(toStoredAgentFeedback)
+    }
+
+    // ========== Auto-Iteration Config CRUD ==========
+
+    getAutoIterationConfig(namespace: string): StoredAutoIterationConfig | null {
+        const row = this.db.prepare(
+            'SELECT * FROM auto_iteration_config WHERE namespace = ?'
+        ).get(namespace) as DbAutoIterationConfigRow | undefined
+        return row ? toStoredAutoIterationConfig(row) : null
+    }
+
+    upsertAutoIterationConfig(namespace: string, data: {
+        enabled?: boolean
+        policyJson?: Partial<Record<AutoIterActionType, AutoIterExecutionPolicy>>
+        allowedProjects?: string[]
+        notificationLevel?: AutoIterNotificationLevel
+        keepLogsDays?: number
+        updatedBy?: string
+    }): StoredAutoIterationConfig | null {
+        try {
+            const now = Date.now()
+            const existing = this.getAutoIterationConfig(namespace)
+
+            if (existing) {
+                // Update
+                const updates: string[] = ['updated_at = @updated_at']
+                const params: Record<string, unknown> = { namespace, updated_at: now }
+
+                if (data.enabled !== undefined) {
+                    updates.push('enabled = @enabled')
+                    params.enabled = data.enabled ? 1 : 0
+                }
+                if (data.policyJson !== undefined) {
+                    updates.push('policy_json = @policy_json')
+                    params.policy_json = JSON.stringify(data.policyJson)
+                }
+                if (data.allowedProjects !== undefined) {
+                    updates.push('allowed_projects = @allowed_projects')
+                    params.allowed_projects = JSON.stringify(data.allowedProjects)
+                }
+                if (data.notificationLevel !== undefined) {
+                    updates.push('notification_level = @notification_level')
+                    params.notification_level = data.notificationLevel
+                }
+                if (data.keepLogsDays !== undefined) {
+                    updates.push('keep_logs_days = @keep_logs_days')
+                    params.keep_logs_days = data.keepLogsDays
+                }
+                if (data.updatedBy !== undefined) {
+                    updates.push('updated_by = @updated_by')
+                    params.updated_by = data.updatedBy
+                }
+
+                this.db.prepare(`
+                    UPDATE auto_iteration_config
+                    SET ${updates.join(', ')}
+                    WHERE namespace = @namespace
+                `).run(params)
+            } else {
+                // Insert
+                this.db.prepare(`
+                    INSERT INTO auto_iteration_config (
+                        namespace, enabled, policy_json, allowed_projects,
+                        notification_level, keep_logs_days, created_at, updated_at, updated_by
+                    ) VALUES (
+                        @namespace, @enabled, @policy_json, @allowed_projects,
+                        @notification_level, @keep_logs_days, @created_at, @updated_at, @updated_by
+                    )
+                `).run({
+                    namespace,
+                    enabled: data.enabled ? 1 : 0,
+                    policy_json: data.policyJson ? JSON.stringify(data.policyJson) : null,
+                    allowed_projects: JSON.stringify(data.allowedProjects ?? []),
+                    notification_level: data.notificationLevel ?? 'all',
+                    keep_logs_days: data.keepLogsDays ?? 30,
+                    created_at: now,
+                    updated_at: now,
+                    updated_by: data.updatedBy ?? null
+                })
+            }
+
+            return this.getAutoIterationConfig(namespace)
+        } catch {
+            return null
+        }
+    }
+
+    // ========== Auto-Iteration Log CRUD ==========
+
+    createAutoIterationLog(data: {
+        id: string
+        namespace: string
+        sourceSuggestionId?: string
+        sourceSessionId?: string
+        projectPath?: string
+        actionType: AutoIterActionType
+        actionDetail?: unknown
+        reason?: string
+    }): StoredAutoIterationLog | null {
+        try {
+            const now = Date.now()
+            this.db.prepare(`
+                INSERT INTO auto_iteration_logs (
+                    id, namespace, source_suggestion_id, source_session_id,
+                    project_path, action_type, action_detail, reason,
+                    execution_status, created_at
+                ) VALUES (
+                    @id, @namespace, @source_suggestion_id, @source_session_id,
+                    @project_path, @action_type, @action_detail, @reason,
+                    'pending', @created_at
+                )
+            `).run({
+                id: data.id,
+                namespace: data.namespace,
+                source_suggestion_id: data.sourceSuggestionId ?? null,
+                source_session_id: data.sourceSessionId ?? null,
+                project_path: data.projectPath ?? null,
+                action_type: data.actionType,
+                action_detail: data.actionDetail ? JSON.stringify(data.actionDetail) : null,
+                reason: data.reason ?? null,
+                created_at: now
+            })
+
+            return this.getAutoIterationLog(data.id)
+        } catch {
+            return null
+        }
+    }
+
+    getAutoIterationLog(id: string): StoredAutoIterationLog | null {
+        const row = this.db.prepare(
+            'SELECT * FROM auto_iteration_logs WHERE id = ?'
+        ).get(id) as DbAutoIterationLogRow | undefined
+        return row ? toStoredAutoIterationLog(row) : null
+    }
+
+    getAutoIterationLogs(namespace: string, filters?: {
+        status?: AutoIterExecutionStatus | AutoIterExecutionStatus[]
+        actionType?: AutoIterActionType
+        projectPath?: string
+        limit?: number
+        offset?: number
+    }): StoredAutoIterationLog[] {
+        let query = 'SELECT * FROM auto_iteration_logs WHERE namespace = ?'
+        const params: unknown[] = [namespace]
+
+        if (filters?.status) {
+            if (Array.isArray(filters.status)) {
+                query += ` AND execution_status IN (${filters.status.map(() => '?').join(',')})`
+                params.push(...filters.status)
+            } else {
+                query += ' AND execution_status = ?'
+                params.push(filters.status)
+            }
+        }
+
+        if (filters?.actionType) {
+            query += ' AND action_type = ?'
+            params.push(filters.actionType)
+        }
+
+        if (filters?.projectPath) {
+            query += ' AND project_path = ?'
+            params.push(filters.projectPath)
+        }
+
+        query += ' ORDER BY created_at DESC'
+
+        if (filters?.limit) {
+            query += ' LIMIT ?'
+            params.push(filters.limit)
+        }
+
+        if (filters?.offset) {
+            query += ' OFFSET ?'
+            params.push(filters.offset)
+        }
+
+        const rows = this.db.prepare(query).all(...(params as (string | number)[])) as DbAutoIterationLogRow[]
+        return rows.map(toStoredAutoIterationLog)
+    }
+
+    updateAutoIterationLog(id: string, data: {
+        executionStatus?: AutoIterExecutionStatus
+        approvalMethod?: AutoIterApprovalMethod
+        approvedBy?: string
+        approvedAt?: number
+        resultJson?: unknown
+        errorMessage?: string
+        rollbackAvailable?: boolean
+        rollbackData?: unknown
+        rolledBack?: boolean
+        rolledBackAt?: number
+        executedAt?: number
+    }): boolean {
+        try {
+            const updates: string[] = []
+            const params: Record<string, unknown> = { id }
+
+            if (data.executionStatus !== undefined) {
+                updates.push('execution_status = @execution_status')
+                params.execution_status = data.executionStatus
+            }
+            if (data.approvalMethod !== undefined) {
+                updates.push('approval_method = @approval_method')
+                params.approval_method = data.approvalMethod
+            }
+            if (data.approvedBy !== undefined) {
+                updates.push('approved_by = @approved_by')
+                params.approved_by = data.approvedBy
+            }
+            if (data.approvedAt !== undefined) {
+                updates.push('approved_at = @approved_at')
+                params.approved_at = data.approvedAt
+            }
+            if (data.resultJson !== undefined) {
+                updates.push('result_json = @result_json')
+                params.result_json = JSON.stringify(data.resultJson)
+            }
+            if (data.errorMessage !== undefined) {
+                updates.push('error_message = @error_message')
+                params.error_message = data.errorMessage
+            }
+            if (data.rollbackAvailable !== undefined) {
+                updates.push('rollback_available = @rollback_available')
+                params.rollback_available = data.rollbackAvailable ? 1 : 0
+            }
+            if (data.rollbackData !== undefined) {
+                updates.push('rollback_data = @rollback_data')
+                params.rollback_data = JSON.stringify(data.rollbackData)
+            }
+            if (data.rolledBack !== undefined) {
+                updates.push('rolled_back = @rolled_back')
+                params.rolled_back = data.rolledBack ? 1 : 0
+            }
+            if (data.rolledBackAt !== undefined) {
+                updates.push('rolled_back_at = @rolled_back_at')
+                params.rolled_back_at = data.rolledBackAt
+            }
+            if (data.executedAt !== undefined) {
+                updates.push('executed_at = @executed_at')
+                params.executed_at = data.executedAt
+            }
+
+            if (updates.length === 0) return true
+
+            const result = this.db.prepare(`
+                UPDATE auto_iteration_logs
+                SET ${updates.join(', ')}
+                WHERE id = @id
+            `).run(params)
+
+            return result.changes > 0
+        } catch {
+            return false
+        }
+    }
+
+    deleteAutoIterationLog(id: string): boolean {
+        const result = this.db.prepare('DELETE FROM auto_iteration_logs WHERE id = ?').run(id)
+        return result.changes > 0
+    }
+
+    cleanupOldAutoIterationLogs(namespace: string, keepDays: number): number {
+        const cutoff = Date.now() - keepDays * 24 * 60 * 60 * 1000
+        const result = this.db.prepare(
+            'DELETE FROM auto_iteration_logs WHERE namespace = ? AND created_at < ?'
+        ).run(namespace, cutoff)
+        return result.changes
     }
 }
