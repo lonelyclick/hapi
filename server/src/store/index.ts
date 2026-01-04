@@ -181,6 +181,54 @@ export type StoredAIProfileMemory = {
     metadata: unknown | null
 }
 
+// AI Team 相关类型 (V4.2)
+export type AITeamStatus = 'active' | 'paused' | 'archived'
+export type AITeamMemberRole = 'lead' | 'member' | 'advisor'
+
+export type StoredAITeam = {
+    id: string
+    namespace: string
+    name: string
+    description: string | null
+    focus: string | null  // 团队专注领域，如 "backend", "frontend", "devops"
+    status: AITeamStatus
+    config: {
+        maxMembers: number
+        autoAssign: boolean  // 是否自动分配新任务
+        sharedKnowledge: boolean  // 是否共享团队知识
+    }
+    stats: {
+        tasksCompleted: number
+        activeHours: number
+        collaborationScore: number  // 协作效率评分 0-100
+    }
+    createdAt: number
+    updatedAt: number
+}
+
+export type StoredAITeamMember = {
+    teamId: string
+    profileId: string
+    role: AITeamMemberRole
+    joinedAt: number
+    contribution: number  // 贡献度 0-100
+    specialization: string | null  // 在团队中的专项职责
+}
+
+export type StoredAITeamKnowledge = {
+    id: string
+    teamId: string
+    namespace: string
+    title: string
+    content: string
+    category: 'best-practice' | 'lesson-learned' | 'decision' | 'convention'
+    contributorProfileId: string
+    importance: number
+    accessCount: number
+    createdAt: number
+    updatedAt: number
+}
+
 export type StoredAgentGroup = {
     id: string
     namespace: string
@@ -519,6 +567,43 @@ type DbAIProfileMemoryRow = {
     metadata: string | null
 }
 
+// AI Team 数据库行类型 (V4.2)
+type DbAITeamRow = {
+    id: string
+    namespace: string
+    name: string
+    description: string | null
+    focus: string | null
+    status: string
+    config_json: string | null
+    stats_json: string | null
+    created_at: number
+    updated_at: number
+}
+
+type DbAITeamMemberRow = {
+    team_id: string
+    profile_id: string
+    role: string
+    joined_at: number
+    contribution: number
+    specialization: string | null
+}
+
+type DbAITeamKnowledgeRow = {
+    id: string
+    team_id: string
+    namespace: string
+    title: string
+    content: string
+    category: string
+    contributor_profile_id: string
+    importance: number
+    access_count: number
+    created_at: number
+    updated_at: number
+}
+
 function safeJsonParse(value: string | null): unknown | null {
     if (value === null) return null
     try {
@@ -784,6 +869,59 @@ function toStoredAIProfileMemory(row: DbAIProfileMemoryRow): StoredAIProfileMemo
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         metadata: safeJsonParse(row.metadata)
+    }
+}
+
+// AI Team 转换函数 (V4.2)
+function toStoredAITeam(row: DbAITeamRow): StoredAITeam {
+    const config = safeJsonParse(row.config_json) as StoredAITeam['config'] | null
+    const stats = safeJsonParse(row.stats_json) as StoredAITeam['stats'] | null
+    return {
+        id: row.id,
+        namespace: row.namespace,
+        name: row.name,
+        description: row.description,
+        focus: row.focus,
+        status: (row.status as AITeamStatus) || 'active',
+        config: {
+            maxMembers: config?.maxMembers ?? 10,
+            autoAssign: config?.autoAssign ?? true,
+            sharedKnowledge: config?.sharedKnowledge ?? true
+        },
+        stats: {
+            tasksCompleted: stats?.tasksCompleted ?? 0,
+            activeHours: stats?.activeHours ?? 0,
+            collaborationScore: stats?.collaborationScore ?? 50
+        },
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    }
+}
+
+function toStoredAITeamMember(row: DbAITeamMemberRow): StoredAITeamMember {
+    return {
+        teamId: row.team_id,
+        profileId: row.profile_id,
+        role: (row.role as AITeamMemberRole) || 'member',
+        joinedAt: row.joined_at,
+        contribution: row.contribution,
+        specialization: row.specialization
+    }
+}
+
+function toStoredAITeamKnowledge(row: DbAITeamKnowledgeRow): StoredAITeamKnowledge {
+    return {
+        id: row.id,
+        teamId: row.team_id,
+        namespace: row.namespace,
+        title: row.title,
+        content: row.content,
+        category: row.category as StoredAITeamKnowledge['category'],
+        contributorProfileId: row.contributor_profile_id,
+        importance: row.importance,
+        accessCount: row.access_count,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
     }
 }
 
@@ -1286,6 +1424,58 @@ export class Store {
             CREATE INDEX IF NOT EXISTS idx_ai_profile_memories_type ON ai_profile_memories(memory_type);
             CREATE INDEX IF NOT EXISTS idx_ai_profile_memories_importance ON ai_profile_memories(importance);
             CREATE INDEX IF NOT EXISTS idx_ai_profile_memories_expires ON ai_profile_memories(expires_at);
+        `)
+
+        // Step 10: Create AI Teams tables (V4.2)
+        this.db.exec(`
+            -- AI 团队表
+            CREATE TABLE IF NOT EXISTS ai_teams (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                focus TEXT,
+                status TEXT DEFAULT 'active',
+                config_json TEXT,
+                stats_json TEXT,
+                created_at INTEGER DEFAULT (unixepoch() * 1000),
+                updated_at INTEGER DEFAULT (unixepoch() * 1000)
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_teams_namespace ON ai_teams(namespace);
+            CREATE INDEX IF NOT EXISTS idx_ai_teams_status ON ai_teams(status);
+
+            -- AI 团队成员表
+            CREATE TABLE IF NOT EXISTS ai_team_members (
+                team_id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                role TEXT DEFAULT 'member',
+                joined_at INTEGER DEFAULT (unixepoch() * 1000),
+                contribution INTEGER DEFAULT 0,
+                specialization TEXT,
+                PRIMARY KEY (team_id, profile_id),
+                FOREIGN KEY (team_id) REFERENCES ai_teams(id) ON DELETE CASCADE,
+                FOREIGN KEY (profile_id) REFERENCES ai_profiles(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_team_members_profile ON ai_team_members(profile_id);
+
+            -- AI 团队知识库表
+            CREATE TABLE IF NOT EXISTS ai_team_knowledge (
+                id TEXT PRIMARY KEY,
+                team_id TEXT NOT NULL,
+                namespace TEXT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                category TEXT NOT NULL,
+                contributor_profile_id TEXT NOT NULL,
+                importance REAL DEFAULT 0.5,
+                access_count INTEGER DEFAULT 0,
+                created_at INTEGER DEFAULT (unixepoch() * 1000),
+                updated_at INTEGER DEFAULT (unixepoch() * 1000),
+                FOREIGN KEY (team_id) REFERENCES ai_teams(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_team_knowledge_team ON ai_team_knowledge(team_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_team_knowledge_category ON ai_team_knowledge(category);
+            CREATE INDEX IF NOT EXISTS idx_ai_team_knowledge_importance ON ai_team_knowledge(importance);
         `)
     }
 
@@ -3756,5 +3946,400 @@ export class Store {
             'DELETE FROM ai_profile_memories WHERE id = ?'
         ).run(id)
         return result.changes > 0
+    }
+
+    // ===========================================
+    // AI Team 方法 (V4.2)
+    // ===========================================
+
+    /**
+     * 创建 AI 团队
+     */
+    createAITeam(
+        namespace: string,
+        team: {
+            name: string
+            description?: string | null
+            focus?: string | null
+            config?: Partial<StoredAITeam['config']>
+        }
+    ): StoredAITeam {
+        const id = randomUUID()
+        const now = Date.now()
+
+        const config: StoredAITeam['config'] = {
+            maxMembers: team.config?.maxMembers ?? 10,
+            autoAssign: team.config?.autoAssign ?? true,
+            sharedKnowledge: team.config?.sharedKnowledge ?? true
+        }
+
+        const stats: StoredAITeam['stats'] = {
+            tasksCompleted: 0,
+            activeHours: 0,
+            collaborationScore: 50
+        }
+
+        this.db.prepare(`
+            INSERT INTO ai_teams (
+                id, namespace, name, description, focus, status,
+                config_json, stats_json, created_at, updated_at
+            ) VALUES (
+                @id, @namespace, @name, @description, @focus, @status,
+                @config_json, @stats_json, @created_at, @updated_at
+            )
+        `).run({
+            id,
+            namespace,
+            name: team.name,
+            description: team.description ?? null,
+            focus: team.focus ?? null,
+            status: 'active',
+            config_json: JSON.stringify(config),
+            stats_json: JSON.stringify(stats),
+            created_at: now,
+            updated_at: now
+        })
+
+        return this.getAITeam(id)!
+    }
+
+    /**
+     * 获取 AI 团队
+     */
+    getAITeam(id: string): StoredAITeam | null {
+        const row = this.db.prepare(
+            'SELECT * FROM ai_teams WHERE id = ?'
+        ).get(id) as DbAITeamRow | undefined
+
+        return row ? toStoredAITeam(row) : null
+    }
+
+    /**
+     * 获取命名空间下的所有 AI 团队
+     */
+    getAITeams(namespace: string): StoredAITeam[] {
+        const rows = this.db.prepare(
+            'SELECT * FROM ai_teams WHERE namespace = ? ORDER BY created_at DESC'
+        ).all(namespace) as DbAITeamRow[]
+
+        return rows.map(toStoredAITeam)
+    }
+
+    /**
+     * 获取活跃的 AI 团队
+     */
+    getActiveAITeams(namespace: string): StoredAITeam[] {
+        const rows = this.db.prepare(
+            "SELECT * FROM ai_teams WHERE namespace = ? AND status = 'active' ORDER BY created_at DESC"
+        ).all(namespace) as DbAITeamRow[]
+
+        return rows.map(toStoredAITeam)
+    }
+
+    /**
+     * 更新 AI 团队
+     */
+    updateAITeam(
+        id: string,
+        data: Partial<{
+            name: string
+            description: string | null
+            focus: string | null
+            status: AITeamStatus
+            config: Partial<StoredAITeam['config']>
+        }>
+    ): StoredAITeam | null {
+        const existing = this.getAITeam(id)
+        if (!existing) return null
+
+        const now = Date.now()
+        const updates: string[] = ['updated_at = @updated_at']
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const params: Record<string, any> = { id, updated_at: now }
+
+        if (data.name !== undefined) {
+            updates.push('name = @name')
+            params.name = data.name
+        }
+        if (data.description !== undefined) {
+            updates.push('description = @description')
+            params.description = data.description
+        }
+        if (data.focus !== undefined) {
+            updates.push('focus = @focus')
+            params.focus = data.focus
+        }
+        if (data.status !== undefined) {
+            updates.push('status = @status')
+            params.status = data.status
+        }
+        if (data.config !== undefined) {
+            updates.push('config_json = @config_json')
+            params.config_json = JSON.stringify({ ...existing.config, ...data.config })
+        }
+
+        this.db.prepare(`
+            UPDATE ai_teams SET ${updates.join(', ')} WHERE id = @id
+        `).run(params)
+
+        return this.getAITeam(id)
+    }
+
+    /**
+     * 更新 AI 团队统计数据
+     */
+    updateAITeamStats(id: string, stats: Partial<StoredAITeam['stats']>): void {
+        const existing = this.getAITeam(id)
+        if (!existing) return
+
+        const now = Date.now()
+        const mergedStats = { ...existing.stats, ...stats }
+
+        this.db.prepare(`
+            UPDATE ai_teams SET stats_json = @stats_json, updated_at = @updated_at WHERE id = @id
+        `).run({
+            id,
+            stats_json: JSON.stringify(mergedStats),
+            updated_at: now
+        })
+    }
+
+    /**
+     * 删除 AI 团队
+     */
+    deleteAITeam(id: string): boolean {
+        const result = this.db.prepare('DELETE FROM ai_teams WHERE id = ?').run(id)
+        return result.changes > 0
+    }
+
+    /**
+     * 添加团队成员
+     */
+    addAITeamMember(
+        teamId: string,
+        profileId: string,
+        role: AITeamMemberRole = 'member',
+        specialization?: string
+    ): StoredAITeamMember | null {
+        const team = this.getAITeam(teamId)
+        if (!team) return null
+
+        // 检查成员数量限制
+        const members = this.getAITeamMembers(teamId)
+        if (members.length >= team.config.maxMembers) {
+            console.log(`[Store] Team ${teamId} has reached max members`)
+            return null
+        }
+
+        // 检查是否已是成员
+        if (members.some(m => m.profileId === profileId)) {
+            console.log(`[Store] Profile ${profileId} is already a member of team ${teamId}`)
+            return null
+        }
+
+        const now = Date.now()
+
+        this.db.prepare(`
+            INSERT INTO ai_team_members (team_id, profile_id, role, joined_at, contribution, specialization)
+            VALUES (@team_id, @profile_id, @role, @joined_at, @contribution, @specialization)
+        `).run({
+            team_id: teamId,
+            profile_id: profileId,
+            role,
+            joined_at: now,
+            contribution: 0,
+            specialization: specialization ?? null
+        })
+
+        return this.getAITeamMember(teamId, profileId)
+    }
+
+    /**
+     * 获取团队成员
+     */
+    getAITeamMember(teamId: string, profileId: string): StoredAITeamMember | null {
+        const row = this.db.prepare(
+            'SELECT * FROM ai_team_members WHERE team_id = ? AND profile_id = ?'
+        ).get(teamId, profileId) as DbAITeamMemberRow | undefined
+
+        return row ? toStoredAITeamMember(row) : null
+    }
+
+    /**
+     * 获取团队所有成员
+     */
+    getAITeamMembers(teamId: string): StoredAITeamMember[] {
+        const rows = this.db.prepare(
+            'SELECT * FROM ai_team_members WHERE team_id = ? ORDER BY joined_at ASC'
+        ).all(teamId) as DbAITeamMemberRow[]
+
+        return rows.map(toStoredAITeamMember)
+    }
+
+    /**
+     * 获取 AI Profile 所属的团队
+     */
+    getTeamsForProfile(profileId: string): StoredAITeam[] {
+        const memberRows = this.db.prepare(
+            'SELECT team_id FROM ai_team_members WHERE profile_id = ?'
+        ).all(profileId) as Array<{ team_id: string }>
+
+        const teams: StoredAITeam[] = []
+        for (const row of memberRows) {
+            const team = this.getAITeam(row.team_id)
+            if (team) teams.push(team)
+        }
+
+        return teams
+    }
+
+    /**
+     * 更新团队成员贡献度
+     */
+    updateTeamMemberContribution(teamId: string, profileId: string, contribution: number): void {
+        this.db.prepare(`
+            UPDATE ai_team_members SET contribution = @contribution WHERE team_id = @team_id AND profile_id = @profile_id
+        `).run({ team_id: teamId, profile_id: profileId, contribution })
+    }
+
+    /**
+     * 更新团队成员角色
+     */
+    updateTeamMemberRole(teamId: string, profileId: string, role: AITeamMemberRole): void {
+        this.db.prepare(`
+            UPDATE ai_team_members SET role = @role WHERE team_id = @team_id AND profile_id = @profile_id
+        `).run({ team_id: teamId, profile_id: profileId, role })
+    }
+
+    /**
+     * 移除团队成员
+     */
+    removeAITeamMember(teamId: string, profileId: string): boolean {
+        const result = this.db.prepare(
+            'DELETE FROM ai_team_members WHERE team_id = ? AND profile_id = ?'
+        ).run(teamId, profileId)
+        return result.changes > 0
+    }
+
+    /**
+     * 添加团队知识
+     */
+    addAITeamKnowledge(
+        teamId: string,
+        namespace: string,
+        knowledge: {
+            title: string
+            content: string
+            category: StoredAITeamKnowledge['category']
+            contributorProfileId: string
+            importance?: number
+        }
+    ): StoredAITeamKnowledge {
+        const id = randomUUID()
+        const now = Date.now()
+
+        this.db.prepare(`
+            INSERT INTO ai_team_knowledge (
+                id, team_id, namespace, title, content, category,
+                contributor_profile_id, importance, access_count,
+                created_at, updated_at
+            ) VALUES (
+                @id, @team_id, @namespace, @title, @content, @category,
+                @contributor_profile_id, @importance, @access_count,
+                @created_at, @updated_at
+            )
+        `).run({
+            id,
+            team_id: teamId,
+            namespace,
+            title: knowledge.title,
+            content: knowledge.content,
+            category: knowledge.category,
+            contributor_profile_id: knowledge.contributorProfileId,
+            importance: knowledge.importance ?? 0.5,
+            access_count: 0,
+            created_at: now,
+            updated_at: now
+        })
+
+        return this.getAITeamKnowledge(id)!
+    }
+
+    /**
+     * 获取团队知识
+     */
+    getAITeamKnowledge(id: string): StoredAITeamKnowledge | null {
+        const row = this.db.prepare(
+            'SELECT * FROM ai_team_knowledge WHERE id = ?'
+        ).get(id) as DbAITeamKnowledgeRow | undefined
+
+        return row ? toStoredAITeamKnowledge(row) : null
+    }
+
+    /**
+     * 获取团队所有知识
+     */
+    getAITeamKnowledgeList(teamId: string, options?: {
+        category?: StoredAITeamKnowledge['category']
+        limit?: number
+        orderBy?: 'importance' | 'accessCount' | 'createdAt'
+    }): StoredAITeamKnowledge[] {
+        let sql = 'SELECT * FROM ai_team_knowledge WHERE team_id = ?'
+        const params: (string | number)[] = [teamId]
+
+        if (options?.category) {
+            sql += ' AND category = ?'
+            params.push(options.category)
+        }
+
+        const orderBy = options?.orderBy ?? 'importance'
+        const orderColumn = orderBy === 'accessCount' ? 'access_count' : orderBy === 'createdAt' ? 'created_at' : 'importance'
+        sql += ` ORDER BY ${orderColumn} DESC`
+
+        if (options?.limit) {
+            sql += ' LIMIT ?'
+            params.push(options.limit)
+        }
+
+        const rows = this.db.prepare(sql).all(...params) as DbAITeamKnowledgeRow[]
+        return rows.map(toStoredAITeamKnowledge)
+    }
+
+    /**
+     * 更新团队知识访问计数
+     */
+    updateTeamKnowledgeAccess(id: string): void {
+        const now = Date.now()
+        this.db.prepare(`
+            UPDATE ai_team_knowledge
+            SET access_count = access_count + 1, updated_at = @now
+            WHERE id = @id
+        `).run({ id, now })
+    }
+
+    /**
+     * 删除团队知识
+     */
+    deleteAITeamKnowledge(id: string): boolean {
+        const result = this.db.prepare('DELETE FROM ai_team_knowledge WHERE id = ?').run(id)
+        return result.changes > 0
+    }
+
+    /**
+     * 获取团队及其成员的完整信息
+     */
+    getAITeamWithMembers(teamId: string): {
+        team: StoredAITeam
+        members: Array<StoredAITeamMember & { profile: StoredAIProfile | null }>
+    } | null {
+        const team = this.getAITeam(teamId)
+        if (!team) return null
+
+        const members = this.getAITeamMembers(teamId).map(member => ({
+            ...member,
+            profile: this.getAIProfile(member.profileId)
+        }))
+
+        return { team, members }
     }
 }

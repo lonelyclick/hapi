@@ -19,4 +19,28 @@ export {
     type InjectedMemory,
     type MemoryInjectionResult
 } from './memoryInjector'
+export {
+    CollaborationTaskManager,
+    type CollaborationTask,
+    type CollaborationTaskType,
+    type CollaborationTaskStatus,
+    type CollaborationMessage,
+    type TaskParticipant,
+    type ParticipantRole,
+    type Subtask,
+    type SubtaskStatus
+} from './collaborationTask'
+export {
+    CollaborationProtocol,
+    PairProgrammingProtocol,
+    CodeReviewProtocol,
+    KnowledgeSharingProtocol,
+    ProtocolManager,
+    createProtocol,
+    type CollaborationProtocolType,
+    type ProtocolPhase,
+    type ProtocolConfig,
+    type ProtocolContext,
+    type ProtocolMessage
+} from './collaborationProtocol'
 export * from './types'
