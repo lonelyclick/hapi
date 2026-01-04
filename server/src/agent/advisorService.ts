@@ -23,6 +23,7 @@ import type {
 import { ADVISOR_OUTPUT_MARKER, extractJsonFromPosition } from './types'
 import type { AutoIterationService } from './autoIteration'
 import type { ActionRequest } from './autoIteration/types'
+import { findBestProfileForTask } from './profileMatcher'
 
 export interface AdvisorServiceConfig {
     namespace: string
@@ -1762,6 +1763,15 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         const taskId = output.id || `task-${Date.now().toString(36)}`
         const sessionId = `advisor-spawn-${taskId}`
 
+        // 4.5 如果没有指定 aiProfileId，使用智能匹配算法推荐
+        let aiProfileId = output.aiProfileId
+        if (!aiProfileId) {
+            aiProfileId = findBestProfileForTask(this.store, this.namespace, output.taskDescription) ?? undefined
+            if (aiProfileId) {
+                console.log(`[AdvisorService] Auto-matched AI Profile: ${aiProfileId}`)
+            }
+        }
+
         console.log(`[AdvisorService] Spawning session ${sessionId} on machine ${targetMachine.id}, dir: ${workingDir}`)
 
         // 5. 创建会话
@@ -1791,7 +1801,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
                     reason: output.reason,
                     expectedOutcome: output.expectedOutcome,
                     workingDir,
-                    aiProfileId: output.aiProfileId
+                    aiProfileId
                 })
 
                 // 8. 等待会话就绪后发送任务消息
