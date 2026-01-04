@@ -128,6 +128,42 @@ export type StoredSessionAutoIterConfig = {
     updatedAt: number
 }
 
+// Agent Group 相关类型
+export type AgentGroupType = 'collaboration' | 'debate' | 'review'
+export type AgentGroupStatus = 'active' | 'paused' | 'completed'
+export type GroupMemberRole = 'owner' | 'moderator' | 'member'
+export type GroupSenderType = 'agent' | 'user' | 'system'
+export type GroupMessageType = 'chat' | 'task' | 'feedback' | 'decision'
+
+export type StoredAgentGroup = {
+    id: string
+    namespace: string
+    name: string
+    description: string | null
+    type: AgentGroupType
+    createdAt: number
+    updatedAt: number
+    status: AgentGroupStatus
+}
+
+export type StoredAgentGroupMember = {
+    groupId: string
+    sessionId: string
+    role: GroupMemberRole
+    agentType: string | null
+    joinedAt: number
+}
+
+export type StoredAgentGroupMessage = {
+    id: string
+    groupId: string
+    sourceSessionId: string | null
+    senderType: GroupSenderType
+    content: string
+    messageType: GroupMessageType
+    createdAt: number
+}
+
 export type StoredAdvisorState = {
     namespace: string
     advisorSessionId: string | null
@@ -351,6 +387,36 @@ type DbSessionAutoIterConfigRow = {
     updated_at: number
 }
 
+// Agent Group 数据库行类型
+type DbAgentGroupRow = {
+    id: string
+    namespace: string
+    name: string
+    description: string | null
+    type: string
+    created_at: number
+    updated_at: number
+    status: string
+}
+
+type DbAgentGroupMemberRow = {
+    group_id: string
+    session_id: string
+    role: string
+    agent_type: string | null
+    joined_at: number
+}
+
+type DbAgentGroupMessageRow = {
+    id: string
+    group_id: string
+    source_session_id: string | null
+    sender_type: string
+    content: string
+    message_type: string
+    created_at: number
+}
+
 function safeJsonParse(value: string | null): unknown | null {
     if (value === null) return null
     try {
@@ -533,6 +599,42 @@ function toStoredSessionAutoIterConfig(row: DbSessionAutoIterConfigRow): StoredS
         sessionId: row.session_id,
         autoIterEnabled: row.auto_iter_enabled === 1,
         updatedAt: row.updated_at
+    }
+}
+
+// Agent Group 转换函数
+function toStoredAgentGroup(row: DbAgentGroupRow): StoredAgentGroup {
+    return {
+        id: row.id,
+        namespace: row.namespace,
+        name: row.name,
+        description: row.description,
+        type: (row.type as AgentGroupType) || 'collaboration',
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        status: (row.status as AgentGroupStatus) || 'active'
+    }
+}
+
+function toStoredAgentGroupMember(row: DbAgentGroupMemberRow): StoredAgentGroupMember {
+    return {
+        groupId: row.group_id,
+        sessionId: row.session_id,
+        role: (row.role as GroupMemberRole) || 'member',
+        agentType: row.agent_type,
+        joinedAt: row.joined_at
+    }
+}
+
+function toStoredAgentGroupMessage(row: DbAgentGroupMessageRow): StoredAgentGroupMessage {
+    return {
+        id: row.id,
+        groupId: row.group_id,
+        sourceSessionId: row.source_session_id,
+        senderType: (row.sender_type as GroupSenderType) || 'agent',
+        content: row.content,
+        messageType: (row.message_type as GroupMessageType) || 'chat',
+        createdAt: row.created_at
     }
 }
 
@@ -855,6 +957,47 @@ export class Store {
                 updated_at INTEGER DEFAULT (unixepoch() * 1000),
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             );
+        `)
+
+        // Step 6: Create Agent Groups tables
+        this.db.exec(`
+            -- Agent 群组
+            CREATE TABLE IF NOT EXISTS agent_groups (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                type TEXT DEFAULT 'collaboration',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                status TEXT DEFAULT 'active'
+            );
+            CREATE INDEX IF NOT EXISTS idx_agent_groups_namespace ON agent_groups(namespace);
+
+            -- 群组成员
+            CREATE TABLE IF NOT EXISTS agent_group_members (
+                group_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                role TEXT DEFAULT 'member',
+                agent_type TEXT,
+                joined_at INTEGER NOT NULL,
+                PRIMARY KEY (group_id, session_id),
+                FOREIGN KEY (group_id) REFERENCES agent_groups(id) ON DELETE CASCADE,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            );
+
+            -- 群组消息
+            CREATE TABLE IF NOT EXISTS agent_group_messages (
+                id TEXT PRIMARY KEY,
+                group_id TEXT NOT NULL,
+                source_session_id TEXT,
+                sender_type TEXT DEFAULT 'agent',
+                content TEXT NOT NULL,
+                message_type TEXT DEFAULT 'chat',
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (group_id) REFERENCES agent_groups(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_agent_group_messages_group ON agent_group_messages(group_id);
         `)
     }
 
@@ -2397,5 +2540,183 @@ export class Store {
         `).run(sessionId, enabled ? 1 : 0, now)
 
         return this.getSessionAutoIterConfig(sessionId)
+    }
+
+    // ==================== Agent Group CRUD ====================
+
+    createAgentGroup(
+        namespace: string,
+        name: string,
+        type: AgentGroupType = 'collaboration',
+        description?: string
+    ): StoredAgentGroup {
+        const now = Date.now()
+        const id = randomUUID()
+
+        this.db.prepare(`
+            INSERT INTO agent_groups (id, namespace, name, description, type, created_at, updated_at, status)
+            VALUES (@id, @namespace, @name, @description, @type, @created_at, @updated_at, 'active')
+        `).run({
+            id,
+            namespace,
+            name,
+            description: description ?? null,
+            type,
+            created_at: now,
+            updated_at: now
+        })
+
+        const group = this.getAgentGroup(id)
+        if (!group) {
+            throw new Error('Failed to create agent group')
+        }
+        return group
+    }
+
+    getAgentGroup(id: string): StoredAgentGroup | null {
+        const row = this.db.prepare(
+            'SELECT * FROM agent_groups WHERE id = ?'
+        ).get(id) as DbAgentGroupRow | undefined
+        return row ? toStoredAgentGroup(row) : null
+    }
+
+    getAgentGroups(namespace: string): StoredAgentGroup[] {
+        const rows = this.db.prepare(
+            'SELECT * FROM agent_groups WHERE namespace = ? ORDER BY updated_at DESC'
+        ).all(namespace) as DbAgentGroupRow[]
+        return rows.map(toStoredAgentGroup)
+    }
+
+    updateAgentGroupStatus(id: string, status: AgentGroupStatus): void {
+        const now = Date.now()
+        this.db.prepare(
+            'UPDATE agent_groups SET status = ?, updated_at = ? WHERE id = ?'
+        ).run(status, now, id)
+    }
+
+    deleteAgentGroup(id: string): void {
+        this.db.prepare('DELETE FROM agent_groups WHERE id = ?').run(id)
+    }
+
+    // ==================== Agent Group Members ====================
+
+    addGroupMember(
+        groupId: string,
+        sessionId: string,
+        role: GroupMemberRole = 'member',
+        agentType?: string
+    ): void {
+        const now = Date.now()
+        this.db.prepare(`
+            INSERT OR REPLACE INTO agent_group_members (group_id, session_id, role, agent_type, joined_at)
+            VALUES (@group_id, @session_id, @role, @agent_type, @joined_at)
+        `).run({
+            group_id: groupId,
+            session_id: sessionId,
+            role,
+            agent_type: agentType ?? null,
+            joined_at: now
+        })
+
+        // Update group updated_at
+        this.db.prepare(
+            'UPDATE agent_groups SET updated_at = ? WHERE id = ?'
+        ).run(now, groupId)
+    }
+
+    removeGroupMember(groupId: string, sessionId: string): void {
+        this.db.prepare(
+            'DELETE FROM agent_group_members WHERE group_id = ? AND session_id = ?'
+        ).run(groupId, sessionId)
+
+        const now = Date.now()
+        this.db.prepare(
+            'UPDATE agent_groups SET updated_at = ? WHERE id = ?'
+        ).run(now, groupId)
+    }
+
+    getGroupMembers(groupId: string): StoredAgentGroupMember[] {
+        const rows = this.db.prepare(
+            'SELECT * FROM agent_group_members WHERE group_id = ? ORDER BY joined_at ASC'
+        ).all(groupId) as DbAgentGroupMemberRow[]
+        return rows.map(toStoredAgentGroupMember)
+    }
+
+    getSessionGroups(sessionId: string): StoredAgentGroup[] {
+        const rows = this.db.prepare(`
+            SELECT g.* FROM agent_groups g
+            INNER JOIN agent_group_members m ON g.id = m.group_id
+            WHERE m.session_id = ?
+            ORDER BY g.updated_at DESC
+        `).all(sessionId) as DbAgentGroupRow[]
+        return rows.map(toStoredAgentGroup)
+    }
+
+    // ==================== Agent Group Messages ====================
+
+    addGroupMessage(
+        groupId: string,
+        sourceSessionId: string | null,
+        content: string,
+        senderType: GroupSenderType = 'agent',
+        messageType: GroupMessageType = 'chat'
+    ): StoredAgentGroupMessage {
+        const now = Date.now()
+        const id = randomUUID()
+
+        this.db.prepare(`
+            INSERT INTO agent_group_messages (id, group_id, source_session_id, sender_type, content, message_type, created_at)
+            VALUES (@id, @group_id, @source_session_id, @sender_type, @content, @message_type, @created_at)
+        `).run({
+            id,
+            group_id: groupId,
+            source_session_id: sourceSessionId,
+            sender_type: senderType,
+            content,
+            message_type: messageType,
+            created_at: now
+        })
+
+        // Update group updated_at
+        this.db.prepare(
+            'UPDATE agent_groups SET updated_at = ? WHERE id = ?'
+        ).run(now, groupId)
+
+        const message = this.db.prepare(
+            'SELECT * FROM agent_group_messages WHERE id = ?'
+        ).get(id) as DbAgentGroupMessageRow | undefined
+
+        if (!message) {
+            throw new Error('Failed to create group message')
+        }
+        return toStoredAgentGroupMessage(message)
+    }
+
+    getGroupMessages(groupId: string, limit: number = 100, beforeId?: string): StoredAgentGroupMessage[] {
+        const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(500, limit)) : 100
+
+        if (beforeId) {
+            const beforeRow = this.db.prepare(
+                'SELECT created_at FROM agent_group_messages WHERE id = ?'
+            ).get(beforeId) as { created_at: number } | undefined
+
+            if (beforeRow) {
+                const rows = this.db.prepare(`
+                    SELECT * FROM agent_group_messages
+                    WHERE group_id = ? AND created_at < ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                `).all(groupId, beforeRow.created_at, safeLimit) as DbAgentGroupMessageRow[]
+                return rows.reverse().map(toStoredAgentGroupMessage)
+            }
+        }
+
+        const rows = this.db.prepare(`
+            SELECT * FROM agent_group_messages
+            WHERE group_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        `).all(groupId, safeLimit) as DbAgentGroupMessageRow[]
+        return rows.reverse().map(toStoredAgentGroupMessage)
     }
 }
