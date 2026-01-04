@@ -33,3 +33,4 @@ coverage/
 .claude/settings.local.json
 localdocs/
 execplan/
+.aider*

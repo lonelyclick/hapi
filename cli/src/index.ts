@@ -263,6 +263,34 @@ import { getCliArgs } from './utils/cliArgs'
       process.exit(1)
     }
     return;
+  } else if (subcommand === 'aider') {
+    // Handle aider command (OpenRouter-powered coding assistant)
+    try {
+      let startedBy: 'daemon' | 'terminal' | undefined = undefined;
+      let model: string | undefined = undefined;
+      for (let i = 1; i < args.length; i++) {
+        if (args[i] === '--started-by') {
+          startedBy = args[++i] as 'daemon' | 'terminal';
+        } else if (args[i] === '--model') {
+          model = args[++i];
+        }
+      }
+
+      const { registerAiderAgent } = await import('./agent/runners/aider');
+      const { runAgentSession } = await import('./agent/runners/runAgentSession');
+      registerAiderAgent(model);
+
+      await initializeToken();
+      await authAndSetupMachineIfNeeded();
+      await runAgentSession({ agentType: 'aider', startedBy });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
+      if (process.env.DEBUG) {
+        console.error(error)
+      }
+      process.exit(1)
+    }
+    return;
   } else if (subcommand === 'logout') {
     // Keep for backward compatibility - redirect to auth logout
     console.log(chalk.yellow('Note: "hapi logout" is deprecated. Use "hapi auth logout" instead.\n'));

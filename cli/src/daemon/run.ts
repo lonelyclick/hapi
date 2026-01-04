@@ -383,6 +383,7 @@ export async function startDaemon(): Promise<void> {
             case 'glm': return 'glm';
             case 'minimax': return 'minimax';
             case 'grok': return 'grok';
+            case 'aider': return 'aider';
             default: return 'claude';
           }
         })();
@@ -394,6 +395,10 @@ export async function startDaemon(): Promise<void> {
         const claudeAgent = typeof options.claudeAgent === 'string' ? options.claudeAgent.trim() : '';
         if (agent === 'claude' && claudeAgent) {
           args.push('--agent', claudeAgent);
+        }
+        const aiderModel = typeof options.aiderModel === 'string' ? options.aiderModel.trim() : '';
+        if (agent === 'aider' && aiderModel) {
+          args.push('--model', aiderModel);
         }
         if (options.sessionId) {
           args.push('--hapi-session-id', options.sessionId);

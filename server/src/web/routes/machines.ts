@@ -8,11 +8,12 @@ import { requireMachine } from './guards'
 
 const spawnBodySchema = z.object({
     directory: z.string().min(1),
-    agent: z.enum(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok']).optional(),
+    agent: z.enum(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok', 'aider']).optional(),
     yolo: z.boolean().optional(),
     sessionType: z.enum(['simple', 'worktree']).optional(),
     worktreeName: z.string().optional(),
-    claudeAgent: z.string().min(1).optional()
+    claudeAgent: z.string().min(1).optional(),
+    aiderModel: z.string().min(1).optional()
 })
 
 const pathsExistsSchema = z.object({
@@ -125,7 +126,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             parsed.data.yolo,
             parsed.data.sessionType,
             parsed.data.worktreeName,
-            { claudeAgent: parsed.data.claudeAgent }
+            { claudeAgent: parsed.data.claudeAgent, aiderModel: parsed.data.aiderModel }
         )
 
         // 如果 spawn 成功，等 session online 后发送初始化 prompt（动态生成）
