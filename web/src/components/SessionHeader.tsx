@@ -226,7 +226,15 @@ export function SessionHeader(props: {
 
     // Subscription state
     const tg = getTelegramWebApp()
-    const currentChatId = tg?.initDataUnsafe?.user?.id?.toString() ?? null
+    const telegramChatId = tg?.initDataUnsafe?.user?.id?.toString() ?? null
+    const [manualChatId, setManualChatId] = useState<string | null>(() => {
+        // Try to get from localStorage
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('hapi_notification_chat_id')
+        }
+        return null
+    })
+    const currentChatId = telegramChatId ?? manualChatId
 
     const subscribersQueryKey = ['session-subscribers', props.session.id]
     const { data: subscribersData } = useQuery({
@@ -234,8 +242,7 @@ export function SessionHeader(props: {
         queryFn: async () => {
             return await api.getSessionSubscribers(props.session.id)
         },
-        staleTime: 30000,
-        enabled: !!currentChatId  // Only fetch if we have a chatId
+        staleTime: 30000
     })
 
     const isSubscribed = useMemo(() => {
@@ -247,11 +254,20 @@ export function SessionHeader(props: {
 
     const toggleSubscriptionMutation = useMutation({
         mutationFn: async (subscribe: boolean) => {
-            if (!currentChatId) throw new Error('No chat ID')
+            let chatId = currentChatId
+            if (!chatId) {
+                // Prompt user for chat ID
+                const input = window.prompt('请输入你的 Telegram Chat ID（可通过 @userinfobot 获取）:')
+                if (!input) throw new Error('未输入 Chat ID')
+                chatId = input.trim()
+                // Save to localStorage
+                localStorage.setItem('hapi_notification_chat_id', chatId)
+                setManualChatId(chatId)
+            }
             if (subscribe) {
-                return await api.subscribeToSession(props.session.id, currentChatId)
+                return await api.subscribeToSession(props.session.id, chatId)
             } else {
-                return await api.unsubscribeFromSession(props.session.id, currentChatId)
+                return await api.unsubscribeFromSession(props.session.id, chatId)
             }
         },
         onSuccess: () => {
@@ -335,22 +351,20 @@ export function SessionHeader(props: {
                     {props.viewers && props.viewers.length > 0 && (
                         <ViewersBadge viewers={props.viewers} compact buttonClassName="h-5 leading-none" />
                     )}
-                    {/* Subscription toggle - only show if we have a chatId */}
-                    {currentChatId && (
-                        <button
-                            type="button"
-                            onClick={() => toggleSubscriptionMutation.mutate(!isSubscribed)}
-                            disabled={toggleSubscriptionMutation.isPending}
-                            className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-                                isSubscribed
-                                    ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
-                                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
-                            } disabled:opacity-50`}
-                            title={isSubscribed ? '已订阅通知 (点击取消)' : '订阅通知'}
-                        >
-                            <BellIcon subscribed={isSubscribed} />
-                        </button>
-                    )}
+                    {/* Subscription toggle */}
+                    <button
+                        type="button"
+                        onClick={() => toggleSubscriptionMutation.mutate(!isSubscribed)}
+                        disabled={toggleSubscriptionMutation.isPending}
+                        className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                            isSubscribed
+                                ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
+                                : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
+                        } disabled:opacity-50`}
+                        title={isSubscribed ? '已订阅通知 (点击取消)' : '订阅通知'}
+                    >
+                        <BellIcon subscribed={isSubscribed} />
+                    </button>
                     {/* Auto-iteration toggle */}
                     <button
                         type="button"
