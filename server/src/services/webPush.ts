@@ -131,12 +131,18 @@ export class WebPushService {
         clientId: string,
         payload: PushNotificationPayload
     ): Promise<SendResult> {
+        console.log('[webpush] sendToClient called:', { namespace, clientId })
         if (!this.isConfigured()) {
             console.warn('[webpush] not configured, skipping notification')
             return { success: 0, failed: 0, removed: 0 }
         }
 
         const subscriptions = this.store.getPushSubscriptionsByClientId(namespace, clientId)
+        console.log('[webpush] found subscriptions for client:', clientId, subscriptions.map(s => ({
+            id: s.id,
+            endpoint: s.endpoint.slice(0, 60) + '...',
+            userAgent: s.userAgent?.slice(0, 50)
+        })))
         if (subscriptions.length === 0) {
             console.log('[webpush] no subscriptions for client:', clientId)
             return { success: 0, failed: 0, removed: 0 }
@@ -187,8 +193,14 @@ export class WebPushService {
             keys: subscription.keys
         }
 
+        console.log('[webpush] sendToSubscription:', {
+            subscriptionId: subscription.id,
+            endpoint: subscription.endpoint.slice(0, 80) + '...',
+            payload: { title: payload.title, body: payload.body?.slice(0, 50) }
+        })
+
         try {
-            await webPush.sendNotification(
+            const result = await webPush.sendNotification(
                 pushSubscription,
                 JSON.stringify(payload),
                 {
@@ -196,10 +208,24 @@ export class WebPushService {
                     urgency: 'high'
                 }
             )
+            console.log('[webpush] send success:', {
+                subscriptionId: subscription.id,
+                statusCode: result.statusCode,
+                headers: result.headers
+            })
             return { success: true, shouldRemove: false }
         } catch (error: unknown) {
             const statusCode = (error as { statusCode?: number })?.statusCode
             const body = (error as { body?: string })?.body
+            const message = (error as Error)?.message
+
+            console.error('[webpush] send error details:', {
+                subscriptionId: subscription.id,
+                endpoint: subscription.endpoint.slice(0, 50) + '...',
+                statusCode,
+                body,
+                message
+            })
 
             // 404 or 410: Subscription has expired or been unsubscribed
             if (statusCode === 404 || statusCode === 410) {
@@ -249,6 +275,7 @@ export class WebPushService {
         chatIds: string[],
         payload: PushNotificationPayload
     ): Promise<SendResult> {
+        console.log('[webpush] sendToChatIds called:', { namespace, chatIds })
         if (!this.isConfigured()) {
             console.warn('[webpush] not configured, skipping notification')
             return { success: 0, failed: 0, removed: 0 }
@@ -265,6 +292,7 @@ export class WebPushService {
 
         for (const chatId of chatIds) {
             const subs = this.store.getPushSubscriptionsByChatId(namespace, chatId)
+            console.log('[webpush] subscriptions for chatId:', chatId, subs.length)
             for (const sub of subs) {
                 if (!seenEndpoints.has(sub.endpoint)) {
                     seenEndpoints.add(sub.endpoint)

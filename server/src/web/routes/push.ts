@@ -70,7 +70,11 @@ export function createPushRoutes(): Hono<WebAppEnv> {
 
         console.log('[push] new subscription:', {
             namespace,
-            endpoint: parsed.data.endpoint.slice(0, 60) + '...'
+            endpoint: parsed.data.endpoint.slice(0, 60) + '...',
+            clientId,
+            chatId,
+            subscriptionId: subscription.id,
+            userAgent: userAgent?.slice(0, 50)
         })
 
         // 订阅成功后立即发送测试通知

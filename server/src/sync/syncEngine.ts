@@ -830,8 +830,10 @@ export class SyncEngine {
      * 2. 通过 clientId（非 Telegram 用户）
      */
     private sendTaskCompletePushNotification(session: Session): void {
+        console.log('[webpush] sendTaskCompletePushNotification called for session:', session.id)
         const webPush = getWebPushService()
         if (!webPush || !webPush.isConfigured()) {
+            console.log('[webpush] service not configured, skipping')
             return
         }
 
@@ -852,6 +854,12 @@ export class SyncEngine {
         const recipientChatIds = this.store.getSessionNotificationRecipients(session.id)
         // 获取应该接收通知的 clientIds（非 Telegram 用户）
         const recipientClientIds = this.store.getSessionNotificationRecipientClientIds(session.id)
+
+        console.log('[webpush] recipients for session:', session.id, {
+            chatIds: recipientChatIds,
+            clientIds: recipientClientIds,
+            namespace: session.namespace
+        })
 
         if (recipientChatIds.length === 0 && recipientClientIds.length === 0) {
             console.log('[webpush] no recipients for session:', session.id)
