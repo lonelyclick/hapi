@@ -708,11 +708,31 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                     currentModeHash = null;
                     logger.debug('[Codex] Marked session as not created after abort for proper resume');
                 } else {
-                    messageBuffer.addMessage('Process exited unexpectedly', 'status');
-                    session.sendSessionEvent({ type: 'message', message: 'Process exited unexpectedly' });
+                    // Unexpected error - try to recover
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    const displayMessage = `Process error: ${errorMessage.slice(0, 100)}`;
+                    messageBuffer.addMessage(displayMessage, 'status');
+                    session.sendSessionEvent({ type: 'message', message: displayMessage });
+
+                    // Store session for resume before clearing
                     if (client.hasActiveSession()) {
                         storedSessionIdForResume = client.storeSessionForResume();
                         logger.debug('[Codex] Stored session after unexpected error:', storedSessionIdForResume);
+                    }
+
+                    // Reset session state to allow fresh start on next message
+                    wasCreated = false;
+                    currentModeHash = null;
+                    client.clearSession();
+                    logger.debug('[Codex] Reset session state after unexpected error for recovery');
+
+                    // Reconnect MCP client for next attempt
+                    try {
+                        await client.disconnect();
+                        await client.connect();
+                        logger.debug('[Codex] Reconnected MCP client after error');
+                    } catch (reconnectError) {
+                        logger.warn('[Codex] Failed to reconnect MCP client:', reconnectError);
                     }
                 }
             } finally {

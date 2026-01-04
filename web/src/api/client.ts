@@ -661,6 +661,60 @@ export class ApiClient {
         )
     }
 
+    // ==================== Session Notification Subscriptions ====================
+
+    async getSessionSubscribers(sessionId: string): Promise<{
+        sessionId: string
+        creatorChatId: string | null
+        subscribers: string[]
+        totalRecipients: number
+    }> {
+        return await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/subscribers`)
+    }
+
+    async subscribeToSession(sessionId: string, chatId: string): Promise<{
+        ok: boolean
+        subscription: {
+            id: number
+            sessionId: string
+            chatId: string
+            namespace: string
+            subscribedAt: number
+        }
+    }> {
+        return await this.request(
+            `/api/sessions/${encodeURIComponent(sessionId)}/subscribe`,
+            {
+                method: 'POST',
+                body: JSON.stringify({ chatId })
+            }
+        )
+    }
+
+    async unsubscribeFromSession(sessionId: string, chatId: string): Promise<{
+        ok: boolean
+    }> {
+        return await this.request(
+            `/api/sessions/${encodeURIComponent(sessionId)}/subscribe`,
+            {
+                method: 'DELETE',
+                body: JSON.stringify({ chatId })
+            }
+        )
+    }
+
+    async setSessionCreator(sessionId: string, chatId: string): Promise<{
+        ok: boolean
+    }> {
+        return await this.request(
+            `/api/sessions/${encodeURIComponent(sessionId)}/creator`,
+            {
+                method: 'POST',
+                body: JSON.stringify({ chatId })
+            }
+        )
+    }
+
     async get<T>(path: string): Promise<{ data: T }> {
         const data = await this.request<T>(`/api${path}`)
         return { data }

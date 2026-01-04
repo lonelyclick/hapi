@@ -582,7 +582,8 @@ export class CodexMcpClient {
     }
 
     async startSession(config: CodexSessionConfig, options?: { signal?: AbortSignal }): Promise<CodexToolResponse> {
-        if (!this.connected) await this.connect();
+        // Ensure we have a valid connection
+        await this.ensureConnected();
 
         logger.debug('[CodexMCP] Starting Codex session:', config);
 
@@ -592,7 +593,7 @@ export class CodexMcpClient {
         }, undefined, {
             signal: options?.signal,
             timeout: DEFAULT_TIMEOUT,
-            // maxTotalTimeout: 10000000000 
+            // maxTotalTimeout: 10000000000
         });
 
         logger.debug('[CodexMCP] startSession response:', response);
@@ -603,8 +604,27 @@ export class CodexMcpClient {
         return response as CodexToolResponse;
     }
 
+    private async ensureConnected(): Promise<void> {
+        if (!this.connected) {
+            await this.connect();
+            return;
+        }
+
+        // Check if the transport is still alive
+        if (this.transport) {
+            const pid = this.transport.pid;
+            if (pid && !isProcessAlive(pid)) {
+                logger.warn('[CodexMCP] Transport process died, reconnecting...');
+                this.connected = false;
+                this.transport = null;
+                await this.connect();
+            }
+        }
+    }
+
     async continueSession(prompt: string, options?: { signal?: AbortSignal }): Promise<CodexToolResponse> {
-        if (!this.connected) await this.connect();
+        // Ensure we have a valid connection
+        await this.ensureConnected();
 
         if (!this.sessionId) {
             throw new Error('No active session. Call startSession first.');
