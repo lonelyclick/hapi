@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Session, SessionViewer } from '@/types/api'
-import { isTelegramApp } from '@/hooks/useTelegram'
+import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
 import { ViewersBadge } from './ViewersBadge'
 import { useAppContext } from '@/lib/app-context'
 
@@ -125,6 +125,26 @@ function RobotIcon(props: { className?: string; enabled?: boolean }) {
     )
 }
 
+function BellIcon(props: { className?: string; subscribed?: boolean }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill={props.subscribed ? 'currentColor' : 'none'}
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
+    )
+}
+
 function getAgentLabel(session: Session): string {
     const flavor = session.metadata?.flavor?.trim()
     if (flavor === 'claude') return 'Claude'
@@ -204,6 +224,41 @@ export function SessionHeader(props: {
 
     const autoIterEnabled = autoIterConfig?.autoIterEnabled ?? true
 
+    // Subscription state
+    const tg = getTelegramWebApp()
+    const currentChatId = tg?.initDataUnsafe?.user?.id?.toString() ?? null
+
+    const subscribersQueryKey = ['session-subscribers', props.session.id]
+    const { data: subscribersData } = useQuery({
+        queryKey: subscribersQueryKey,
+        queryFn: async () => {
+            return await api.getSessionSubscribers(props.session.id)
+        },
+        staleTime: 30000,
+        enabled: !!currentChatId  // Only fetch if we have a chatId
+    })
+
+    const isSubscribed = useMemo(() => {
+        if (!currentChatId || !subscribersData) return false
+        // Check if current user is creator or subscriber
+        return subscribersData.creatorChatId === currentChatId ||
+               subscribersData.subscribers.includes(currentChatId)
+    }, [currentChatId, subscribersData])
+
+    const toggleSubscriptionMutation = useMutation({
+        mutationFn: async (subscribe: boolean) => {
+            if (!currentChatId) throw new Error('No chat ID')
+            if (subscribe) {
+                return await api.subscribeToSession(props.session.id, currentChatId)
+            } else {
+                return await api.unsubscribeFromSession(props.session.id, currentChatId)
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: subscribersQueryKey })
+        }
+    })
+
     useEffect(() => {
         setShowAgentTip(false)
     }, [props.session.id])
@@ -279,6 +334,22 @@ export function SessionHeader(props: {
                     )}
                     {props.viewers && props.viewers.length > 0 && (
                         <ViewersBadge viewers={props.viewers} compact buttonClassName="h-5 leading-none" />
+                    )}
+                    {/* Subscription toggle - only show if we have a chatId */}
+                    {currentChatId && (
+                        <button
+                            type="button"
+                            onClick={() => toggleSubscriptionMutation.mutate(!isSubscribed)}
+                            disabled={toggleSubscriptionMutation.isPending}
+                            className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                                isSubscribed
+                                    ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
+                                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
+                            } disabled:opacity-50`}
+                            title={isSubscribed ? '已订阅通知 (点击取消)' : '订阅通知'}
+                        >
+                            <BellIcon subscribed={isSubscribed} />
+                        </button>
                     )}
                     {/* Auto-iteration toggle */}
                     <button
