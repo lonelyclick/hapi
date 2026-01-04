@@ -98,7 +98,7 @@ export function addIdleSuggestion(suggestion: IdleSuggestion): void {
 }
 
 /**
- * 设置 Grok 审查开始状态
+ * 设置 AI 审查开始状态
  */
 export function setMinimaxStart(sessionId: string): void {
     if (!getAiSuggestionsEnabled()) return
@@ -115,7 +115,7 @@ export function setMinimaxStart(sessionId: string): void {
                 suggestionId: `minimax_${Date.now()}`,
                 sessionId,
                 chips: [],
-                reason: 'Grok 审查中',
+                reason: 'AI 审查中',
                 createdAt: Date.now()
             },
             status: 'pending',
@@ -130,7 +130,7 @@ export function setMinimaxStart(sessionId: string): void {
 }
 
 /**
- * 设置 Grok 审查完成
+ * 设置 AI 审查完成
  */
 export function setMinimaxComplete(sessionId: string, chips: SuggestionChip[]): void {
     if (!getAiSuggestionsEnabled()) return
@@ -144,11 +144,30 @@ export function setMinimaxComplete(sessionId: string, chips: SuggestionChip[]): 
         globalSuggestions.set(sessionId, updated)
         saveToStorage(sessionId, updated)
         notifyListeners()
+    } else if (chips.length > 0) {
+        // 如果没有现有条目但有芯片，创建新条目
+        const newStored: StoredIdleSuggestion = {
+            suggestion: {
+                suggestionId: `minimax_${Date.now()}`,
+                sessionId,
+                chips: [],
+                reason: 'AI 建议',
+                createdAt: Date.now()
+            },
+            status: 'pending',
+            createdAt: Date.now(),
+            usedChipIds: [],
+            minimaxStatus: 'complete',
+            minimaxChips: chips
+        }
+        globalSuggestions.set(sessionId, newStored)
+        saveToStorage(sessionId, newStored)
+        notifyListeners()
     }
 }
 
 /**
- * 设置 Grok 审查错误
+ * 设置 AI 审查错误
  */
 export function setMinimaxError(sessionId: string, error: string): void {
     if (!getAiSuggestionsEnabled()) return
