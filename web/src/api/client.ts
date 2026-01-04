@@ -1,4 +1,5 @@
 import type {
+    AddInputPresetResponse,
     AddProjectResponse,
     AddUserResponse,
     AuthResponse,
@@ -6,11 +7,13 @@ import type {
     FileReadResponse,
     FileSearchResponse,
     GitCommandResponse,
+    InputPresetsResponse,
     MachinePathsExistsResponse,
     MachinesResponse,
     MessagesResponse,
     OnlineUsersResponse,
     ProjectsResponse,
+    RemoveInputPresetResponse,
     RemoveProjectResponse,
     RemoveUserResponse,
     ResumeSessionResponse,
@@ -22,6 +25,7 @@ import type {
     SpawnResponse,
     SessionResponse,
     SessionsResponse,
+    UpdateInputPresetResponse,
     UpdateProjectResponse,
     UpdateUserRoleResponse,
     UsersResponse
@@ -356,11 +360,12 @@ export class ApiClient {
         agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
-        worktreeName?: string
+        worktreeName?: string,
+        claudeAgent?: string
     ): Promise<SpawnResponse> {
         return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn`, {
             method: 'POST',
-            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName })
+            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeAgent })
         })
     }
 
@@ -464,6 +469,31 @@ export class ApiClient {
                 method: 'DELETE'
             }
         )
+    }
+
+    // 输入预设管理
+    async getInputPresets(): Promise<InputPresetsResponse> {
+        return await this.request<InputPresetsResponse>('/api/settings/input-presets')
+    }
+
+    async addInputPreset(trigger: string, title: string, prompt: string): Promise<AddInputPresetResponse> {
+        return await this.request<AddInputPresetResponse>('/api/settings/input-presets', {
+            method: 'POST',
+            body: JSON.stringify({ trigger, title, prompt })
+        })
+    }
+
+    async updateInputPreset(id: string, trigger: string, title: string, prompt: string): Promise<UpdateInputPresetResponse> {
+        return await this.request<UpdateInputPresetResponse>(`/api/settings/input-presets/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            body: JSON.stringify({ trigger, title, prompt })
+        })
+    }
+
+    async removeInputPreset(id: string): Promise<RemoveInputPresetResponse> {
+        return await this.request<RemoveInputPresetResponse>(`/api/settings/input-presets/${encodeURIComponent(id)}`, {
+            method: 'DELETE'
+        })
     }
 
     // Push 通知

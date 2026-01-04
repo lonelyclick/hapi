@@ -188,6 +188,7 @@ function SessionItem(props: {
     const { session: s, onSelect } = props
     const progress = getTodoProgress(s)
     const hasPending = s.pendingRequestsCount > 0
+    const runtimeAgent = s.metadata?.runtimeAgent?.trim()
 
     return (
         <button
@@ -228,6 +229,12 @@ function SessionItem(props: {
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--app-hint)]">
                     <span className="shrink-0">{getAgentLabel(s)}</span>
+                    {runtimeAgent && (
+                        <>
+                            <span className="text-[var(--app-divider)]">•</span>
+                            <span className="truncate">{runtimeAgent}</span>
+                        </>
+                    )}
                     {s.metadata?.worktree?.branch && (
                         <>
                             <span className="text-[var(--app-divider)]">•</span>

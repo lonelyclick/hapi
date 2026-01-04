@@ -46,6 +46,7 @@ export type Metadata = {
     archivedBy?: string
     archiveReason?: string
     flavor?: string
+    runtimeAgent?: string
     runtimeModel?: string
     runtimeModelReasoningEffort?: SessionModelReasoningEffort
     worktree?: {
@@ -84,6 +85,7 @@ export const MetadataSchema = z.object({
     archivedBy: z.string().optional(),
     archiveReason: z.string().optional(),
     flavor: z.string().optional(),
+    runtimeAgent: z.string().optional(),
     runtimeModel: z.string().optional(),
     runtimeModelReasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
     worktree: z.object({

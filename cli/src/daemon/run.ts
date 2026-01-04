@@ -358,6 +358,10 @@ export async function startDaemon(): Promise<void> {
           '--hapi-starting-mode', 'remote',
           '--started-by', 'daemon'
         ];
+        const claudeAgent = typeof options.claudeAgent === 'string' ? options.claudeAgent.trim() : '';
+        if (agent === 'claude' && claudeAgent) {
+          args.push('--agent', claudeAgent);
+        }
         if (options.sessionId) {
           args.push('--hapi-session-id', options.sessionId);
         }

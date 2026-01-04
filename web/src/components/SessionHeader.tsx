@@ -111,11 +111,15 @@ export function SessionHeader(props: {
     const title = useMemo(() => getSessionTitle(props.session), [props.session])
     const worktreeBranch = props.session.metadata?.worktree?.branch
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
+    const runtimeAgent = props.session.metadata?.runtimeAgent?.trim() || null
     const runtimeModel = useMemo(() => formatRuntimeModel(props.session), [props.session])
     const [showAgentTip, setShowAgentTip] = useState(false)
     const agentMeta = useMemo(
         () => {
             const parts = [agentLabel]
+            if (runtimeAgent) {
+                parts.push(runtimeAgent)
+            }
             if (runtimeModel) {
                 parts.push(runtimeModel)
             }
@@ -124,7 +128,7 @@ export function SessionHeader(props: {
             }
             return parts.join(' • ')
         },
-        [agentLabel, runtimeModel, worktreeBranch]
+        [agentLabel, runtimeAgent, runtimeModel, worktreeBranch]
     )
     const hasAgentTip = agentMeta !== agentLabel
     const agentTipId = `session-agent-tip-${props.session.id}`

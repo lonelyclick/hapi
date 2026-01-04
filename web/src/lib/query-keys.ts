@@ -15,4 +15,5 @@ export const queryKeys = {
     ] as const,
     slashCommands: (sessionId: string) => ['slash-commands', sessionId] as const,
     typing: (sessionId: string) => ['typing', sessionId] as const,
+    inputPresets: () => ['input-presets'] as const,
 }

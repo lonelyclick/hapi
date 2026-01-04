@@ -29,6 +29,28 @@ import { readModeEnv } from '@/utils/modeEnv';
 
 const INIT_PROMPT_PREFIX = '#InitPrompt-';
 
+function extractClaudeAgent(args?: string[]): string | null {
+    if (!args || args.length === 0) {
+        return null;
+    }
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === '--agent') {
+            const next = args[i + 1];
+            if (next && !next.startsWith('-')) {
+                return next.trim() || null;
+            }
+        }
+        if (arg.startsWith('--agent=')) {
+            const value = arg.slice('--agent='.length).trim();
+            if (value) {
+                return value;
+            }
+        }
+    }
+    return null;
+}
+
 export interface StartOptions {
     model?: string
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
@@ -45,6 +67,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     const workingDirectory = process.cwd();
     const sessionTag = randomUUID();
     const startedBy = options.startedBy ?? 'terminal';
+    const runtimeAgent = extractClaudeAgent(options.claudeArgs);
 
     // Log environment info at startup
     logger.debugLargeJson('[START] HAPI process started', getEnvironmentInfo());
@@ -97,6 +120,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         lifecycleState: 'running',
         lifecycleStateSince: Date.now(),
         flavor: 'claude',
+        runtimeAgent: runtimeAgent ?? undefined,
         worktree: worktreeInfo ?? undefined
     };
     let response: Awaited<ReturnType<typeof api.getOrCreateSession>> | null = null;

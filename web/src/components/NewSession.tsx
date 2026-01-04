@@ -31,6 +31,7 @@ export function NewSession(props: {
     const [machineId, setMachineId] = useState<string | null>(null)
     const [projectPath, setProjectPath] = useState('')
     const [agent, setAgent] = useState<AgentType>('claude')
+    const [claudeAgent, setClaudeAgent] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
 
@@ -111,7 +112,8 @@ export function NewSession(props: {
                 directory,
                 agent,
                 yolo: true,
-                sessionType: 'simple'
+                sessionType: 'simple',
+                claudeAgent: agent === 'claude' ? (claudeAgent.trim() || undefined) : undefined
             })
 
             if (result.type === 'success') {
@@ -237,6 +239,24 @@ export function NewSession(props: {
                     ))}
                 </div>
             </div>
+            {agent === 'claude' ? (
+                <div className="flex flex-col gap-1.5 px-3 pb-3">
+                    <label className="text-xs font-medium text-[var(--app-hint)]">
+                        Claude Agent (optional)
+                    </label>
+                    <input
+                        type="text"
+                        value={claudeAgent}
+                        onChange={(e) => setClaudeAgent(e.target.value)}
+                        disabled={isFormDisabled}
+                        placeholder="e.g. grok"
+                        className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
+                    />
+                    <div className="text-[11px] text-[var(--app-hint)]">
+                        Matches the name from Claude Code (--agent).
+                    </div>
+                </div>
+            ) : null}
 
             {/* Error Message */}
             {(error ?? spawnError) ? (

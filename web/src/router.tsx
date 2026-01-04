@@ -24,6 +24,7 @@ import { useSessions } from '@/hooks/queries/useSessions'
 import { useOnlineUsers } from '@/hooks/queries/useOnlineUsers'
 import { useSlashCommands } from '@/hooks/queries/useSlashCommands'
 import { useFileSuggestions } from '@/hooks/queries/useFileSuggestions'
+import { useInputPresets } from '@/hooks/queries/useInputPresets'
 import { useSessionViewers } from '@/hooks/queries/useSessionViewers'
 import { useSendMessage } from '@/hooks/mutations/useSendMessage'
 import { useOtherUserTyping } from '@/hooks/useOtherUserTyping'
@@ -274,10 +275,24 @@ function SessionPage() {
         refetch: refetchMessages,
     } = useMessages(api, sessionId)
     const {
-        sendMessage,
+        sendMessage: rawSendMessage,
         retryMessage,
         isSending,
     } = useSendMessage(api, sessionId)
+
+    // Wrap sendMessage to intercept client-side slash commands
+    const sendMessage = useCallback((text: string) => {
+        const trimmed = text.trim().toLowerCase()
+
+        // Handle /stats and /status - navigate to usage page
+        if (trimmed === '/stats' || trimmed === '/status') {
+            navigate({ to: '/usage' })
+            return
+        }
+
+        // All other messages go to the agent
+        rawSendMessage(text)
+    }, [rawSendMessage, navigate])
 
     // Get agent type from session metadata for slash commands
     const agentType = session?.metadata?.flavor ?? 'claude'
@@ -290,19 +305,29 @@ function SessionPage() {
         getSuggestions: getFileSuggestions,
     } = useFileSuggestions(api, sessionId)
 
+    // Input presets (global, not session-specific)
+    const {
+        getSuggestions: getPresetSuggestions,
+    } = useInputPresets(api)
+
     // 其他用户正在输入
     const otherUserTyping = useOtherUserTyping(sessionId)
 
     // Combined suggestions handler
     const getAutocompleteSuggestions = useCallback(async (query: string) => {
         if (query.startsWith('/')) {
-            return getSlashSuggestions(query)
+            // Presets first, then slash commands
+            const [presets, slashCommands] = await Promise.all([
+                getPresetSuggestions(query),
+                getSlashSuggestions(query)
+            ])
+            return [...presets, ...slashCommands]
         }
         if (query.startsWith('@')) {
             return getFileSuggestions(query)
         }
         return []
-    }, [getSlashSuggestions, getFileSuggestions])
+    }, [getPresetSuggestions, getSlashSuggestions, getFileSuggestions])
 
     const refreshSelectedSession = useCallback(() => {
         void refetchSession()

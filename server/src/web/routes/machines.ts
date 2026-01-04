@@ -11,7 +11,8 @@ const spawnBodySchema = z.object({
     agent: z.enum(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok']).optional(),
     yolo: z.boolean().optional(),
     sessionType: z.enum(['simple', 'worktree']).optional(),
-    worktreeName: z.string().optional()
+    worktreeName: z.string().optional(),
+    claudeAgent: z.string().min(1).optional()
 })
 
 const pathsExistsSchema = z.object({
@@ -123,7 +124,8 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             parsed.data.agent,
             parsed.data.yolo,
             parsed.data.sessionType,
-            parsed.data.worktreeName
+            parsed.data.worktreeName,
+            { claudeAgent: parsed.data.claudeAgent }
         )
 
         // 如果 spawn 成功，等 session online 后发送初始化 prompt（动态生成）

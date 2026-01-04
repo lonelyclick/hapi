@@ -1,11 +1,12 @@
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
 import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
 import { useNotificationPermission, useWebPushSubscription } from '@/hooks/useNotification'
-import type { Project, UserRole } from '@/types/api'
+import type { InputPreset, Project, UserRole } from '@/types/api'
+import { queryKeys } from '@/lib/query-keys'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -90,6 +91,87 @@ type ProjectFormData = {
     name: string
     path: string
     description: string
+}
+
+type PresetFormData = {
+    trigger: string
+    title: string
+    prompt: string
+}
+
+function PresetForm(props: {
+    initial?: PresetFormData
+    onSubmit: (data: PresetFormData) => void
+    onCancel: () => void
+    isPending: boolean
+    submitLabel: string
+}) {
+    // Use key prop to reset form when editing different presets
+    const [trigger, setTrigger] = useState(props.initial?.trigger ?? '')
+    const [title, setTitle] = useState(props.initial?.title ?? '')
+    const [prompt, setPrompt] = useState(props.initial?.prompt ?? '')
+
+    // Reset form when initial values change (editing a different preset)
+    const initialRef = useRef(props.initial)
+    if (props.initial !== initialRef.current) {
+        initialRef.current = props.initial
+        setTrigger(props.initial?.trigger ?? '')
+        setTitle(props.initial?.title ?? '')
+        setPrompt(props.initial?.prompt ?? '')
+    }
+
+    const handleSubmit = useCallback((e: React.FormEvent) => {
+        e.preventDefault()
+        if (!trigger.trim() || !title.trim() || !prompt.trim()) return
+        props.onSubmit({ trigger: trigger.trim(), title: title.trim(), prompt: prompt.trim() })
+    }, [trigger, title, prompt, props])
+
+    return (
+        <form onSubmit={handleSubmit} className="px-3 py-2 space-y-2 border-b border-[var(--app-divider)]">
+            <input
+                type="text"
+                value={trigger}
+                onChange={(e) => setTrigger(e.target.value)}
+                placeholder="Trigger (e.g. loopreview)"
+                className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                disabled={props.isPending}
+            />
+            <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Title (short description)"
+                className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                disabled={props.isPending}
+            />
+            <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Prompt content..."
+                rows={4}
+                className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] resize-none"
+                disabled={props.isPending}
+            />
+            <div className="flex justify-end gap-2 pt-1">
+                <button
+                    type="button"
+                    onClick={props.onCancel}
+                    disabled={props.isPending}
+                    className="px-3 py-1.5 text-sm rounded border border-[var(--app-border)] text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="submit"
+                    disabled={props.isPending || !trigger.trim() || !title.trim() || !prompt.trim()}
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] disabled:opacity-50 hover:opacity-90 transition-opacity"
+                >
+                    {props.isPending && <Spinner size="sm" label={null} />}
+                    {props.submitLabel}
+                </button>
+            </div>
+        </form>
+    )
 }
 
 function ProjectForm(props: {
@@ -308,6 +390,78 @@ export default function SettingsPage() {
     const handleRemoveUser = useCallback((email: string) => {
         removeUserMutation.mutate(email)
     }, [removeUserMutation])
+
+    // Input Presets
+    const [presetError, setPresetError] = useState<string | null>(null)
+    const [showAddPreset, setShowAddPreset] = useState(false)
+    const [editingPreset, setEditingPreset] = useState<InputPreset | null>(null)
+
+    const { data: presetsData, isLoading: presetsLoading } = useQuery({
+        queryKey: queryKeys.inputPresets(),
+        queryFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.getInputPresets()
+        },
+        enabled: Boolean(api)
+    })
+
+    const addPresetMutation = useMutation({
+        mutationFn: async (data: PresetFormData) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.addInputPreset(data.trigger, data.title, data.prompt)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(queryKeys.inputPresets(), { presets: result.presets })
+            setShowAddPreset(false)
+            setPresetError(null)
+        },
+        onError: (err) => {
+            setPresetError(err instanceof Error ? err.message : 'Failed to add preset')
+        }
+    })
+
+    const updatePresetMutation = useMutation({
+        mutationFn: async ({ id, data }: { id: string; data: PresetFormData }) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.updateInputPreset(id, data.trigger, data.title, data.prompt)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(queryKeys.inputPresets(), { presets: result.presets })
+            setEditingPreset(null)
+            setPresetError(null)
+        },
+        onError: (err) => {
+            setPresetError(err instanceof Error ? err.message : 'Failed to update preset')
+        }
+    })
+
+    const removePresetMutation = useMutation({
+        mutationFn: async (id: string) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.removeInputPreset(id)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(queryKeys.inputPresets(), { presets: result.presets })
+        },
+        onError: (err) => {
+            setPresetError(err instanceof Error ? err.message : 'Failed to remove preset')
+        }
+    })
+
+    const handleAddPreset = useCallback((data: PresetFormData) => {
+        addPresetMutation.mutate(data)
+    }, [addPresetMutation])
+
+    const handleUpdatePreset = useCallback((data: PresetFormData) => {
+        if (!editingPreset) return
+        updatePresetMutation.mutate({ id: editingPreset.id, data })
+    }, [editingPreset, updatePresetMutation])
+
+    const handleRemovePreset = useCallback((id: string) => {
+        removePresetMutation.mutate(id)
+    }, [removePresetMutation])
+
+    const presets = presetsData?.presets ?? []
 
     const handleLogout = useCallback(async () => {
         // 清除 localStorage
@@ -711,6 +865,115 @@ export default function SettingsPage() {
                                             )}
                                         </div>
                                     </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Input Presets Section */}
+                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                        <div className="px-3 py-2 border-b border-[var(--app-divider)] flex items-center justify-between">
+                            <div>
+                                <h2 className="text-sm font-medium">Input Presets</h2>
+                                <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                    Quick prompts triggered by /command.
+                                </p>
+                            </div>
+                            {!showAddPreset && !editingPreset && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddPreset(true)}
+                                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] hover:opacity-90 transition-opacity"
+                                >
+                                    <PlusIcon className="w-3 h-3" />
+                                    Add
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Add Preset Form */}
+                        {showAddPreset && (
+                            <PresetForm
+                                onSubmit={handleAddPreset}
+                                onCancel={() => {
+                                    setShowAddPreset(false)
+                                    setPresetError(null)
+                                }}
+                                isPending={addPresetMutation.isPending}
+                                submitLabel="Add Preset"
+                            />
+                        )}
+
+                        {presetError && (
+                            <div className="px-3 py-2 text-sm text-red-500 border-b border-[var(--app-divider)]">
+                                {presetError}
+                            </div>
+                        )}
+
+                        {/* Preset List */}
+                        {presetsLoading ? (
+                            <div className="px-3 py-4 flex justify-center">
+                                <Spinner size="sm" label="Loading..." />
+                            </div>
+                        ) : presets.length === 0 && !showAddPreset ? (
+                            <div className="px-3 py-4 text-center text-sm text-[var(--app-hint)]">
+                                No presets saved yet.
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-[var(--app-divider)]">
+                                {presets.map((preset) => (
+                                    editingPreset?.id === preset.id ? (
+                                        <PresetForm
+                                            key={preset.id}
+                                            initial={{
+                                                trigger: preset.trigger,
+                                                title: preset.title,
+                                                prompt: preset.prompt
+                                            }}
+                                            onSubmit={handleUpdatePreset}
+                                            onCancel={() => {
+                                                setEditingPreset(null)
+                                                setPresetError(null)
+                                            }}
+                                            isPending={updatePresetMutation.isPending}
+                                            submitLabel="Save"
+                                        />
+                                    ) : (
+                                        <div
+                                            key={preset.id}
+                                            className="px-3 py-2"
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-sm font-medium truncate">/{preset.trigger}</div>
+                                                    <div className="text-xs text-[var(--app-hint)] truncate mt-0.5">{preset.title}</div>
+                                                    <div className="text-xs text-[var(--app-hint)] mt-1 line-clamp-2 font-mono bg-[var(--app-bg)] rounded px-1.5 py-1">
+                                                        {preset.prompt.slice(0, 100)}{preset.prompt.length > 100 ? '...' : ''}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingPreset(preset)}
+                                                        disabled={removePresetMutation.isPending}
+                                                        className="flex h-7 w-7 items-center justify-center rounded text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50"
+                                                        title="Edit preset"
+                                                    >
+                                                        <EditIcon />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemovePreset(preset.id)}
+                                                        disabled={removePresetMutation.isPending}
+                                                        className="flex h-7 w-7 items-center justify-center rounded text-[var(--app-hint)] hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                                        title="Remove preset"
+                                                    >
+                                                        <TrashIcon />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
                                 ))}
                             </div>
                         )}

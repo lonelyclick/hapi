@@ -13,6 +13,7 @@ type SessionSummaryMetadata = {
     machineId?: string
     summary?: { text: string }
     flavor?: string | null
+    runtimeAgent?: string
     runtimeModel?: string
     runtimeModelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     worktree?: {
@@ -52,6 +53,7 @@ function toSessionSummary(session: Session): SessionSummary {
         machineId: session.metadata.machineId ?? undefined,
         summary: session.metadata.summary ? { text: session.metadata.summary.text } : undefined,
         flavor: session.metadata.flavor ?? null,
+        runtimeAgent: session.metadata.runtimeAgent,
         runtimeModel: session.metadata.runtimeModel,
         runtimeModelReasoningEffort: session.metadata.runtimeModelReasoningEffort,
         worktree: session.metadata.worktree
@@ -491,7 +493,8 @@ export function createSessionsRoutes(
         const modeSettings = {
             permissionMode: session.permissionMode,
             modelMode: session.modelMode,
-            modelReasoningEffort: session.modelReasoningEffort
+            modelReasoningEffort: session.modelReasoningEffort,
+            claudeAgent: flavor === 'claude' ? (session.metadata?.runtimeAgent ?? undefined) : undefined
         }
 
         const resumeAttempt = await engine.spawnSession(

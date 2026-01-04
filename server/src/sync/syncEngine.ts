@@ -30,6 +30,7 @@ export const MetadataSchema = z.object({
     machineId: z.string().optional(),
     tools: z.array(z.string()).optional(),
     flavor: z.string().nullish(),
+    runtimeAgent: z.string().optional(),
     runtimeModel: z.string().optional(),
     runtimeModelReasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
     worktree: z.object({
@@ -953,6 +954,7 @@ export class SyncEngine {
             sessionId?: string
             resumeSessionId?: string
             token?: string
+            claudeAgent?: string
             permissionMode?: Session['permissionMode']
             modelMode?: Session['modelMode']
             modelReasoningEffort?: Session['modelReasoningEffort']
@@ -972,6 +974,7 @@ export class SyncEngine {
                     sessionId: options?.sessionId,
                     resumeSessionId: options?.resumeSessionId,
                     token: options?.token,
+                    claudeAgent: options?.claudeAgent,
                     permissionMode: options?.permissionMode,
                     modelMode: options?.modelMode,
                     modelReasoningEffort: options?.modelReasoningEffort
