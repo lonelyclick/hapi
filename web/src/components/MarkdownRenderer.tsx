@@ -127,7 +127,7 @@ function Image(props: ComponentPropsWithoutRef<'img'>) {
     return <img {...props} className={cn('max-w-full rounded', props.className)} />
 }
 
-const defaultComponents = {
+const components = {
     pre: Pre,
     code: Code,
     a: A,
@@ -153,13 +153,9 @@ const defaultComponents = {
  * Used for rendering markdown in group chat messages and other standalone contexts.
  */
 export function MarkdownRenderer(props: MarkdownRendererProps) {
-    const mergedComponents = props.components
-        ? { ...defaultComponents, ...props.components }
-        : defaultComponents
-
     return (
         <div className={cn('min-w-0 max-w-full break-words text-sm')}>
-            <Markdown remarkPlugins={[remarkGfm]} components={mergedComponents}>
+            <Markdown remarkPlugins={[remarkGfm]} components={components}>
                 {props.content}
             </Markdown>
         </div>
