@@ -321,15 +321,22 @@ export class SyncEngine {
         // 同步 agent 消息到群组
         if (event.type === 'message-received' && event.sessionId && event.message) {
             const msgContent = event.message.content as Record<string, unknown> | null
+            console.log(`[SyncEngine] message-received event for session ${event.sessionId}, msgContent:`, JSON.stringify(msgContent, null, 2))
             if (msgContent) {
                 const role = msgContent.role as string
+                console.log(`[SyncEngine] Message role: "${role}"`)
                 // 只同步 agent 的回复，不同步 user 消息
                 if (role === 'agent' || role === 'assistant') {
                     const text = this.extractTextFromMessageContent(msgContent)
+                    console.log(`[SyncEngine] Extracted text for group sync: "${text?.substring(0, 100) || 'null'}"`)
                     if (text) {
                         this.syncAgentMessageToGroups(event.sessionId, text)
                     }
+                } else {
+                    console.log(`[SyncEngine] Skipping group sync - role "${role}" is not agent/assistant`)
                 }
+            } else {
+                console.log(`[SyncEngine] Skipping group sync - msgContent is null`)
             }
         }
 
@@ -379,9 +386,11 @@ export class SyncEngine {
      * 同时广播 SSE 事件给群组订阅者
      */
     private syncAgentMessageToGroups(sessionId: string, content: string): void {
+        console.log(`[SyncEngine] syncAgentMessageToGroups called for session ${sessionId}, content length: ${content.length}`)
         try {
             const groups = this.store.getGroupsForSession(sessionId)
             const session = this.sessions.get(sessionId)
+            console.log(`[SyncEngine] Found ${groups.length} groups for session ${sessionId}:`, groups.map(g => ({ id: g.id, name: g.name, status: g.status })))
 
             for (const group of groups) {
                 // 存储消息到群组

@@ -298,6 +298,7 @@ export function SessionHeader(props: {
         mutationFn: async (subscribe: boolean) => {
             // Prefer chatId if available (Telegram), otherwise use clientId
             const options = currentChatId ? { chatId: currentChatId } : { clientId: currentClientId }
+            console.log('[subscription] toggle', { subscribe, options, sessionId: props.session.id })
             if (subscribe) {
                 return await api.subscribeToSession(props.session.id, options)
             } else {
@@ -305,7 +306,12 @@ export function SessionHeader(props: {
             }
         },
         onSuccess: () => {
+            console.log('[subscription] toggle success')
             queryClient.invalidateQueries({ queryKey: subscribersQueryKey })
+            queryClient.invalidateQueries({ queryKey: ['my-subscriptions'] })
+        },
+        onError: (error) => {
+            console.error('[subscription] toggle error', error)
         }
     })
 
