@@ -16,11 +16,13 @@ export interface ImageContentBlock {
         media_type: string
         data: string
     }
+    [key: string]: unknown
 }
 
 export interface TextContentBlock {
     type: 'text'
     text: string
+    [key: string]: unknown
 }
 
 export type ContentBlock = ImageContentBlock | TextContentBlock
