@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { AgentGroupMember, SessionSummary, SpawnAgentType, Machine, GroupMemberRole } from '@/types/api'
+import type { AgentGroupMember, SessionSummary, SpawnAgentType } from '@/types/api'
 import { useAppContext } from '@/lib/app-context'
 import {
     Dialog,
