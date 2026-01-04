@@ -135,9 +135,9 @@ export function createPushRoutes(): Hono<WebAppEnv> {
 
         return c.json({
             ok: true,
-            sent: result.sent,
+            sent: result.success,
             failed: result.failed,
-            errors: result.errors
+            removed: result.removed
         })
     })
 
