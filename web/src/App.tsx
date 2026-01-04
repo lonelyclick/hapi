@@ -283,6 +283,13 @@ export function App() {
                 // 获取 session 标题和项目
                 const sessionsData = queryClient.getQueryData<{ sessions: SessionSummary[] }>(queryKeys.sessions)
                 const session = sessionsData?.sessions.find(s => s.id === event.sessionId)
+
+                // Skip notifications for Advisor sessions
+                if (session?.metadata?.runtimeAgent === 'advisor') {
+                    console.log('[notification] skipping - advisor session')
+                    return
+                }
+
                 const title = session?.metadata?.summary?.text || session?.metadata?.name || 'Task completed'
 
                 // 查找匹配的项目

@@ -241,6 +241,11 @@ export class HappyBot {
             return
         }
 
+        // Skip notifications for Advisor sessions
+        if (session.metadata?.runtimeAgent === 'advisor') {
+            return
+        }
+
         const now = Date.now()
         const last = this.lastReadyNotificationAt.get(sessionId) ?? 0
         if (now - last < 5000) {
@@ -279,6 +284,11 @@ export class HappyBot {
     private checkForPermissionNotification(session: Session): void {
         const currentSession = this.getNotifiableSession(session.id)
         if (!currentSession) {
+            return
+        }
+
+        // Skip notifications for Advisor sessions
+        if (currentSession.metadata?.runtimeAgent === 'advisor') {
             return
         }
 
