@@ -106,6 +106,25 @@ function BroadcastIcon(props: { className?: string }) {
     )
 }
 
+function ChatIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+    )
+}
+
 const GROUP_TYPE_LABELS: Record<AgentGroupType, string> = {
     collaboration: '协作',
     debate: '辩论',
@@ -350,6 +369,17 @@ function GroupCard(props: {
                     </span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                    {/* Chat button - always visible */}
+                    <button
+                        onClick={() => navigate({
+                            to: '/groups/$groupId/chat',
+                            params: { groupId: props.group.id }
+                        })}
+                        className="p-1.5 rounded text-[var(--app-link)] hover:text-[var(--app-link)] hover:bg-[var(--app-link)]/10"
+                        title="进入群聊"
+                    >
+                        <ChatIcon />
+                    </button>
                     {props.group.status === 'active' && (
                         <>
                             <button

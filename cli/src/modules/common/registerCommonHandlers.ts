@@ -135,7 +135,7 @@ export interface SpawnSessionOptions {
     sessionId?: string;
     resumeSessionId?: string;
     approvedNewDirectoryCreation?: boolean;
-    agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter';
+    agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli';
     yolo?: boolean;
     token?: string;
     sessionType?: 'simple' | 'worktree';

@@ -35,6 +35,7 @@ import TerminalPage from '@/routes/sessions/terminal'
 import SettingsPage from '@/routes/settings'
 import UsagePage from '@/routes/usage'
 import GroupsPage from '@/routes/groups'
+import GroupChatPage from '@/routes/groups/chat'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -511,6 +512,12 @@ const groupsRoute = createRoute({
     component: GroupsPage,
 })
 
+const groupChatRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/groups/$groupId/chat',
+    component: GroupChatPage,
+})
+
 export const routeTree = rootRoute.addChildren([
     indexRoute,
     sessionsRoute,
@@ -522,6 +529,7 @@ export const routeTree = rootRoute.addChildren([
     settingsRoute,
     usageRoute,
     groupsRoute,
+    groupChatRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']
