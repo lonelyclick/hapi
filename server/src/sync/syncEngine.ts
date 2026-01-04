@@ -1027,6 +1027,38 @@ export class SyncEngine {
         }
     }
 
+    async getUsage(machineId: string): Promise<{
+        claude: {
+            fiveHour: { utilization: number; resetsAt: string } | null
+            sevenDay: { utilization: number; resetsAt: string } | null
+            error?: string
+        } | null
+        codex: {
+            model?: string
+            approvalPolicy?: string
+            writableRoots?: string[]
+            tokenUsage?: { used?: number; remaining?: number }
+            error?: string
+        } | null
+        timestamp: number
+    }> {
+        return await this.machineRpc(machineId, 'get-usage', {}) as {
+            claude: {
+                fiveHour: { utilization: number; resetsAt: string } | null
+                sevenDay: { utilization: number; resetsAt: string } | null
+                error?: string
+            } | null
+            codex: {
+                model?: string
+                approvalPolicy?: string
+                writableRoots?: string[]
+                tokenUsage?: { used?: number; remaining?: number }
+                error?: string
+            } | null
+            timestamp: number
+        }
+    }
+
     private async sessionRpc(sessionId: string, method: string, params: unknown): Promise<unknown> {
         return await this.rpcCall(`${sessionId}:${method}`, params)
     }

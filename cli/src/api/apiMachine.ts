@@ -11,6 +11,7 @@ import { DaemonStateSchema, MachineMetadataSchema } from './types'
 import { backoff } from '@/utils/time'
 import { RpcHandlerManager } from './rpc/RpcHandlerManager'
 import { registerCommonHandlers, type SpawnSessionOptions, type SpawnSessionResult } from '../modules/common/registerCommonHandlers'
+import { getAllUsage, type UsageResponse } from '../daemon/usage'
 
 interface ServerToDaemonEvents {
     update: (data: Update) => void
@@ -93,6 +94,11 @@ export class ApiMachineClient {
             }))
 
             return { exists }
+        })
+
+        // Get usage data for Claude Code and Codex
+        this.rpcHandlerManager.registerHandler<Record<string, never>, UsageResponse>('get-usage', async () => {
+            return await getAllUsage()
         })
     }
 

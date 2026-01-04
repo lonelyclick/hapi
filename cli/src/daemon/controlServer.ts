@@ -10,6 +10,7 @@ import { logger } from '@/ui/logger';
 import { Metadata } from '@/api/types';
 import { TrackedSession } from './types';
 import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/registerCommonHandlers';
+import { getAllUsage } from './usage';
 
 export function startDaemonControlServer({
   getChildren,
@@ -189,6 +190,42 @@ export function startDaemonControlServer({
       }, 50);
 
       return { status: 'stopping' };
+    });
+
+    // Get usage data for Claude Code and Codex
+    typed.get('/usage', {
+      schema: {
+        response: {
+          200: z.object({
+            claude: z.object({
+              fiveHour: z.object({
+                utilization: z.number(),
+                resetsAt: z.string()
+              }).nullable(),
+              sevenDay: z.object({
+                utilization: z.number(),
+                resetsAt: z.string()
+              }).nullable(),
+              error: z.string().optional()
+            }).nullable(),
+            codex: z.object({
+              model: z.string().optional(),
+              approvalPolicy: z.string().optional(),
+              writableRoots: z.array(z.string()).optional(),
+              tokenUsage: z.object({
+                used: z.number().optional(),
+                remaining: z.number().optional()
+              }).optional(),
+              error: z.string().optional()
+            }).nullable(),
+            timestamp: z.number()
+          })
+        }
+      }
+    }, async () => {
+      logger.debug('[CONTROL SERVER] Usage data request');
+      const usage = await getAllUsage();
+      return usage;
     });
 
     app.listen({ port: 0, host: '127.0.0.1' }, (err, address) => {
