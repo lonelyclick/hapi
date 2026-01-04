@@ -126,7 +126,7 @@ export class WebPushService {
     /**
      * Send a push notification to a specific subscription
      */
-    private async sendToSubscription(
+    async sendToSubscription(
         subscription: StoredPushSubscription,
         payload: PushNotificationPayload
     ): Promise<{ success: boolean; shouldRemove: boolean }> {

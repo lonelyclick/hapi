@@ -67,6 +67,23 @@ export function createPushRoutes(): Hono<WebAppEnv> {
             endpoint: parsed.data.endpoint.slice(0, 60) + '...'
         })
 
+        // 订阅成功后立即发送测试通知
+        webPush.sendToSubscription(subscription, {
+            title: '🎉 订阅成功',
+            body: '推送通知已启用，任务完成时你将收到通知',
+            icon: '/pwa-192x192.png',
+            badge: '/pwa-64x64.png',
+            tag: 'subscription-success',
+            data: {
+                type: 'subscription-success',
+                timestamp: Date.now()
+            }
+        }).then(result => {
+            console.log('[push] welcome notification sent:', result)
+        }).catch(err => {
+            console.error('[push] welcome notification failed:', err)
+        })
+
         return c.json({ ok: true, subscriptionId: subscription.id })
     })
 
