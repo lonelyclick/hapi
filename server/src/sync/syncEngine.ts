@@ -426,6 +426,49 @@ export class SyncEngine {
                     groupId: group.id,
                     groupMessage: groupMessageData
                 })
+
+                // 转发消息给群组内其他 AI 成员
+                const members = this.store.getGroupMembers(group.id)
+                const senderName = session?.metadata?.name || sessionId.slice(0, 8)
+                const agentType = (session?.metadata as Record<string, unknown>)?.agent as string || 'unknown'
+
+                const forwardPromises = members
+                    .filter(member => member.sessionId !== sessionId) // 跳过消息发送者
+                    .map(async (member) => {
+                        const memberSession = this.sessions.get(member.sessionId)
+                        if (!memberSession?.active) {
+                            return { sessionId: member.sessionId, status: 'skipped', reason: 'inactive' }
+                        }
+
+                        try {
+                            await this.sendMessage(member.sessionId, {
+                                text: `[群组消息 from ${senderName} (${agentType})]\n${content}`,
+                                sentFrom: 'system' as const,
+                                meta: {
+                                    isGroupMessage: true,
+                                    groupId: group.id,
+                                    groupName: group.name,
+                                    senderSessionId: sessionId,
+                                    senderName,
+                                    agentType
+                                }
+                            } as { text: string; sentFrom: 'telegram-bot' | 'webapp' | 'advisor' })
+                            return { sessionId: member.sessionId, status: 'sent' }
+                        } catch (error) {
+                            console.error(`[SyncEngine] Failed to forward message to ${member.sessionId}:`, error)
+                            return { sessionId: member.sessionId, status: 'failed', error }
+                        }
+                    })
+
+                // 使用 Promise.allSettled 并行发送，避免一个失败影响其他
+                Promise.allSettled(forwardPromises).then(results => {
+                    const sent = results.filter(r => r.status === 'fulfilled' && (r.value as { status: string }).status === 'sent').length
+                    const skipped = results.filter(r => r.status === 'fulfilled' && (r.value as { status: string }).status === 'skipped').length
+                    const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && (r.value as { status: string }).status === 'failed')).length
+                    console.log(`[SyncEngine] Forwarded group message to ${sent} AI members (skipped: ${skipped}, failed: ${failed}) in group ${group.id}`)
+                }).catch(error => {
+                    console.error('[SyncEngine] Error in Promise.allSettled:', error)
+                })
             }
 
             if (groups.length > 0) {
