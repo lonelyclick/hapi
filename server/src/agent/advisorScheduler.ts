@@ -181,6 +181,7 @@ export class AdvisorScheduler {
                 activeSessionCount
             })
 
+            console.log(`[AdvisorScheduler] Sending init prompt to session ${this.advisorSessionId}, prompt length: ${prompt.length}`)
             await this.syncEngine.sendMessage(this.advisorSessionId, {
                 text: prompt,
                 sentFrom: 'webapp'

@@ -283,6 +283,12 @@ export class AdvisorService {
 
             if (!text) continue
 
+            // 跳过 init prompt 消息（以 #InitPrompt- 开头的消息）
+            const trimmedText = text.trim()
+            if (trimmedText.startsWith('#InitPrompt-')) {
+                continue
+            }
+
             // 简单的活动分类
             if (text.length > 200) {
                 activities.push(text.slice(0, 200) + '...')

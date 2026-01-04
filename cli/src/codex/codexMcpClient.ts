@@ -74,7 +74,7 @@ function extractRequestedSchema(params: Record<string, unknown>): ElicitRequeste
     return null;
 }
 
-function extractToolCallId(params: Record<string, unknown>): string | null {
+function extractToolCallIdFromRecord(record: Record<string, unknown>): string | null {
     const candidateKeys = [
         'codex_call_id',
         'codex_mcp_tool_call_id',
@@ -90,10 +90,24 @@ function extractToolCallId(params: Record<string, unknown>): string | null {
     ];
 
     for (const key of candidateKeys) {
-        const value = params[key];
+        const value = record[key];
         if (typeof value === 'string' && value.length > 0) {
             return value;
         }
+    }
+
+    return null;
+}
+
+function extractToolCallId(params: Record<string, unknown>): string | null {
+    const direct = extractToolCallIdFromRecord(params);
+    if (direct) return direct;
+
+    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request, params.input];
+    for (const candidate of nestedCandidates) {
+        if (!isObject(candidate)) continue;
+        const nested = extractToolCallIdFromRecord(candidate);
+        if (nested) return nested;
     }
 
     return null;
@@ -115,7 +129,23 @@ const COMMAND_KEYS = [
 
 function extractCommandFromValue(value: unknown): string[] | null {
     if (Array.isArray(value)) {
-        const parts = value.filter((item) => typeof item === 'string' && item.trim().length > 0);
+        const parts: string[] = [];
+        for (const item of value) {
+            if (typeof item === 'string' && item.trim().length > 0) {
+                parts.push(item);
+                continue;
+            }
+            if (isObject(item)) {
+                const candidate = normalizeText(item.text)
+                    ?? normalizeText(item.value)
+                    ?? normalizeText(item.arg)
+                    ?? normalizeText(item.command)
+                    ?? normalizeText(item.cmd);
+                if (candidate) {
+                    parts.push(candidate);
+                }
+            }
+        }
         return parts.length > 0 ? parts : null;
     }
 
@@ -143,7 +173,7 @@ function extractCommand(params: Record<string, unknown>): string[] | null {
     const direct = extractCommandFromValue(params);
     if (direct) return direct;
 
-    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request];
+    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request, params.input];
     for (const candidate of nestedCandidates) {
         const extracted = extractCommandFromValue(candidate);
         if (extracted) return extracted;
@@ -165,7 +195,7 @@ function extractCwd(params: Record<string, unknown>): string | null {
     const direct = pickStringByKeys(params, CWD_KEYS);
     if (direct) return direct;
 
-    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request];
+    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request, params.input];
     for (const candidate of nestedCandidates) {
         if (!isObject(candidate)) continue;
         const extracted = pickStringByKeys(candidate, CWD_KEYS);
@@ -196,7 +226,7 @@ function extractPrompt(params: Record<string, unknown>): { prompt: string | null
         return { prompt, description };
     }
 
-    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request];
+    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request, params.input];
     for (const candidate of nestedCandidates) {
         if (!isObject(candidate)) continue;
         const nestedPrompt = pickStringByKeys(candidate, PROMPT_KEYS);
@@ -214,6 +244,92 @@ function truncateText(value: string, maxLen: number): string {
     return `${value.slice(0, maxLen)}...`;
 }
 
+function pickEnumValue(
+    values: string[],
+    decision: 'approved' | 'approved_for_session' | 'denied' | 'abort',
+    approved: boolean
+): string {
+    const normalizedDecision = decision.toLowerCase();
+    if (values.includes(decision)) {
+        return decision;
+    }
+    if (values.includes(normalizedDecision)) {
+        return normalizedDecision;
+    }
+
+    const normalizedValues = values.map((value) => value.toLowerCase());
+    const approvedNeedles = ['allow', 'approve', 'approved', 'yes', 'true', 'accept', 'ok', 'confirm'];
+    const deniedNeedles = ['deny', 'denied', 'no', 'false', 'reject', 'abort', 'cancel'];
+
+    const matchNeedle = (needles: string[]) => {
+        for (const needle of needles) {
+            const idx = normalizedValues.findIndex((value) => value.includes(needle));
+            if (idx >= 0) return values[idx];
+        }
+        return null;
+    };
+
+    const matched = approved ? matchNeedle(approvedNeedles) : matchNeedle(deniedNeedles);
+    if (matched) return matched;
+
+    return approved ? values[0] : values[values.length - 1];
+}
+
+function extractEnumValues(schema: Record<string, unknown>): string[] | null {
+    if (Array.isArray(schema.enum)) {
+        const values = schema.enum.filter((value) => typeof value === 'string' && value.length > 0);
+        if (values.length > 0) return values;
+    }
+
+    const collectConsts = (options: unknown): string[] | null => {
+        if (!Array.isArray(options)) return null;
+        const values = options
+            .map((opt) => (isObject(opt) && typeof opt.const === 'string' ? opt.const : null))
+            .filter((value): value is string => Boolean(value));
+        return values.length > 0 ? values : null;
+    };
+
+    const oneOfValues = collectConsts(schema.oneOf);
+    if (oneOfValues) return oneOfValues;
+
+    const anyOfValues = collectConsts(schema.anyOf);
+    if (anyOfValues) return anyOfValues;
+
+    return null;
+}
+
+function coerceValueForSchema(
+    schema: unknown,
+    decision: 'approved' | 'approved_for_session' | 'denied' | 'abort',
+    approved: boolean
+): ElicitResponseValue | null {
+    if (!isObject(schema)) {
+        return null;
+    }
+
+    const enumValues = extractEnumValues(schema);
+    if (enumValues) {
+        return pickEnumValue(enumValues, decision, approved);
+    }
+
+    const schemaType = typeof schema.type === 'string' ? schema.type : null;
+    if (schemaType === 'boolean') return approved;
+    if (schemaType === 'number' || schemaType === 'integer') return approved ? 1 : 0;
+    if (schemaType === 'string') return decision;
+    if (schemaType === 'array') {
+        const items = isObject(schema.items) ? schema.items : null;
+        if (items) {
+            const itemEnum = extractEnumValues(items);
+            if (itemEnum) {
+                return [pickEnumValue(itemEnum, decision, approved)];
+            }
+        }
+        return [decision];
+    }
+
+    return null;
+}
+
 function buildElicitationContent(
     decision: 'approved' | 'approved_for_session' | 'denied' | 'abort',
     requestedSchema: ElicitRequestedSchema | null,
@@ -226,29 +342,44 @@ function buildElicitationContent(
         const properties = requestedSchema.properties;
         const required = requestedSchema.required ?? [];
 
-        if (Object.prototype.hasOwnProperty.call(properties, 'decision')) {
-            content.decision = decision;
-        }
-        if (Object.prototype.hasOwnProperty.call(properties, 'approved')) {
-            content.approved = approved;
-        }
-        if (Object.prototype.hasOwnProperty.call(properties, 'allow')) {
-            content.allow = approved;
-        }
-        if (reason && Object.prototype.hasOwnProperty.call(properties, 'reason')) {
-            content.reason = reason;
+        for (const [key, schema] of Object.entries(properties)) {
+            const isRequired = required.includes(key);
+            const preferred = (() => {
+                if (key === 'decision') return decision;
+                if (key === 'approved' || key === 'allow' || key === 'confirm') return approved;
+                if (key === 'reason' && reason) return reason;
+                return null;
+            })();
+
+            if (preferred !== null) {
+                const value = coerceValueForSchema(schema, decision, approved);
+                content[key] = value ?? preferred;
+                continue;
+            }
+
+            if (isRequired) {
+                const value = coerceValueForSchema(schema, decision, approved);
+                if (value !== null) {
+                    content[key] = value;
+                }
+            }
         }
 
         for (const key of required) {
-            if (!Object.prototype.hasOwnProperty.call(content, key)) {
-                content[key] = decision;
+            if (Object.prototype.hasOwnProperty.call(content, key)) {
+                continue;
+            }
+            const value = coerceValueForSchema(properties[key], decision, approved);
+            if (value !== null) {
+                content[key] = value;
             }
         }
 
         if (Object.keys(content).length === 0) {
             const fallbackKey = required[0] ?? Object.keys(properties)[0];
             if (fallbackKey) {
-                content[fallbackKey] = decision;
+                const value = coerceValueForSchema(properties[fallbackKey], decision, approved);
+                content[fallbackKey] = value ?? decision;
             }
         }
 
@@ -259,7 +390,7 @@ function buildElicitationContent(
     if (schemaType === 'boolean') return approved;
     if (schemaType === 'string') return decision;
     if (schemaType === 'array') return [decision];
-    if (schemaType === 'number') return approved ? 1 : 0;
+    if (schemaType === 'number' || schemaType === 'integer') return approved ? 1 : 0;
 
     const fallback: Record<string, ElicitResponseValue> = {
         decision,
@@ -409,6 +540,7 @@ export class CodexMcpClient {
                 const toolCallId = extractToolCallId(params) ?? randomUUID();
                 const command = extractCommand(params);
                 const cwd = extractCwd(params);
+                const prompt = extractPrompt(params);
                 const toolName = 'CodexBash';
 
                 // If no permission handler set, deny by default
@@ -418,14 +550,22 @@ export class CodexMcpClient {
                 }
 
                 try {
+                    const input: Record<string, unknown> = {
+                        command: command ?? (prompt.prompt ? prompt.prompt : []),
+                        cwd: cwd ?? ''
+                    };
+                    if (prompt.prompt) {
+                        input.prompt = prompt.prompt;
+                    }
+                    if (prompt.description) {
+                        input.description = prompt.description;
+                    }
+
                     // Request permission through the handler
                     const result = await this.permissionHandler.handleToolCall(
                         toolCallId,
                         toolName,
-                        {
-                            command: command ?? [],
-                            cwd: cwd ?? ''
-                        }
+                        input
                     );
 
                     logger.debug('[CodexMCP] Permission result:', result);
