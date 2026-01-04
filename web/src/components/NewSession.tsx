@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/Spinner'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
-import { useRecentPaths } from '@/hooks/useRecentPaths'
 
 type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok'
 
@@ -79,7 +78,6 @@ export function NewSession(props: {
     const { haptic } = usePlatform()
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
     const isFormDisabled = isPending || props.isLoading
-    const { getRecentPaths, addRecentPath, getLastUsedMachineId, setLastUsedMachineId } = useRecentPaths()
 
     const [machineId, setMachineId] = useState<string | null>(null)
     const [projectPath, setProjectPath] = useState('')
@@ -104,62 +102,31 @@ export function NewSession(props: {
         [projects, projectPath]
     )
 
-    const recentPaths = useMemo(() => getRecentPaths(machineId), [getRecentPaths, machineId])
     const projectSuggestions = useMemo(() => {
-        // 创建路径到项目名的映射
-        const pathToName = new Map<string, string>()
-        for (const project of projects) {
-            pathToName.set(project.path, project.name)
-        }
+        return projects.map((project) => ({
+            value: project.path,
+            label: project.name
+        }))
+    }, [projects])
 
-        const seen = new Set<string>()
-        const suggestions: Array<{ value: string; label?: string }> = []
-
-        // 先添加最近使用的路径，如果能匹配到项目则使用项目名
-        for (const recent of recentPaths) {
-            if (seen.has(recent)) continue
-            seen.add(recent)
-            const projectName = pathToName.get(recent)
-            suggestions.push({ value: recent, label: projectName })
-        }
-
-        // 再添加未使用过的项目
-        for (const project of projects) {
-            if (seen.has(project.path)) continue
-            seen.add(project.path)
-            suggestions.push({ value: project.path, label: project.name })
-        }
-        return suggestions
-    }, [projects, recentPaths])
-
-    // Initialize with last used machine or first available
+    // Initialize with first available machine
     useEffect(() => {
         if (props.machines.length === 0) return
         if (machineId && props.machines.find((m) => m.id === machineId)) return
 
-        const lastUsed = getLastUsedMachineId()
-        const foundLast = lastUsed ? props.machines.find((m) => m.id === lastUsed) : null
-
-        if (foundLast) {
-            setMachineId(foundLast.id)
-        } else if (props.machines[0]) {
+        if (props.machines[0]) {
             setMachineId(props.machines[0].id)
         }
-    }, [props.machines, machineId, getLastUsedMachineId])
+    }, [props.machines, machineId])
 
+    // Initialize with first available project
     useEffect(() => {
         if (projectPath.trim()) return
-
-        const recent = machineId ? getRecentPaths(machineId) : []
-        if (recent.length > 0) {
-            setProjectPath(recent[0])
-            return
-        }
 
         if (projects.length > 0) {
             setProjectPath(projects[0].path)
         }
-    }, [projectPath, machineId, getRecentPaths, projects])
+    }, [projectPath, projects])
 
     const handleMachineChange = useCallback((newMachineId: string) => {
         setMachineId(newMachineId)
@@ -196,8 +163,6 @@ export function NewSession(props: {
 
             if (result.type === 'success') {
                 haptic.notification('success')
-                addRecentPath(machineId, directory)
-                setLastUsedMachineId(machineId)
                 props.onSuccess(result.sessionId)
                 return
             }

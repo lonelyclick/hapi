@@ -22,6 +22,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
 import { notifyTaskComplete, getPendingNotification, clearPendingNotification, useWebPushSubscription } from '@/hooks/useNotification'
 import { addAlert } from '@/hooks/useAdvisorAlert'
+import { addIdleSuggestion } from '@/hooks/useIdleSuggestion'
 import { AdvisorAlertBanner } from '@/components/AdvisorAlertBanner'
 
 export function App() {
@@ -262,6 +263,38 @@ export function App() {
         if (event.type === 'advisor-alert' && event.alert) {
             console.log('[advisor] alert received', event.alert)
             addAlert(event.alert)
+            return
+        }
+
+        // 处理空闲建议事件
+        if (event.type === 'advisor-idle-suggestion' && event.idleSuggestion) {
+            console.log('[advisor] idle suggestion received', event.idleSuggestion)
+            addIdleSuggestion(event.idleSuggestion)
+
+            // 检查是否需要通知
+            const isCurrentSession = event.sessionId === selectedSessionId
+            const isAppVisible = document.visibilityState === 'visible'
+
+            if (!isCurrentSession || !isAppVisible) {
+                // 用户不在当前页面，发送浏览器通知
+                // TODO: 可以在这里添加浏览器通知逻辑
+                console.log('[advisor] user not viewing session, may notify', {
+                    sessionId: event.sessionId,
+                    isCurrentSession,
+                    isAppVisible
+                })
+
+                // 高优先级时也显示全局提示条
+                if (event.idleSuggestion.severity === 'high' || event.idleSuggestion.severity === 'critical') {
+                    addAlert({
+                        suggestionId: event.idleSuggestion.suggestionId,
+                        title: `💡 ${event.idleSuggestion.title}`,
+                        detail: event.idleSuggestion.reason,
+                        severity: event.idleSuggestion.severity as 'high' | 'critical',
+                        sourceSessionId: event.sessionId
+                    })
+                }
+            }
             return
         }
 

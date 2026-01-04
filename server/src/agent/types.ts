@@ -90,7 +90,21 @@ export interface AdvisorSuggestionStatusEvent {
     status: SuggestionStatus
 }
 
-export type AdvisorEventData = AdvisorSuggestionEvent | AdvisorSuggestionStatusEvent
+// 空闲建议事件（会话静默后触发）
+export interface AdvisorIdleSuggestionEvent {
+    type: 'advisor-idle-suggestion'
+    suggestionId: string
+    sessionId: string
+    title: string
+    detail: string
+    reason: string  // 触发原因
+    category: 'todo_check' | 'error_analysis' | 'code_review' | 'general'
+    severity: SuggestionSeverity
+    suggestedText?: string  // 建议填入输入框的文本
+    createdAt: number
+}
+
+export type AdvisorEventData = AdvisorSuggestionEvent | AdvisorSuggestionStatusEvent | AdvisorIdleSuggestionEvent
 
 // 事件消息格式
 export interface AdvisorEventMessage {

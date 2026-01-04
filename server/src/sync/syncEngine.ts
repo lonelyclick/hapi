@@ -160,6 +160,7 @@ export type SyncEventType =
     | 'online-users-changed'
     | 'typing-changed'
     | 'advisor-alert'
+    | 'advisor-idle-suggestion'
 
 export type OnlineUser = {
     email: string
@@ -184,6 +185,18 @@ export type AdvisorAlertData = {
     sourceSessionId?: string
 }
 
+export type AdvisorIdleSuggestionData = {
+    suggestionId: string
+    sessionId: string
+    title: string
+    detail: string
+    reason: string
+    category: 'todo_check' | 'error_analysis' | 'code_review' | 'general'
+    severity: 'low' | 'medium' | 'high' | 'critical'
+    suggestedText?: string
+    createdAt: number
+}
+
 export interface SyncEvent {
     type: SyncEventType
     namespace?: string
@@ -194,6 +207,7 @@ export interface SyncEvent {
     users?: OnlineUser[]
     typing?: TypingUser
     alert?: AdvisorAlertData
+    idleSuggestion?: AdvisorIdleSuggestionData
 }
 
 export type SyncEventListener = (event: SyncEvent) => void
@@ -245,7 +259,7 @@ export class SyncEngine {
         return () => this.listeners.delete(listener)
     }
 
-    private emit(event: SyncEvent): void {
+    emit(event: SyncEvent): void {
         const namespace = this.resolveNamespace(event)
         const enrichedEvent = namespace ? { ...event, namespace } : event
 
@@ -265,12 +279,20 @@ export class SyncEngine {
                 machineId: event.machineId,
                 message: event.message
             }
+            : event.type === 'advisor-idle-suggestion'
+            ? {
+                type: event.type,
+                namespace,
+                sessionId: event.sessionId,
+                idleSuggestion: event.idleSuggestion
+            }
             : {
                 type: event.type,
                 namespace,
                 sessionId: event.sessionId,
                 machineId: event.machineId,
-                data: event.data
+                data: event.data,
+                alert: event.alert
             }
 
         this.sseManager.broadcast(webappEvent)

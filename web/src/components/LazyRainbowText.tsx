@@ -1,5 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
+import { ImageViewer, parseImagesFromText, hasImageReferences } from '@/components/ImageViewer'
+import { useHappyChatContextSafe } from '@/components/AssistantChat/context'
 
 // 特效单词列表 - 可以轻松扩展
 const RAINBOW_WORDS = [
@@ -102,10 +104,39 @@ function processChildrenForRainbow(children: React.ReactNode): React.ReactNode {
     })
 }
 
+// Build image URL from relative path
+function buildImageUrl(path: string, sessionId: string): string {
+    // The image is stored in .hapi/uploads/ directory on the CLI side
+    // We need to fetch it through the session file read API
+    const encodedPath = encodeURIComponent(path)
+    return `/api/sessions/${encodeURIComponent(sessionId)}/file?path=${encodedPath}&raw=true`
+}
+
+// Component to render images from message
+function MessageImages({ images, sessionId }: { images: string[]; sessionId: string }) {
+    if (images.length === 0) return null
+
+    return (
+        <div className="flex flex-wrap gap-2 mt-2">
+            {images.map((imagePath, index) => (
+                <ImageViewer
+                    key={`${imagePath}-${index}`}
+                    src={buildImageUrl(imagePath, sessionId)}
+                    alt={`Uploaded image ${index + 1}`}
+                />
+            ))}
+        </div>
+    )
+}
+
 export function LazyRainbowText(props: { text: string }) {
     const text = props.text
     const ref = useRef<HTMLDivElement>(null)
     const [hasBeenVisible, setHasBeenVisible] = useState(false)
+
+    // Get context for building image URLs (safe version that won't throw)
+    const context = useHappyChatContextSafe()
+    const sessionId = context?.sessionId ?? ''
 
     useEffect(() => {
         const el = ref.current
@@ -127,11 +158,34 @@ export function LazyRainbowText(props: { text: string }) {
     // Quick check: if no special words, just render markdown
     const hasSpecialWord = hasAnySpecialWord(text, RAINBOW_WORDS)
 
+    // Check for image references
+    const containsImages = hasImageReferences(text)
+
     const rainbowComponents = useMemo(() => ({
         p: ({ children }: { children?: React.ReactNode }) => (
             <p>{processChildrenForRainbow(children)}</p>
         ),
     }), [])
+
+    // If text contains images, parse and render them separately
+    if (containsImages && sessionId) {
+        const parts = parseImagesFromText(text)
+        const textParts = parts.filter(p => p.type === 'text').map(p => p.content)
+        const imagePaths = parts.filter(p => p.type === 'image').map(p => p.content)
+        const textContent = textParts.join('\n\n')
+
+        return (
+            <div ref={ref}>
+                {textContent && (
+                    <MarkdownRenderer
+                        content={textContent}
+                        components={hasSpecialWord && hasBeenVisible ? rainbowComponents : undefined}
+                    />
+                )}
+                <MessageImages images={imagePaths} sessionId={sessionId} />
+            </div>
+        )
+    }
 
     return (
         <div ref={ref}>

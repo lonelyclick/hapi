@@ -28,6 +28,8 @@ import { FloatingOverlay } from '@/components/ChatInput/FloatingOverlay'
 import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { StatusBar } from '@/components/AssistantChat/StatusBar'
 import { ComposerButtons } from '@/components/AssistantChat/ComposerButtons'
+import { IdleSuggestionCard } from '@/components/IdleSuggestionCard'
+import { useIdleSuggestion } from '@/hooks/useIdleSuggestion'
 import type { ApiClient } from '@/api/client'
 
 export interface TextInputState {
@@ -251,9 +253,20 @@ export function HappyComposer(props: {
     const prevControlledByUser = useRef(controlledByUser)
     const sttPrefixRef = useRef<string>('')
     const [isUploading, setIsUploading] = useState(false)
+    const [uploadedImages, setUploadedImages] = useState<Array<{ path: string; previewUrl: string }>>([])
+    const MAX_IMAGES = 5
 
     // Session 草稿管理
     const { getDraft, setDraft, clearDraft } = useSessionDraft(sessionId)
+
+    // 空闲建议管理
+    const {
+        suggestion: idleSuggestion,
+        hasPendingSuggestion,
+        apply: applyIdleSuggestion,
+        dismiss: dismissIdleSuggestion,
+        markViewed: markIdleSuggestionViewed
+    } = useIdleSuggestion(sessionId)
     const draftLoadedRef = useRef(false)
     const prevSessionIdRef = useRef(sessionId)
 
@@ -300,6 +313,8 @@ export function HappyComposer(props: {
         }
         draftLoadedRef.current = true
         resetNavigation()
+        // 清空上传的图片
+        setUploadedImages([])
     }, [sessionId]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // 实时保存草稿
@@ -403,6 +418,29 @@ export function HappyComposer(props: {
 
         haptic('light')
     }, [assistantApi, suggestions, inputState, autocompletePrefixes, haptic])
+
+    // 处理空闲建议应用
+    const handleIdleSuggestionApply = useCallback(() => {
+        const suggestedText = applyIdleSuggestion()
+        if (suggestedText) {
+            assistantApi.composer().setText(suggestedText)
+            setInputState({
+                text: suggestedText,
+                selection: { start: suggestedText.length, end: suggestedText.length }
+            })
+            setTimeout(() => {
+                textareaRef.current?.focus()
+            }, 0)
+        }
+        haptic('success')
+    }, [applyIdleSuggestion, assistantApi, haptic])
+
+    // 标记空闲建议已查看
+    useEffect(() => {
+        if (hasPendingSuggestion) {
+            markIdleSuggestionViewed()
+        }
+    }, [hasPendingSuggestion, markIdleSuggestionViewed])
 
     const abortDisabled = controlsDisabled || isAborting || !threadIsRunning
     const switchDisabled = controlsDisabled || isSwitching || !controlledByUser
@@ -629,15 +667,27 @@ export function HappyComposer(props: {
 
     const handleSubmit = useCallback(() => {
         setShowContinueHint(false)
+
+        // 如果有上传的图片，将路径添加到消息中
+        if (uploadedImages.length > 0) {
+            const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
+            const currentText = composerText.trim()
+            const separator = currentText ? '\n\n' : ''
+            const newText = `${currentText}${separator}${imageRefs}`
+            assistantApi.composer().setText(newText)
+            // 清空图片列表
+            setUploadedImages([])
+        }
+
         // 添加到历史记录
-        if (trimmed) {
+        if (trimmed || uploadedImages.length > 0) {
             addToHistory(trimmed)
         }
         // 清除草稿
         clearDraft()
         // 重置历史导航
         resetNavigation()
-    }, [trimmed, addToHistory, clearDraft, resetNavigation])
+    }, [trimmed, addToHistory, clearDraft, resetNavigation, uploadedImages, composerText, assistantApi])
 
     const handlePermissionChange = useCallback((mode: PermissionMode) => {
         if (!onPermissionModeChange || controlsDisabled) return
@@ -673,6 +723,13 @@ export function HappyComposer(props: {
         // Reset input for next selection
         e.target.value = ''
 
+        // Check max images limit
+        if (uploadedImages.length >= MAX_IMAGES) {
+            haptic('error')
+            console.error(`Maximum ${MAX_IMAGES} images allowed`)
+            return
+        }
+
         // Validate file type
         if (!file.type.startsWith('image/')) {
             haptic('error')
@@ -692,35 +749,27 @@ export function HappyComposer(props: {
         haptic('light')
 
         try {
-            // Read file as base64
+            // Read file as base64 and create preview URL
             const reader = new FileReader()
-            const base64Promise = new Promise<string>((resolve, reject) => {
+            const dataUrlPromise = new Promise<string>((resolve, reject) => {
                 reader.onload = () => {
-                    const result = reader.result as string
-                    // Remove data URL prefix (e.g., "data:image/png;base64,")
-                    const base64 = result.split(',')[1]
-                    resolve(base64)
+                    resolve(reader.result as string)
                 }
                 reader.onerror = reject
             })
             reader.readAsDataURL(file)
-            const content = await base64Promise
+            const dataUrl = await dataUrlPromise
+
+            // Extract base64 content (remove data URL prefix)
+            const base64Content = dataUrl.split(',')[1]
 
             // Upload to server
-            const result = await apiClient.uploadImage(sessionId, file.name, content, file.type)
+            const result = await apiClient.uploadImage(sessionId, file.name, base64Content, file.type)
 
             if (result.success && result.path) {
                 haptic('success')
-                // Append image path to input
-                const imagePath = result.path
-                const currentText = composerText.trim()
-                const separator = currentText ? '\n' : ''
-                const newText = `${currentText}${separator}[Image: ${imagePath}]`
-                assistantApi.composer().setText(newText)
-                setInputState({
-                    text: newText,
-                    selection: { start: newText.length, end: newText.length }
-                })
+                // Add to uploaded images list with preview
+                setUploadedImages(prev => [...prev, { path: result.path!, previewUrl: dataUrl }])
             } else {
                 haptic('error')
                 console.error('Failed to upload image:', result.error)
@@ -731,7 +780,12 @@ export function HappyComposer(props: {
         } finally {
             setIsUploading(false)
         }
-    }, [apiClient, sessionId, composerText, assistantApi, haptic])
+    }, [apiClient, sessionId, uploadedImages.length, haptic])
+
+    const handleRemoveImage = useCallback((index: number) => {
+        setUploadedImages(prev => prev.filter((_, i) => i !== index))
+        haptic('light')
+    }, [haptic])
 
     const handlePreviewConfirm = useCallback(() => {
         if (!optimizePreview) return
@@ -1153,6 +1207,19 @@ export function HappyComposer(props: {
             )
         }
 
+        // 空闲建议卡片（当无设置面板和自动补全时显示）
+        if (hasPendingSuggestion && idleSuggestion) {
+            return (
+                <div className="absolute bottom-[100%] mb-2 w-full px-1">
+                    <IdleSuggestionCard
+                        suggestion={idleSuggestion}
+                        onApply={handleIdleSuggestionApply}
+                        onDismiss={dismissIdleSuggestion}
+                    />
+                </div>
+            )
+        }
+
         return null
     }, [
         showSettings,
@@ -1174,7 +1241,11 @@ export function HappyComposer(props: {
         handleModelChange,
         handleSuggestionSelect,
         autoOptimize,
-        handleAutoOptimizeToggle
+        handleAutoOptimizeToggle,
+        hasPendingSuggestion,
+        idleSuggestion,
+        handleIdleSuggestionApply,
+        dismissIdleSuggestion
     ])
 
     const volumePercent = Math.max(0, Math.min(100, Math.round((speechToText.volume ?? 0) * 100)))
@@ -1222,6 +1293,53 @@ export function HappyComposer(props: {
                     ) : null}
 
                     <div className="overflow-hidden rounded-[20px] bg-[var(--app-secondary-bg)]">
+                        {/* Image Preview Area */}
+                        {uploadedImages.length > 0 ? (
+                            <div className="flex gap-2 px-3 pt-3 pb-1 overflow-x-auto">
+                                {uploadedImages.map((img, index) => (
+                                    <div key={img.path} className="relative flex-shrink-0 group">
+                                        <img
+                                            src={img.previewUrl}
+                                            alt={`Upload ${index + 1}`}
+                                            className="h-16 w-16 rounded-lg object-cover border border-[var(--app-divider)]"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveImage(index)}
+                                            className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white text-xs shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                                            aria-label="Remove image"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="18" y1="6" x2="6" y2="18" />
+                                                <line x1="6" y1="6" x2="18" y2="18" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                ))}
+                                {uploadedImages.length < MAX_IMAGES && !isUploading ? (
+                                    <button
+                                        type="button"
+                                        onClick={handleImageClick}
+                                        className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-[var(--app-divider)] text-[var(--app-hint)] hover:border-[var(--app-link)] hover:text-[var(--app-link)] transition-colors"
+                                        aria-label="Add more images"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <line x1="12" y1="5" x2="12" y2="19" />
+                                            <line x1="5" y1="12" x2="19" y2="12" />
+                                        </svg>
+                                    </button>
+                                ) : null}
+                                {isUploading ? (
+                                    <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-[var(--app-link)] text-[var(--app-link)]">
+                                        <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
+                                            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                                        </svg>
+                                    </div>
+                                ) : null}
+                            </div>
+                        ) : null}
+
                         <div className="relative flex items-center px-4 py-3">
                             <ComposerPrimitive.Input
                                 ref={textareaRef}

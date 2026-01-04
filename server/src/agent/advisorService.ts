@@ -3,7 +3,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { SyncEngine, SyncEvent, DecryptedMessage, Session, AdvisorAlertData } from '../sync/syncEngine'
+import type { SyncEngine, SyncEvent, DecryptedMessage, Session, AdvisorAlertData, AdvisorIdleSuggestionData } from '../sync/syncEngine'
 import type { Store, StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { AdvisorScheduler } from './advisorScheduler'
 import { SuggestionEvaluator } from './suggestionEvaluator'
@@ -36,10 +36,19 @@ export class AdvisorService {
 
     private unsubscribe: (() => void) | null = null
     private pendingMessageCounts: Map<string, number> = new Map()  // sessionId -> 待处理消息计数
-    private idleTimers: Map<string, NodeJS.Timeout> = new Map()    // sessionId -> 空闲计时器
+    private idleTimers: Map<string, NodeJS.Timeout> = new Map()    // sessionId -> 空闲计时器（60秒摘要）
+    private idleCheckTimers: Map<string, NodeJS.Timeout> = new Map()  // sessionId -> 空闲检查计时器（30秒建议）
     private broadcastedSet: Set<string> = new Set()                // 已广播的 suggestionId:status:sessionId
     private evaluationTimer: NodeJS.Timeout | null = null
     private telegramNotifier: AdvisorTelegramNotifier | null = null
+
+    // 空闲检查配置
+    private readonly idleCheckTimeoutMs = 30_000  // 30秒静默后触发检查
+
+    // SESSION_SUMMARY 推送频率控制
+    private lastSummaryHash: Map<string, string> = new Map()       // sessionId -> 上次摘要的内容哈希
+    private lastSummaryTime: Map<string, number> = new Map()       // sessionId -> 上次推送时间戳
+    private readonly summaryMinIntervalMs = 30_000                 // 最小推送间隔 30 秒
 
     constructor(
         syncEngine: SyncEngine,
@@ -103,6 +112,12 @@ export class AdvisorService {
         }
         this.idleTimers.clear()
 
+        // 清理所有空闲检查计时器
+        for (const timer of this.idleCheckTimers.values()) {
+            clearTimeout(timer)
+        }
+        this.idleCheckTimers.clear()
+
         console.log('[AdvisorService] Stopped')
     }
 
@@ -149,8 +164,11 @@ export class AdvisorService {
         const currentCount = (this.pendingMessageCounts.get(sessionId) ?? 0) + 1
         this.pendingMessageCounts.set(sessionId, currentCount)
 
-        // 重置空闲计时器
+        // 重置空闲计时器（60秒摘要）
         this.resetIdleTimer(sessionId)
+
+        // 重置空闲检查计时器（30秒建议）
+        this.resetIdleCheckTimer(sessionId)
 
         // 检查是否达到阈值
         if (currentCount >= this.summaryThreshold) {
@@ -180,6 +198,204 @@ export class AdvisorService {
         }, this.summaryIdleTimeoutMs)
 
         this.idleTimers.set(sessionId, timer)
+    }
+
+    /**
+     * 重置空闲检查计时器（30秒静默后触发建议检查）
+     */
+    private resetIdleCheckTimer(sessionId: string): void {
+        const existingTimer = this.idleCheckTimers.get(sessionId)
+        if (existingTimer) {
+            clearTimeout(existingTimer)
+        }
+
+        const timer = setTimeout(() => {
+            this.idleCheckTimers.delete(sessionId)
+            this.performIdleCheck(sessionId).catch(error => {
+                console.error('[AdvisorService] Idle check error:', error)
+            })
+        }, this.idleCheckTimeoutMs)
+
+        this.idleCheckTimers.set(sessionId, timer)
+    }
+
+    /**
+     * 执行空闲检查
+     */
+    private async performIdleCheck(sessionId: string): Promise<void> {
+        const session = this.syncEngine.getSession(sessionId)
+        if (!session || !session.active) {
+            return
+        }
+
+        // 本地快速检查
+        const issues = this.quickLocalCheck(session)
+
+        if (issues.length === 0) {
+            console.log(`[AdvisorService] Idle check passed for ${sessionId}`)
+            return
+        }
+
+        // 有问题，生成建议
+        await this.generateIdleSuggestion(sessionId, session, issues)
+    }
+
+    /**
+     * 本地快速检查（无需 AI）
+     */
+    private quickLocalCheck(session: Session): Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }> {
+        const issues: Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }> = []
+
+        // 1. 检查 Todos 完成情况
+        if (session.todos && Array.isArray(session.todos) && session.todos.length > 0) {
+            const todos = session.todos as Array<{ content?: string; status?: string }>
+            const inProgressTodos = todos.filter(t => t.status === 'in_progress')
+            const pendingTodos = todos.filter(t => t.status === 'pending')
+
+            if (inProgressTodos.length > 0) {
+                const todoTitles = inProgressTodos.slice(0, 3).map(t => t.content || '未命名任务').join(', ')
+                issues.push({
+                    type: 'incomplete_todos',
+                    description: `有 ${inProgressTodos.length} 个任务正在进行中: ${todoTitles}`,
+                    severity: 'medium',
+                    data: { inProgressCount: inProgressTodos.length, pendingCount: pendingTodos.length, titles: todoTitles }
+                })
+            }
+        }
+
+        // 2. 检查最近消息中的错误
+        const recentMessages = this.syncEngine.getMessagesAfter(session.id, {
+            afterSeq: Math.max(0, session.seq - 20),
+            limit: 20
+        })
+
+        let errorCount = 0
+        let lastError = ''
+        for (const msg of recentMessages) {
+            const content = msg.content as Record<string, unknown>
+            const text = this.extractMessageText(content)
+            if (/error|failed|exception|crash|错误|失败|异常/i.test(text)) {
+                errorCount++
+                if (!lastError && text.length < 200) {
+                    lastError = text.slice(0, 100)
+                }
+            }
+        }
+
+        if (errorCount > 0) {
+            issues.push({
+                type: 'recent_errors',
+                description: `最近有 ${errorCount} 条消息包含错误信息`,
+                severity: errorCount >= 3 ? 'high' : 'medium',
+                data: { errorCount, lastError }
+            })
+        }
+
+        // 3. 检查任务是否卡住（thinking 超时）
+        if (session.thinking && session.thinkingAt) {
+            const thinkingDuration = Date.now() - session.thinkingAt
+            if (thinkingDuration > 120_000) {  // 超过2分钟
+                issues.push({
+                    type: 'stalled_task',
+                    description: `任务已运行 ${Math.floor(thinkingDuration / 60000)} 分钟，可能卡住`,
+                    severity: 'high',
+                    data: { duration: thinkingDuration }
+                })
+            }
+        }
+
+        return issues
+    }
+
+    /**
+     * 从消息内容中提取文本（复用现有逻辑）
+     */
+    private extractMessageText(content: Record<string, unknown>): string {
+        const innerContent = content.content as Record<string, unknown> | string | null
+        if (typeof innerContent === 'string') {
+            return innerContent
+        }
+        if (innerContent && typeof innerContent === 'object') {
+            const contentType = (innerContent as Record<string, unknown>).type as string
+            if (contentType === 'codex') {
+                const data = (innerContent as Record<string, unknown>).data as Record<string, unknown>
+                if (data?.type === 'message' && typeof data.message === 'string') {
+                    return data.message
+                }
+            } else if (contentType === 'text') {
+                return ((innerContent as Record<string, unknown>).text as string) || ''
+            }
+        }
+        return ''
+    }
+
+    /**
+     * 生成空闲建议
+     */
+    private async generateIdleSuggestion(
+        sessionId: string,
+        session: Session,
+        issues: Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }>
+    ): Promise<void> {
+        const primaryIssue = issues[0]
+        if (!primaryIssue) return
+
+        // 根据问题类型生成建议
+        const categoryMap: Record<string, 'todo_check' | 'error_analysis' | 'code_review' | 'general'> = {
+            'incomplete_todos': 'todo_check',
+            'recent_errors': 'error_analysis',
+            'stalled_task': 'general'
+        }
+
+        const titleMap: Record<string, string> = {
+            'incomplete_todos': '继续未完成的任务',
+            'recent_errors': '处理检测到的错误',
+            'stalled_task': '检查任务运行状态'
+        }
+
+        const suggestedTextMap: Record<string, (data: unknown) => string> = {
+            'incomplete_todos': (data) => {
+                const d = data as { titles?: string }
+                return `请继续完成任务: ${d?.titles || '进行中的任务'}`
+            },
+            'recent_errors': (data) => {
+                const d = data as { lastError?: string }
+                return d?.lastError
+                    ? `请检查并修复错误: ${d.lastError}`
+                    : '请检查最近的错误并修复'
+            },
+            'stalled_task': () => '任务似乎卡住了，请检查运行状态或考虑重启'
+        }
+
+        const suggestion: AdvisorIdleSuggestionData = {
+            suggestionId: randomUUID(),
+            sessionId,
+            title: titleMap[primaryIssue.type] || '会话检查建议',
+            detail: issues.map(i => i.description).join('\n'),
+            reason: `会话静默 30 秒，检测到 ${issues.length} 个待处理项`,
+            category: categoryMap[primaryIssue.type] || 'general',
+            severity: primaryIssue.severity,
+            suggestedText: suggestedTextMap[primaryIssue.type]?.(primaryIssue.data),
+            createdAt: Date.now()
+        }
+
+        // 广播建议
+        await this.broadcastIdleSuggestion(suggestion)
+    }
+
+    /**
+     * 广播空闲建议
+     */
+    private async broadcastIdleSuggestion(suggestion: AdvisorIdleSuggestionData): Promise<void> {
+        const event: SyncEvent = {
+            type: 'advisor-idle-suggestion',
+            namespace: this.namespace,
+            sessionId: suggestion.sessionId,
+            idleSuggestion: suggestion
+        }
+
+        this.syncEngine.emit(event)
+        console.log(`[AdvisorService] Idle suggestion broadcasted: ${suggestion.suggestionId} - ${suggestion.title}`)
     }
 
     /**
@@ -313,33 +529,41 @@ export class AdvisorService {
                 continue
             }
 
-            // 简单的活动分类
-            if (text.length > 200) {
-                activities.push(text.slice(0, 200) + '...')
+            // 简单的活动分类 - 限制长度以节省 token
+            if (text.length > 100) {
+                activities.push(text.slice(0, 100) + '...')
             } else {
                 activities.push(text)
             }
 
             // 检测错误
             if (/error|failed|exception|crash|错误|失败/i.test(text)) {
-                errors.push(text.slice(0, 100))
+                errors.push(text.slice(0, 80))
             }
 
-            // 检测决策
-            if (/decided|choose|选择|决定|采用|will use|using|用/i.test(text)) {
-                decisions.push(text.slice(0, 100))
+            // 检测决策 - 只保留关键决策
+            if (/decided|choose|选择|决定|采用|will use|架构|设计/i.test(text)) {
+                decisions.push(text.slice(0, 80))
             }
 
             // 检测代码变更 (来自 agent 的消息)
             if (isAgentMessage && /created|modified|edited|deleted|wrote|创建|修改|编辑|删除|写入/i.test(text)) {
-                codeChanges.push(text.slice(0, 100))
+                codeChanges.push(text.slice(0, 80))
             }
         }
 
         // 如果当前增量没有活动，使用之前的活动
         const finalActivity = activities.length > 0
-            ? activities.slice(-5).join('\n')
+            ? activities.slice(-3).join('\n')  // 减少为3条
             : (previousSummary?.recentActivity || '')
+
+        // 精简 todos - 只保留状态和标题
+        const simplifiedTodos = session.todos && Array.isArray(session.todos)
+            ? (session.todos as Array<{ content?: string; status?: string }>)
+                .filter(t => t.status === 'in_progress' || t.status === 'pending')
+                .slice(0, 5)
+                .map(t => ({ s: t.status?.charAt(0), t: t.content?.slice(0, 50) }))
+            : undefined
 
         return {
             sessionId: session.id,
@@ -347,14 +571,66 @@ export class AdvisorService {
             workDir,
             project,
             recentActivity: finalActivity,
-            todos: session.todos,
-            codeChanges: codeChanges.slice(-5),
-            errors: errors.slice(-3),
-            decisions: decisions.slice(-3),
+            todos: simplifiedTodos,
+            codeChanges: codeChanges.slice(-3),  // 减少为3条
+            errors: errors.slice(-2),  // 减少为2条
+            decisions: decisions.slice(-2),  // 减少为2条
             messageCount: filteredMessages.length,
             lastMessageSeq: filteredMessages[filteredMessages.length - 1]?.seq ?? 0,
             timestamp: Date.now()
         }
+    }
+
+    /**
+     * 计算摘要内容哈希（用于去重）
+     */
+    private computeSummaryHash(summary: SessionSummary): string {
+        // 只对关键内容计算哈希，忽略时间戳等动态字段
+        const hashContent = {
+            recentActivity: summary.recentActivity,
+            codeChanges: summary.codeChanges,
+            errors: summary.errors,
+            decisions: summary.decisions,
+            todos: summary.todos
+        }
+        return JSON.stringify(hashContent)
+    }
+
+    /**
+     * 检查是否应该推送摘要
+     */
+    private shouldDeliverSummary(sessionId: string, summary: SessionSummary, hash: string): { should: boolean; reason: string } {
+        const now = Date.now()
+        const lastTime = this.lastSummaryTime.get(sessionId) ?? 0
+        const lastHash = this.lastSummaryHash.get(sessionId)
+        const timeSinceLastPush = now - lastTime
+
+        // 1. messageCount=0 时，降低推送频率或跳过
+        if (summary.messageCount === 0) {
+            // 如果没有新消息，完全跳过推送
+            return { should: false, reason: 'messageCount=0, no new activity' }
+        }
+
+        // 2. 检查推送间隔
+        if (timeSinceLastPush < this.summaryMinIntervalMs) {
+            return { should: false, reason: `interval too short (${Math.round(timeSinceLastPush / 1000)}s < ${this.summaryMinIntervalMs / 1000}s)` }
+        }
+
+        // 3. 检查内容是否有变化
+        if (lastHash && hash === lastHash) {
+            return { should: false, reason: 'content unchanged (duplicate)' }
+        }
+
+        // 4. 检查是否有实质性活动
+        const hasActivity = Boolean(summary.recentActivity) ||
+            (summary.codeChanges?.length ?? 0) > 0 ||
+            (summary.errors?.length ?? 0) > 0
+
+        if (!hasActivity) {
+            return { should: false, reason: 'no meaningful activity' }
+        }
+
+        return { should: true, reason: 'ok' }
     }
 
     /**
@@ -367,6 +643,16 @@ export class AdvisorService {
             return
         }
 
+        const sessionId = summary.sessionId
+        const hash = this.computeSummaryHash(summary)
+
+        // 检查是否应该推送
+        const { should, reason } = this.shouldDeliverSummary(sessionId, summary, hash)
+        if (!should) {
+            console.log(`[AdvisorService] Skip summary for session ${sessionId}: ${reason}`)
+            return
+        }
+
         const content = `[[SESSION_SUMMARY]]${JSON.stringify(summary, null, 2)}`
 
         try {
@@ -374,7 +660,12 @@ export class AdvisorService {
                 text: content,
                 sentFrom: 'advisor'
             })
-            console.log(`[AdvisorService] Summary delivered for session ${summary.sessionId}`)
+
+            // 更新推送记录
+            this.lastSummaryHash.set(sessionId, hash)
+            this.lastSummaryTime.set(sessionId, Date.now())
+
+            console.log(`[AdvisorService] Summary delivered for session ${sessionId}`)
         } catch (error) {
             console.error('[AdvisorService] Failed to deliver summary:', error)
         }

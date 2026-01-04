@@ -328,6 +328,18 @@ export type AdvisorAlertData = {
     sourceSessionId?: string
 }
 
+export type AdvisorIdleSuggestionData = {
+    suggestionId: string
+    sessionId: string
+    title: string
+    detail: string
+    reason: string
+    category: 'todo_check' | 'error_analysis' | 'code_review' | 'general'
+    severity: 'low' | 'medium' | 'high' | 'critical'
+    suggestedText?: string
+    createdAt: number
+}
+
 export type SyncEvent =
     | { type: 'session-added'; sessionId: string; data?: unknown; namespace?: string }
     | { type: 'session-updated'; sessionId: string; data?: unknown; namespace?: string }
@@ -338,5 +350,6 @@ export type SyncEvent =
     | { type: 'online-users-changed'; users: OnlineUser[]; namespace?: string }
     | { type: 'typing-changed'; sessionId: string; typing: TypingUser; namespace?: string }
     | { type: 'advisor-alert'; alert: AdvisorAlertData; namespace?: string }
+    | { type: 'advisor-idle-suggestion'; sessionId: string; idleSuggestion: AdvisorIdleSuggestionData; namespace?: string }
 
 export type OnlineUsersResponse = { users: OnlineUser[] }

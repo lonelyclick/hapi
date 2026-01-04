@@ -128,7 +128,40 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return c.json({ error: 'Invalid file path' }, 400)
         }
 
+        const raw = parseBooleanParam(c.req.query('raw'))
+
         const result = await runRpc(() => engine.readSessionFile(sessionResult.sessionId, parsed.data.path))
+
+        // If raw mode is requested and we have content, return the raw binary data
+        if (raw && result.success && result.content) {
+            const buffer = Buffer.from(result.content, 'base64')
+
+            // Determine content type from file extension
+            const ext = parsed.data.path.split('.').pop()?.toLowerCase() ?? ''
+            const mimeTypes: Record<string, string> = {
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'png': 'image/png',
+                'gif': 'image/gif',
+                'webp': 'image/webp',
+                'svg': 'image/svg+xml',
+                'bmp': 'image/bmp',
+                'ico': 'image/x-icon',
+                'heic': 'image/heic',
+                'heif': 'image/heif'
+            }
+            const contentType = mimeTypes[ext] ?? 'application/octet-stream'
+
+            return new Response(buffer, {
+                status: 200,
+                headers: {
+                    'Content-Type': contentType,
+                    'Content-Length': buffer.length.toString(),
+                    'Cache-Control': 'public, max-age=31536000, immutable'
+                }
+            })
+        }
+
         return c.json(result)
     })
 

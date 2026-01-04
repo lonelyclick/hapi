@@ -29,3 +29,8 @@ export function useHappyChatContext(): HappyChatContextValue {
     }
     return ctx
 }
+
+// Safe version that returns null instead of throwing
+export function useHappyChatContextSafe(): HappyChatContextValue | null {
+    return useContext(HappyChatContext)
+}
