@@ -143,5 +143,56 @@ export interface AdvisorEventMessage {
     }
 }
 
-// 正则匹配模式
-export const ADVISOR_OUTPUT_PATTERN = /\[\[HAPI_ADVISOR\]\]\s*(\{[\s\S]*?\})/g
+// 正则匹配模式 - 匹配 [[HAPI_ADVISOR]] 标记位置
+export const ADVISOR_OUTPUT_MARKER = /\[\[HAPI_ADVISOR\]\]/g
+
+// 从位置开始提取完整 JSON 对象
+export function extractJsonFromPosition(text: string, startPos: number): string | null {
+    // 跳过空白
+    let pos = startPos
+    while (pos < text.length && /\s/.test(text[pos])) {
+        pos++
+    }
+
+    if (text[pos] !== '{') {
+        return null
+    }
+
+    // 手动匹配括号，处理嵌套
+    let depth = 0
+    let inString = false
+    let escape = false
+    const start = pos
+
+    for (; pos < text.length; pos++) {
+        const char = text[pos]
+
+        if (escape) {
+            escape = false
+            continue
+        }
+
+        if (char === '\\' && inString) {
+            escape = true
+            continue
+        }
+
+        if (char === '"' && !escape) {
+            inString = !inString
+            continue
+        }
+
+        if (!inString) {
+            if (char === '{') {
+                depth++
+            } else if (char === '}') {
+                depth--
+                if (depth === 0) {
+                    return text.slice(start, pos + 1)
+                }
+            }
+        }
+    }
+
+    return null
+}

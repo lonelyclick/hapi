@@ -17,7 +17,7 @@ import type {
     AdvisorEventData,
     AdvisorActionRequestOutput
 } from './types'
-import { ADVISOR_OUTPUT_PATTERN } from './types'
+import { ADVISOR_OUTPUT_MARKER, extractJsonFromPosition } from './types'
 import type { AutoIterationService } from './autoIteration'
 import type { ActionRequest } from './autoIteration/types'
 
@@ -1230,28 +1230,36 @@ export class AdvisorService {
         }
 
         // 调试：检查 Advisor 输出
-        if (text.includes('[[HAPI_ADVISOR]]') || text.includes('action_request') || text.includes('DAILY_REVIEW')) {
-            console.log(`[AdvisorService] Parsing advisor output (${text.length} chars), contains HAPI_ADVISOR: ${text.includes('[[HAPI_ADVISOR]]')}`)
+        if (text.includes('[[HAPI_ADVISOR]]')) {
+            console.log(`[AdvisorService] Parsing advisor output (${text.length} chars)`)
         }
 
-        // 查找所有 [[HAPI_ADVISOR]] JSON
-        const matches = text.matchAll(ADVISOR_OUTPUT_PATTERN)
-
+        // 查找所有 [[HAPI_ADVISOR]] 标记并提取 JSON
+        ADVISOR_OUTPUT_MARKER.lastIndex = 0  // 重置正则状态
+        let match
         let matchCount = 0
-        for (const match of matches) {
+
+        while ((match = ADVISOR_OUTPUT_MARKER.exec(text)) !== null) {
+            const markerEnd = match.index + match[0].length
+            const jsonStr = extractJsonFromPosition(text, markerEnd)
+
+            if (!jsonStr) {
+                console.warn(`[AdvisorService] Found [[HAPI_ADVISOR]] at ${match.index} but no valid JSON follows. Next 100 chars:`, text.slice(markerEnd, markerEnd + 100))
+                continue
+            }
+
             matchCount++
-            const jsonStr = match[1]
             try {
                 const output = JSON.parse(jsonStr) as AdvisorOutput
-                console.log(`[AdvisorService] Parsed advisor output: type=${output.type}`)
+                console.log(`[AdvisorService] Parsed advisor output: type=${output.type}, id=${(output as { id?: string }).id || 'N/A'}`)
                 this.handleAdvisorOutput(sessionId, output)
             } catch (error) {
-                console.error('[AdvisorService] Failed to parse advisor output:', error, jsonStr?.slice(0, 200))
+                console.error('[AdvisorService] Failed to parse JSON:', error, 'JSON sample:', jsonStr.slice(0, 200))
             }
         }
 
         if (text.includes('[[HAPI_ADVISOR]]') && matchCount === 0) {
-            console.warn('[AdvisorService] Found [[HAPI_ADVISOR]] but no valid matches. Text sample:', text.slice(0, 500))
+            console.warn('[AdvisorService] Found [[HAPI_ADVISOR]] markers but extracted 0 valid outputs')
         }
     }
 
