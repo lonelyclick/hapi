@@ -321,7 +321,6 @@ export class Store {
                 updated_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_push_subscriptions_namespace ON push_subscriptions(namespace);
-            CREATE INDEX IF NOT EXISTS idx_push_subscriptions_client_id ON push_subscriptions(client_id);
         `)
 
         // Step 2: Migrate existing tables (add missing columns)
@@ -366,6 +365,8 @@ export class Store {
         if (!pushSubColumnNames.has('client_id')) {
             this.db.exec('ALTER TABLE push_subscriptions ADD COLUMN client_id TEXT')
         }
+        // Create index for client_id after the column exists
+        this.db.exec('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_client_id ON push_subscriptions(client_id)')
 
         // Step 3: Create indexes that depend on namespace column (after migration)
         this.db.exec(`
