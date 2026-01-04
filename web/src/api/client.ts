@@ -667,17 +667,19 @@ export class ApiClient {
         sessionId: string
         creatorChatId: string | null
         subscribers: string[]
+        clientIdSubscribers: string[]
         totalRecipients: number
     }> {
         return await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/subscribers`)
     }
 
-    async subscribeToSession(sessionId: string, chatId: string): Promise<{
+    async subscribeToSession(sessionId: string, options: { chatId?: string; clientId?: string }): Promise<{
         ok: boolean
         subscription: {
             id: number
             sessionId: string
-            chatId: string
+            chatId: string | null
+            clientId: string | null
             namespace: string
             subscribedAt: number
         }
@@ -686,19 +688,19 @@ export class ApiClient {
             `/api/sessions/${encodeURIComponent(sessionId)}/subscribe`,
             {
                 method: 'POST',
-                body: JSON.stringify({ chatId })
+                body: JSON.stringify(options)
             }
         )
     }
 
-    async unsubscribeFromSession(sessionId: string, chatId: string): Promise<{
+    async unsubscribeFromSession(sessionId: string, options: { chatId?: string; clientId?: string }): Promise<{
         ok: boolean
     }> {
         return await this.request(
             `/api/sessions/${encodeURIComponent(sessionId)}/subscribe`,
             {
                 method: 'DELETE',
-                body: JSON.stringify({ chatId })
+                body: JSON.stringify(options)
             }
         )
     }

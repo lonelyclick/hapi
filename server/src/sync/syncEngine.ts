@@ -606,12 +606,11 @@ export class SyncEngine {
 
     /**
      * Send push notification when a task completes
-     * Sends to session owner and subscribers via their Telegram chatId
+     * Sends to session owner and subscribers
      *
-     * 修改说明：
-     * - 之前发给 viewers（正在查看的用户）
-     * - 现在发给 owner/subscribers（与 Telegram 通知一致）
-     * - 通过 chatId 关联 push subscription
+     * 支持两种订阅方式：
+     * 1. 通过 chatId（Telegram 用户）
+     * 2. 通过 clientId（非 Telegram 用户）
      */
     private sendTaskCompletePushNotification(session: Session): void {
         const webPush = getWebPushService()
@@ -632,15 +631,15 @@ export class SyncEngine {
         const title = session.metadata?.summary?.text || session.metadata?.name || 'Task completed'
         const projectName = session.metadata?.path?.split('/').pop() || 'Session'
 
-        // 获取应该接收通知的 chatIds（owner + subscribers）
+        // 获取应该接收通知的 chatIds（Telegram 用户）
         const recipientChatIds = this.store.getSessionNotificationRecipients(session.id)
+        // 获取应该接收通知的 clientIds（非 Telegram 用户）
+        const recipientClientIds = this.store.getSessionNotificationRecipientClientIds(session.id)
 
-        if (recipientChatIds.length === 0) {
+        if (recipientChatIds.length === 0 && recipientClientIds.length === 0) {
             console.log('[webpush] no recipients for session:', session.id)
             return
         }
-
-        console.log('[webpush] sending to owner/subscribers:', recipientChatIds)
 
         const payload = {
             title: `${projectName}: Task completed`,
@@ -655,10 +654,23 @@ export class SyncEngine {
             }
         }
 
-        // 给 owner/subscribers 的设备发送通知
-        webPush.sendToChatIds(session.namespace, recipientChatIds, payload).catch(error => {
-            console.error('[webpush] failed to send notification to chatIds:', recipientChatIds, error)
-        })
+        // 发送给 Telegram 用户（通过 chatId）
+        if (recipientChatIds.length > 0) {
+            console.log('[webpush] sending to chatIds:', recipientChatIds)
+            webPush.sendToChatIds(session.namespace, recipientChatIds, payload).catch(error => {
+                console.error('[webpush] failed to send to chatIds:', recipientChatIds, error)
+            })
+        }
+
+        // 发送给非 Telegram 用户（通过 clientId）
+        if (recipientClientIds.length > 0) {
+            console.log('[webpush] sending to clientIds:', recipientClientIds)
+            for (const clientId of recipientClientIds) {
+                webPush.sendToClient(session.namespace, clientId, payload).catch(error => {
+                    console.error('[webpush] failed to send to clientId:', clientId, error)
+                })
+            }
+        }
     }
 
     handleSessionEnd(payload: { sid: string; time: number }): void {

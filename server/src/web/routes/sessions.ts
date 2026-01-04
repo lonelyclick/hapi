@@ -785,18 +785,32 @@ export function createSessionsRoutes(
     /**
      * 订阅 session 通知
      * POST /sessions/:id/subscribe
-     * Body: { chatId: string }
+     * Body: { chatId?: string, clientId?: string }
+     * 至少需要提供 chatId 或 clientId 其中之一
      */
     app.post('/:id/subscribe', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
 
-        if (!body || typeof body.chatId !== 'string') {
-            return c.json({ error: 'Invalid body, expected { chatId: string }' }, 400)
+        if (!body) {
+            return c.json({ error: 'Invalid body' }, 400)
         }
 
-        const subscription = store.subscribeToSessionNotifications(sessionId, body.chatId, namespace)
+        const chatId = typeof body.chatId === 'string' ? body.chatId : null
+        const clientId = typeof body.clientId === 'string' ? body.clientId : null
+
+        if (!chatId && !clientId) {
+            return c.json({ error: 'Either chatId or clientId is required' }, 400)
+        }
+
+        let subscription
+        if (chatId) {
+            subscription = store.subscribeToSessionNotifications(sessionId, chatId, namespace)
+        } else if (clientId) {
+            subscription = store.subscribeToSessionNotificationsByClientId(sessionId, clientId, namespace)
+        }
+
         if (!subscription) {
             return c.json({ error: 'Failed to subscribe' }, 500)
         }
@@ -807,17 +821,30 @@ export function createSessionsRoutes(
     /**
      * 取消订阅 session 通知
      * DELETE /sessions/:id/subscribe
-     * Body: { chatId: string }
+     * Body: { chatId?: string, clientId?: string }
      */
     app.delete('/:id/subscribe', async (c) => {
         const sessionId = c.req.param('id')
         const body = await c.req.json().catch(() => null)
 
-        if (!body || typeof body.chatId !== 'string') {
-            return c.json({ error: 'Invalid body, expected { chatId: string }' }, 400)
+        if (!body) {
+            return c.json({ error: 'Invalid body' }, 400)
         }
 
-        const success = store.unsubscribeFromSessionNotifications(sessionId, body.chatId)
+        const chatId = typeof body.chatId === 'string' ? body.chatId : null
+        const clientId = typeof body.clientId === 'string' ? body.clientId : null
+
+        if (!chatId && !clientId) {
+            return c.json({ error: 'Either chatId or clientId is required' }, 400)
+        }
+
+        let success = false
+        if (chatId) {
+            success = store.unsubscribeFromSessionNotifications(sessionId, chatId)
+        } else if (clientId) {
+            success = store.unsubscribeFromSessionNotificationsByClientId(sessionId, clientId)
+        }
+
         return c.json({ ok: success })
     })
 
@@ -827,14 +854,16 @@ export function createSessionsRoutes(
      */
     app.get('/:id/subscribers', async (c) => {
         const sessionId = c.req.param('id')
-        const subscribers = store.getSessionNotificationSubscribers(sessionId)
+        const chatIdSubscribers = store.getSessionNotificationSubscribers(sessionId)
+        const clientIdSubscribers = store.getSessionNotificationSubscriberClientIds(sessionId)
         const creatorChatId = store.getSessionCreatorChatId(sessionId)
 
         return c.json({
             sessionId,
             creatorChatId,
-            subscribers,
-            totalRecipients: store.getSessionNotificationRecipients(sessionId).length
+            subscribers: chatIdSubscribers,          // Telegram chatId 订阅者
+            clientIdSubscribers: clientIdSubscribers, // clientId 订阅者
+            totalRecipients: store.getSessionNotificationRecipients(sessionId).length + clientIdSubscribers.length
         })
     })
 

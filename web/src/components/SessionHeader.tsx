@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Session, SessionViewer } from '@/types/api'
 import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
+import { getClientId } from '@/lib/client-identity'
 import { ViewersBadge } from './ViewersBadge'
 import { useAppContext } from '@/lib/app-context'
 
@@ -224,9 +225,10 @@ export function SessionHeader(props: {
 
     const autoIterEnabled = autoIterConfig?.autoIterEnabled ?? true
 
-    // Subscription state - only available if we have Telegram chatId
+    // Subscription state - supports both Telegram chatId and Web clientId
     const tg = getTelegramWebApp()
     const currentChatId = tg?.initDataUnsafe?.user?.id?.toString() ?? null
+    const currentClientId = getClientId()
 
     const subscribersQueryKey = ['session-subscribers', props.session.id]
     const { data: subscribersData } = useQuery({
@@ -234,24 +236,33 @@ export function SessionHeader(props: {
         queryFn: async () => {
             return await api.getSessionSubscribers(props.session.id)
         },
-        staleTime: 30000,
-        enabled: !!currentChatId  // Only fetch if we have chatId
+        staleTime: 30000
     })
 
     const isSubscribed = useMemo(() => {
-        if (!currentChatId || !subscribersData) return false
-        // Check if current user is creator or subscriber
-        return subscribersData.creatorChatId === currentChatId ||
-               subscribersData.subscribers.includes(currentChatId)
-    }, [currentChatId, subscribersData])
+        if (!subscribersData) return false
+        // Check via chatId (Telegram users)
+        if (currentChatId) {
+            if (subscribersData.creatorChatId === currentChatId ||
+                subscribersData.subscribers.includes(currentChatId)) {
+                return true
+            }
+        }
+        // Check via clientId (non-Telegram users)
+        if (currentClientId && subscribersData.clientIdSubscribers?.includes(currentClientId)) {
+            return true
+        }
+        return false
+    }, [currentChatId, currentClientId, subscribersData])
 
     const toggleSubscriptionMutation = useMutation({
         mutationFn: async (subscribe: boolean) => {
-            if (!currentChatId) throw new Error('No Telegram Chat ID')
+            // Prefer chatId if available (Telegram), otherwise use clientId
+            const options = currentChatId ? { chatId: currentChatId } : { clientId: currentClientId }
             if (subscribe) {
-                return await api.subscribeToSession(props.session.id, currentChatId)
+                return await api.subscribeToSession(props.session.id, options)
             } else {
-                return await api.unsubscribeFromSession(props.session.id, currentChatId)
+                return await api.unsubscribeFromSession(props.session.id, options)
             }
         },
         onSuccess: () => {
@@ -335,22 +346,20 @@ export function SessionHeader(props: {
                     {props.viewers && props.viewers.length > 0 && (
                         <ViewersBadge viewers={props.viewers} compact buttonClassName="h-5 leading-none" />
                     )}
-                    {/* Subscription toggle - only show if we have Telegram chatId */}
-                    {currentChatId && (
-                        <button
-                            type="button"
-                            onClick={() => toggleSubscriptionMutation.mutate(!isSubscribed)}
-                            disabled={toggleSubscriptionMutation.isPending}
-                            className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-                                isSubscribed
-                                    ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
-                                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
-                            } disabled:opacity-50`}
-                            title={isSubscribed ? '已订阅通知 (点击取消)' : '订阅通知'}
-                        >
-                            <BellIcon subscribed={isSubscribed} />
-                        </button>
-                    )}
+                    {/* Subscription toggle - works for both Telegram (chatId) and Web (clientId) users */}
+                    <button
+                        type="button"
+                        onClick={() => toggleSubscriptionMutation.mutate(!isSubscribed)}
+                        disabled={toggleSubscriptionMutation.isPending}
+                        className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                            isSubscribed
+                                ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
+                                : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
+                        } disabled:opacity-50`}
+                        title={isSubscribed ? '已订阅通知 (点击取消)' : '订阅通知'}
+                    >
+                        <BellIcon subscribed={isSubscribed} />
+                    </button>
                     {/* Auto-iteration toggle */}
                     <button
                         type="button"

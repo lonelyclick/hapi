@@ -169,7 +169,8 @@ export type StoredAgentGroupMessage = {
 export type StoredSessionNotificationSubscription = {
     id: number
     sessionId: string
-    chatId: string
+    chatId: string | null      // Telegram chatId
+    clientId: string | null    // Web clientId (用于非 Telegram 用户)
     namespace: string
     subscribedAt: number
 }
@@ -848,6 +849,14 @@ export class Store {
         this.db.exec('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_client_id ON push_subscriptions(client_id)')
         this.db.exec('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_chat_id ON push_subscriptions(chat_id)')
 
+        // Migrate session_notification_subscriptions table to add client_id column
+        const sessionNotifSubColumns = this.db.prepare('PRAGMA table_info(session_notification_subscriptions)').all() as Array<{ name: string }>
+        const sessionNotifSubColumnNames = new Set(sessionNotifSubColumns.map((c) => c.name))
+        if (sessionNotifSubColumnNames.size > 0 && !sessionNotifSubColumnNames.has('client_id')) {
+            this.db.exec('ALTER TABLE session_notification_subscriptions ADD COLUMN client_id TEXT')
+            this.db.exec('CREATE INDEX IF NOT EXISTS idx_session_notif_sub_client ON session_notification_subscriptions(client_id)')
+        }
+
         // Step 3: Create indexes that depend on namespace column (after migration)
         this.db.exec(`
             CREATE INDEX IF NOT EXISTS idx_sessions_tag_namespace ON sessions(tag, namespace);
@@ -1024,16 +1033,20 @@ export class Store {
         // Step 7: Create session notification subscriptions table
         this.db.exec(`
             -- Session 通知订阅表（用于订阅指定 session 的通知）
+            -- 支持 chat_id (Telegram) 或 client_id (Web) 订阅
             CREATE TABLE IF NOT EXISTS session_notification_subscriptions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
-                chat_id TEXT NOT NULL,
+                chat_id TEXT,
+                client_id TEXT,
                 namespace TEXT NOT NULL,
                 subscribed_at INTEGER DEFAULT (unixepoch() * 1000),
-                UNIQUE(session_id, chat_id)
+                UNIQUE(session_id, chat_id),
+                UNIQUE(session_id, client_id)
             );
             CREATE INDEX IF NOT EXISTS idx_session_notif_sub_session ON session_notification_subscriptions(session_id);
             CREATE INDEX IF NOT EXISTS idx_session_notif_sub_chat ON session_notification_subscriptions(chat_id);
+            CREATE INDEX IF NOT EXISTS idx_session_notif_sub_client ON session_notification_subscriptions(client_id);
         `)
     }
 
@@ -2823,13 +2836,31 @@ export class Store {
 
     // ==================== Session Notification Subscriptions ====================
 
+    /**
+     * 通过 chatId 订阅（Telegram 用户）
+     */
     subscribeToSessionNotifications(sessionId: string, chatId: string, namespace: string): StoredSessionNotificationSubscription | null {
         try {
             this.db.prepare(`
-                INSERT OR REPLACE INTO session_notification_subscriptions (session_id, chat_id, namespace, subscribed_at)
-                VALUES (?, ?, ?, ?)
+                INSERT OR REPLACE INTO session_notification_subscriptions (session_id, chat_id, client_id, namespace, subscribed_at)
+                VALUES (?, ?, NULL, ?, ?)
             `).run(sessionId, chatId, namespace, Date.now())
             return this.getSessionNotificationSubscription(sessionId, chatId)
+        } catch {
+            return null
+        }
+    }
+
+    /**
+     * 通过 clientId 订阅（非 Telegram 用户）
+     */
+    subscribeToSessionNotificationsByClientId(sessionId: string, clientId: string, namespace: string): StoredSessionNotificationSubscription | null {
+        try {
+            this.db.prepare(`
+                INSERT OR REPLACE INTO session_notification_subscriptions (session_id, chat_id, client_id, namespace, subscribed_at)
+                VALUES (?, NULL, ?, ?, ?)
+            `).run(sessionId, clientId, namespace, Date.now())
+            return this.getSessionNotificationSubscriptionByClientId(sessionId, clientId)
         } catch {
             return null
         }
@@ -2846,15 +2877,42 @@ export class Store {
         }
     }
 
+    unsubscribeFromSessionNotificationsByClientId(sessionId: string, clientId: string): boolean {
+        try {
+            const result = this.db.prepare(
+                'DELETE FROM session_notification_subscriptions WHERE session_id = ? AND client_id = ?'
+            ).run(sessionId, clientId)
+            return result.changes > 0
+        } catch {
+            return false
+        }
+    }
+
     getSessionNotificationSubscription(sessionId: string, chatId: string): StoredSessionNotificationSubscription | null {
         const row = this.db.prepare(
             'SELECT * FROM session_notification_subscriptions WHERE session_id = ? AND chat_id = ?'
-        ).get(sessionId, chatId) as { id: number; session_id: string; chat_id: string; namespace: string; subscribed_at: number } | undefined
+        ).get(sessionId, chatId) as { id: number; session_id: string; chat_id: string | null; client_id: string | null; namespace: string; subscribed_at: number } | undefined
         if (!row) return null
         return {
             id: row.id,
             sessionId: row.session_id,
             chatId: row.chat_id,
+            clientId: row.client_id,
+            namespace: row.namespace,
+            subscribedAt: row.subscribed_at
+        }
+    }
+
+    getSessionNotificationSubscriptionByClientId(sessionId: string, clientId: string): StoredSessionNotificationSubscription | null {
+        const row = this.db.prepare(
+            'SELECT * FROM session_notification_subscriptions WHERE session_id = ? AND client_id = ?'
+        ).get(sessionId, clientId) as { id: number; session_id: string; chat_id: string | null; client_id: string | null; namespace: string; subscribed_at: number } | undefined
+        if (!row) return null
+        return {
+            id: row.id,
+            sessionId: row.session_id,
+            chatId: row.chat_id,
+            clientId: row.client_id,
             namespace: row.namespace,
             subscribedAt: row.subscribed_at
         }
@@ -2862,9 +2920,16 @@ export class Store {
 
     getSessionNotificationSubscribers(sessionId: string): string[] {
         const rows = this.db.prepare(
-            'SELECT chat_id FROM session_notification_subscriptions WHERE session_id = ?'
+            'SELECT chat_id FROM session_notification_subscriptions WHERE session_id = ? AND chat_id IS NOT NULL'
         ).all(sessionId) as Array<{ chat_id: string }>
         return rows.map(r => r.chat_id)
+    }
+
+    getSessionNotificationSubscriberClientIds(sessionId: string): string[] {
+        const rows = this.db.prepare(
+            'SELECT client_id FROM session_notification_subscriptions WHERE session_id = ? AND client_id IS NOT NULL'
+        ).all(sessionId) as Array<{ client_id: string }>
+        return rows.map(r => r.client_id)
     }
 
     getSubscribedSessionsForChat(chatId: string): string[] {
@@ -2887,12 +2952,20 @@ export class Store {
             recipients.add(session.creatorChatId)
         }
 
-        // 添加订阅者
+        // 添加订阅者（通过 chatId）
         const subscribers = this.getSessionNotificationSubscribers(sessionId)
         for (const chatId of subscribers) {
             recipients.add(chatId)
         }
 
         return Array.from(recipients)
+    }
+
+    /**
+     * 获取应该接收 session 通知的所有 clientId
+     * 包括通过 clientId 订阅的用户
+     */
+    getSessionNotificationRecipientClientIds(sessionId: string): string[] {
+        return this.getSessionNotificationSubscriberClientIds(sessionId)
     }
 }
