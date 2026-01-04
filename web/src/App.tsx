@@ -33,6 +33,7 @@ export function App() {
     const { token, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
     const { hasUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
     const { enabled: aiSuggestionsEnabled } = useAiSuggestionSetting()
+    const showBottomTabs = useShowBottomTabs()
 
     // Subscribe to Web Push notifications when authenticated
     // This enables true background push on iOS 16.4+ and other platforms
@@ -496,7 +497,10 @@ export function App() {
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />
             <div className="h-full flex flex-col">
-                <Outlet />
+                <div className={showBottomTabs ? 'flex-1 overflow-hidden pb-14' : 'flex-1 overflow-hidden'}>
+                    <Outlet />
+                </div>
+                {showBottomTabs && <BottomTabs />}
             </div>
             <InstallPrompt />
             <Toaster />

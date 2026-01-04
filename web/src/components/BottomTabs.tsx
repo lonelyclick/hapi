@@ -79,7 +79,7 @@ const tabs: TabItem[] = [
     {
         key: 'chat',
         label: 'Chat',
-        path: '/chat',
+        path: '/groups',
         icon: ChatIcon,
     },
     {
@@ -92,7 +92,7 @@ const tabs: TabItem[] = [
 ]
 
 // Pages where bottom tabs should be visible
-const TOP_LEVEL_PATHS = ['/sessions', '/chat', '/settings', '/usage', '/sessions/new', '/groups']
+const TOP_LEVEL_PATHS = ['/sessions', '/settings', '/usage', '/sessions/new', '/groups']
 
 export function useShowBottomTabs(): boolean {
     const location = useLocation()
