@@ -235,6 +235,28 @@ function mergeCliOutputBlocks(blocks: ChatBlock[]): ChatBlock[] {
     return merged
 }
 
+function mergeAgentTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
+    const merged: ChatBlock[] = []
+
+    for (const block of blocks) {
+        if (block.kind !== 'agent-text') {
+            merged.push(block)
+            continue
+        }
+
+        const prev = merged[merged.length - 1]
+        if (prev && prev.kind === 'agent-text') {
+            // Merge consecutive agent-text blocks (for streaming deltas from OpenRouter, etc.)
+            merged[merged.length - 1] = { ...prev, text: prev.text + block.text }
+            continue
+        }
+
+        merged.push(block)
+    }
+
+    return merged
+}
+
 function ensureToolBlock(
     blocks: ChatBlock[],
     toolBlocksById: Map<string, ToolCallBlock>,
@@ -555,7 +577,7 @@ function reduceTimeline(
         }
     }
 
-    return { blocks: mergeCliOutputBlocks(blocks), toolBlocksById, hasReadyEvent }
+    return { blocks: mergeAgentTextBlocks(mergeCliOutputBlocks(blocks)), toolBlocksById, hasReadyEvent }
 }
 
 export type LatestUsage = {
