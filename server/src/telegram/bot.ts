@@ -224,21 +224,6 @@ export class HappyBot {
         return session
     }
 
-    /**
-     * Get bound Telegram chat IDs from storage.
-     */
-    private getBoundChatIds(namespace: string): number[] {
-        const users = this.store.getUsersByPlatformAndNamespace('telegram', namespace)
-        const ids = new Set<number>()
-        for (const user of users) {
-            const chatId = Number(user.platformUserId)
-            if (Number.isFinite(chatId)) {
-                ids.add(chatId)
-            }
-        }
-        return Array.from(ids)
-    }
-
     private getNamespaceForChatId(chatId: number | null | undefined): string | null {
         if (!chatId) {
             return null
@@ -274,7 +259,7 @@ export class HappyBot {
         const keyboard = new InlineKeyboard()
             .webApp('Open Session', url)
 
-        const chatIds = this.getBoundChatIds(session.namespace)
+        const chatIds = this.getBoundChatIdsInternal(session.namespace)
         if (chatIds.length === 0) {
             return
         }
@@ -341,6 +326,51 @@ export class HappyBot {
         this.notificationDebounce.set(currentSession.id, timer)
     }
 
+    // ========== Public API for Advisor ==========
+
+    /**
+     * Check if bot is enabled and running
+     */
+    isEnabled(): boolean {
+        return this.isRunning
+    }
+
+    /**
+     * Get bound chat IDs for a namespace
+     */
+    getBoundChatIds(namespace: string): number[] {
+        return this.getBoundChatIdsInternal(namespace)
+    }
+
+    /**
+     * Get internal bound chat IDs
+     */
+    private getBoundChatIdsInternal(namespace: string): number[] {
+        const users = this.store.getUsersByPlatformAndNamespace('telegram', namespace)
+        const ids = new Set<number>()
+        for (const user of users) {
+            const chatId = Number(user.platformUserId)
+            if (Number.isFinite(chatId)) {
+                ids.add(chatId)
+            }
+        }
+        return Array.from(ids)
+    }
+
+    /**
+     * Send a message to a chat
+     */
+    async sendMessageToChat(chatId: number, text: string, options?: { parse_mode?: string; reply_markup?: unknown }): Promise<void> {
+        await this.bot.api.sendMessage(chatId, text, options as Parameters<typeof this.bot.api.sendMessage>[2])
+    }
+
+    /**
+     * Build Mini App deep link
+     */
+    buildMiniAppDeepLink(startParam: string): string {
+        return buildMiniAppDeepLink(this.miniAppUrl, startParam)
+    }
+
     /**
      * Send permission notification to all bound chats
      */
@@ -353,7 +383,7 @@ export class HappyBot {
         const text = formatSessionNotification(session)
         const keyboard = createNotificationKeyboard(session, this.miniAppUrl)
 
-        const chatIds = this.getBoundChatIds(session.namespace)
+        const chatIds = this.getBoundChatIdsInternal(session.namespace)
         if (chatIds.length === 0) {
             return
         }

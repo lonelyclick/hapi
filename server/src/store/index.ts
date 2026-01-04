@@ -60,6 +60,74 @@ export type StoredPushSubscription = {
     updatedAt: number
 }
 
+// Advisor Agent 相关类型
+export type AdvisorStatus = 'idle' | 'running' | 'error'
+export type SuggestionCategory = 'product' | 'architecture' | 'operation' | 'strategy' | 'collaboration'
+export type SuggestionSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type SuggestionStatus = 'pending' | 'accepted' | 'rejected' | 'stale' | 'superseded'
+export type SuggestionScope = 'session' | 'project' | 'team' | 'global'
+export type MemoryType = 'insight' | 'pattern' | 'decision' | 'lesson'
+export type FeedbackSource = 'user' | 'auto' | 'advisor'
+export type FeedbackAction = 'accept' | 'reject' | 'defer' | 'supersede'
+
+export type StoredAdvisorState = {
+    namespace: string
+    advisorSessionId: string | null
+    machineId: string | null
+    status: AdvisorStatus
+    lastSeen: number | null
+    configJson: unknown | null
+    updatedAt: number
+}
+
+export type StoredAgentSessionState = {
+    sessionId: string
+    namespace: string
+    lastSeq: number
+    summary: string | null
+    contextJson: unknown | null
+    updatedAt: number
+}
+
+export type StoredAgentMemory = {
+    id: number
+    namespace: string
+    type: MemoryType
+    contentJson: unknown
+    sourceRef: string | null
+    confidence: number
+    expiresAt: number | null
+    updatedAt: number
+}
+
+export type StoredAgentSuggestion = {
+    id: string
+    namespace: string
+    sessionId: string | null
+    sourceSessionId: string | null
+    title: string
+    detail: string | null
+    category: SuggestionCategory | null
+    severity: SuggestionSeverity
+    confidence: number
+    status: SuggestionStatus
+    targets: string | null  // JSON array
+    scope: SuggestionScope
+    createdAt: number
+    updatedAt: number
+}
+
+export type StoredAgentFeedback = {
+    id: number
+    suggestionId: string
+    source: FeedbackSource
+    userId: string | null
+    action: FeedbackAction
+    evidenceJson: unknown | null
+    comment: string | null
+    createdAt: number
+}
+
 export type StoredUser = {
     id: number
     platform: string
@@ -121,6 +189,65 @@ type DbUserRow = {
     platform_user_id: string
     namespace: string
     role: string
+    created_at: number
+}
+
+// Advisor Agent 数据库行类型
+type DbAdvisorStateRow = {
+    namespace: string
+    advisor_session_id: string | null
+    machine_id: string | null
+    status: string
+    last_seen: number | null
+    config_json: string | null
+    updated_at: number
+}
+
+type DbAgentSessionStateRow = {
+    session_id: string
+    namespace: string
+    last_seq: number
+    summary: string | null
+    context_json: string | null
+    updated_at: number
+}
+
+type DbAgentMemoryRow = {
+    id: number
+    namespace: string
+    type: string
+    content_json: string
+    source_ref: string | null
+    confidence: number
+    expires_at: number | null
+    updated_at: number
+}
+
+type DbAgentSuggestionRow = {
+    id: string
+    namespace: string
+    session_id: string | null
+    source_session_id: string | null
+    title: string
+    detail: string | null
+    category: string | null
+    severity: string
+    confidence: number
+    status: string
+    targets: string | null
+    scope: string
+    created_at: number
+    updated_at: number
+}
+
+type DbAgentFeedbackRow = {
+    id: number
+    suggestion_id: string
+    source: string
+    user_id: string | null
+    action: string
+    evidence_json: string | null
+    comment: string | null
     created_at: number
 }
 
@@ -187,6 +314,75 @@ function toStoredUser(row: DbUserRow): StoredUser {
         platformUserId: row.platform_user_id,
         namespace: row.namespace,
         role: (row.role === 'operator' ? 'operator' : 'developer') as UserRole,
+        createdAt: row.created_at
+    }
+}
+
+// Advisor Agent 转换函数
+function toStoredAdvisorState(row: DbAdvisorStateRow): StoredAdvisorState {
+    return {
+        namespace: row.namespace,
+        advisorSessionId: row.advisor_session_id,
+        machineId: row.machine_id,
+        status: (row.status as AdvisorStatus) || 'idle',
+        lastSeen: row.last_seen,
+        configJson: safeJsonParse(row.config_json),
+        updatedAt: row.updated_at
+    }
+}
+
+function toStoredAgentSessionState(row: DbAgentSessionStateRow): StoredAgentSessionState {
+    return {
+        sessionId: row.session_id,
+        namespace: row.namespace,
+        lastSeq: row.last_seq,
+        summary: row.summary,
+        contextJson: safeJsonParse(row.context_json),
+        updatedAt: row.updated_at
+    }
+}
+
+function toStoredAgentMemory(row: DbAgentMemoryRow): StoredAgentMemory {
+    return {
+        id: row.id,
+        namespace: row.namespace,
+        type: (row.type as MemoryType) || 'insight',
+        contentJson: safeJsonParse(row.content_json),
+        sourceRef: row.source_ref,
+        confidence: row.confidence,
+        expiresAt: row.expires_at,
+        updatedAt: row.updated_at
+    }
+}
+
+function toStoredAgentSuggestion(row: DbAgentSuggestionRow): StoredAgentSuggestion {
+    return {
+        id: row.id,
+        namespace: row.namespace,
+        sessionId: row.session_id,
+        sourceSessionId: row.source_session_id,
+        title: row.title,
+        detail: row.detail,
+        category: (row.category as SuggestionCategory) || null,
+        severity: (row.severity as SuggestionSeverity) || 'low',
+        confidence: row.confidence,
+        status: (row.status as SuggestionStatus) || 'pending',
+        targets: row.targets,
+        scope: (row.scope as SuggestionScope) || 'session',
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    }
+}
+
+function toStoredAgentFeedback(row: DbAgentFeedbackRow): StoredAgentFeedback {
+    return {
+        id: row.id,
+        suggestionId: row.suggestion_id,
+        source: (row.source as FeedbackSource) || 'auto',
+        userId: row.user_id,
+        action: (row.action as FeedbackAction) || 'accept',
+        evidenceJson: safeJsonParse(row.evidence_json),
+        comment: row.comment,
         createdAt: row.created_at
     }
 }
@@ -382,6 +578,78 @@ export class Store {
             CREATE INDEX IF NOT EXISTS idx_sessions_tag_namespace ON sessions(tag, namespace);
             CREATE INDEX IF NOT EXISTS idx_machines_namespace ON machines(namespace);
             CREATE INDEX IF NOT EXISTS idx_users_platform_namespace ON users(platform, namespace);
+        `)
+
+        // Step 4: Create Advisor Agent tables
+        this.db.exec(`
+            -- Advisor 全局状态（每个 namespace 一条记录）
+            CREATE TABLE IF NOT EXISTS advisor_state (
+                namespace TEXT PRIMARY KEY,
+                advisor_session_id TEXT,
+                machine_id TEXT,
+                status TEXT DEFAULT 'idle',
+                last_seen INTEGER,
+                config_json TEXT,
+                updated_at INTEGER DEFAULT (unixepoch() * 1000)
+            );
+
+            -- 各会话的增量摘要进度
+            CREATE TABLE IF NOT EXISTS agent_session_state (
+                session_id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                last_seq INTEGER DEFAULT 0,
+                summary TEXT,
+                context_json TEXT,
+                updated_at INTEGER DEFAULT (unixepoch() * 1000)
+            );
+            CREATE INDEX IF NOT EXISTS idx_agent_session_state_namespace ON agent_session_state(namespace);
+
+            -- Advisor 记忆（长期知识）
+            CREATE TABLE IF NOT EXISTS agent_memory (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                namespace TEXT NOT NULL,
+                type TEXT NOT NULL,
+                content_json TEXT NOT NULL,
+                source_ref TEXT,
+                confidence REAL DEFAULT 0.5,
+                expires_at INTEGER,
+                updated_at INTEGER DEFAULT (unixepoch() * 1000)
+            );
+            CREATE INDEX IF NOT EXISTS idx_agent_memory_namespace_type ON agent_memory(namespace, type);
+
+            -- Advisor 建议
+            CREATE TABLE IF NOT EXISTS agent_suggestions (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                session_id TEXT,
+                source_session_id TEXT,
+                title TEXT NOT NULL,
+                detail TEXT,
+                category TEXT,
+                severity TEXT DEFAULT 'low',
+                confidence REAL DEFAULT 0.5,
+                status TEXT DEFAULT 'pending',
+                targets TEXT,
+                scope TEXT DEFAULT 'session',
+                created_at INTEGER DEFAULT (unixepoch() * 1000),
+                updated_at INTEGER DEFAULT (unixepoch() * 1000)
+            );
+            CREATE INDEX IF NOT EXISTS idx_agent_suggestions_namespace_status ON agent_suggestions(namespace, status);
+            CREATE INDEX IF NOT EXISTS idx_agent_suggestions_created ON agent_suggestions(created_at);
+
+            -- 建议反馈（人工与自动）
+            CREATE TABLE IF NOT EXISTS agent_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                suggestion_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                user_id TEXT,
+                action TEXT NOT NULL,
+                evidence_json TEXT,
+                comment TEXT,
+                created_at INTEGER DEFAULT (unixepoch() * 1000),
+                FOREIGN KEY (suggestion_id) REFERENCES agent_suggestions(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_agent_feedback_suggestion ON agent_feedback(suggestion_id);
         `)
     }
 
@@ -1253,5 +1521,331 @@ export class Store {
     removeInputPreset(id: string): boolean {
         const result = this.db.prepare('DELETE FROM input_presets WHERE id = ?').run(id)
         return result.changes > 0
+    }
+
+    // ========== Advisor Agent 方法 ==========
+
+    // Advisor State CRUD
+    getAdvisorState(namespace: string): StoredAdvisorState | null {
+        const row = this.db.prepare(
+            'SELECT * FROM advisor_state WHERE namespace = ?'
+        ).get(namespace) as DbAdvisorStateRow | undefined
+        return row ? toStoredAdvisorState(row) : null
+    }
+
+    upsertAdvisorState(namespace: string, data: Partial<Omit<StoredAdvisorState, 'namespace' | 'updatedAt'>>): StoredAdvisorState | null {
+        try {
+            const now = Date.now()
+            const existing = this.getAdvisorState(namespace)
+
+            if (existing) {
+                this.db.prepare(`
+                    UPDATE advisor_state
+                    SET advisor_session_id = @advisor_session_id,
+                        machine_id = @machine_id,
+                        status = @status,
+                        last_seen = @last_seen,
+                        config_json = @config_json,
+                        updated_at = @updated_at
+                    WHERE namespace = @namespace
+                `).run({
+                    namespace,
+                    advisor_session_id: data.advisorSessionId ?? existing.advisorSessionId,
+                    machine_id: data.machineId ?? existing.machineId,
+                    status: data.status ?? existing.status,
+                    last_seen: data.lastSeen ?? existing.lastSeen,
+                    config_json: data.configJson ? JSON.stringify(data.configJson) : (existing.configJson ? JSON.stringify(existing.configJson) : null),
+                    updated_at: now
+                })
+            } else {
+                this.db.prepare(`
+                    INSERT INTO advisor_state (namespace, advisor_session_id, machine_id, status, last_seen, config_json, updated_at)
+                    VALUES (@namespace, @advisor_session_id, @machine_id, @status, @last_seen, @config_json, @updated_at)
+                `).run({
+                    namespace,
+                    advisor_session_id: data.advisorSessionId ?? null,
+                    machine_id: data.machineId ?? null,
+                    status: data.status ?? 'idle',
+                    last_seen: data.lastSeen ?? null,
+                    config_json: data.configJson ? JSON.stringify(data.configJson) : null,
+                    updated_at: now
+                })
+            }
+            return this.getAdvisorState(namespace)
+        } catch {
+            return null
+        }
+    }
+
+    // Agent Session State CRUD
+    getAgentSessionState(sessionId: string): StoredAgentSessionState | null {
+        const row = this.db.prepare(
+            'SELECT * FROM agent_session_state WHERE session_id = ?'
+        ).get(sessionId) as DbAgentSessionStateRow | undefined
+        return row ? toStoredAgentSessionState(row) : null
+    }
+
+    getAgentSessionStatesByNamespace(namespace: string): StoredAgentSessionState[] {
+        const rows = this.db.prepare(
+            'SELECT * FROM agent_session_state WHERE namespace = ? ORDER BY updated_at DESC'
+        ).all(namespace) as DbAgentSessionStateRow[]
+        return rows.map(toStoredAgentSessionState)
+    }
+
+    upsertAgentSessionState(sessionId: string, namespace: string, data: Partial<Omit<StoredAgentSessionState, 'sessionId' | 'namespace' | 'updatedAt'>>): StoredAgentSessionState | null {
+        try {
+            const now = Date.now()
+            const existing = this.getAgentSessionState(sessionId)
+
+            if (existing) {
+                this.db.prepare(`
+                    UPDATE agent_session_state
+                    SET last_seq = @last_seq,
+                        summary = @summary,
+                        context_json = @context_json,
+                        updated_at = @updated_at
+                    WHERE session_id = @session_id
+                `).run({
+                    session_id: sessionId,
+                    last_seq: data.lastSeq ?? existing.lastSeq,
+                    summary: data.summary ?? existing.summary,
+                    context_json: data.contextJson ? JSON.stringify(data.contextJson) : (existing.contextJson ? JSON.stringify(existing.contextJson) : null),
+                    updated_at: now
+                })
+            } else {
+                this.db.prepare(`
+                    INSERT INTO agent_session_state (session_id, namespace, last_seq, summary, context_json, updated_at)
+                    VALUES (@session_id, @namespace, @last_seq, @summary, @context_json, @updated_at)
+                `).run({
+                    session_id: sessionId,
+                    namespace,
+                    last_seq: data.lastSeq ?? 0,
+                    summary: data.summary ?? null,
+                    context_json: data.contextJson ? JSON.stringify(data.contextJson) : null,
+                    updated_at: now
+                })
+            }
+            return this.getAgentSessionState(sessionId)
+        } catch {
+            return null
+        }
+    }
+
+    deleteAgentSessionState(sessionId: string): boolean {
+        const result = this.db.prepare('DELETE FROM agent_session_state WHERE session_id = ?').run(sessionId)
+        return result.changes > 0
+    }
+
+    // Agent Memory CRUD
+    createAgentMemory(data: {
+        namespace: string
+        type: MemoryType
+        contentJson: unknown
+        sourceRef?: string
+        confidence?: number
+        expiresAt?: number
+    }): StoredAgentMemory | null {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                INSERT INTO agent_memory (namespace, type, content_json, source_ref, confidence, expires_at, updated_at)
+                VALUES (@namespace, @type, @content_json, @source_ref, @confidence, @expires_at, @updated_at)
+            `).run({
+                namespace: data.namespace,
+                type: data.type,
+                content_json: JSON.stringify(data.contentJson),
+                source_ref: data.sourceRef ?? null,
+                confidence: data.confidence ?? 0.5,
+                expires_at: data.expiresAt ?? null,
+                updated_at: now
+            })
+
+            const id = result.lastInsertRowid as number
+            return this.getAgentMemory(id)
+        } catch {
+            return null
+        }
+    }
+
+    getAgentMemory(id: number): StoredAgentMemory | null {
+        const row = this.db.prepare(
+            'SELECT * FROM agent_memory WHERE id = ?'
+        ).get(id) as DbAgentMemoryRow | undefined
+        return row ? toStoredAgentMemory(row) : null
+    }
+
+    getAgentMemories(namespace: string, type?: MemoryType, limit: number = 100): StoredAgentMemory[] {
+        const query = type
+            ? 'SELECT * FROM agent_memory WHERE namespace = ? AND type = ? ORDER BY updated_at DESC LIMIT ?'
+            : 'SELECT * FROM agent_memory WHERE namespace = ? ORDER BY updated_at DESC LIMIT ?'
+        const params = type ? [namespace, type, limit] : [namespace, limit]
+        const rows = this.db.prepare(query).all(...params) as DbAgentMemoryRow[]
+        return rows.map(toStoredAgentMemory)
+    }
+
+    deleteAgentMemory(id: number): boolean {
+        const result = this.db.prepare('DELETE FROM agent_memory WHERE id = ?').run(id)
+        return result.changes > 0
+    }
+
+    deleteExpiredAgentMemories(namespace: string): number {
+        const now = Date.now()
+        const result = this.db.prepare(
+            'DELETE FROM agent_memory WHERE namespace = ? AND expires_at IS NOT NULL AND expires_at < ?'
+        ).run(namespace, now)
+        return result.changes
+    }
+
+    // Agent Suggestions CRUD
+    createAgentSuggestion(data: {
+        id: string
+        namespace: string
+        sessionId?: string
+        sourceSessionId?: string
+        title: string
+        detail?: string
+        category?: SuggestionCategory
+        severity?: SuggestionSeverity
+        confidence?: number
+        status?: SuggestionStatus
+        targets?: string[]
+        scope?: SuggestionScope
+    }): StoredAgentSuggestion | null {
+        try {
+            const now = Date.now()
+            this.db.prepare(`
+                INSERT INTO agent_suggestions (id, namespace, session_id, source_session_id, title, detail, category, severity, confidence, status, targets, scope, created_at, updated_at)
+                VALUES (@id, @namespace, @session_id, @source_session_id, @title, @detail, @category, @severity, @confidence, @status, @targets, @scope, @created_at, @updated_at)
+            `).run({
+                id: data.id,
+                namespace: data.namespace,
+                session_id: data.sessionId ?? null,
+                source_session_id: data.sourceSessionId ?? null,
+                title: data.title,
+                detail: data.detail ?? null,
+                category: data.category ?? null,
+                severity: data.severity ?? 'low',
+                confidence: data.confidence ?? 0.5,
+                status: data.status ?? 'pending',
+                targets: data.targets ? JSON.stringify(data.targets) : null,
+                scope: data.scope ?? 'session',
+                created_at: now,
+                updated_at: now
+            })
+            return this.getAgentSuggestion(data.id)
+        } catch {
+            return null
+        }
+    }
+
+    getAgentSuggestion(id: string): StoredAgentSuggestion | null {
+        const row = this.db.prepare(
+            'SELECT * FROM agent_suggestions WHERE id = ?'
+        ).get(id) as DbAgentSuggestionRow | undefined
+        return row ? toStoredAgentSuggestion(row) : null
+    }
+
+    getAgentSuggestions(namespace: string, filters?: {
+        status?: SuggestionStatus | SuggestionStatus[]
+        category?: SuggestionCategory
+        sessionId?: string
+        sourceSessionId?: string
+        limit?: number
+    }): StoredAgentSuggestion[] {
+        let query = 'SELECT * FROM agent_suggestions WHERE namespace = ?'
+        const params: unknown[] = [namespace]
+
+        if (filters?.status) {
+            if (Array.isArray(filters.status)) {
+                query += ` AND status IN (${filters.status.map(() => '?').join(',')})`
+                params.push(...filters.status)
+            } else {
+                query += ' AND status = ?'
+                params.push(filters.status)
+            }
+        }
+
+        if (filters?.category) {
+            query += ' AND category = ?'
+            params.push(filters.category)
+        }
+
+        if (filters?.sessionId) {
+            query += ' AND session_id = ?'
+            params.push(filters.sessionId)
+        }
+
+        if (filters?.sourceSessionId) {
+            query += ' AND source_session_id = ?'
+            params.push(filters.sourceSessionId)
+        }
+
+        query += ' ORDER BY created_at DESC'
+
+        if (filters?.limit) {
+            query += ' LIMIT ?'
+            params.push(filters.limit)
+        }
+
+        const rows = this.db.prepare(query).all(...(params as (string | number)[])) as DbAgentSuggestionRow[]
+        return rows.map(toStoredAgentSuggestion)
+    }
+
+    updateAgentSuggestionStatus(id: string, status: SuggestionStatus): boolean {
+        const now = Date.now()
+        const result = this.db.prepare(
+            'UPDATE agent_suggestions SET status = ?, updated_at = ? WHERE id = ?'
+        ).run(status, now, id)
+        return result.changes > 0
+    }
+
+    deleteAgentSuggestion(id: string): boolean {
+        const result = this.db.prepare('DELETE FROM agent_suggestions WHERE id = ?').run(id)
+        return result.changes > 0
+    }
+
+    // Agent Feedback CRUD
+    createAgentFeedback(data: {
+        suggestionId: string
+        source: FeedbackSource
+        userId?: string
+        action: FeedbackAction
+        evidenceJson?: unknown
+        comment?: string
+    }): StoredAgentFeedback | null {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                INSERT INTO agent_feedback (suggestion_id, source, user_id, action, evidence_json, comment, created_at)
+                VALUES (@suggestion_id, @source, @user_id, @action, @evidence_json, @comment, @created_at)
+            `).run({
+                suggestion_id: data.suggestionId,
+                source: data.source,
+                user_id: data.userId ?? null,
+                action: data.action,
+                evidence_json: data.evidenceJson ? JSON.stringify(data.evidenceJson) : null,
+                comment: data.comment ?? null,
+                created_at: now
+            })
+
+            const id = result.lastInsertRowid as number
+            return this.getAgentFeedback(id)
+        } catch {
+            return null
+        }
+    }
+
+    getAgentFeedback(id: number): StoredAgentFeedback | null {
+        const row = this.db.prepare(
+            'SELECT * FROM agent_feedback WHERE id = ?'
+        ).get(id) as DbAgentFeedbackRow | undefined
+        return row ? toStoredAgentFeedback(row) : null
+    }
+
+    getAgentFeedbackBySuggestion(suggestionId: string): StoredAgentFeedback[] {
+        const rows = this.db.prepare(
+            'SELECT * FROM agent_feedback WHERE suggestion_id = ? ORDER BY created_at ASC'
+        ).all(suggestionId) as DbAgentFeedbackRow[]
+        return rows.map(toStoredAgentFeedback)
     }
 }

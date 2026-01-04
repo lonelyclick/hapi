@@ -27,7 +27,8 @@ export const initialMachineMetadata: MachineMetadata = {
   happyCliVersion: packageJson.version,
   homeDir: os.homedir(),
   happyHomeDir: configuration.happyHomeDir,
-  happyLibDir: runtimePath()
+  happyLibDir: runtimePath(),
+  advisorWorkingDir: process.env.HAPI_ADVISOR_WORKDIR || '/home/guang/softwares/hapi'
 };
 
 export async function startDaemon(): Promise<void> {
