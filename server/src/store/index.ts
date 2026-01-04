@@ -140,6 +140,31 @@ export type GroupMemberRole = 'owner' | 'moderator' | 'member'
 export type GroupSenderType = 'agent' | 'user' | 'system'
 export type GroupMessageType = 'chat' | 'task' | 'feedback' | 'decision'
 
+// AI Profile 相关类型
+export type AIProfileRole = 'developer' | 'architect' | 'reviewer' | 'pm' | 'tester' | 'devops'
+export type AIProfileStatus = 'idle' | 'working' | 'resting'
+
+export type StoredAIProfile = {
+    id: string
+    namespace: string
+    name: string
+    role: AIProfileRole
+    specialties: string[]
+    personality: string | null
+    greetingTemplate: string | null
+    preferredProjects: string[]
+    workStyle: string | null
+    avatarEmoji: string
+    status: AIProfileStatus
+    stats: {
+        tasksCompleted: number
+        activeMinutes: number
+        lastActiveAt: number | null
+    }
+    createdAt: number
+    updatedAt: number
+}
+
 export type StoredAgentGroup = {
     id: string
     namespace: string
@@ -444,6 +469,24 @@ type DbAgentGroupMessageRow = {
     created_at: number
 }
 
+// AI Profile 数据库行类型
+type DbAIProfileRow = {
+    id: string
+    namespace: string
+    name: string
+    role: string
+    specialties: string | null
+    personality: string | null
+    greeting_template: string | null
+    preferred_projects: string | null
+    work_style: string | null
+    avatar_emoji: string
+    status: string
+    stats_json: string | null
+    created_at: number
+    updated_at: number
+}
+
 function safeJsonParse(value: string | null): unknown | null {
     if (value === null) return null
     try {
@@ -666,6 +709,31 @@ function toStoredAgentGroupMessage(row: DbAgentGroupMessageRow): StoredAgentGrou
         content: row.content,
         messageType: (row.message_type as GroupMessageType) || 'chat',
         createdAt: row.created_at
+    }
+}
+
+// AI Profile 转换函数
+function toStoredAIProfile(row: DbAIProfileRow): StoredAIProfile {
+    const stats = safeJsonParse(row.stats_json) as { tasksCompleted?: number; activeMinutes?: number; lastActiveAt?: number | null } | null
+    return {
+        id: row.id,
+        namespace: row.namespace,
+        name: row.name,
+        role: (row.role as AIProfileRole) || 'developer',
+        specialties: (safeJsonParse(row.specialties) as string[]) || [],
+        personality: row.personality,
+        greetingTemplate: row.greeting_template,
+        preferredProjects: (safeJsonParse(row.preferred_projects) as string[]) || [],
+        workStyle: row.work_style,
+        avatarEmoji: row.avatar_emoji || '🤖',
+        status: (row.status as AIProfileStatus) || 'idle',
+        stats: {
+            tasksCompleted: stats?.tasksCompleted ?? 0,
+            activeMinutes: stats?.activeMinutes ?? 0,
+            lastActiveAt: stats?.lastActiveAt ?? null
+        },
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
     }
 }
 
@@ -1121,6 +1189,29 @@ export class Store {
             CREATE INDEX IF NOT EXISTS idx_session_notif_sub_session ON session_notification_subscriptions(session_id);
             CREATE INDEX IF NOT EXISTS idx_session_notif_sub_chat ON session_notification_subscriptions(chat_id);
             CREATE INDEX IF NOT EXISTS idx_session_notif_sub_client ON session_notification_subscriptions(client_id);
+        `)
+
+        // Step 8: Create AI Profiles table
+        this.db.exec(`
+            -- AI 员工档案表
+            CREATE TABLE IF NOT EXISTS ai_profiles (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                specialties TEXT,
+                personality TEXT,
+                greeting_template TEXT,
+                preferred_projects TEXT,
+                work_style TEXT,
+                avatar_emoji TEXT DEFAULT '🤖',
+                status TEXT DEFAULT 'idle',
+                stats_json TEXT,
+                created_at INTEGER DEFAULT (unixepoch() * 1000),
+                updated_at INTEGER DEFAULT (unixepoch() * 1000)
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_profiles_namespace ON ai_profiles(namespace);
+            CREATE INDEX IF NOT EXISTS idx_ai_profiles_role ON ai_profiles(role);
         `)
     }
 
@@ -3211,5 +3302,187 @@ export class Store {
      */
     getSessionNotificationRecipientClientIds(sessionId: string): string[] {
         return this.getSessionNotificationSubscriberClientIds(sessionId)
+    }
+
+    // ==================== AI Profiles ====================
+
+    /**
+     * 获取 namespace 下所有 AI 员工档案
+     */
+    getAIProfiles(namespace: string): StoredAIProfile[] {
+        const rows = this.db.prepare(
+            'SELECT * FROM ai_profiles WHERE namespace = ? ORDER BY created_at ASC'
+        ).all(namespace) as DbAIProfileRow[]
+        return rows.map(toStoredAIProfile)
+    }
+
+    /**
+     * 通过 ID 获取 AI 员工档案
+     */
+    getAIProfile(id: string): StoredAIProfile | null {
+        const row = this.db.prepare(
+            'SELECT * FROM ai_profiles WHERE id = ?'
+        ).get(id) as DbAIProfileRow | undefined
+        return row ? toStoredAIProfile(row) : null
+    }
+
+    /**
+     * 通过名称获取 AI 员工档案
+     */
+    getAIProfileByName(namespace: string, name: string): StoredAIProfile | null {
+        const row = this.db.prepare(
+            'SELECT * FROM ai_profiles WHERE namespace = ? AND name = ?'
+        ).get(namespace, name) as DbAIProfileRow | undefined
+        return row ? toStoredAIProfile(row) : null
+    }
+
+    /**
+     * 创建 AI 员工档案
+     */
+    createAIProfile(
+        namespace: string,
+        data: Omit<StoredAIProfile, 'id' | 'namespace' | 'createdAt' | 'updatedAt'>
+    ): StoredAIProfile {
+        const id = randomUUID()
+        const now = Date.now()
+
+        this.db.prepare(`
+            INSERT INTO ai_profiles (
+                id, namespace, name, role, specialties, personality,
+                greeting_template, preferred_projects, work_style,
+                avatar_emoji, status, stats_json, created_at, updated_at
+            ) VALUES (
+                @id, @namespace, @name, @role, @specialties, @personality,
+                @greeting_template, @preferred_projects, @work_style,
+                @avatar_emoji, @status, @stats_json, @created_at, @updated_at
+            )
+        `).run({
+            id,
+            namespace,
+            name: data.name,
+            role: data.role,
+            specialties: JSON.stringify(data.specialties),
+            personality: data.personality,
+            greeting_template: data.greetingTemplate,
+            preferred_projects: JSON.stringify(data.preferredProjects),
+            work_style: data.workStyle,
+            avatar_emoji: data.avatarEmoji,
+            status: data.status,
+            stats_json: JSON.stringify(data.stats),
+            created_at: now,
+            updated_at: now
+        })
+
+        const profile = this.getAIProfile(id)
+        if (!profile) {
+            throw new Error('Failed to create AI profile')
+        }
+        return profile
+    }
+
+    /**
+     * 更新 AI 员工档案
+     */
+    updateAIProfile(id: string, data: Partial<StoredAIProfile>): StoredAIProfile | null {
+        const existing = this.getAIProfile(id)
+        if (!existing) {
+            return null
+        }
+
+        const now = Date.now()
+        const updates: string[] = ['updated_at = @updated_at']
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const params: Record<string, any> = { id, updated_at: now }
+
+        if (data.name !== undefined) {
+            updates.push('name = @name')
+            params.name = data.name
+        }
+        if (data.role !== undefined) {
+            updates.push('role = @role')
+            params.role = data.role
+        }
+        if (data.specialties !== undefined) {
+            updates.push('specialties = @specialties')
+            params.specialties = JSON.stringify(data.specialties)
+        }
+        if (data.personality !== undefined) {
+            updates.push('personality = @personality')
+            params.personality = data.personality
+        }
+        if (data.greetingTemplate !== undefined) {
+            updates.push('greeting_template = @greeting_template')
+            params.greeting_template = data.greetingTemplate
+        }
+        if (data.preferredProjects !== undefined) {
+            updates.push('preferred_projects = @preferred_projects')
+            params.preferred_projects = JSON.stringify(data.preferredProjects)
+        }
+        if (data.workStyle !== undefined) {
+            updates.push('work_style = @work_style')
+            params.work_style = data.workStyle
+        }
+        if (data.avatarEmoji !== undefined) {
+            updates.push('avatar_emoji = @avatar_emoji')
+            params.avatar_emoji = data.avatarEmoji
+        }
+        if (data.status !== undefined) {
+            updates.push('status = @status')
+            params.status = data.status
+        }
+        if (data.stats !== undefined) {
+            updates.push('stats_json = @stats_json')
+            params.stats_json = JSON.stringify(data.stats)
+        }
+
+        this.db.prepare(`
+            UPDATE ai_profiles SET ${updates.join(', ')} WHERE id = @id
+        `).run(params)
+
+        return this.getAIProfile(id)
+    }
+
+    /**
+     * 删除 AI 员工档案
+     */
+    deleteAIProfile(id: string): boolean {
+        const result = this.db.prepare(
+            'DELETE FROM ai_profiles WHERE id = ?'
+        ).run(id)
+        return result.changes > 0
+    }
+
+    /**
+     * 更新 AI 员工状态
+     */
+    updateAIProfileStatus(id: string, status: AIProfileStatus): void {
+        const now = Date.now()
+        this.db.prepare(`
+            UPDATE ai_profiles SET status = @status, updated_at = @updated_at WHERE id = @id
+        `).run({ id, status, updated_at: now })
+    }
+
+    /**
+     * 更新 AI 员工统计数据
+     */
+    updateAIProfileStats(id: string, stats: Partial<StoredAIProfile['stats']>): void {
+        const existing = this.getAIProfile(id)
+        if (!existing) {
+            return
+        }
+
+        const now = Date.now()
+        const mergedStats = {
+            ...existing.stats,
+            ...stats
+        }
+
+        this.db.prepare(`
+            UPDATE ai_profiles SET stats_json = @stats_json, updated_at = @updated_at WHERE id = @id
+        `).run({
+            id,
+            stats_json: JSON.stringify(mergedStats),
+            updated_at: now
+        })
     }
 }
