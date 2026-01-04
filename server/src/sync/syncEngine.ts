@@ -467,6 +467,34 @@ export class SyncEngine {
                 const text = ((innerContent as Record<string, unknown>).text as string) || null
                 console.log(`[SyncEngine] extractTextFromMessageContent: found text type, text length: ${text?.length || 0}`)
                 return text
+            } else if (contentType === 'output') {
+                // 处理 output 类型消息
+                const data = (innerContent as Record<string, unknown>).data as Record<string, unknown>
+                if (data) {
+                    const dataType = data.type as string
+                    // 只处理 assistant 类型的消息，不处理 user 类型
+                    if (dataType === 'assistant' || dataType === 'message') {
+                        const message = data.message as Record<string, unknown>
+                        if (message) {
+                            const messageContent = message.content
+                            if (Array.isArray(messageContent)) {
+                                const textParts: string[] = []
+                                for (const item of messageContent) {
+                                    if (item && typeof item === 'object') {
+                                        const itemRecord = item as Record<string, unknown>
+                                        if (itemRecord.type === 'text' && typeof itemRecord.text === 'string') {
+                                            textParts.push(itemRecord.text)
+                                        }
+                                    }
+                                }
+                                if (textParts.length > 0) {
+                                    console.log('[SyncEngine] extractTextFromMessageContent: found output message with text')
+                                    return textParts.join('\n')
+                                }
+                            }
+                        }
+                    }
+                }
             }
             // 尝试处理数组格式的 content（Claude 消息格式）
             if (Array.isArray(innerContent)) {
