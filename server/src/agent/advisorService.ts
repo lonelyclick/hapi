@@ -1227,17 +1227,29 @@ export class AdvisorService {
             return
         }
 
+        // 调试：检查 Advisor 输出
+        if (text.includes('[[HAPI_ADVISOR]]') || text.includes('action_request') || text.includes('DAILY_REVIEW')) {
+            console.log(`[AdvisorService] Parsing advisor output (${text.length} chars), contains HAPI_ADVISOR: ${text.includes('[[HAPI_ADVISOR]]')}`)
+        }
+
         // 查找所有 [[HAPI_ADVISOR]] JSON
         const matches = text.matchAll(ADVISOR_OUTPUT_PATTERN)
 
+        let matchCount = 0
         for (const match of matches) {
+            matchCount++
             const jsonStr = match[1]
             try {
                 const output = JSON.parse(jsonStr) as AdvisorOutput
+                console.log(`[AdvisorService] Parsed advisor output: type=${output.type}`)
                 this.handleAdvisorOutput(sessionId, output)
             } catch (error) {
-                console.error('[AdvisorService] Failed to parse advisor output:', error, jsonStr)
+                console.error('[AdvisorService] Failed to parse advisor output:', error, jsonStr?.slice(0, 200))
             }
+        }
+
+        if (text.includes('[[HAPI_ADVISOR]]') && matchCount === 0) {
+            console.warn('[AdvisorService] Found [[HAPI_ADVISOR]] but no valid matches. Text sample:', text.slice(0, 500))
         }
     }
 
