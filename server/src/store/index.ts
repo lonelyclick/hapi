@@ -143,6 +143,7 @@ export type GroupMessageType = 'chat' | 'task' | 'feedback' | 'decision'
 // AI Profile 相关类型
 export type AIProfileRole = 'developer' | 'architect' | 'reviewer' | 'pm' | 'tester' | 'devops'
 export type AIProfileStatus = 'idle' | 'working' | 'resting'
+export type AIProfileMemoryType = 'context' | 'preference' | 'knowledge' | 'experience'
 
 export type StoredAIProfile = {
     id: string
@@ -163,6 +164,21 @@ export type StoredAIProfile = {
     }
     createdAt: number
     updatedAt: number
+}
+
+export type StoredAIProfileMemory = {
+    id: string
+    namespace: string
+    profileId: string
+    memoryType: AIProfileMemoryType
+    content: string
+    importance: number
+    accessCount: number
+    lastAccessedAt: number | null
+    expiresAt: number | null
+    createdAt: number
+    updatedAt: number
+    metadata: unknown | null
 }
 
 export type StoredAgentGroup = {
@@ -487,6 +503,22 @@ type DbAIProfileRow = {
     updated_at: number
 }
 
+// AI Profile Memory 数据库行类型
+type DbAIProfileMemoryRow = {
+    id: string
+    namespace: string
+    profile_id: string
+    memory_type: string
+    content: string
+    importance: number
+    access_count: number
+    last_accessed_at: number | null
+    expires_at: number | null
+    created_at: number
+    updated_at: number
+    metadata: string | null
+}
+
 function safeJsonParse(value: string | null): unknown | null {
     if (value === null) return null
     try {
@@ -734,6 +766,24 @@ function toStoredAIProfile(row: DbAIProfileRow): StoredAIProfile {
         },
         createdAt: row.created_at,
         updatedAt: row.updated_at
+    }
+}
+
+// AI Profile Memory 转换函数
+function toStoredAIProfileMemory(row: DbAIProfileMemoryRow): StoredAIProfileMemory {
+    return {
+        id: row.id,
+        namespace: row.namespace,
+        profileId: row.profile_id,
+        memoryType: (row.memory_type as AIProfileMemoryType) || 'context',
+        content: row.content,
+        importance: row.importance,
+        accessCount: row.access_count,
+        lastAccessedAt: row.last_accessed_at,
+        expiresAt: row.expires_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        metadata: safeJsonParse(row.metadata)
     }
 }
 
@@ -1212,6 +1262,30 @@ export class Store {
             );
             CREATE INDEX IF NOT EXISTS idx_ai_profiles_namespace ON ai_profiles(namespace);
             CREATE INDEX IF NOT EXISTS idx_ai_profiles_role ON ai_profiles(role);
+        `)
+
+        // Step 9: Create AI Profile Memories table
+        this.db.exec(`
+            -- AI 员工记忆表
+            CREATE TABLE IF NOT EXISTS ai_profile_memories (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                memory_type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                importance REAL DEFAULT 0.5,
+                access_count INTEGER DEFAULT 0,
+                last_accessed_at INTEGER,
+                expires_at INTEGER,
+                created_at INTEGER DEFAULT (unixepoch() * 1000),
+                updated_at INTEGER DEFAULT (unixepoch() * 1000),
+                metadata TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_profile_memories_namespace ON ai_profile_memories(namespace);
+            CREATE INDEX IF NOT EXISTS idx_ai_profile_memories_profile ON ai_profile_memories(profile_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_profile_memories_type ON ai_profile_memories(memory_type);
+            CREATE INDEX IF NOT EXISTS idx_ai_profile_memories_importance ON ai_profile_memories(importance);
+            CREATE INDEX IF NOT EXISTS idx_ai_profile_memories_expires ON ai_profile_memories(expires_at);
         `)
     }
 
@@ -3484,5 +3558,203 @@ export class Store {
             stats_json: JSON.stringify(mergedStats),
             updated_at: now
         })
+    }
+
+    // ===========================================
+    // AI Profile Memory 方法
+    // ===========================================
+
+    /**
+     * 创建 AI Profile 记忆
+     */
+    createProfileMemory(
+        namespace: string,
+        profileId: string,
+        memory: {
+            memoryType: AIProfileMemoryType
+            content: string
+            importance?: number
+            expiresAt?: number | null
+            metadata?: unknown
+        }
+    ): StoredAIProfileMemory {
+        const id = randomUUID()
+        const now = Date.now()
+
+        this.db.prepare(`
+            INSERT INTO ai_profile_memories (
+                id, namespace, profile_id, memory_type, content,
+                importance, access_count, last_accessed_at, expires_at,
+                created_at, updated_at, metadata
+            ) VALUES (
+                @id, @namespace, @profile_id, @memory_type, @content,
+                @importance, @access_count, @last_accessed_at, @expires_at,
+                @created_at, @updated_at, @metadata
+            )
+        `).run({
+            id,
+            namespace,
+            profile_id: profileId,
+            memory_type: memory.memoryType,
+            content: memory.content,
+            importance: memory.importance ?? 0.5,
+            access_count: 0,
+            last_accessed_at: null,
+            expires_at: memory.expiresAt ?? null,
+            created_at: now,
+            updated_at: now,
+            metadata: memory.metadata ? JSON.stringify(memory.metadata) : null
+        })
+
+        const row = this.db.prepare(
+            'SELECT * FROM ai_profile_memories WHERE id = ?'
+        ).get(id) as DbAIProfileMemoryRow
+
+        return toStoredAIProfileMemory(row)
+    }
+
+    /**
+     * 获取 AI Profile 的记忆列表
+     */
+    getProfileMemories(
+        namespace: string,
+        profileId: string,
+        options?: {
+            type?: AIProfileMemoryType
+            limit?: number
+            minImportance?: number
+        }
+    ): StoredAIProfileMemory[] {
+        let sql = 'SELECT * FROM ai_profile_memories WHERE namespace = ? AND profile_id = ?'
+        const params: (string | number)[] = [namespace, profileId]
+
+        if (options?.type) {
+            sql += ' AND memory_type = ?'
+            params.push(options.type)
+        }
+
+        if (options?.minImportance !== undefined) {
+            sql += ' AND importance >= ?'
+            params.push(options.minImportance)
+        }
+
+        // 排除已过期的记忆
+        sql += ' AND (expires_at IS NULL OR expires_at > ?)'
+        params.push(Date.now())
+
+        sql += ' ORDER BY importance DESC, last_accessed_at DESC NULLS LAST, created_at DESC'
+
+        if (options?.limit) {
+            sql += ' LIMIT ?'
+            params.push(options.limit)
+        }
+
+        const rows = this.db.prepare(sql).all(...params) as DbAIProfileMemoryRow[]
+        return rows.map(toStoredAIProfileMemory)
+    }
+
+    /**
+     * 通过 ID 获取单个记忆
+     */
+    getProfileMemory(id: string): StoredAIProfileMemory | null {
+        const row = this.db.prepare(
+            'SELECT * FROM ai_profile_memories WHERE id = ?'
+        ).get(id) as DbAIProfileMemoryRow | undefined
+        return row ? toStoredAIProfileMemory(row) : null
+    }
+
+    /**
+     * 更新记忆的访问计数和最后访问时间
+     */
+    updateMemoryAccess(namespace: string, memoryId: string): void {
+        const now = Date.now()
+        this.db.prepare(`
+            UPDATE ai_profile_memories
+            SET access_count = access_count + 1,
+                last_accessed_at = @now,
+                updated_at = @now
+            WHERE id = @id AND namespace = @namespace
+        `).run({
+            id: memoryId,
+            namespace,
+            now
+        })
+    }
+
+    /**
+     * 更新记忆内容和重要性
+     */
+    updateProfileMemory(
+        id: string,
+        data: Partial<{
+            content: string
+            importance: number
+            expiresAt: number | null
+            metadata: unknown
+        }>
+    ): StoredAIProfileMemory | null {
+        const existing = this.getProfileMemory(id)
+        if (!existing) {
+            return null
+        }
+
+        const now = Date.now()
+        const updates: string[] = ['updated_at = @updated_at']
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const params: Record<string, any> = { id, updated_at: now }
+
+        if (data.content !== undefined) {
+            updates.push('content = @content')
+            params.content = data.content
+        }
+        if (data.importance !== undefined) {
+            updates.push('importance = @importance')
+            params.importance = data.importance
+        }
+        if (data.expiresAt !== undefined) {
+            updates.push('expires_at = @expires_at')
+            params.expires_at = data.expiresAt
+        }
+        if (data.metadata !== undefined) {
+            updates.push('metadata = @metadata')
+            params.metadata = data.metadata ? JSON.stringify(data.metadata) : null
+        }
+
+        this.db.prepare(`
+            UPDATE ai_profile_memories SET ${updates.join(', ')} WHERE id = @id
+        `).run(params)
+
+        return this.getProfileMemory(id)
+    }
+
+    /**
+     * 删除过期的记忆
+     */
+    deleteExpiredMemories(namespace: string): number {
+        const now = Date.now()
+        const result = this.db.prepare(
+            'DELETE FROM ai_profile_memories WHERE namespace = ? AND expires_at IS NOT NULL AND expires_at <= ?'
+        ).run(namespace, now)
+        return result.changes
+    }
+
+    /**
+     * 删除 Profile 的所有记忆
+     */
+    deleteProfileMemories(namespace: string, profileId: string): number {
+        const result = this.db.prepare(
+            'DELETE FROM ai_profile_memories WHERE namespace = ? AND profile_id = ?'
+        ).run(namespace, profileId)
+        return result.changes
+    }
+
+    /**
+     * 删除单个记忆
+     */
+    deleteProfileMemory(id: string): boolean {
+        const result = this.db.prepare(
+            'DELETE FROM ai_profile_memories WHERE id = ?'
+        ).run(id)
+        return result.changes > 0
     }
 }
