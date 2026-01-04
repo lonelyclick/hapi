@@ -176,6 +176,11 @@ async function main() {
             advisorService.setTelegramNotifier(telegramNotifier)
         }
 
+        // Connect AutoIterationService
+        if (autoIterationService) {
+            advisorService.setAutoIterationService(autoIterationService)
+        }
+
         // Start the service
         advisorService.start()
 
