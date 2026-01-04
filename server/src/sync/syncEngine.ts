@@ -302,6 +302,21 @@ export class SyncEngine {
             }
         }
 
+        // 同步 agent 消息到群组
+        if (event.type === 'message-received' && event.sessionId && event.message) {
+            const msgContent = event.message.content as Record<string, unknown> | null
+            if (msgContent) {
+                const role = msgContent.role as string
+                // 只同步 agent 的回复，不同步 user 消息
+                if (role === 'agent' || role === 'assistant') {
+                    const text = this.extractTextFromMessageContent(msgContent)
+                    if (text) {
+                        this.syncAgentMessageToGroups(event.sessionId, text)
+                    }
+                }
+            }
+        }
+
         const webappEvent: SyncEvent = event.type === 'message-received'
             ? {
                 type: event.type,
@@ -340,6 +355,50 @@ export class SyncEngine {
             return this.machines.get(event.machineId)?.namespace
         }
         return undefined
+    }
+
+    /**
+     * 同步 agent 消息到群组
+     * 当 AI 回复消息时，如果该 session 属于某个活跃群组，自动将回复同步到群组消息表
+     */
+    private syncAgentMessageToGroups(sessionId: string, content: string): void {
+        try {
+            const groups = this.store.getGroupsForSession(sessionId)
+            for (const group of groups) {
+                this.store.addGroupMessage(group.id, sessionId, content, 'agent', 'chat')
+            }
+            if (groups.length > 0) {
+                console.log(`[SyncEngine] Synced agent message to ${groups.length} group(s) for session ${sessionId}`)
+            }
+        } catch (error) {
+            // 群组同步失败不应该影响主流程
+            console.error('[SyncEngine] Failed to sync to group:', error)
+        }
+    }
+
+    /**
+     * 从消息内容中提取文本
+     */
+    private extractTextFromMessageContent(content: unknown): string | null {
+        if (!content || typeof content !== 'object') return null
+        const record = content as Record<string, unknown>
+
+        const innerContent = record.content as Record<string, unknown> | string | null
+        if (typeof innerContent === 'string') {
+            return innerContent
+        }
+        if (innerContent && typeof innerContent === 'object') {
+            const contentType = (innerContent as Record<string, unknown>).type as string
+            if (contentType === 'codex') {
+                const data = (innerContent as Record<string, unknown>).data as Record<string, unknown>
+                if (data?.type === 'message' && typeof data.message === 'string') {
+                    return data.message
+                }
+            } else if (contentType === 'text') {
+                return ((innerContent as Record<string, unknown>).text as string) || null
+            }
+        }
+        return null
     }
 
     getConnectionStatus(): ConnectionStatus {
