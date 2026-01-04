@@ -825,6 +825,9 @@ export class Store {
         if (!sessionColumnNames.has('advisor_prompt_injected')) {
             this.db.exec('ALTER TABLE sessions ADD COLUMN advisor_prompt_injected INTEGER DEFAULT 0')
         }
+        if (!sessionColumnNames.has('role_prompt_sent')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN role_prompt_sent INTEGER DEFAULT 0')
+        }
 
         const machineColumns = this.db.prepare('PRAGMA table_info(machines)').all() as Array<{ name: string }>
         const machineColumnNames = new Set(machineColumns.map((c) => c.name))

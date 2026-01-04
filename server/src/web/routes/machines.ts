@@ -134,6 +134,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
         // 注意：advisor agent 有自己的 init prompt，由 AdvisorScheduler 发送
         if (result.type === 'success' && parsed.data.claudeAgent !== 'advisor') {
             const email = c.get('email')
+            const namespace = c.get('namespace')
             // 获取用户角色
             let role: UserRole = 'developer'
             if (email) {
@@ -146,6 +147,11 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 }
             }
             void sendInitPromptAfterOnline(engine, result.sessionId, role)
+
+            // 如果启用了 advisorMode，设置会话的 advisor 模式标记
+            if (parsed.data.advisorMode) {
+                store.setSessionAdvisorMode(result.sessionId, true, namespace)
+            }
         }
 
         return c.json(result)
