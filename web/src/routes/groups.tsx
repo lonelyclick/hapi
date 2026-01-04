@@ -2,28 +2,8 @@ import { useCallback, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useAppContext } from '@/lib/app-context'
-import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
 import type { AgentGroup, AgentGroupMember, AgentGroupType, AgentGroupStatus, SessionSummary } from '@/types/api'
-
-function BackIcon(props: { className?: string }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={props.className}
-        >
-            <polyline points="15 18 9 12 15 6" />
-        </svg>
-    )
-}
 
 function PlusIcon(props: { className?: string }) {
     return (
@@ -493,7 +473,6 @@ function GroupCard(props: {
 
 export default function GroupsPage() {
     const { api } = useAppContext()
-    const goBack = useAppGoBack()
     const queryClient = useQueryClient()
     const [showCreateForm, setShowCreateForm] = useState(false)
     const [error, setError] = useState<string | null>(null)
