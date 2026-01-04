@@ -17,7 +17,8 @@ export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'bypassPermission
 export type CodexPermissionMode = 'default' | 'read-only' | 'safe-yolo' | 'yolo'
 export type SessionPermissionMode = ClaudePermissionMode | CodexPermissionMode
 export type GrokModelMode = 'grok-4-1-fast-reasoning' | 'grok-4-1-fast-non-reasoning' | 'grok-code-fast-1' | 'grok-4-fast-reasoning' | 'grok-4-fast-non-reasoning' | 'grok-4-0709' | 'grok-3-mini' | 'grok-3'
-export type SessionModelMode = 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2' | GrokModelMode
+export type OpenRouterModelMode = 'anthropic/claude-sonnet-4' | 'anthropic/claude-opus-4' | 'anthropic/claude-3.5-sonnet' | 'openai/gpt-4o' | 'openai/o1' | 'google/gemini-2.0-flash-001' | 'deepseek/deepseek-r1' | 'deepseek/deepseek-chat'
+export type SessionModelMode = 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2' | GrokModelMode | OpenRouterModelMode | string
 export type SessionModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
 export type Metadata = {

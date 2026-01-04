@@ -1191,6 +1191,43 @@ export function HappyComposer(props: {
                                             </button>
                                         ))}
                                     </div>
+                                ) : isOpenRouter ? (
+                                    <div className="space-y-1">
+                                        {OPENROUTER_MODELS.map((mode) => (
+                                            <button
+                                                key={mode.id}
+                                                type="button"
+                                                disabled={controlsDisabled}
+                                                className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                                                    controlsDisabled
+                                                        ? 'cursor-not-allowed opacity-50'
+                                                        : 'cursor-pointer hover:bg-[var(--app-secondary-bg)]'
+                                                }`}
+                                                onClick={() => handleModelChange({ model: mode.id as ModelMode })}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                            >
+                                                <div
+                                                    className={`mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                                                        openrouterModel === mode.id
+                                                            ? 'border-[var(--app-link)]'
+                                                            : 'border-[var(--app-hint)]'
+                                                    }`}
+                                                >
+                                                    {openrouterModel === mode.id && (
+                                                        <div className="h-2 w-2 rounded-full bg-[var(--app-link)]" />
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className={openrouterModel === mode.id ? 'text-[var(--app-link)]' : ''}>
+                                                        {mode.label}
+                                                    </span>
+                                                    <span className="text-xs text-[var(--app-hint)]">
+                                                        {mode.description}
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
                                 ) : (
                                     MODEL_MODES.map((mode) => (
                                         <button
