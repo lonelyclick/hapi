@@ -167,6 +167,10 @@ function getAgentLabel(session: SessionSummary): string {
     return 'Agent'
 }
 
+function isAdvisorSession(session: SessionSummary): boolean {
+    return session.metadata?.runtimeAgent === 'advisor'
+}
+
 function formatRelativeTime(value: number): string | null {
     const ms = value < 1_000_000_000_000 ? value * 1000 : value
     if (!Number.isFinite(ms)) return null
@@ -179,6 +183,91 @@ function formatRelativeTime(value: number): string | null {
     const days = Math.floor(hours / 24)
     if (days < 7) return `${days}d`
     return new Date(ms).toLocaleDateString()
+}
+
+function AdvisorIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4" />
+            <path d="M12 8h.01" />
+        </svg>
+    )
+}
+
+function AdvisorSessionItem(props: {
+    session: SessionSummary
+    onSelect: (sessionId: string) => void
+}) {
+    const { session: s, onSelect } = props
+
+    return (
+        <button
+            type="button"
+            onClick={() => onSelect(s.id)}
+            className={`
+                group flex w-full items-center gap-3 px-3 py-3 text-left
+                rounded-lg mb-2
+                bg-gradient-to-r from-purple-500/10 to-blue-500/10
+                border border-purple-500/20
+                transition-all duration-150
+                hover:from-purple-500/15 hover:to-blue-500/15
+                hover:border-purple-500/30
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500
+                ${!s.active ? 'opacity-50' : ''}
+            `}
+        >
+            {/* Advisor icon */}
+            <div className="shrink-0">
+                <div className={`
+                    flex items-center justify-center w-8 h-8 rounded-full
+                    bg-gradient-to-br from-purple-500 to-blue-500
+                    ${s.active ? 'animate-pulse' : ''}
+                `}>
+                    <AdvisorIcon className="w-4 h-4 text-white" />
+                </div>
+            </div>
+
+            {/* Main content */}
+            <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                        Team Advisor
+                    </span>
+                    <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400">
+                        AI
+                    </span>
+                    {s.viewers && s.viewers.length > 0 && (
+                        <ViewersBadge viewers={s.viewers} />
+                    )}
+                </div>
+                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--app-hint)]">
+                    <span>{s.active ? 'Monitoring all sessions' : 'Offline'}</span>
+                </div>
+            </div>
+
+            {/* Status */}
+            <div className="shrink-0 flex items-center gap-2">
+                <span className={`
+                    text-[10px] font-medium px-2 py-1 rounded-full
+                    ${s.active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-gray-500/15 text-gray-400'}
+                `}>
+                    {s.active ? 'Active' : 'Offline'}
+                </span>
+            </div>
+        </button>
+    )
 }
 
 function SessionItem(props: {
@@ -268,9 +357,24 @@ export function SessionList(props: {
     renderHeader?: boolean
 }) {
     const { renderHeader = true } = props
+
+    // Separate Advisor sessions from regular sessions
+    const { advisorSessions, regularSessions } = useMemo(() => {
+        const advisor: SessionSummary[] = []
+        const regular: SessionSummary[] = []
+        for (const session of props.sessions) {
+            if (isAdvisorSession(session)) {
+                advisor.push(session)
+            } else {
+                regular.push(session)
+            }
+        }
+        return { advisorSessions: advisor, regularSessions: regular }
+    }, [props.sessions])
+
     const groups = useMemo(
-        () => groupSessionsByProject(props.sessions, props.projects),
-        [props.sessions, props.projects]
+        () => groupSessionsByProject(regularSessions, props.projects),
+        [regularSessions, props.projects]
     )
     const [collapseOverrides, setCollapseOverrides] = useState<Map<string, boolean>>(
         () => new Map()
@@ -327,6 +431,16 @@ export function SessionList(props: {
             ) : null}
 
             <div className="flex flex-col gap-1 p-2">
+                {/* Advisor sessions - always at top */}
+                {advisorSessions.map((s) => (
+                    <AdvisorSessionItem
+                        key={s.id}
+                        session={s}
+                        onSelect={props.onSelect}
+                    />
+                ))}
+
+                {/* Regular sessions grouped by project */}
                 {groups.map((group) => {
                     const isCollapsed = isGroupCollapsed(group)
                     const activeCount = group.sessions.filter(s => s.active).length

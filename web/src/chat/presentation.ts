@@ -33,6 +33,28 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
     if (event.type === 'message') {
         return { icon: null, text: typeof event.message === 'string' ? event.message : 'Message' }
     }
+    // Advisor suggestions
+    if (event.type === 'advisor-suggestion') {
+        const e = event as Record<string, unknown>
+        const severity = e.severity as string
+        const severityIcon = severity === 'critical' ? '🚨'
+            : severity === 'high' ? '⚠️'
+            : severity === 'medium' ? '💡'
+            : 'ℹ️'
+        const category = e.category as string || 'general'
+        const title = e.title as string || 'Advisor suggestion'
+        return { icon: severityIcon, text: `[${category}] ${title}` }
+    }
+    if (event.type === 'advisor-suggestion-status') {
+        const e = event as Record<string, unknown>
+        const status = e.status as string
+        const statusIcon = status === 'accepted' ? '✅'
+            : status === 'rejected' ? '❌'
+            : status === 'stale' ? '⏰'
+            : '📋'
+        const title = e.title as string || 'Suggestion'
+        return { icon: statusIcon, text: `${title} - ${status}` }
+    }
     try {
         return { icon: null, text: JSON.stringify(event) }
     } catch {
