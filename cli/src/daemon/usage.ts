@@ -71,10 +71,10 @@ async function getClaudeAccessToken(): Promise<string | null> {
             const creds = JSON.parse(trimmed);
             return creds.accessToken ?? null;
         } catch {
-            // Fallback: try reading from ~/.claude/.credentials
+            // Fallback: try reading from ~/.claude/.credentials.json
             try {
                 const { stdout } = await execAsync(
-                    'cat ~/.claude/.credentials 2>/dev/null'
+                    'cat ~/.claude/.credentials.json 2>/dev/null'
                 );
                 const creds = JSON.parse(stdout.trim());
                 return creds.accessToken ?? null;
