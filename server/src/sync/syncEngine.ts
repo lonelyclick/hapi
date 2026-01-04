@@ -429,24 +429,63 @@ export class SyncEngine {
      * 从消息内容中提取文本
      */
     private extractTextFromMessageContent(content: unknown): string | null {
-        if (!content || typeof content !== 'object') return null
+        console.log(`[SyncEngine] extractTextFromMessageContent input:`, JSON.stringify(content, null, 2))
+        if (!content || typeof content !== 'object') {
+            console.log(`[SyncEngine] extractTextFromMessageContent: content is null or not object`)
+            return null
+        }
         const record = content as Record<string, unknown>
 
         const innerContent = record.content as Record<string, unknown> | string | null
+        console.log(`[SyncEngine] extractTextFromMessageContent innerContent type:`, typeof innerContent, innerContent ? JSON.stringify(innerContent).substring(0, 200) : 'null')
         if (typeof innerContent === 'string') {
+            console.log(`[SyncEngine] extractTextFromMessageContent: innerContent is string, length: ${innerContent.length}`)
             return innerContent
         }
         if (innerContent && typeof innerContent === 'object') {
             const contentType = (innerContent as Record<string, unknown>).type as string
+            console.log(`[SyncEngine] extractTextFromMessageContent: innerContent.type = "${contentType}"`)
             if (contentType === 'codex') {
                 const data = (innerContent as Record<string, unknown>).data as Record<string, unknown>
                 if (data?.type === 'message' && typeof data.message === 'string') {
+                    console.log(`[SyncEngine] extractTextFromMessageContent: found codex message`)
                     return data.message
                 }
             } else if (contentType === 'text') {
-                return ((innerContent as Record<string, unknown>).text as string) || null
+                const text = ((innerContent as Record<string, unknown>).text as string) || null
+                console.log(`[SyncEngine] extractTextFromMessageContent: found text type, text length: ${text?.length || 0}`)
+                return text
+            }
+            // 尝试处理数组格式的 content（Claude 消息格式）
+            if (Array.isArray(innerContent)) {
+                console.log(`[SyncEngine] extractTextFromMessageContent: innerContent is array with ${innerContent.length} items`)
+                const textParts: string[] = []
+                for (const item of innerContent) {
+                    if (item && typeof item === 'object' && (item as Record<string, unknown>).type === 'text') {
+                        const text = (item as Record<string, unknown>).text as string
+                        if (text) textParts.push(text)
+                    }
+                }
+                if (textParts.length > 0) {
+                    return textParts.join('\n')
+                }
             }
         }
+        // 尝试直接检查 record 中的 content 是否为数组（某些消息格式）
+        if (Array.isArray(record.content)) {
+            console.log(`[SyncEngine] extractTextFromMessageContent: record.content is array with ${record.content.length} items`)
+            const textParts: string[] = []
+            for (const item of record.content) {
+                if (item && typeof item === 'object' && (item as Record<string, unknown>).type === 'text') {
+                    const text = (item as Record<string, unknown>).text as string
+                    if (text) textParts.push(text)
+                }
+            }
+            if (textParts.length > 0) {
+                return textParts.join('\n')
+            }
+        }
+        console.log(`[SyncEngine] extractTextFromMessageContent: no text found, returning null`)
         return null
     }
 
