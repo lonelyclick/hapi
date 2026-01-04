@@ -285,7 +285,7 @@ export function NewSession(props: {
                     Agents
                 </label>
                 <div className="flex flex-wrap gap-x-3 gap-y-2">
-                    {(['claude', 'codex', 'gemini'] as const).map((agentType) => (
+                    {(['claude', 'codex', 'gemini', 'aider-cli'] as const).map((agentType) => (
                         <label
                             key={agentType}
                             className="flex items-center gap-1 cursor-pointer"

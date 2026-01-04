@@ -2741,6 +2741,19 @@ export class Store {
         return rows.map(toStoredAgentGroup)
     }
 
+    /**
+     * 获取 session 所属的活跃群组（status = 'active'）
+     * 用于 AI 回复消息时同步到群组
+     */
+    getGroupsForSession(sessionId: string): StoredAgentGroup[] {
+        const rows = this.db.prepare(`
+            SELECT g.* FROM agent_groups g
+            INNER JOIN agent_group_members m ON g.id = m.group_id
+            WHERE m.session_id = ? AND g.status = 'active'
+        `).all(sessionId) as DbAgentGroupRow[]
+        return rows.map(toStoredAgentGroup)
+    }
+
     // ==================== Agent Group Messages ====================
 
     addGroupMessage(
