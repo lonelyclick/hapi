@@ -165,6 +165,14 @@ export type StoredAgentGroupMessage = {
     createdAt: number
 }
 
+export type StoredSessionNotificationSubscription = {
+    id: number
+    sessionId: string
+    chatId: string
+    namespace: string
+    subscribedAt: number
+}
+
 export type StoredAdvisorState = {
     namespace: string
     advisorSessionId: string | null
@@ -1004,6 +1012,21 @@ export class Store {
                 FOREIGN KEY (group_id) REFERENCES agent_groups(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_agent_group_messages_group ON agent_group_messages(group_id);
+        `)
+
+        // Step 7: Create session notification subscriptions table
+        this.db.exec(`
+            -- Session 通知订阅表（用于订阅指定 session 的通知）
+            CREATE TABLE IF NOT EXISTS session_notification_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                chat_id TEXT NOT NULL,
+                namespace TEXT NOT NULL,
+                subscribed_at INTEGER DEFAULT (unixepoch() * 1000),
+                UNIQUE(session_id, chat_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_notif_sub_session ON session_notification_subscriptions(session_id);
+            CREATE INDEX IF NOT EXISTS idx_session_notif_sub_chat ON session_notification_subscriptions(chat_id);
         `)
     }
 
@@ -2724,5 +2747,105 @@ export class Store {
             LIMIT ?
         `).all(groupId, safeLimit) as DbAgentGroupMessageRow[]
         return rows.reverse().map(toStoredAgentGroupMessage)
+    }
+
+    // ==================== Session Creator Chat ID ====================
+
+    setSessionCreatorChatId(sessionId: string, chatId: string, namespace: string): boolean {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                UPDATE sessions
+                SET creator_chat_id = @creator_chat_id,
+                    updated_at = @updated_at,
+                    seq = seq + 1
+                WHERE id = @id AND namespace = @namespace
+            `).run({ id: sessionId, creator_chat_id: chatId, updated_at: now, namespace })
+            return result.changes === 1
+        } catch {
+            return false
+        }
+    }
+
+    getSessionCreatorChatId(sessionId: string): string | null {
+        const row = this.db.prepare(
+            'SELECT creator_chat_id FROM sessions WHERE id = ?'
+        ).get(sessionId) as { creator_chat_id: string | null } | undefined
+        return row?.creator_chat_id ?? null
+    }
+
+    // ==================== Session Notification Subscriptions ====================
+
+    subscribeToSessionNotifications(sessionId: string, chatId: string, namespace: string): StoredSessionNotificationSubscription | null {
+        try {
+            this.db.prepare(`
+                INSERT OR REPLACE INTO session_notification_subscriptions (session_id, chat_id, namespace, subscribed_at)
+                VALUES (?, ?, ?, ?)
+            `).run(sessionId, chatId, namespace, Date.now())
+            return this.getSessionNotificationSubscription(sessionId, chatId)
+        } catch {
+            return null
+        }
+    }
+
+    unsubscribeFromSessionNotifications(sessionId: string, chatId: string): boolean {
+        try {
+            const result = this.db.prepare(
+                'DELETE FROM session_notification_subscriptions WHERE session_id = ? AND chat_id = ?'
+            ).run(sessionId, chatId)
+            return result.changes > 0
+        } catch {
+            return false
+        }
+    }
+
+    getSessionNotificationSubscription(sessionId: string, chatId: string): StoredSessionNotificationSubscription | null {
+        const row = this.db.prepare(
+            'SELECT * FROM session_notification_subscriptions WHERE session_id = ? AND chat_id = ?'
+        ).get(sessionId, chatId) as { id: number; session_id: string; chat_id: string; namespace: string; subscribed_at: number } | undefined
+        if (!row) return null
+        return {
+            id: row.id,
+            sessionId: row.session_id,
+            chatId: row.chat_id,
+            namespace: row.namespace,
+            subscribedAt: row.subscribed_at
+        }
+    }
+
+    getSessionNotificationSubscribers(sessionId: string): string[] {
+        const rows = this.db.prepare(
+            'SELECT chat_id FROM session_notification_subscriptions WHERE session_id = ?'
+        ).all(sessionId) as Array<{ chat_id: string }>
+        return rows.map(r => r.chat_id)
+    }
+
+    getSubscribedSessionsForChat(chatId: string): string[] {
+        const rows = this.db.prepare(
+            'SELECT session_id FROM session_notification_subscriptions WHERE chat_id = ?'
+        ).all(chatId) as Array<{ session_id: string }>
+        return rows.map(r => r.session_id)
+    }
+
+    /**
+     * 获取应该接收 session 通知的所有 chatId
+     * 包括：session 创建者 + 所有订阅者（去重）
+     */
+    getSessionNotificationRecipients(sessionId: string): string[] {
+        const session = this.getSession(sessionId)
+        const recipients = new Set<string>()
+
+        // 添加创建者
+        if (session?.creatorChatId) {
+            recipients.add(session.creatorChatId)
+        }
+
+        // 添加订阅者
+        const subscribers = this.getSessionNotificationSubscribers(sessionId)
+        for (const chatId of subscribers) {
+            recipients.add(chatId)
+        }
+
+        return Array.from(recipients)
     }
 }

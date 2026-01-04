@@ -11,6 +11,7 @@ interface TelegramBotLike {
     sendMessage(chatId: number, text: string, options?: { parse_mode?: string; reply_markup?: unknown }): Promise<void>
     buildMiniAppDeepLink(startParam: string): string
     isEnabled(): boolean
+    getSessionName?(sessionId: string): string | null
 }
 
 interface InlineKeyboardLike {
@@ -137,7 +138,17 @@ export class AdvisorTelegramNotifierImpl implements AdvisorTelegramNotifier {
         }
         const categoryLabel = (suggestion.category && categoryLabels[suggestion.category]) || suggestion.category || '通用'
 
+        // 获取来源 session 名字
+        let sessionInfo = ''
+        if (suggestion.sourceSessionId && this.bot?.getSessionName) {
+            const sessionName = this.bot.getSessionName(suggestion.sourceSessionId)
+            if (sessionName) {
+                sessionInfo = `<b>来源：</b>${this.escapeHtml(sessionName)}\n`
+            }
+        }
+
         let text = `${severityEmoji} <b>Advisor 建议</b>\n\n` +
+            sessionInfo +
             `<b>类别：</b>${categoryLabel}\n` +
             `<b>标题：</b>${this.escapeHtml(suggestion.title)}\n` +
             `<b>严重度：</b>${suggestion.severity}\n` +

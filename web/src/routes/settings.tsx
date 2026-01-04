@@ -1,5 +1,6 @@
 import { useCallback, useState, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
@@ -245,6 +246,7 @@ function ProjectForm(props: {
 export default function SettingsPage() {
     const { api } = useAppContext()
     const goBack = useAppGoBack()
+    const navigate = useNavigate()
     const queryClient = useQueryClient()
     const [projectError, setProjectError] = useState<string | null>(null)
     const [showAddProject, setShowAddProject] = useState(false)
@@ -599,6 +601,60 @@ export default function SettingsPage() {
                                     Logout
                                 </button>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Quick Links Section */}
+                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                        <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                            <h2 className="text-sm font-medium">Agent Tools</h2>
+                        </div>
+                        <div className="divide-y divide-[var(--app-divider)]">
+                            <button
+                                type="button"
+                                onClick={() => navigate({ to: '/groups' })}
+                                className="w-full px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-[var(--app-secondary-bg)] transition-colors"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        className="text-[var(--app-hint)]"
+                                    >
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                        <circle cx="9" cy="7" r="4" />
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                    </svg>
+                                    <div className="text-left">
+                                        <div className="text-sm">Agent Groups</div>
+                                        <div className="text-[11px] text-[var(--app-hint)]">
+                                            Create groups for multi-agent collaboration
+                                        </div>
+                                    </div>
+                                </div>
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="text-[var(--app-hint)]"
+                                >
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
 

@@ -234,6 +234,7 @@ export class HappyBot {
 
     /**
      * Send a push notification when agent is ready for input.
+     * 只通知 session 的 owner（创建者）和订阅者，不再广播给所有人
      */
     private async sendReadyNotification(sessionId: string): Promise<void> {
         const session = this.getNotifiableSession(sessionId)
@@ -260,26 +261,48 @@ export class HappyBot {
                         : flavor === 'gemini' ? 'Gemini'
                         : 'Agent'
 
+        // 获取 session 名字用于通知
+        const sessionName = session.metadata?.name || 'Unknown session'
+
         const url = buildMiniAppDeepLink(this.miniAppUrl, `session_${sessionId}`)
         const keyboard = new InlineKeyboard()
             .webApp('Open Session', url)
 
-        const chatIds = this.getBoundChatIdsInternal(session.namespace)
-        if (chatIds.length === 0) {
+        // 只通知 owner 和订阅者，不再广播给所有人
+        const recipientChatIds = this.store.getSessionNotificationRecipients(sessionId)
+        if (recipientChatIds.length === 0) {
             return
         }
 
-        for (const chatId of chatIds) {
-            await this.bot.api.sendMessage(
-                chatId,
-                `It's ready!\n\n${agentName} is waiting for your command`,
-                { reply_markup: keyboard }
-            )
+        for (const chatIdStr of recipientChatIds) {
+            const chatId = Number(chatIdStr)
+            if (!Number.isFinite(chatId)) continue
+
+            try {
+                await this.bot.api.sendMessage(
+                    chatId,
+                    `✅ <b>${this.escapeHtml(sessionName)}</b>\n\n${agentName} is ready for your command`,
+                    { reply_markup: keyboard, parse_mode: 'HTML' }
+                )
+            } catch (error) {
+                console.error(`[HAPIBot] Failed to send ready notification to chat ${chatId}:`, error)
+            }
         }
     }
 
+    private escapeHtml(text: string): string {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+    }
+
     /**
-     * Check if session has new permission requests and send notification
+     * Check if session has new permission requests and auto-approve them
+     *
+     * 修改说明：
+     * - 自动批准所有权限请求，不再发送通知等待用户审批
+     * - 只发送 Telegram 通知告知已自动批准
      */
     private checkForPermissionNotification(session: Session): void {
         const currentSession = this.getNotifiableSession(session.id)
@@ -305,35 +328,73 @@ export class HappyBot {
         const oldRequestIds = this.lastKnownRequests.get(session.id) || new Set()
 
         // Find NEW requests (in new but not in old)
-        let hasNewRequests = false
+        const newRequests: string[] = []
         for (const requestId of newRequestIds) {
             if (!oldRequestIds.has(requestId)) {
-                hasNewRequests = true
-                break
+                newRequests.push(requestId)
             }
         }
 
         // Update tracked state for this session
         this.lastKnownRequests.set(session.id, newRequestIds)
 
-        if (!hasNewRequests) {
+        if (newRequests.length === 0) {
             return
         }
 
-        // Debounce notifications per session (500ms)
-        const existingTimer = this.notificationDebounce.get(currentSession.id)
-        if (existingTimer) {
-            clearTimeout(existingTimer)
+        // 自动批准所有新的权限请求
+        this.autoApprovePermissions(currentSession.id, newRequests, requests).catch(err => {
+            console.error('[HAPIBot] Failed to auto-approve permissions:', err)
+        })
+    }
+
+    /**
+     * 自动批准权限请求
+     */
+    private async autoApprovePermissions(
+        sessionId: string,
+        requestIds: string[],
+        requests: Record<string, { tool: string; arguments: unknown }>
+    ): Promise<void> {
+        if (!this.syncEngine) return
+
+        const session = this.getNotifiableSession(sessionId)
+        if (!session) return
+
+        const sessionName = session.metadata?.name || 'Unknown session'
+
+        for (const requestId of requestIds) {
+            const request = requests[requestId]
+            if (!request) continue
+
+            try {
+                // 自动批准权限请求
+                await this.syncEngine.approvePermission(sessionId, requestId, undefined, undefined, 'approved')
+                console.log(`[HAPIBot] Auto-approved permission request ${requestId} for tool ${request.tool}`)
+            } catch (error) {
+                console.error(`[HAPIBot] Failed to auto-approve permission ${requestId}:`, error)
+            }
         }
 
-        const timer = setTimeout(() => {
-            this.notificationDebounce.delete(currentSession.id)
-            this.sendPermissionNotification(currentSession.id).catch(err => {
-                console.error('[HAPIBot] Failed to send notification:', err)
-            })
-        }, 500)
+        // 发送 Telegram 通知（告知已自动批准）
+        const recipientChatIds = this.store.getSessionNotificationRecipients(sessionId)
+        if (recipientChatIds.length === 0) return
 
-        this.notificationDebounce.set(currentSession.id, timer)
+        const toolNames = requestIds.map(id => requests[id]?.tool).filter(Boolean).join(', ')
+        const text = `🤖 <b>${this.escapeHtml(sessionName)}</b>\n\n` +
+            `已自动批准 ${requestIds.length} 个权限请求\n` +
+            `工具: ${this.escapeHtml(toolNames)}`
+
+        for (const chatIdStr of recipientChatIds) {
+            const chatId = Number(chatIdStr)
+            if (!Number.isFinite(chatId)) continue
+
+            try {
+                await this.bot.api.sendMessage(chatId, text, { parse_mode: 'HTML' })
+            } catch (error) {
+                console.error(`[HAPIBot] Failed to send auto-approve notification to chat ${chatId}:`, error)
+            }
+        }
     }
 
     // ========== Public API for Advisor ==========
@@ -382,7 +443,16 @@ export class HappyBot {
     }
 
     /**
-     * Send permission notification to all bound chats
+     * Get session name by session ID
+     */
+    getSessionName(sessionId: string): string | null {
+        const session = this.syncEngine?.getSession(sessionId)
+        return session?.metadata?.name ?? null
+    }
+
+    /**
+     * Send permission notification to session owner and subscribers
+     * 只通知 owner 和订阅者，不再广播给所有人
      */
     private async sendPermissionNotification(sessionId: string): Promise<void> {
         const session = this.getNotifiableSession(sessionId)
@@ -393,12 +463,16 @@ export class HappyBot {
         const text = formatSessionNotification(session)
         const keyboard = createNotificationKeyboard(session, this.miniAppUrl)
 
-        const chatIds = this.getBoundChatIdsInternal(session.namespace)
-        if (chatIds.length === 0) {
+        // 只通知 owner 和订阅者
+        const recipientChatIds = this.store.getSessionNotificationRecipients(sessionId)
+        if (recipientChatIds.length === 0) {
             return
         }
 
-        for (const chatId of chatIds) {
+        for (const chatIdStr of recipientChatIds) {
+            const chatId = Number(chatIdStr)
+            if (!Number.isFinite(chatId)) continue
+
             try {
                 await this.bot.api.sendMessage(chatId, text, {
                     reply_markup: keyboard

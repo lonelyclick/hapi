@@ -9,51 +9,108 @@ type PendingPermission = {
     resolve: (result: { outcome: { outcome: string; optionId?: string } }) => void;
 };
 
+type AcpSdkBackendOptions = {
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+    fallbackArgs?: string[][];
+    initTimeoutMs?: number;
+};
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+        return promise;
+    }
+
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(message));
+        }, timeoutMs);
+
+        promise.then((value) => {
+            clearTimeout(timer);
+            resolve(value);
+        }).catch((error) => {
+            clearTimeout(timer);
+            reject(error);
+        });
+    });
+}
+
 export class AcpSdkBackend implements AgentBackend {
     private transport: AcpStdioTransport | null = null;
     private permissionHandler: ((request: PermissionRequest) => void) | null = null;
     private readonly pendingPermissions = new Map<string, PendingPermission>();
     private messageHandler: AcpMessageHandler | null = null;
     private activeSessionId: string | null = null;
+    private readonly argsCandidates: string[][];
+    private readonly initTimeoutMs: number;
 
-    constructor(private readonly options: { command: string; args?: string[]; env?: Record<string, string> }) {}
+    constructor(private readonly options: AcpSdkBackendOptions) {
+        this.argsCandidates = options.fallbackArgs && options.fallbackArgs.length > 0
+            ? options.fallbackArgs
+            : [options.args ?? []];
+        this.initTimeoutMs = options.initTimeoutMs ?? 10_000;
+    }
 
     async initialize(): Promise<void> {
         if (this.transport) return;
 
-        this.transport = new AcpStdioTransport({
-            command: this.options.command,
-            args: this.options.args,
-            env: this.options.env
-        });
+        let lastError: Error | null = null;
 
-        this.transport.onNotification((method, params) => {
-            if (method === 'session/update') {
-                this.handleSessionUpdate(params);
+        for (const args of this.argsCandidates) {
+            this.transport = new AcpStdioTransport({
+                command: this.options.command,
+                args,
+                env: this.options.env
+            });
+
+            this.transport.onNotification((method, params) => {
+                if (method === 'session/update') {
+                    this.handleSessionUpdate(params);
+                }
+            });
+
+            this.transport.registerRequestHandler('session/request_permission', async (params, requestId) => {
+                return await this.handlePermissionRequest(params, requestId);
+            });
+
+            try {
+                const response = await withTimeout(
+                    this.transport.sendRequest('initialize', {
+                        protocolVersion: 1,
+                        clientCapabilities: {
+                            fs: { readTextFile: false, writeTextFile: false },
+                            terminal: false
+                        },
+                        clientInfo: {
+                            name: 'hapi',
+                            version: packageJson.version
+                        }
+                    }),
+                    this.initTimeoutMs,
+                    `ACP initialize timed out after ${this.initTimeoutMs}ms`
+                );
+
+                if (!isObject(response) || typeof response.protocolVersion !== 'number') {
+                    throw new Error('Invalid initialize response from ACP agent');
+                }
+
+                logger.debug(`[ACP] Initialized with protocol version ${response.protocolVersion}`);
+                return;
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                logger.debug('[ACP] Initialize failed, trying next args', {
+                    command: this.options.command,
+                    args,
+                    error: lastError.message
+                });
+                await this.transport.close().catch(() => {});
+                this.transport = null;
             }
-        });
-
-        this.transport.registerRequestHandler('session/request_permission', async (params, requestId) => {
-            return await this.handlePermissionRequest(params, requestId);
-        });
-
-        const response = await this.transport.sendRequest('initialize', {
-            protocolVersion: 1,
-            clientCapabilities: {
-                fs: { readTextFile: false, writeTextFile: false },
-                terminal: false
-            },
-            clientInfo: {
-                name: 'hapi',
-                version: packageJson.version
-            }
-        });
-
-        if (!isObject(response) || typeof response.protocolVersion !== 'number') {
-            throw new Error('Invalid initialize response from ACP agent');
         }
 
-        logger.debug(`[ACP] Initialized with protocol version ${response.protocolVersion}`);
+        throw lastError ?? new Error('Failed to initialize ACP agent');
     }
 
     async newSession(config: AgentSessionConfig): Promise<string> {
@@ -61,10 +118,14 @@ export class AcpSdkBackend implements AgentBackend {
             throw new Error('ACP transport not initialized');
         }
 
-        const response = await this.transport.sendRequest('session/new', {
-            cwd: config.cwd,
-            mcpServers: config.mcpServers
-        });
+        const response = await withTimeout(
+            this.transport.sendRequest('session/new', {
+                cwd: config.cwd,
+                mcpServers: config.mcpServers
+            }),
+            this.initTimeoutMs,
+            `ACP session/new timed out after ${this.initTimeoutMs}ms`
+        );
 
         const sessionId = isObject(response) ? asString(response.sessionId) : null;
         if (!sessionId) {

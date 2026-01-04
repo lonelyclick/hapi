@@ -11,13 +11,16 @@ function buildEnv(): Record<string, string> {
     }, {} as Record<string, string>);
 }
 
-export function registerGeminiAgent(yolo: boolean): void {
-    const args = ['--experimental-acp'];
-    if (yolo) args.push('--yolo');
+export function registerGeminiAgent(_yolo: boolean): void {
+    const fallbackArgs = [
+        ['--acp'],
+        ['--experimental-acp']
+    ];
 
     AgentRegistry.register('gemini', () => new AcpSdkBackend({
         command: 'gemini',
-        args,
-        env: buildEnv()
+        fallbackArgs,
+        env: buildEnv(),
+        initTimeoutMs: 10_000
     }));
 }

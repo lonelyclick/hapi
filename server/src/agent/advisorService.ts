@@ -1579,9 +1579,13 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     }
 
     /**
-     * 处理建议
+     * 处理建议 - 自动 accept 所有建议
+     *
+     * 修改说明：
+     * - 建议创建后自动 accept，不再需要人工审批
+     * - 仍然会发送 Telegram 通知（通知已自动接受）
      */
-    private handleSuggestion(advisorSessionId: string, output: AdvisorSuggestionOutput): void {
+    private async handleSuggestion(advisorSessionId: string, output: AdvisorSuggestionOutput): Promise<void> {
         const suggestionId = output.id || `adv_${Date.now()}_${randomUUID().slice(0, 8)}`
 
         const suggestion = this.store.createAgentSuggestion({
@@ -1601,12 +1605,30 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         if (suggestion) {
             console.log(`[AdvisorService] Suggestion created: ${suggestion.id} - ${suggestion.title}`)
 
-            // 广播给相关会话
-            this.broadcastSuggestion(suggestion)
+            // 自动 accept 建议
+            await this.autoAcceptSuggestion(suggestion)
 
-            // 发送 Telegram 通知
-            this.telegramNotifier?.notifySuggestion(suggestion)
+            // 广播给相关会话（只推送 Telegram）
+            this.broadcastSuggestion(suggestion)
         }
+    }
+
+    /**
+     * 自动 accept 建议
+     */
+    private async autoAcceptSuggestion(suggestion: StoredAgentSuggestion): Promise<void> {
+        // 更新状态为 accepted
+        this.store.updateAgentSuggestionStatus(suggestion.id, 'accepted')
+
+        // 记录自动接受的反馈
+        this.store.createAgentFeedback({
+            suggestionId: suggestion.id,
+            source: 'auto',
+            action: 'accept',
+            comment: '自动接受'
+        })
+
+        console.log(`[AdvisorService] Suggestion ${suggestion.id} auto-accepted`)
     }
 
     /**
@@ -1845,48 +1867,34 @@ ${output.message}
     }
 
     /**
-     * 广播建议给相关会话
+     * 广播建议 - 只推送 Telegram 通知，不再广播到所有 session
+     *
+     * 修改说明：
+     * - 移除了向所有 session 发送事件消息的逻辑
+     * - 只保留 Telegram 通知推送
+     * - 如果需要向特定 session 发送通知，使用 getSessionNotificationRecipients
      */
     async broadcastSuggestion(suggestion: StoredAgentSuggestion): Promise<void> {
-        const sessions = this.syncEngine.getActiveSessions()
-            .filter(s => s.namespace === suggestion.namespace)
-
-        // 对于所有级别的建议，发送全局 alert 事件
-        // 之前只有 critical/high，现在改为所有级别都广播
-        this.broadcastAlert(suggestion)
-
-        for (const session of sessions) {
-            // 排除 Advisor 会话
-            if (this.scheduler.isAdvisorSession(session.id)) {
-                continue
-            }
-
-            // 去重检查
-            const key = `${suggestion.id}:${suggestion.status}:${session.id}`
-            if (this.broadcastedSet.has(key)) {
-                continue
-            }
-            this.broadcastedSet.add(key)
-
-            // 发送事件消息
-            await this.sendEventMessage(session.id, {
-                type: 'advisor-suggestion',
-                suggestionId: suggestion.id,
-                title: suggestion.title,
-                detail: suggestion.detail ?? undefined,
-                category: suggestion.category ?? undefined,
-                severity: suggestion.severity,
-                confidence: suggestion.confidence,
-                scope: suggestion.scope,
-                sourceSessionId: suggestion.sourceSessionId ?? undefined
-            })
+        // 去重检查
+        const key = `suggestion:${suggestion.id}:${suggestion.status}`
+        if (this.broadcastedSet.has(key)) {
+            return
         }
+        this.broadcastedSet.add(key)
+
+        // 只推送 Telegram 通知，不再广播到所有 session
+        this.telegramNotifier?.notifySuggestion(suggestion)
+        console.log(`[AdvisorService] Suggestion notification sent via Telegram: ${suggestion.severity} - ${suggestion.title}`)
     }
 
     /**
-     * 广播全局 alert（用于 critical/high 级别建议）
+     * 广播全局 alert - 已禁用，不再广播 SSE 事件
+     * 保留此方法以备将来需要时启用
      */
-    private broadcastAlert(suggestion: StoredAgentSuggestion): void {
+    private broadcastAlert(_suggestion: StoredAgentSuggestion): void {
+        // 已禁用：不再广播 SSE 事件，只使用 Telegram 通知
+        // 如需恢复，取消下面的注释
+        /*
         const alertData: AdvisorAlertData = {
             suggestionId: suggestion.id,
             title: suggestion.title,
@@ -1904,6 +1912,7 @@ ${output.message}
 
         this.syncEngine.emit(event)
         console.log(`[AdvisorService] Broadcasted alert: ${suggestion.severity} - ${suggestion.title}`)
+        */
     }
 
     /**
@@ -1915,7 +1924,7 @@ ${output.message}
     }
 
     /**
-     * 广播状态变化
+     * 广播状态变化 - 只推送 Telegram 通知，不再广播到所有 session
      */
     async broadcastStatusChange(suggestionId: string, newStatus: SuggestionStatus): Promise<void> {
         const suggestion = this.store.getAgentSuggestion(suggestionId)
@@ -1923,30 +1932,16 @@ ${output.message}
             return
         }
 
-        const sessions = this.syncEngine.getActiveSessions()
-            .filter(s => s.namespace === suggestion.namespace)
-
-        for (const session of sessions) {
-            if (this.scheduler.isAdvisorSession(session.id)) {
-                continue
-            }
-
-            const key = `${suggestionId}:status:${newStatus}:${session.id}`
-            if (this.broadcastedSet.has(key)) {
-                continue
-            }
-            this.broadcastedSet.add(key)
-
-            await this.sendEventMessage(session.id, {
-                type: 'advisor-suggestion-status',
-                suggestionId,
-                title: suggestion.title,
-                status: newStatus
-            })
+        // 去重检查
+        const key = `status:${suggestionId}:${newStatus}`
+        if (this.broadcastedSet.has(key)) {
+            return
         }
+        this.broadcastedSet.add(key)
 
-        // 发送 Telegram 通知
+        // 只推送 Telegram 通知，不再广播到所有 session
         this.telegramNotifier?.notifyStatusChange(suggestion, newStatus)
+        console.log(`[AdvisorService] Status change notification sent via Telegram: ${suggestionId} -> ${newStatus}`)
     }
 
     /**
