@@ -69,8 +69,10 @@ export function SessionChat(props: {
     const controlsDisabled = !props.session.active
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
-    const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, isPending } = useSessionActions(props.api, props.session.id)
+    const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, clearMessages, isPending } = useSessionActions(props.api, props.session.id)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [clearDialogOpen, setClearDialogOpen] = useState(false)
+    const [clearSuggestionDismissed, setClearSuggestionDismissed] = useState(false)
     const [isResuming, setIsResuming] = useState(false)
     const [resumeError, setResumeError] = useState<string | null>(null)
     const pendingMessageRef = useRef<string | null>(null)
@@ -81,6 +83,7 @@ export function SessionChat(props: {
         blocksByIdRef.current.clear()
         setIsResuming(false)
         setResumeError(null)
+        setClearSuggestionDismissed(false)
         pendingMessageRef.current = null
     }, [props.session.id])
 
@@ -197,6 +200,22 @@ export function SessionChat(props: {
         }
     }, [deleteSession, haptic, props])
 
+    const handleClearMessagesClick = useCallback(() => {
+        setClearDialogOpen(true)
+    }, [])
+
+    const handleClearMessagesConfirm = useCallback(async () => {
+        setClearDialogOpen(false)
+        try {
+            await clearMessages(30)
+            haptic.notification('success')
+            props.onRefresh()
+        } catch (error) {
+            haptic.notification('error')
+            console.error('Failed to clear messages:', error)
+        }
+    }, [clearMessages, haptic, props])
+
     const sendPendingMessage = useCallback(async (sessionId: string, text: string) => {
         const trimmed = text.trim()
         if (!trimmed) return
@@ -305,7 +324,9 @@ export function SessionChat(props: {
                 viewers={props.viewers}
                 onBack={props.onBack}
                 onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
+                onClearMessages={handleClearMessagesClick}
                 onDelete={handleDeleteClick}
+                clearDisabled={isPending}
                 deleteDisabled={isPending}
             />
 
@@ -338,6 +359,33 @@ export function SessionChat(props: {
                 </DialogContent>
             </Dialog>
 
+            <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>清空聊天记录</DialogTitle>
+                        <DialogDescription>
+                            清空显示的聊天记录？将保留最近 30 条消息以维持上下文。此操作不可撤销。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setClearDialogOpen(false)}
+                            className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
+                        >
+                            取消
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleClearMessagesConfirm}
+                            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+                        >
+                            确认清空
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
             {controlsDisabled ? (
                 <div className="px-3 pt-3">
                     <div className="mx-auto w-full max-w-content rounded-md bg-[var(--app-subtle-bg)] p-3 text-sm text-[var(--app-hint)]">
@@ -348,6 +396,33 @@ export function SessionChat(props: {
                                 : props.messages.length === 0
                                     ? 'Starting session...'
                                     : 'Session is inactive. Tap the composer to resume.'}
+                    </div>
+                </div>
+            ) : null}
+
+            {/* 消息过多提示横幅 */}
+            {props.messages.length >= 200 && !clearSuggestionDismissed ? (
+                <div className="px-3 pt-2">
+                    <div className="mx-auto w-full max-w-content flex items-center justify-between gap-2 rounded-md bg-orange-500/10 border border-orange-500/20 px-3 py-2 text-sm text-orange-600 dark:text-orange-400">
+                        <span>
+                            聊天记录较多 ({props.messages.length} 条)，可能导致页面卡顿。建议清空旧消息。
+                        </span>
+                        <div className="flex shrink-0 items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setClearDialogOpen(true)}
+                                className="rounded px-2 py-1 text-xs font-medium bg-orange-500 text-white hover:bg-orange-600"
+                            >
+                                清空
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setClearSuggestionDismissed(true)}
+                                className="rounded px-2 py-1 text-xs font-medium hover:bg-orange-500/20"
+                            >
+                                忽略
+                            </button>
+                        </div>
                     </div>
                 </div>
             ) : null}
