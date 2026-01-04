@@ -124,18 +124,18 @@ export class AdvisorService {
             return
         }
 
+        // 忽略来自 Advisor 发送的消息（包括 SESSION_SUMMARY）
+        const meta = content.meta as Record<string, unknown> | null
+        if (meta?.sentFrom === 'advisor') {
+            return
+        }
+
         // 检查是否是 Advisor 会话
         if (this.scheduler.isAdvisorSession(sessionId)) {
             // 解析 Advisor 输出 (agent 角色的 codex 消息)
             if (content.role === 'agent' || content.role === 'assistant') {
                 this.parseAdvisorOutput(sessionId, content)
             }
-            return
-        }
-
-        // 忽略来自 Advisor 广播的事件消息
-        const meta = content.meta as Record<string, unknown> | null
-        if (meta?.sentFrom === 'advisor') {
             return
         }
 
@@ -253,20 +253,19 @@ export class AdvisorService {
                         text = data.message
                         isAgentMessage = role === 'agent'
                     }
-                } else if (contentType === 'event') {
-                    // 跳过 event 消息
+                    // 跳过非 message 类型的 codex 消息 (token_count, tool-call, tool-call-result 等)
+                } else if (contentType === 'event' || contentType === 'output') {
+                    // 跳过 event 和 output 消息
                     continue
+                } else if (contentType === 'text') {
+                    // 用户消息格式: { role: 'user', content: { type: 'text', text: '...' } }
+                    text = ((innerContent as Record<string, unknown>).text as string) || ''
                 } else {
                     // 其他对象格式
                     text = ((innerContent as Record<string, unknown>).text as string) || ''
                 }
             } else if (typeof innerContent === 'string') {
                 text = innerContent
-            }
-
-            // 格式 2: 用户消息 { role: 'user', content: '...' }
-            if (!text && role === 'user' && typeof content.content === 'string') {
-                text = content.content
             }
 
             if (!text) continue
@@ -325,7 +324,7 @@ export class AdvisorService {
         try {
             await this.syncEngine.sendMessage(advisorSessionId, {
                 text: content,
-                sentFrom: 'webapp'
+                sentFrom: 'advisor'
             })
             console.log(`[AdvisorService] Summary delivered for session ${summary.sessionId}`)
         } catch (error) {
