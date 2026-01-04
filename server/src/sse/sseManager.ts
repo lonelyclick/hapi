@@ -9,6 +9,7 @@ export type SSESubscription = {
     email?: string
     clientId?: string
     deviceType?: string
+    groupId?: string  // 订阅的群组 ID
 }
 
 type SSEConnection = SSESubscription & {
@@ -34,6 +35,7 @@ export class SSEManager {
         email?: string
         clientId?: string
         deviceType?: string
+        groupId?: string
         send: (event: SyncEvent) => void | Promise<void>
         sendHeartbeat: () => void | Promise<void>
     }): SSESubscription {
@@ -46,6 +48,7 @@ export class SSEManager {
             email: options.email,
             clientId: options.clientId,
             deviceType: options.deviceType,
+            groupId: options.groupId,
             send: options.send,
             sendHeartbeat: options.sendHeartbeat
         }
@@ -64,7 +67,8 @@ export class SSEManager {
             machineId: subscription.machineId,
             email: subscription.email,
             clientId: subscription.clientId,
-            deviceType: subscription.deviceType
+            deviceType: subscription.deviceType,
+            groupId: subscription.groupId
         }
     }
 
@@ -228,5 +232,31 @@ export class SSEManager {
                 this.unsubscribe(connection.id)
             })
         }
+    }
+
+    /**
+     * 向订阅了指定群组的所有连接广播群组消息
+     */
+    broadcastToGroup(groupId: string, event: SyncEvent): void {
+        for (const connection of this.connections.values()) {
+            if (connection.groupId !== groupId) continue
+
+            void Promise.resolve(connection.send(event)).catch(() => {
+                this.unsubscribe(connection.id)
+            })
+        }
+    }
+
+    /**
+     * 获取订阅了指定群组的连接数量
+     */
+    getGroupSubscriberCount(groupId: string): number {
+        let count = 0
+        for (const connection of this.connections.values()) {
+            if (connection.groupId === groupId) {
+                count++
+            }
+        }
+        return count
     }
 }

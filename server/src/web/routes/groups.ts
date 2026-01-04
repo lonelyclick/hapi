@@ -1,8 +1,11 @@
 import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
 import type { Store, AgentGroupType, AgentGroupStatus, GroupMemberRole, GroupSenderType, GroupMessageType } from '../../store'
-import type { SyncEngine } from '../../sync/syncEngine'
+import type { SyncEngine, GroupMessageData } from '../../sync/syncEngine'
+import type { SSEManager } from '../../sse/sseManager'
 
 // Zod schemas
 const groupTypeSchema = z.enum(['collaboration', 'debate', 'review'])
@@ -33,7 +36,8 @@ const sendMessageSchema = z.object({
     content: z.string().min(1).max(50000),
     sourceSessionId: z.string().uuid().optional(),
     senderType: senderTypeSchema.optional().default('agent'),
-    messageType: messageTypeSchema.optional().default('chat')
+    messageType: messageTypeSchema.optional().default('chat'),
+    mentions: z.array(z.string()).optional() // @提及的 agentType 列表
 })
 
 const messagesQuerySchema = z.object({
@@ -43,9 +47,23 @@ const messagesQuerySchema = z.object({
 
 export function createGroupRoutes(
     store: Store,
-    syncEngine: SyncEngine | null
+    syncEngine: SyncEngine | null,
+    sseManager: SSEManager | null = null
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
+
+    /**
+     * 广播群组消息给订阅者
+     */
+    function broadcastGroupMessage(groupId: string, message: GroupMessageData): void {
+        if (!sseManager) return
+
+        sseManager.broadcastToGroup(groupId, {
+            type: 'group-message',
+            groupId,
+            groupMessage: message
+        })
+    }
 
     // GET /groups - 获取群组列表
     app.get('/groups', (c) => {
@@ -229,6 +247,17 @@ export function createGroupRoutes(
                 parsed.data.senderType as GroupSenderType,
                 parsed.data.messageType as GroupMessageType
             )
+
+            // 获取发送者信息并广播 SSE 事件
+            const senderSession = parsed.data.sourceSessionId
+                ? syncEngine?.getSession(parsed.data.sourceSessionId)
+                : null
+            broadcastGroupMessage(groupId, {
+                ...message,
+                senderName: senderSession?.metadata?.name || undefined,
+                agentType: senderSession?.metadata?.agent || undefined
+            })
+
             return c.json({ ok: true, message })
         } catch (error) {
             return c.json({ error: 'Failed to send message' }, 500)
@@ -268,14 +297,35 @@ export function createGroupRoutes(
             parsed.data.messageType as GroupMessageType
         )
 
+        // 获取发送者信息并广播 SSE 事件到群组订阅者
+        const senderSession = parsed.data.sourceSessionId
+            ? syncEngine.getSession(parsed.data.sourceSessionId)
+            : null
+        broadcastGroupMessage(groupId, {
+            ...message,
+            senderName: senderSession?.metadata?.name || undefined,
+            agentType: senderSession?.metadata?.agent || undefined
+        })
+
         // Get all members and broadcast
         const members = store.getGroupMembers(groupId)
-        const results: { sessionId: string; success: boolean; error?: string }[] = []
+        const results: { sessionId: string; success: boolean; error?: string; skipped?: boolean }[] = []
+        const mentions = parsed.data.mentions
 
         for (const member of members) {
             // Skip the source session (don't echo back)
             if (member.sessionId === parsed.data.sourceSessionId) {
                 continue
+            }
+
+            // 如果有 @提及，只发送给被提及的成员
+            // mentions 包含 agentType 如 ['claude', 'gemini'] 或 ['all']
+            if (mentions && mentions.length > 0 && !mentions.includes('all')) {
+                const memberAgentType = member.agentType || syncEngine.getSession(member.sessionId)?.metadata?.agent || 'unknown'
+                if (!mentions.some(m => memberAgentType.toLowerCase().includes(m.toLowerCase()))) {
+                    results.push({ sessionId: member.sessionId, success: true, skipped: true, error: 'Not mentioned' })
+                    continue
+                }
             }
 
             const session = syncEngine.getSession(member.sessionId)
@@ -298,7 +348,8 @@ export function createGroupRoutes(
                         groupName: group.name,
                         senderName: senderName,
                         messageType: parsed.data.messageType,
-                        isGroupMessage: true
+                        isGroupMessage: true,
+                        mentions: mentions
                     }
                 })
                 results.push({ sessionId: member.sessionId, success: true })
@@ -317,6 +368,52 @@ export function createGroupRoutes(
                 failed: results.filter(r => !r.success).length,
                 results
             }
+        })
+    })
+
+    // GET /groups/:id/events - SSE 订阅群组事件
+    app.get('/groups/:id/events', (c) => {
+        const groupId = c.req.param('id')
+        const group = store.getAgentGroup(groupId)
+
+        if (!group) {
+            return c.json({ error: 'Group not found' }, 404)
+        }
+
+        if (!sseManager) {
+            return c.json({ error: 'SSE not available' }, 503)
+        }
+
+        const subscriptionId = randomUUID()
+        const namespace = c.get('namespace') || 'default'
+        const email = c.get('email')
+        const clientId = c.get('clientId')
+        const deviceType = c.get('deviceType')
+
+        return streamSSE(c, async (stream) => {
+            sseManager.subscribe({
+                id: subscriptionId,
+                namespace,
+                all: false,
+                sessionId: null,
+                machineId: null,
+                email,
+                clientId,
+                deviceType,
+                groupId,
+                send: (event) => stream.writeSSE({ data: JSON.stringify(event) }),
+                sendHeartbeat: async () => {
+                    await stream.write(': heartbeat\n\n')
+                }
+            })
+
+            await new Promise<void>((resolve) => {
+                const done = () => resolve()
+                c.req.raw.signal.addEventListener('abort', done, { once: true })
+                stream.onAbort(done)
+            })
+
+            sseManager.unsubscribe(subscriptionId)
         })
     })
 

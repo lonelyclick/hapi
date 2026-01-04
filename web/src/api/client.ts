@@ -718,6 +718,39 @@ export class ApiClient {
         )
     }
 
+    /**
+     * 移除指定订阅者
+     * @param sessionId - session ID
+     * @param subscriberId - 订阅者 ID（chatId 或 clientId）
+     * @param type - 订阅者类型，默认为 'chatId'
+     */
+    async removeSessionSubscriber(sessionId: string, subscriberId: string, type: 'chatId' | 'clientId' = 'chatId'): Promise<{
+        ok: boolean
+    }> {
+        return await this.request(
+            `/api/sessions/${encodeURIComponent(sessionId)}/subscribers/${encodeURIComponent(subscriberId)}?type=${type}`,
+            {
+                method: 'DELETE'
+            }
+        )
+    }
+
+    /**
+     * 清除所有订阅者
+     * @param sessionId - session ID
+     */
+    async clearSessionSubscribers(sessionId: string): Promise<{
+        ok: boolean
+        removed: { chatIds: number; clientIds: number; creator: boolean }
+    }> {
+        return await this.request(
+            `/api/sessions/${encodeURIComponent(sessionId)}/subscribers`,
+            {
+                method: 'DELETE'
+            }
+        )
+    }
+
     async get<T>(path: string): Promise<{ data: T }> {
         const data = await this.request<T>(`/api${path}`)
         return { data }
@@ -829,13 +862,14 @@ export class ApiClient {
         content: string,
         sourceSessionId?: string,
         senderType: GroupSenderType = 'user',
-        messageType: GroupMessageType = 'chat'
+        messageType: GroupMessageType = 'chat',
+        mentions?: string[]
     ): Promise<BroadcastResponse> {
         return await this.request<BroadcastResponse>(
             `/api/groups/${encodeURIComponent(groupId)}/broadcast`,
             {
                 method: 'POST',
-                body: JSON.stringify({ content, sourceSessionId, senderType, messageType })
+                body: JSON.stringify({ content, sourceSessionId, senderType, messageType, mentions })
             }
         )
     }

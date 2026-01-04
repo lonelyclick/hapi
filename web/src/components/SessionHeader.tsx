@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Session, SessionViewer } from '@/types/api'
 import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
@@ -146,6 +146,45 @@ function BellIcon(props: { className?: string; subscribed?: boolean }) {
     )
 }
 
+function XIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+    )
+}
+
+function ChevronDownIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <polyline points="6 9 12 15 18 9" />
+        </svg>
+    )
+}
+
 function getAgentLabel(session: Session): string {
     const flavor = session.metadata?.flavor?.trim()
     if (flavor === 'claude') return 'Claude'
@@ -270,8 +309,52 @@ export function SessionHeader(props: {
         }
     })
 
+    // 移除订阅者的 mutation
+    const removeSubscriberMutation = useMutation({
+        mutationFn: async ({ subscriberId, type }: { subscriberId: string; type: 'chatId' | 'clientId' }) => {
+            return await api.removeSessionSubscriber(props.session.id, subscriberId, type)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: subscribersQueryKey })
+        }
+    })
+
+    // 订阅者下拉菜单状态
+    const [showSubscribersMenu, setShowSubscribersMenu] = useState(false)
+    const subscribersMenuRef = useRef<HTMLDivElement>(null)
+
+    // 点击外部关闭菜单
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (subscribersMenuRef.current && !subscribersMenuRef.current.contains(event.target as Node)) {
+                setShowSubscribersMenu(false)
+            }
+        }
+        if (showSubscribersMenu) {
+            document.addEventListener('mousedown', handleClickOutside)
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [showSubscribersMenu])
+
+    // 计算订阅者总数
+    const totalSubscribers = useMemo(() => {
+        if (!subscribersData) return 0
+        let count = 0
+        if (subscribersData.creatorChatId) count++
+        count += subscribersData.subscribers.length
+        count += (subscribersData.clientIdSubscribers?.length ?? 0)
+        // 去重 creator 和 subscribers 中的重复
+        if (subscribersData.creatorChatId && subscribersData.subscribers.includes(subscribersData.creatorChatId)) {
+            count--
+        }
+        return count
+    }, [subscribersData])
+
     useEffect(() => {
         setShowAgentTip(false)
+        setShowSubscribersMenu(false)
     }, [props.session.id])
 
     // In Telegram, don't render header (Telegram provides its own)
@@ -346,20 +429,122 @@ export function SessionHeader(props: {
                     {props.viewers && props.viewers.length > 0 && (
                         <ViewersBadge viewers={props.viewers} compact buttonClassName="h-5 leading-none" />
                     )}
-                    {/* Subscription toggle - works for both Telegram (chatId) and Web (clientId) users */}
-                    <button
-                        type="button"
-                        onClick={() => toggleSubscriptionMutation.mutate(!isSubscribed)}
-                        disabled={toggleSubscriptionMutation.isPending}
-                        className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-                            isSubscribed
-                                ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
-                                : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
-                        } disabled:opacity-50`}
-                        title={isSubscribed ? '已订阅通知 (点击取消)' : '订阅通知'}
-                    >
-                        <BellIcon subscribed={isSubscribed} />
-                    </button>
+                    {/* Subscription toggle with dropdown menu */}
+                    <div className="relative" ref={subscribersMenuRef}>
+                        <div className="flex items-center">
+                            {/* 主按钮：切换自己的订阅 */}
+                            <button
+                                type="button"
+                                onClick={() => toggleSubscriptionMutation.mutate(!isSubscribed)}
+                                disabled={toggleSubscriptionMutation.isPending}
+                                className={`flex h-7 items-center justify-center rounded-l-md pl-2 pr-1 transition-colors ${
+                                    isSubscribed
+                                        ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
+                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
+                                } disabled:opacity-50`}
+                                title={isSubscribed ? '已订阅通知 (点击取消)' : '订阅通知'}
+                            >
+                                <BellIcon subscribed={isSubscribed} />
+                                {totalSubscribers > 0 && (
+                                    <span className="ml-1 text-[10px] font-medium">{totalSubscribers}</span>
+                                )}
+                            </button>
+                            {/* 下拉按钮：显示订阅者列表 */}
+                            <button
+                                type="button"
+                                onClick={() => setShowSubscribersMenu(!showSubscribersMenu)}
+                                className={`flex h-7 w-5 items-center justify-center rounded-r-md border-l transition-colors ${
+                                    isSubscribed
+                                        ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20'
+                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] border-[var(--app-divider)]'
+                                }`}
+                                title="管理订阅者"
+                            >
+                                <ChevronDownIcon />
+                            </button>
+                        </div>
+                        {/* 订阅者下拉菜单 */}
+                        {showSubscribersMenu && subscribersData && (
+                            <div className="absolute right-0 top-full z-30 mt-1 min-w-[200px] max-w-[280px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
+                                <div className="px-3 py-1.5 text-[10px] font-medium text-[var(--app-hint)] uppercase tracking-wider">
+                                    通知订阅者 ({totalSubscribers})
+                                </div>
+                                {totalSubscribers === 0 ? (
+                                    <div className="px-3 py-2 text-xs text-[var(--app-hint)]">
+                                        暂无订阅者
+                                    </div>
+                                ) : (
+                                    <div className="max-h-[200px] overflow-y-auto">
+                                        {/* Creator */}
+                                        {subscribersData.creatorChatId && !subscribersData.subscribers.includes(subscribersData.creatorChatId) && (
+                                            <div className="flex items-center justify-between px-3 py-1.5 hover:bg-[var(--app-subtle-bg)]">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="text-xs truncate">
+                                                        {subscribersData.creatorChatId === currentChatId ? '我 (创建者)' : `TG: ${subscribersData.creatorChatId}`}
+                                                    </span>
+                                                    <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600">
+                                                        创建者
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeSubscriberMutation.mutate({ subscriberId: subscribersData.creatorChatId!, type: 'chatId' })}
+                                                    disabled={removeSubscriberMutation.isPending}
+                                                    className="shrink-0 p-1 rounded hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                                                    title="移除订阅"
+                                                >
+                                                    <XIcon />
+                                                </button>
+                                            </div>
+                                        )}
+                                        {/* ChatId subscribers */}
+                                        {subscribersData.subscribers.map((chatId) => (
+                                            <div key={`chat-${chatId}`} className="flex items-center justify-between px-3 py-1.5 hover:bg-[var(--app-subtle-bg)]">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="text-xs truncate">
+                                                        {chatId === currentChatId ? '我' : `TG: ${chatId}`}
+                                                    </span>
+                                                    {chatId === subscribersData.creatorChatId && (
+                                                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600">
+                                                            创建者
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeSubscriberMutation.mutate({ subscriberId: chatId, type: 'chatId' })}
+                                                    disabled={removeSubscriberMutation.isPending}
+                                                    className="shrink-0 p-1 rounded hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                                                    title="移除订阅"
+                                                >
+                                                    <XIcon />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {/* ClientId subscribers */}
+                                        {subscribersData.clientIdSubscribers?.map((clientId) => (
+                                            <div key={`client-${clientId}`} className="flex items-center justify-between px-3 py-1.5 hover:bg-[var(--app-subtle-bg)]">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="text-xs truncate">
+                                                        {clientId === currentClientId ? '我 (Web)' : `Web: ${clientId.slice(0, 8)}...`}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeSubscriberMutation.mutate({ subscriberId: clientId, type: 'clientId' })}
+                                                    disabled={removeSubscriberMutation.isPending}
+                                                    className="shrink-0 p-1 rounded hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                                                    title="移除订阅"
+                                                >
+                                                    <XIcon />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                     {/* Auto-iteration toggle */}
                     <button
                         type="button"

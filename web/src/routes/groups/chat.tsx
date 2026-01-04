@@ -60,9 +60,9 @@ export default function GroupChatPage() {
 
     // Send message mutation
     const sendMessageMutation = useMutation({
-        mutationFn: async (content: string) => {
+        mutationFn: async ({ content, mentions }: { content: string; mentions?: string[] }) => {
             if (!api) throw new Error('API unavailable')
-            return await api.broadcastToGroup(groupId, content, undefined, 'user', 'chat')
+            return await api.broadcastToGroup(groupId, content, undefined, 'user', 'chat', mentions)
         },
         onSuccess: () => {
             // Refetch messages after sending
@@ -70,10 +70,10 @@ export default function GroupChatPage() {
         }
     })
 
-    const handleSend = useCallback(async (content: string) => {
+    const handleSend = useCallback(async (content: string, mentions?: string[]) => {
         setIsSending(true)
         try {
-            await sendMessageMutation.mutateAsync(content)
+            await sendMessageMutation.mutateAsync({ content, mentions })
         } catch (error) {
             console.error('Failed to send message:', error)
         } finally {
@@ -125,6 +125,7 @@ export default function GroupChatPage() {
                 isSending={isSending}
                 onSend={handleSend}
                 placeholder={group.status === 'active' ? '发送消息给群组...' : '群组已暂停'}
+                members={members}
             />
         </div>
     )

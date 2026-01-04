@@ -903,5 +903,67 @@ export function createSessionsRoutes(
         return c.json({ ok: success })
     })
 
+    /**
+     * 移除指定订阅者（owner 或任何人都可以操作）
+     * DELETE /sessions/:id/subscribers/:subscriberId
+     * subscriberId 可以是 chatId 或 clientId
+     * Query: type=chatId|clientId （可选，默认为 chatId）
+     */
+    app.delete('/:id/subscribers/:subscriberId', async (c) => {
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+        const subscriberId = c.req.param('subscriberId')
+        const type = c.req.query('type') || 'chatId'
+
+        let success = false
+        if (type === 'clientId') {
+            success = store.unsubscribeFromSessionNotificationsByClientId(sessionId, subscriberId)
+        } else {
+            // chatId - 同时检查是否是 creator
+            success = store.unsubscribeFromSessionNotifications(sessionId, subscriberId)
+            const creatorChatId = store.getSessionCreatorChatId(sessionId)
+            if (creatorChatId === subscriberId) {
+                const cleared = store.clearSessionCreatorChatId(sessionId, namespace)
+                success = success || cleared
+            }
+        }
+
+        return c.json({ ok: success })
+    })
+
+    /**
+     * 清除所有订阅者（owner 操作）
+     * DELETE /sessions/:id/subscribers
+     * 清除所有订阅者，包括 creator
+     */
+    app.delete('/:id/subscribers', async (c) => {
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+
+        // 清除所有 chatId 订阅者
+        const chatIdSubscribers = store.getSessionNotificationSubscribers(sessionId)
+        for (const chatId of chatIdSubscribers) {
+            store.unsubscribeFromSessionNotifications(sessionId, chatId)
+        }
+
+        // 清除所有 clientId 订阅者
+        const clientIdSubscribers = store.getSessionNotificationSubscriberClientIds(sessionId)
+        for (const clientId of clientIdSubscribers) {
+            store.unsubscribeFromSessionNotificationsByClientId(sessionId, clientId)
+        }
+
+        // 清除 creator
+        store.clearSessionCreatorChatId(sessionId, namespace)
+
+        return c.json({
+            ok: true,
+            removed: {
+                chatIds: chatIdSubscribers.length,
+                clientIds: clientIdSubscribers.length,
+                creator: true
+            }
+        })
+    })
+
     return app
 }

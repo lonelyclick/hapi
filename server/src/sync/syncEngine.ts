@@ -166,6 +166,7 @@ export type SyncEventType =
     | 'advisor-minimax-start'
     | 'advisor-minimax-complete'
     | 'advisor-minimax-error'
+    | 'group-message'
 
 export type OnlineUser = {
     email: string
@@ -221,11 +222,25 @@ export type AdvisorMinimaxErrorData = {
     error: string
 }
 
+export type GroupMessageData = {
+    id: string
+    groupId: string
+    sourceSessionId: string | null
+    senderType: 'agent' | 'user' | 'system'
+    content: string
+    messageType: 'chat' | 'task' | 'feedback' | 'decision'
+    createdAt: number
+    // 可选的发送者信息（用于前端显示）
+    senderName?: string
+    agentType?: string
+}
+
 export interface SyncEvent {
     type: SyncEventType
     namespace?: string
     sessionId?: string
     machineId?: string
+    groupId?: string
     data?: unknown
     message?: DecryptedMessage
     users?: OnlineUser[]
@@ -235,6 +250,7 @@ export interface SyncEvent {
     minimaxStart?: AdvisorMinimaxStartData
     minimaxComplete?: AdvisorMinimaxCompleteData
     minimaxError?: AdvisorMinimaxErrorData
+    groupMessage?: GroupMessageData
 }
 
 export type SyncEventListener = (event: SyncEvent) => void
@@ -360,13 +376,37 @@ export class SyncEngine {
     /**
      * 同步 agent 消息到群组
      * 当 AI 回复消息时，如果该 session 属于某个活跃群组，自动将回复同步到群组消息表
+     * 同时广播 SSE 事件给群组订阅者
      */
     private syncAgentMessageToGroups(sessionId: string, content: string): void {
         try {
             const groups = this.store.getGroupsForSession(sessionId)
+            const session = this.sessions.get(sessionId)
+
             for (const group of groups) {
-                this.store.addGroupMessage(group.id, sessionId, content, 'agent', 'chat')
+                // 存储消息到群组
+                const message = this.store.addGroupMessage(group.id, sessionId, content, 'agent', 'chat')
+
+                // 广播 SSE 事件给群组订阅者
+                const groupMessageData: GroupMessageData = {
+                    id: message.id,
+                    groupId: message.groupId,
+                    sourceSessionId: message.sourceSessionId,
+                    senderType: message.senderType,
+                    content: message.content,
+                    messageType: message.messageType,
+                    createdAt: message.createdAt,
+                    senderName: session?.metadata?.name || undefined,
+                    agentType: (session?.metadata as Record<string, unknown>)?.agent as string | undefined
+                }
+
+                this.sseManager.broadcastToGroup(group.id, {
+                    type: 'group-message',
+                    groupId: group.id,
+                    groupMessage: groupMessageData
+                })
             }
+
             if (groups.length > 0) {
                 console.log(`[SyncEngine] Synced agent message to ${groups.length} group(s) for session ${sessionId}`)
             }
