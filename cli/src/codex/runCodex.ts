@@ -19,6 +19,7 @@ import { runtimePath } from '@/projectPath';
 import type { CodexSession } from './session';
 import { parseCodexCliOverrides } from './utils/codexCliOverrides';
 import { readWorktreeEnv } from '@/utils/worktreeEnv';
+import { readModeEnv } from '@/utils/modeEnv';
 
 export { emitReadyIfIdle } from './utils/emitReadyIfIdle';
 
@@ -126,9 +127,18 @@ export async function runCodex(opts: {
     const codexCliOverrides = parseCodexCliOverrides(opts.codexArgs);
     const sessionWrapperRef: { current: CodexSession | null } = { current: null };
 
-    let currentPermissionMode: PermissionMode = opts.permissionMode ?? 'default';
-    let currentModelMode: SessionModelMode | undefined = undefined;
-    let currentModelReasoningEffort: SessionModelReasoningEffort | undefined = undefined;
+    // Read mode settings from environment (set by daemon when resuming session)
+    const modeEnv = readModeEnv();
+    // Filter to valid Codex permission modes
+    const envPermissionMode = (modeEnv.permissionMode === 'default' || modeEnv.permissionMode === 'read-only' || modeEnv.permissionMode === 'safe-yolo' || modeEnv.permissionMode === 'yolo')
+        ? modeEnv.permissionMode
+        : undefined;
+    let currentPermissionMode: PermissionMode = envPermissionMode ?? opts.permissionMode ?? 'default';
+    let currentModelMode: SessionModelMode | undefined = modeEnv.modelMode;
+    let currentModelReasoningEffort: SessionModelReasoningEffort | undefined = modeEnv.modelReasoningEffort;
+    if (envPermissionMode || modeEnv.modelMode || modeEnv.modelReasoningEffort) {
+        logger.debug(`[Codex] Using mode settings from environment: permissionMode=${envPermissionMode}, modelMode=${modeEnv.modelMode}, reasoningEffort=${modeEnv.modelReasoningEffort}`);
+    }
 
     const syncSessionMode = () => {
         const sessionInstance = sessionWrapperRef.current;

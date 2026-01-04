@@ -235,6 +235,34 @@ import { getCliArgs } from './utils/cliArgs'
       process.exit(1)
     }
     return;
+  } else if (subcommand === 'grok') {
+    // Handle grok command (Grok CLI with ACP)
+    try {
+      let startedBy: 'daemon' | 'terminal' | undefined = undefined;
+      let yolo = false;
+      for (let i = 1; i < args.length; i++) {
+        if (args[i] === '--started-by') {
+          startedBy = args[++i] as 'daemon' | 'terminal';
+        } else if (args[i] === '--yolo') {
+          yolo = true;
+        }
+      }
+
+      const { registerGrokAgent } = await import('./agent/runners/grok');
+      const { runAgentSession } = await import('./agent/runners/runAgentSession');
+      registerGrokAgent(yolo);
+
+      await initializeToken();
+      await authAndSetupMachineIfNeeded();
+      await runAgentSession({ agentType: 'grok', startedBy });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
+      if (process.env.DEBUG) {
+        console.error(error)
+      }
+      process.exit(1)
+    }
+    return;
   } else if (subcommand === 'logout') {
     // Keep for backward compatibility - redirect to auth logout
     console.log(chalk.yellow('Note: "hapi logout" is deprecated. Use "hapi auth logout" instead.\n'));
@@ -428,6 +456,7 @@ ${chalk.bold('Usage:')}
   hapi gemini            Start Gemini ACP mode
   hapi glm               Start GLM-4.7 mode (NVIDIA NIM)
   hapi minimax           Start MiniMax-M2.1 mode (NVIDIA NIM)
+  hapi grok              Start Grok CLI mode
   hapi mcp               Start MCP stdio bridge
   hapi connect           (not available in direct-connect mode)
   hapi notify            (not available in direct-connect mode)

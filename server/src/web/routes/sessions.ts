@@ -487,6 +487,13 @@ export function createSessionsRoutes(
             return c.json({ error: spawnTarget.error }, 409)
         }
 
+        // Preserve mode settings from original session
+        const modeSettings = {
+            permissionMode: session.permissionMode,
+            modelMode: session.modelMode,
+            modelReasoningEffort: session.modelReasoningEffort
+        }
+
         const resumeAttempt = await engine.spawnSession(
             machineId,
             spawnTarget.directory,
@@ -494,7 +501,7 @@ export function createSessionsRoutes(
             undefined,
             spawnTarget.sessionType,
             spawnTarget.worktreeName,
-            { sessionId }
+            { sessionId, ...modeSettings }
         )
 
         if (resumeAttempt.type === 'success') {
@@ -518,7 +525,7 @@ export function createSessionsRoutes(
             undefined,
             spawnTarget.sessionType,
             spawnTarget.worktreeName,
-            { resumeSessionId }
+            { resumeSessionId, ...modeSettings }
         )
 
         if (fallbackResult.type !== 'success') {
@@ -683,6 +690,48 @@ export function createSessionsRoutes(
         const namespace = c.get('namespace')
         const users = sseManager.getOnlineUsers(namespace)
         return c.json({ users })
+    })
+
+    // 广播用户输入状态
+    app.post('/sessions/:id/typing', async (c) => {
+        const sseManager = getSseManager()
+        if (!sseManager) {
+            return c.json({ error: 'SSE not available' }, 503)
+        }
+
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const body = await c.req.json().catch(() => null)
+        if (!body || typeof body.text !== 'string') {
+            return c.json({ error: 'Invalid body' }, 400)
+        }
+
+        const email = c.get('email') ?? 'anonymous'
+        const clientId = c.get('clientId') ?? 'unknown'
+        const namespace = c.get('namespace')
+
+        // 广播 typing 事件给同一 session 的其他用户
+        sseManager.broadcast({
+            type: 'typing-changed',
+            namespace,
+            sessionId: sessionResult.sessionId,
+            typing: {
+                email,
+                clientId,
+                text: body.text,
+                updatedAt: Date.now()
+            }
+        })
+
+        return c.json({ ok: true })
     })
 
     return app

@@ -282,6 +282,13 @@ export type SpeechToTextStreamResponse = {
     retryAfter?: number | null
 }
 
+export type TypingUser = {
+    email: string
+    clientId: string
+    text: string
+    updatedAt: number
+}
+
 export type SyncEvent =
     | { type: 'session-added'; sessionId: string; data?: unknown; namespace?: string }
     | { type: 'session-updated'; sessionId: string; data?: unknown; namespace?: string }
@@ -290,5 +297,6 @@ export type SyncEvent =
     | { type: 'machine-updated'; machineId: string; data?: unknown; namespace?: string }
     | { type: 'connection-changed'; data?: { status: string }; namespace?: string }
     | { type: 'online-users-changed'; users: OnlineUser[]; namespace?: string }
+    | { type: 'typing-changed'; sessionId: string; typing: TypingUser; namespace?: string }
 
 export type OnlineUsersResponse = { users: OnlineUser[] }

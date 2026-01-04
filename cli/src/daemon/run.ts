@@ -331,6 +331,17 @@ export async function startDaemon(): Promise<void> {
           };
         }
 
+        // Pass permission mode and model settings from original session
+        if (options.permissionMode) {
+          extraEnv = { ...extraEnv, HAPI_PERMISSION_MODE: options.permissionMode };
+        }
+        if (options.modelMode) {
+          extraEnv = { ...extraEnv, HAPI_MODEL_MODE: options.modelMode };
+        }
+        if (options.modelReasoningEffort) {
+          extraEnv = { ...extraEnv, HAPI_MODEL_REASONING_EFFORT: options.modelReasoningEffort };
+        }
+
         // Construct arguments for the CLI
         const agentCommand = (() => {
           switch (agent) {
@@ -338,6 +349,7 @@ export async function startDaemon(): Promise<void> {
             case 'gemini': return 'gemini';
             case 'glm': return 'glm';
             case 'minimax': return 'minimax';
+            case 'grok': return 'grok';
             default: return 'claude';
           }
         })();

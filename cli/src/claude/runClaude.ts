@@ -25,6 +25,7 @@ import { runtimePath } from '../projectPath';
 import { resolve } from 'node:path';
 import type { Session } from './session';
 import { readWorktreeEnv } from '@/utils/worktreeEnv';
+import { readModeEnv } from '@/utils/modeEnv';
 
 const INIT_PROMPT_PREFIX = '#InitPrompt-';
 
@@ -215,10 +216,19 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     }));
 
     // Forward messages to the queue
-    let currentPermissionMode: PermissionMode = options.permissionMode ?? 'default';
+    // Read mode settings from environment (set by daemon when resuming session)
+    const modeEnv = readModeEnv();
+    // Filter to valid Claude permission modes
+    const envPermissionMode = (modeEnv.permissionMode === 'default' || modeEnv.permissionMode === 'acceptEdits' || modeEnv.permissionMode === 'bypassPermissions' || modeEnv.permissionMode === 'plan')
+        ? modeEnv.permissionMode
+        : undefined;
+    let currentPermissionMode: PermissionMode = envPermissionMode ?? options.permissionMode ?? 'default';
     let currentModel = options.model; // Track current model state
-    let currentModelMode: SessionModelMode = currentModel === 'sonnet' || currentModel === 'opus' ? currentModel : 'default';
+    let currentModelMode: SessionModelMode = modeEnv.modelMode ?? (currentModel === 'sonnet' || currentModel === 'opus' ? currentModel : 'default');
     let currentFallbackModel: string | undefined = undefined; // Track current fallback model
+    if (envPermissionMode || modeEnv.modelMode) {
+        logger.debug(`[loop] Using mode settings from environment: permissionMode=${envPermissionMode}, modelMode=${modeEnv.modelMode}, reasoningEffort=${modeEnv.modelReasoningEffort}`);
+    }
     let currentCustomSystemPrompt: string | undefined = undefined; // Track current custom system prompt
     let currentAppendSystemPrompt: string | undefined = undefined; // Track current append system prompt
     let currentAllowedTools: string[] | undefined = undefined; // Track current allowed tools

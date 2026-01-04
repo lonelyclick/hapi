@@ -353,7 +353,7 @@ export class ApiClient {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax',
+        agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string
@@ -379,6 +379,13 @@ export class ApiClient {
 
     async getOnlineUsers(): Promise<OnlineUsersResponse> {
         return await this.request<OnlineUsersResponse>('/api/online-users')
+    }
+
+    async sendTyping(sessionId: string, text: string): Promise<void> {
+        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/typing`, {
+            method: 'POST',
+            body: JSON.stringify({ text })
+        })
     }
 
     // 项目管理

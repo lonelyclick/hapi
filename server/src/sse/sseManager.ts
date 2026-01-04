@@ -133,6 +133,19 @@ export class SSEManager {
             return Boolean(event.sessionId && connection.sessionId === event.sessionId)
         }
 
+        // typing-changed 事件：发送给同一 session 的其他用户（排除发送者自己）
+        if (event.type === 'typing-changed') {
+            if (!event.sessionId || connection.sessionId !== event.sessionId) {
+                return false
+            }
+            // 排除发送者自己
+            const typing = event.typing as { clientId?: string } | undefined
+            if (typing?.clientId && connection.clientId === typing.clientId) {
+                return false
+            }
+            return true
+        }
+
         if (event.type === 'connection-changed') {
             return true
         }

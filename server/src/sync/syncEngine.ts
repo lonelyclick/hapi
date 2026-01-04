@@ -151,12 +151,20 @@ export type SyncEventType =
     | 'machine-updated'
     | 'connection-changed'
     | 'online-users-changed'
+    | 'typing-changed'
 
 export type OnlineUser = {
     email: string
     clientId: string
     deviceType?: string
     sessionId: string | null
+}
+
+export type TypingUser = {
+    email: string
+    clientId: string
+    text: string
+    updatedAt: number
 }
 
 export interface SyncEvent {
@@ -167,6 +175,7 @@ export interface SyncEvent {
     data?: unknown
     message?: DecryptedMessage
     users?: OnlineUser[]
+    typing?: TypingUser
 }
 
 export type SyncEventListener = (event: SyncEvent) => void
@@ -936,7 +945,7 @@ export class SyncEngine {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' = 'claude',
+        agent: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' = 'claude',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
@@ -944,6 +953,9 @@ export class SyncEngine {
             sessionId?: string
             resumeSessionId?: string
             token?: string
+            permissionMode?: Session['permissionMode']
+            modelMode?: Session['modelMode']
+            modelReasoningEffort?: Session['modelReasoningEffort']
         }
     ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         try {
@@ -959,7 +971,10 @@ export class SyncEngine {
                     worktreeName,
                     sessionId: options?.sessionId,
                     resumeSessionId: options?.resumeSessionId,
-                    token: options?.token
+                    token: options?.token,
+                    permissionMode: options?.permissionMode,
+                    modelMode: options?.modelMode,
+                    modelReasoningEffort: options?.modelReasoningEffort
                 }
             )
             if (result && typeof result === 'object') {

@@ -12,6 +12,9 @@ import {
     useRef,
     useState
 } from 'react'
+import type { TypingUser } from '@/types/api'
+import { useSessionDraft } from '@/hooks/useSessionDraft'
+import { useInputHistory } from '@/hooks/useInputHistory'
 import { createPortal } from 'react-dom'
 import type { AgentState, ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
@@ -115,6 +118,7 @@ const defaultSuggestionHandler = async (): Promise<Suggestion[]> => []
 
 export function HappyComposer(props: {
     apiClient: ApiClient
+    sessionId: string
     disabled?: boolean
     permissionMode?: PermissionMode
     modelMode?: ModelMode
@@ -134,9 +138,11 @@ export function HappyComposer(props: {
     onTerminal?: () => void
     autocompletePrefixes?: string[]
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
+    otherUserTyping?: TypingUser | null
 }) {
     const {
         apiClient,
+        sessionId,
         disabled = false,
         permissionMode: rawPermissionMode,
         modelMode: rawModelMode,
@@ -155,7 +161,8 @@ export function HappyComposer(props: {
         onSwitchToRemote,
         onTerminal,
         autocompletePrefixes = ['@', '/'],
-        autocompleteSuggestions = defaultSuggestionHandler
+        autocompleteSuggestions = defaultSuggestionHandler,
+        otherUserTyping = null
     } = props
 
     // Use ?? so missing values fall back to default (destructuring defaults only handle undefined)
@@ -199,6 +206,83 @@ export function HappyComposer(props: {
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const prevControlledByUser = useRef(controlledByUser)
     const sttPrefixRef = useRef<string>('')
+
+    // Session 草稿管理
+    const { getDraft, setDraft, clearDraft } = useSessionDraft(sessionId)
+    const draftLoadedRef = useRef(false)
+    const prevSessionIdRef = useRef(sessionId)
+
+    // 历史记录管理
+    const { addToHistory, navigateUp, navigateDown, resetNavigation, isNavigating } = useInputHistory()
+
+    // 输入同步防抖
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+    // 加载草稿（切换 session 时）
+    useEffect(() => {
+        // 保存前一个 session 的草稿
+        if (prevSessionIdRef.current !== sessionId && prevSessionIdRef.current) {
+            const currentText = composerText.trim()
+            if (currentText) {
+                // 使用 localStorage 直接保存，因为 setDraft 可能还指向旧的 sessionId
+                try {
+                    const stored = localStorage.getItem('hapi:sessionDrafts')
+                    const data = stored ? JSON.parse(stored) : {}
+                    data[prevSessionIdRef.current] = composerText
+                    localStorage.setItem('hapi:sessionDrafts', JSON.stringify(data))
+                } catch {
+                    // Ignore
+                }
+            }
+        }
+        prevSessionIdRef.current = sessionId
+
+        // 加载新 session 的草稿
+        const draft = getDraft()
+        if (draft) {
+            assistantApi.composer().setText(draft)
+            setInputState({
+                text: draft,
+                selection: { start: draft.length, end: draft.length }
+            })
+        } else if (composerText) {
+            // 如果有 composerText 但没有草稿，清空输入
+            assistantApi.composer().setText('')
+            setInputState({
+                text: '',
+                selection: { start: 0, end: 0 }
+            })
+        }
+        draftLoadedRef.current = true
+        resetNavigation()
+    }, [sessionId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // 实时保存草稿
+    useEffect(() => {
+        if (!draftLoadedRef.current) return
+        setDraft(composerText)
+    }, [composerText, setDraft])
+
+    // 同步输入给其他用户（防抖 300ms）
+    useEffect(() => {
+        if (!sessionId || !active) return
+
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current)
+        }
+
+        typingTimeoutRef.current = setTimeout(() => {
+            apiClient.sendTyping(sessionId, composerText).catch(() => {
+                // Ignore errors
+            })
+        }, 300)
+
+        return () => {
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current)
+            }
+        }
+    }, [composerText, sessionId, active, apiClient])
 
     useEffect(() => {
         setInputState((prev) => {
@@ -388,6 +472,34 @@ export function HappyComposer(props: {
             }
         }
 
+        // 历史记录导航（输入框为空时）
+        if (!hasText && suggestions.length === 0) {
+            if (key === 'ArrowUp') {
+                const historyText = navigateUp(inputState.text)
+                if (historyText !== null) {
+                    e.preventDefault()
+                    assistantApi.composer().setText(historyText)
+                    setInputState({
+                        text: historyText,
+                        selection: { start: historyText.length, end: historyText.length }
+                    })
+                }
+                return
+            }
+            if (key === 'ArrowDown' && isNavigating()) {
+                const historyText = navigateDown()
+                if (historyText !== null) {
+                    e.preventDefault()
+                    assistantApi.composer().setText(historyText)
+                    setInputState({
+                        text: historyText,
+                        selection: { start: historyText.length, end: historyText.length }
+                    })
+                }
+                return
+            }
+        }
+
         if (key === 'Escape' && threadIsRunning) {
             e.preventDefault()
             handleAbort()
@@ -426,7 +538,12 @@ export function HappyComposer(props: {
         hasText,
         isOptimizing,
         controlsDisabled,
-        handleOptimizeForPreview
+        handleOptimizeForPreview,
+        navigateUp,
+        navigateDown,
+        isNavigating,
+        inputState.text,
+        assistantApi
     ])
 
     useEffect(() => {
@@ -467,7 +584,15 @@ export function HappyComposer(props: {
 
     const handleSubmit = useCallback(() => {
         setShowContinueHint(false)
-    }, [])
+        // 添加到历史记录
+        if (trimmed) {
+            addToHistory(trimmed)
+        }
+        // 清除草稿
+        clearDraft()
+        // 重置历史导航
+        resetNavigation()
+    }, [trimmed, addToHistory, clearDraft, resetNavigation])
 
     const handlePermissionChange = useCallback((mode: PermissionMode) => {
         if (!onPermissionModeChange || controlsDisabled) return
@@ -927,6 +1052,17 @@ export function HappyComposer(props: {
                         permissionMode={permissionMode}
                         agentFlavor={agentFlavor}
                     />
+
+                    {/* 其他用户正在输入提示 */}
+                    {otherUserTyping && otherUserTyping.text ? (
+                        <div className="mb-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-xs text-blue-600 dark:text-blue-400">
+                            <span className="font-medium">{otherUserTyping.email.split('@')[0]}</span>
+                            <span className="text-blue-500 dark:text-blue-300"> 正在输入：</span>
+                            <span className="italic text-blue-500/80 dark:text-blue-300/80 line-clamp-2">
+                                {otherUserTyping.text.slice(0, 100)}{otherUserTyping.text.length > 100 ? '...' : ''}
+                            </span>
+                        </div>
+                    ) : null}
 
                     <div className="overflow-hidden rounded-[20px] bg-[var(--app-secondary-bg)]">
                         <div className="relative flex items-center px-4 py-3">

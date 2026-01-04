@@ -123,7 +123,7 @@ export interface SpawnSessionOptions {
     sessionId?: string;
     resumeSessionId?: string;
     approvedNewDirectoryCreation?: boolean;
-    agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax';
+    agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok';
     yolo?: boolean;
     token?: string;
     sessionType?: 'simple' | 'worktree';

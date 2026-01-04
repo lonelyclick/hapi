@@ -26,6 +26,7 @@ import { useSlashCommands } from '@/hooks/queries/useSlashCommands'
 import { useFileSuggestions } from '@/hooks/queries/useFileSuggestions'
 import { useSessionViewers } from '@/hooks/queries/useSessionViewers'
 import { useSendMessage } from '@/hooks/mutations/useSendMessage'
+import { useOtherUserTyping } from '@/hooks/useOtherUserTyping'
 import { queryKeys } from '@/lib/query-keys'
 import FilesPage from '@/routes/sessions/files'
 import FilePage from '@/routes/sessions/file'
@@ -289,6 +290,9 @@ function SessionPage() {
         getSuggestions: getFileSuggestions,
     } = useFileSuggestions(api, sessionId)
 
+    // 其他用户正在输入
+    const otherUserTyping = useOtherUserTyping(sessionId)
+
     // Combined suggestions handler
     const getAutocompleteSuggestions = useCallback(async (query: string) => {
         if (query.startsWith('/')) {
@@ -335,6 +339,7 @@ function SessionPage() {
             onSend={sendMessage}
             onRetryMessage={retryMessage}
             autocompleteSuggestions={getAutocompleteSuggestions}
+            otherUserTyping={otherUserTyping}
         />
     )
 }

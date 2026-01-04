@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session, SessionViewer } from '@/types/api'
+import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session, SessionViewer, TypingUser } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
@@ -61,6 +61,7 @@ export function SessionChat(props: {
     onSend: (text: string) => void
     onRetryMessage?: (localId: string) => void
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
+    otherUserTyping?: TypingUser | null
 }) {
     const { haptic } = usePlatform()
     const navigate = useNavigate()
@@ -365,6 +366,7 @@ export function SessionChat(props: {
 
                     <HappyComposer
                         apiClient={props.api}
+                        sessionId={props.session.id}
                         disabled={props.isSending || isResuming || controlsDisabled}
                         permissionMode={props.session.permissionMode}
                         modelMode={resolvedModelMode}
@@ -383,6 +385,7 @@ export function SessionChat(props: {
                         onSwitchToRemote={handleSwitchToRemote}
                         onTerminal={props.session.active ? handleViewTerminal : undefined}
                         autocompleteSuggestions={props.autocompleteSuggestions}
+                        otherUserTyping={props.otherUserTyping}
                     />
                 </div>
             </AssistantRuntimeProvider>
