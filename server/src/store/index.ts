@@ -2746,11 +2746,23 @@ export class Store {
      * 用于 AI 回复消息时同步到群组
      */
     getGroupsForSession(sessionId: string): StoredAgentGroup[] {
+        console.log(`[Store] getGroupsForSession called with sessionId: ${sessionId}`)
+
+        // 先检查 session 是否在任何群组成员表中
+        const memberRows = this.db.prepare(`
+            SELECT m.*, g.name as group_name, g.status as group_status
+            FROM agent_group_members m
+            LEFT JOIN agent_groups g ON g.id = m.group_id
+            WHERE m.session_id = ?
+        `).all(sessionId) as Array<{ group_id: string; session_id: string; group_name: string | null; group_status: string | null }>
+        console.log(`[Store] Session ${sessionId} is member of ${memberRows.length} groups:`, memberRows.map(r => ({ groupId: r.group_id, groupName: r.group_name, groupStatus: r.group_status })))
+
         const rows = this.db.prepare(`
             SELECT g.* FROM agent_groups g
             INNER JOIN agent_group_members m ON g.id = m.group_id
             WHERE m.session_id = ? AND g.status = 'active'
         `).all(sessionId) as DbAgentGroupRow[]
+        console.log(`[Store] Found ${rows.length} active groups for session ${sessionId}`)
         return rows.map(toStoredAgentGroup)
     }
 

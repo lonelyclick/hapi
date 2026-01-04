@@ -320,24 +320,36 @@ export class SyncEngine {
 
         // 同步 agent 消息到群组
         if (event.type === 'message-received' && event.sessionId && event.message) {
+            console.log('[SyncEngine] ========== GROUP SYNC DEBUG START ==========')
+            console.log('[SyncEngine] message-received event:', {
+                sessionId: event.sessionId,
+                messageId: event.message.id,
+                messageSeq: event.message.seq
+            })
             const msgContent = event.message.content as Record<string, unknown> | null
-            console.log(`[SyncEngine] message-received event for session ${event.sessionId}, msgContent:`, JSON.stringify(msgContent, null, 2))
+            console.log('[SyncEngine] msgContent keys:', msgContent ? Object.keys(msgContent) : 'null')
+            console.log('[SyncEngine] Full msgContent:', JSON.stringify(msgContent, null, 2).slice(0, 2000))
             if (msgContent) {
                 const role = msgContent.role as string
-                console.log(`[SyncEngine] Message role: "${role}"`)
+                console.log(`[SyncEngine] Checking role: "${role}"`)
                 // 只同步 agent 的回复，不同步 user 消息
                 if (role === 'agent' || role === 'assistant') {
+                    console.log('[SyncEngine] Role matches agent/assistant, extracting text...')
                     const text = this.extractTextFromMessageContent(msgContent)
-                    console.log(`[SyncEngine] Extracted text for group sync: "${text?.substring(0, 100) || 'null'}"`)
+                    console.log(`[SyncEngine] Extracted text (first 300 chars): "${text?.slice(0, 300) || 'NULL'}"`)
                     if (text) {
+                        console.log('[SyncEngine] Text extracted successfully, calling syncAgentMessageToGroups')
                         this.syncAgentMessageToGroups(event.sessionId, text)
+                    } else {
+                        console.log('[SyncEngine] WARNING: No text extracted from message content!')
                     }
                 } else {
                     console.log(`[SyncEngine] Skipping group sync - role "${role}" is not agent/assistant`)
                 }
             } else {
-                console.log(`[SyncEngine] Skipping group sync - msgContent is null`)
+                console.log('[SyncEngine] Skipping group sync - msgContent is null')
             }
+            console.log('[SyncEngine] ========== GROUP SYNC DEBUG END ==========')
         }
 
         const webappEvent: SyncEvent = event.type === 'message-received'
