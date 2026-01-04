@@ -798,7 +798,7 @@ export function createSessionsRoutes(
      * Body: { chatId?: string, clientId?: string }
      * 至少需要提供 chatId 或 clientId 其中之一
      */
-    app.post('/:id/subscribe', async (c) => {
+    app.post('/sessions/:id/subscribe', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
@@ -833,7 +833,7 @@ export function createSessionsRoutes(
      * DELETE /sessions/:id/subscribe
      * Body: { chatId?: string, clientId?: string }
      */
-    app.delete('/:id/subscribe', async (c) => {
+    app.delete('/sessions/:id/subscribe', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
@@ -870,7 +870,7 @@ export function createSessionsRoutes(
      * 获取 session 的所有订阅者
      * GET /sessions/:id/subscribers
      */
-    app.get('/:id/subscribers', async (c) => {
+    app.get('/sessions/:id/subscribers', async (c) => {
         const sessionId = c.req.param('id')
         const chatIdSubscribers = store.getSessionNotificationSubscribers(sessionId)
         const clientIdSubscribers = store.getSessionNotificationSubscriberClientIds(sessionId)
@@ -913,7 +913,7 @@ export function createSessionsRoutes(
      * POST /sessions/:id/creator
      * Body: { chatId: string }
      */
-    app.post('/:id/creator', async (c) => {
+    app.post('/sessions/:id/creator', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
