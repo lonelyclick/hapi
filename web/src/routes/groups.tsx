@@ -135,63 +135,49 @@ function CreateGroupForm(props: {
     isPending: boolean
 }) {
     const [name, setName] = useState('')
-    const [type, setType] = useState<AgentGroupType>('collaboration')
-    const [description, setDescription] = useState('')
 
-    const handleSubmit = useCallback((e: React.FormEvent) => {
-        e.preventDefault()
+    const handleSubmit = useCallback(() => {
         if (!name.trim()) return
-        props.onSubmit({ name: name.trim(), type, description: description.trim() })
-    }, [name, type, description, props])
+        props.onSubmit({ name: name.trim(), type: 'collaboration', description: '' })
+    }, [name, props])
+
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            handleSubmit()
+        } else if (e.key === 'Escape') {
+            props.onCancel()
+        }
+    }, [handleSubmit, props])
 
     return (
-        <form onSubmit={handleSubmit} className="px-3 py-2 space-y-2 border-b border-[var(--app-divider)]">
+        <div className="flex items-center gap-2 px-3 py-2">
             <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="群组名称"
-                className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                onKeyDown={handleKeyDown}
+                placeholder="输入聊天名称后按回车"
+                className="flex-1 px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
                 disabled={props.isPending}
                 autoFocus
             />
-            <select
-                value={type}
-                onChange={(e) => setType(e.target.value as AgentGroupType)}
-                className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
-                disabled={props.isPending}
-            >
-                <option value="collaboration">协作模式</option>
-                <option value="debate">辩论模式</option>
-                <option value="review">审查模式</option>
-            </select>
-            <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="描述（可选）"
-                rows={2}
-                className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] resize-none"
-                disabled={props.isPending}
-            />
-            <div className="flex items-center justify-end gap-2">
+            {props.isPending ? (
+                <Spinner className="w-4 h-4" />
+            ) : (
                 <button
                     type="button"
                     onClick={props.onCancel}
-                    className="px-3 py-1 text-xs font-medium rounded text-[var(--app-hint)] hover:text-[var(--app-fg)]"
-                    disabled={props.isPending}
+                    className="p-1.5 rounded text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)]"
+                    title="取消"
                 >
-                    取消
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
                 </button>
-                <button
-                    type="submit"
-                    disabled={!name.trim() || props.isPending}
-                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] disabled:opacity-50"
-                >
-                    {props.isPending ? <Spinner className="w-3 h-3" /> : null}
-                    创建
-                </button>
-            </div>
-        </form>
+            )}
+        </div>
     )
 }
 
@@ -474,9 +460,9 @@ function GroupCard(props: {
 export default function GroupsPage() {
     const { api } = useAppContext()
     const queryClient = useQueryClient()
+    const navigate = useNavigate()
     const [showCreateForm, setShowCreateForm] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
 
     // Fetch groups
     const { data: groupsData, isLoading: groupsLoading } = useQuery({
@@ -488,28 +474,7 @@ export default function GroupsPage() {
         enabled: Boolean(api)
     })
 
-    // Fetch sessions for member selection
-    const { data: sessionsData } = useQuery({
-        queryKey: ['sessions'],
-        queryFn: async () => {
-            if (!api) throw new Error('API unavailable')
-            return await api.getSessions()
-        },
-        enabled: Boolean(api)
-    })
-
-    // Fetch group details (with members) for expanded group
-    const { data: groupDetailData } = useQuery({
-        queryKey: ['group', expandedGroupId],
-        queryFn: async () => {
-            if (!api || !expandedGroupId) throw new Error('API unavailable')
-            return await api.getGroup(expandedGroupId)
-        },
-        enabled: Boolean(api && expandedGroupId)
-    })
-
     const groups = groupsData?.groups ?? []
-    const sessions = sessionsData?.sessions ?? []
 
     // Create group mutation
     const createGroupMutation = useMutation({
@@ -517,10 +482,15 @@ export default function GroupsPage() {
             if (!api) throw new Error('API unavailable')
             return await api.createGroup(data.name, data.type, data.description || undefined)
         },
-        onSuccess: () => {
+        onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: ['groups'] })
             setShowCreateForm(false)
             setError(null)
+            // Navigate to the new chat
+            navigate({
+                to: '/groups/$groupId/chat',
+                params: { groupId: result.group.id }
+            })
         },
         onError: (err) => {
             setError(err instanceof Error ? err.message : 'Failed to create group')
@@ -535,56 +505,6 @@ export default function GroupsPage() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['groups'] })
-            setExpandedGroupId(null)
-        }
-    })
-
-    // Update status mutation
-    const updateStatusMutation = useMutation({
-        mutationFn: async ({ groupId, status }: { groupId: string; status: AgentGroupStatus }) => {
-            if (!api) throw new Error('API unavailable')
-            return await api.updateGroupStatus(groupId, status)
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['groups'] })
-            queryClient.invalidateQueries({ queryKey: ['group', expandedGroupId] })
-        }
-    })
-
-    // Add member mutation
-    const addMemberMutation = useMutation({
-        mutationFn: async ({ groupId, sessionId }: { groupId: string; sessionId: string }) => {
-            if (!api) throw new Error('API unavailable')
-            return await api.addGroupMember(groupId, sessionId)
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['group', expandedGroupId] })
-        }
-    })
-
-    // Remove member mutation
-    const removeMemberMutation = useMutation({
-        mutationFn: async ({ groupId, sessionId }: { groupId: string; sessionId: string }) => {
-            if (!api) throw new Error('API unavailable')
-            return await api.removeGroupMember(groupId, sessionId)
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['group', expandedGroupId] })
-        }
-    })
-
-    // Broadcast mutation
-    const broadcastMutation = useMutation({
-        mutationFn: async ({ groupId, content }: { groupId: string; content: string }) => {
-            if (!api) throw new Error('API unavailable')
-            return await api.broadcastToGroup(groupId, content)
-        },
-        onSuccess: (result) => {
-            const { broadcast } = result
-            alert(`广播完成: ${broadcast.sent} 成功, ${broadcast.failed} 失败`)
-        },
-        onError: (err) => {
-            alert(`广播失败: ${err instanceof Error ? err.message : 'Unknown error'}`)
         }
     })
 
@@ -597,10 +517,10 @@ export default function GroupsPage() {
                     {!showCreateForm && (
                         <button
                             onClick={() => setShowCreateForm(true)}
-                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)]"
+                            className="p-1.5 rounded bg-[var(--app-button)] text-[var(--app-button-text)]"
+                            title="新建聊天"
                         >
-                            <PlusIcon className="w-3 h-3" />
-                            新建
+                            <PlusIcon className="w-4 h-4" />
                         </button>
                     )}
                 </div>
@@ -619,9 +539,6 @@ export default function GroupsPage() {
                     {/* Create Form */}
                     {showCreateForm && (
                         <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                            <div className="px-3 py-2 border-b border-[var(--app-divider)]">
-                                <h3 className="text-sm font-medium">创建群组</h3>
-                            </div>
                             <CreateGroupForm
                                 onSubmit={(data) => createGroupMutation.mutate(data)}
                                 onCancel={() => setShowCreateForm(false)}
@@ -640,12 +557,12 @@ export default function GroupsPage() {
                     {/* Empty State */}
                     {!groupsLoading && groups.length === 0 && !showCreateForm && (
                         <div className="text-center py-8">
-                            <UsersIcon className="w-12 h-12 mx-auto text-[var(--app-hint)] opacity-50" />
+                            <ChatIcon className="w-12 h-12 mx-auto text-[var(--app-hint)] opacity-50" />
                             <p className="mt-2 text-sm text-[var(--app-hint)]">
-                                还没有群组
+                                开始新对话
                             </p>
                             <p className="mt-1 text-xs text-[var(--app-hint)]">
-                                创建群组来让多个 AI Agent 协作、辩论或审查
+                                点击右上角 + 创建聊天
                             </p>
                         </div>
                     )}
