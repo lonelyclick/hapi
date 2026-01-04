@@ -195,6 +195,8 @@ export function ComposerButtons(props: {
     autoOptimizeEnabled: boolean
     isOptimizing: boolean
     onOptimizeSend?: () => void
+    hasImages?: boolean
+    onSendWithImages?: () => void
 }) {
     return (
         <div className="flex items-center justify-between px-2 pb-2">
@@ -303,6 +305,21 @@ export function ComposerButtons(props: {
                     onClick={props.onOptimizeSend}
                 >
                     {props.isOptimizing ? <SpinnerIcon /> : <SendIcon />}
+                </button>
+            ) : props.hasImages && props.onSendWithImages ? (
+                <button
+                    type="button"
+                    disabled={props.controlsDisabled || !props.canSend || props.isOptimizing}
+                    aria-label="Send"
+                    title="Send"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                        props.canSend && !props.controlsDisabled
+                            ? 'bg-black text-white'
+                            : 'bg-[#C0C0C0] text-white'
+                    } disabled:cursor-not-allowed`}
+                    onClick={props.onSendWithImages}
+                >
+                    <SendIcon />
                 </button>
             ) : (
                 <ComposerPrimitive.Send

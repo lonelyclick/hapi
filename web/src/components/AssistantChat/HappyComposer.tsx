@@ -219,10 +219,14 @@ export function HappyComposer(props: {
     const threadIsRunning = useAssistantState(({ thread }) => thread.isRunning)
     const threadIsDisabled = useAssistantState(({ thread }) => thread.isDisabled)
 
+    const [uploadedImages, setUploadedImages] = useState<Array<{ path: string; previewUrl: string }>>([])
+    const MAX_IMAGES = 5
+
     const controlsDisabled = disabled || !active || threadIsDisabled
     const trimmed = composerText.trim()
     const hasText = trimmed.length > 0
-    const canSend = hasText && !controlsDisabled && !threadIsRunning
+    const hasImages = uploadedImages.length > 0
+    const canSend = (hasText || hasImages) && !controlsDisabled && !threadIsRunning
     const showResumeOverlay = !active && Boolean(onRequestResume)
     const resumeLabel = resumePending
         ? 'Resuming...'
@@ -253,8 +257,6 @@ export function HappyComposer(props: {
     const prevControlledByUser = useRef(controlledByUser)
     const sttPrefixRef = useRef<string>('')
     const [isUploading, setIsUploading] = useState(false)
-    const [uploadedImages, setUploadedImages] = useState<Array<{ path: string; previewUrl: string }>>([])
-    const MAX_IMAGES = 5
 
     // Session 草稿管理
     const { getDraft, setDraft, clearDraft } = useSessionDraft(sessionId)
@@ -668,17 +670,6 @@ export function HappyComposer(props: {
     const handleSubmit = useCallback(() => {
         setShowContinueHint(false)
 
-        // 如果有上传的图片，将路径添加到消息中
-        if (uploadedImages.length > 0) {
-            const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
-            const currentText = composerText.trim()
-            const separator = currentText ? '\n\n' : ''
-            const newText = `${currentText}${separator}${imageRefs}`
-            assistantApi.composer().setText(newText)
-            // 清空图片列表
-            setUploadedImages([])
-        }
-
         // 添加到历史记录
         if (trimmed || uploadedImages.length > 0) {
             addToHistory(trimmed)
@@ -687,7 +678,38 @@ export function HappyComposer(props: {
         clearDraft()
         // 重置历史导航
         resetNavigation()
-    }, [trimmed, addToHistory, clearDraft, resetNavigation, uploadedImages, composerText, assistantApi])
+        // 清空图片列表（提交后清理）
+        if (uploadedImages.length > 0) {
+            setUploadedImages([])
+        }
+    }, [trimmed, addToHistory, clearDraft, resetNavigation, uploadedImages])
+
+    // 处理带图片的消息发送
+    const handleSendWithImages = useCallback(() => {
+        if (uploadedImages.length === 0) {
+            // 没有图片，直接提交
+            const form = textareaRef.current?.closest('form')
+            if (form) {
+                form.requestSubmit()
+            }
+            return
+        }
+
+        // 有图片，先添加图片引用到文本
+        const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
+        const currentText = composerText.trim()
+        const separator = currentText ? '\n\n' : ''
+        const newText = `${currentText}${separator}${imageRefs}`
+        assistantApi.composer().setText(newText)
+
+        // 延迟提交，等待文本更新
+        setTimeout(() => {
+            const form = textareaRef.current?.closest('form')
+            if (form) {
+                form.requestSubmit()
+            }
+        }, 50)
+    }, [uploadedImages, composerText, assistantApi])
 
     const handlePermissionChange = useCallback((mode: PermissionMode) => {
         if (!onPermissionModeChange || controlsDisabled) return
@@ -1423,6 +1445,8 @@ export function HappyComposer(props: {
                             autoOptimizeEnabled={autoOptimize}
                             isOptimizing={isOptimizing}
                             onOptimizeSend={handleOptimizeForPreview}
+                            hasImages={hasImages}
+                            onSendWithImages={handleSendWithImages}
                         />
                         {/* Hidden image input */}
                         <input
