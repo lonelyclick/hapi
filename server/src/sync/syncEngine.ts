@@ -443,16 +443,8 @@ export class SyncEngine {
                         try {
                             await this.sendMessage(member.sessionId, {
                                 text: `[群组消息 from ${senderName} (${agentType})]\n${content}`,
-                                sentFrom: 'system' as const,
-                                meta: {
-                                    isGroupMessage: true,
-                                    groupId: group.id,
-                                    groupName: group.name,
-                                    senderSessionId: sessionId,
-                                    senderName,
-                                    agentType
-                                }
-                            } as { text: string; sentFrom: 'telegram-bot' | 'webapp' | 'advisor' })
+                                sentFrom: 'advisor'
+                            })
                             return { sessionId: member.sessionId, status: 'sent' }
                         } catch (error) {
                             console.error(`[SyncEngine] Failed to forward message to ${member.sessionId}:`, error)
