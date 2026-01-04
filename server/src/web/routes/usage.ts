@@ -35,7 +35,8 @@ async function getClaudeAccessToken(): Promise<string | null> {
         const credPath = join(homedir(), '.claude', '.credentials.json')
         const content = await readFile(credPath, 'utf-8')
         const creds = JSON.parse(content)
-        return creds.accessToken ?? null
+        // Try claudeAiOauth.accessToken first (newer format), then accessToken (older format)
+        return creds.claudeAiOauth?.accessToken ?? creds.accessToken ?? null
     } catch {
         return null
     }

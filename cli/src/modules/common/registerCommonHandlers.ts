@@ -128,6 +128,9 @@ export interface SpawnSessionOptions {
     token?: string;
     sessionType?: 'simple' | 'worktree';
     worktreeName?: string;
+    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo';
+    modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2';
+    modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
 }
 
 export type SpawnSessionResult =
