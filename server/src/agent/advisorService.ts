@@ -351,7 +351,9 @@ export class AdvisorService {
         // 检查是否是 Advisor 会话
         if (this.scheduler.isAdvisorSession(sessionId)) {
             // 解析 Advisor 输出 (agent 角色的 codex 消息)
-            if (content.role === 'agent' || content.role === 'assistant') {
+            const role = content.role as string
+            console.log(`[AdvisorService] Advisor session message received: role=${role}`)
+            if (role === 'agent' || role === 'assistant') {
                 this.parseAdvisorOutput(sessionId, content)
             }
             return
