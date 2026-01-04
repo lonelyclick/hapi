@@ -10,6 +10,7 @@ import type { SuggestionChip } from '../sync/syncEngine'
 // 使用 Gemini CLI
 const CLI_TIMEOUT_MS = 60_000  // 60秒超时（CLI 启动较慢）
 const GEMINI_MODEL = 'gemini-2.5-flash'  // 支持 thinking 的模型
+const GEMINI_CLI_PATH = '/home/guang/.nvm/versions/node/v22.18.0/bin/gemini'  // 完整路径（systemd 环境没有 PATH）
 
 export interface MinimaxReviewRequest {
     sessionId: string
@@ -104,7 +105,7 @@ export class MinimaxService {
     private async callApi(prompt: string): Promise<string> {
         return new Promise((resolve, reject) => {
             const args = ['--model', GEMINI_MODEL, prompt]
-            const child = spawn('gemini', args, {
+            const child = spawn(GEMINI_CLI_PATH, args, {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 timeout: CLI_TIMEOUT_MS
             })
