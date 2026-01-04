@@ -7,6 +7,7 @@ import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identit
 import { useNotificationPermission, useWebPushSubscription } from '@/hooks/useNotification'
 import type { InputPreset, Project, UserRole } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
+import { AutoIterationSettings } from '@/components/AutoIterationSettings'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -869,6 +870,9 @@ export default function SettingsPage() {
                             </div>
                         )}
                     </div>
+
+                    {/* Auto-Iteration Section */}
+                    <AutoIterationSettings />
 
                     {/* Input Presets Section */}
                     <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">

@@ -304,5 +304,168 @@ export function createSettingsRoutes(store: Store, autoIterationService?: AutoIt
         return c.json({ ok: true, presets })
     })
 
+    // ==================== 自动迭代管理 ====================
+
+    // 获取自动迭代配置
+    app.get('/settings/auto-iteration', (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const config = autoIterationService.getConfig()
+        const policySummary = autoIterationService.getPolicySummary()
+        const stats = autoIterationService.getStats()
+
+        return c.json({
+            config,
+            policySummary,
+            stats
+        })
+    })
+
+    // 更新自动迭代配置
+    app.put('/settings/auto-iteration', async (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const json = await c.req.json().catch(() => null)
+        const parsed = updateAutoIterationConfigSchema.safeParse(json)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid config data', details: parsed.error.issues }, 400)
+        }
+
+        const userId = c.get('userId')
+        const config = await autoIterationService.updateConfig({
+            ...parsed.data,
+            updatedBy: String(userId)
+        })
+
+        return c.json({ ok: true, config })
+    })
+
+    // 启用自动迭代
+    app.post('/settings/auto-iteration/enable', async (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const userId = c.get('userId')
+        await autoIterationService.enable(String(userId))
+
+        return c.json({ ok: true, enabled: true })
+    })
+
+    // 禁用自动迭代
+    app.post('/settings/auto-iteration/disable', async (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const userId = c.get('userId')
+        await autoIterationService.disable(String(userId))
+
+        return c.json({ ok: true, enabled: false })
+    })
+
+    // 获取执行日志
+    app.get('/settings/auto-iteration/logs', (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const query = c.req.query()
+        const parsed = autoIterationLogsQuerySchema.safeParse(query)
+
+        const filters = parsed.success ? {
+            status: parsed.data.status as AutoIterExecutionStatus | AutoIterExecutionStatus[] | undefined,
+            actionType: parsed.data.actionType as AutoIterActionType | undefined,
+            projectPath: parsed.data.projectPath,
+            limit: parsed.data.limit ?? 50,
+            offset: parsed.data.offset ?? 0
+        } : { limit: 50, offset: 0 }
+
+        const logs = autoIterationService.getLogs(filters)
+
+        return c.json({ logs })
+    })
+
+    // 获取单条日志
+    app.get('/settings/auto-iteration/logs/:id', (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const id = c.req.param('id')
+        const log = autoIterationService.getLog(id)
+
+        if (!log) {
+            return c.json({ error: 'Log not found' }, 404)
+        }
+
+        return c.json({ log })
+    })
+
+    // 批准操作
+    app.post('/settings/auto-iteration/logs/:id/approve', (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const id = c.req.param('id')
+        const userId = c.get('userId')
+        const success = autoIterationService.handleApproval(id, true, String(userId))
+
+        if (!success) {
+            return c.json({ error: 'No pending approval found or already processed' }, 400)
+        }
+
+        return c.json({ ok: true })
+    })
+
+    // 拒绝操作
+    app.post('/settings/auto-iteration/logs/:id/reject', (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const id = c.req.param('id')
+        const userId = c.get('userId')
+        const success = autoIterationService.handleApproval(id, false, String(userId))
+
+        if (!success) {
+            return c.json({ error: 'No pending approval found or already processed' }, 400)
+        }
+
+        return c.json({ ok: true })
+    })
+
+    // 回滚操作
+    app.post('/settings/auto-iteration/logs/:id/rollback', async (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const id = c.req.param('id')
+        const success = await autoIterationService.rollback(id)
+
+        if (!success) {
+            return c.json({ error: 'Rollback failed or not available' }, 400)
+        }
+
+        return c.json({ ok: true })
+    })
+
+    // 获取待处理审批
+    app.get('/settings/auto-iteration/pending', (c) => {
+        if (!autoIterationService) {
+            return c.json({ error: 'AutoIteration service not available' }, 503)
+        }
+
+        const pending = autoIterationService.getPendingApprovals()
+
+        return c.json({ pending })
+    })
+
     return app
 }

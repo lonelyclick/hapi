@@ -3,6 +3,10 @@ import type {
     AddProjectResponse,
     AddUserResponse,
     AuthResponse,
+    AutoIterationConfigUpdateRequest,
+    AutoIterationData,
+    AutoIterationLogsResponse,
+    AutoIterationNotificationLevel,
     DeleteSessionResponse,
     FileReadResponse,
     FileSearchResponse,
@@ -564,5 +568,41 @@ export class ApiClient {
         timestamp: number
     }> {
         return await this.request('/api/usage')
+    }
+
+    // Auto-Iteration 方法
+    async getAutoIterationConfig(): Promise<AutoIterationData> {
+        return await this.request('/api/settings/auto-iteration')
+    }
+
+    async updateAutoIterationConfig(update: AutoIterationConfigUpdateRequest): Promise<{ ok: boolean; config: AutoIterationData['config'] }> {
+        return await this.request('/api/settings/auto-iteration', {
+            method: 'PUT',
+            body: JSON.stringify(update)
+        })
+    }
+
+    async enableAutoIteration(): Promise<{ ok: boolean; enabled: boolean }> {
+        return await this.request('/api/settings/auto-iteration/enable', {
+            method: 'POST'
+        })
+    }
+
+    async disableAutoIteration(): Promise<{ ok: boolean; enabled: boolean }> {
+        return await this.request('/api/settings/auto-iteration/disable', {
+            method: 'POST'
+        })
+    }
+
+    async getAutoIterationLogs(limit?: number): Promise<AutoIterationLogsResponse> {
+        const params = limit ? `?limit=${limit}` : ''
+        return await this.request(`/api/settings/auto-iteration/logs${params}`)
+    }
+
+    async updateAutoIterationNotificationLevel(level: AutoIterationNotificationLevel): Promise<{ ok: boolean }> {
+        return await this.request('/api/settings/auto-iteration', {
+            method: 'PUT',
+            body: JSON.stringify({ notificationLevel: level })
+        })
     }
 }

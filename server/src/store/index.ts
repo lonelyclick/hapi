@@ -2039,43 +2039,33 @@ export class Store {
     }): StoredAutoIterationConfig | null {
         try {
             const now = Date.now()
-            const existing = this.getAutoIterationConfig(namespace)
+            // Get raw row for existing values
+            const existingRow = this.db.prepare(
+                'SELECT * FROM auto_iteration_config WHERE namespace = ?'
+            ).get(namespace) as DbAutoIterationConfigRow | undefined
 
-            if (existing) {
-                // Update
-                const updates: string[] = ['updated_at = @updated_at']
-                const params: Record<string, unknown> = { namespace, updated_at: now }
-
-                if (data.enabled !== undefined) {
-                    updates.push('enabled = @enabled')
-                    params.enabled = data.enabled ? 1 : 0
-                }
-                if (data.policyJson !== undefined) {
-                    updates.push('policy_json = @policy_json')
-                    params.policy_json = JSON.stringify(data.policyJson)
-                }
-                if (data.allowedProjects !== undefined) {
-                    updates.push('allowed_projects = @allowed_projects')
-                    params.allowed_projects = JSON.stringify(data.allowedProjects)
-                }
-                if (data.notificationLevel !== undefined) {
-                    updates.push('notification_level = @notification_level')
-                    params.notification_level = data.notificationLevel
-                }
-                if (data.keepLogsDays !== undefined) {
-                    updates.push('keep_logs_days = @keep_logs_days')
-                    params.keep_logs_days = data.keepLogsDays
-                }
-                if (data.updatedBy !== undefined) {
-                    updates.push('updated_by = @updated_by')
-                    params.updated_by = data.updatedBy
-                }
-
+            if (existingRow) {
+                // Update - build complete params object with proper types for DB
                 this.db.prepare(`
                     UPDATE auto_iteration_config
-                    SET ${updates.join(', ')}
-                    WHERE namespace = @namespace
-                `).run(params)
+                    SET updated_at = ?,
+                        enabled = ?,
+                        policy_json = ?,
+                        allowed_projects = ?,
+                        notification_level = ?,
+                        keep_logs_days = ?,
+                        updated_by = ?
+                    WHERE namespace = ?
+                `).run(
+                    now,
+                    data.enabled !== undefined ? (data.enabled ? 1 : 0) : existingRow.enabled,
+                    data.policyJson !== undefined ? JSON.stringify(data.policyJson) : existingRow.policy_json,
+                    data.allowedProjects !== undefined ? JSON.stringify(data.allowedProjects) : existingRow.allowed_projects,
+                    data.notificationLevel ?? existingRow.notification_level,
+                    data.keepLogsDays ?? existingRow.keep_logs_days,
+                    data.updatedBy ?? existingRow.updated_by ?? null,
+                    namespace
+                )
             } else {
                 // Insert
                 this.db.prepare(`
@@ -2215,60 +2205,63 @@ export class Store {
     }): boolean {
         try {
             const updates: string[] = []
-            const params: Record<string, unknown> = { id }
 
             if (data.executionStatus !== undefined) {
-                updates.push('execution_status = @execution_status')
-                params.execution_status = data.executionStatus
+                updates.push('execution_status = ?')
             }
             if (data.approvalMethod !== undefined) {
-                updates.push('approval_method = @approval_method')
-                params.approval_method = data.approvalMethod
+                updates.push('approval_method = ?')
             }
             if (data.approvedBy !== undefined) {
-                updates.push('approved_by = @approved_by')
-                params.approved_by = data.approvedBy
+                updates.push('approved_by = ?')
             }
             if (data.approvedAt !== undefined) {
-                updates.push('approved_at = @approved_at')
-                params.approved_at = data.approvedAt
+                updates.push('approved_at = ?')
             }
             if (data.resultJson !== undefined) {
-                updates.push('result_json = @result_json')
-                params.result_json = JSON.stringify(data.resultJson)
+                updates.push('result_json = ?')
             }
             if (data.errorMessage !== undefined) {
-                updates.push('error_message = @error_message')
-                params.error_message = data.errorMessage
+                updates.push('error_message = ?')
             }
             if (data.rollbackAvailable !== undefined) {
-                updates.push('rollback_available = @rollback_available')
-                params.rollback_available = data.rollbackAvailable ? 1 : 0
+                updates.push('rollback_available = ?')
             }
             if (data.rollbackData !== undefined) {
-                updates.push('rollback_data = @rollback_data')
-                params.rollback_data = JSON.stringify(data.rollbackData)
+                updates.push('rollback_data = ?')
             }
             if (data.rolledBack !== undefined) {
-                updates.push('rolled_back = @rolled_back')
-                params.rolled_back = data.rolledBack ? 1 : 0
+                updates.push('rolled_back = ?')
             }
             if (data.rolledBackAt !== undefined) {
-                updates.push('rolled_back_at = @rolled_back_at')
-                params.rolled_back_at = data.rolledBackAt
+                updates.push('rolled_back_at = ?')
             }
             if (data.executedAt !== undefined) {
-                updates.push('executed_at = @executed_at')
-                params.executed_at = data.executedAt
+                updates.push('executed_at = ?')
             }
 
             if (updates.length === 0) return true
 
+            // Build positional params array in same order as updates
+            const params: (string | number | null)[] = []
+            if (data.executionStatus !== undefined) params.push(data.executionStatus)
+            if (data.approvalMethod !== undefined) params.push(data.approvalMethod)
+            if (data.approvedBy !== undefined) params.push(data.approvedBy)
+            if (data.approvedAt !== undefined) params.push(data.approvedAt)
+            if (data.resultJson !== undefined) params.push(JSON.stringify(data.resultJson))
+            if (data.errorMessage !== undefined) params.push(data.errorMessage)
+            if (data.rollbackAvailable !== undefined) params.push(data.rollbackAvailable ? 1 : 0)
+            if (data.rollbackData !== undefined) params.push(JSON.stringify(data.rollbackData))
+            if (data.rolledBack !== undefined) params.push(data.rolledBack ? 1 : 0)
+            if (data.rolledBackAt !== undefined) params.push(data.rolledBackAt)
+            if (data.executedAt !== undefined) params.push(data.executedAt)
+            params.push(id) // WHERE id = ?
+
             const result = this.db.prepare(`
                 UPDATE auto_iteration_logs
                 SET ${updates.join(', ')}
-                WHERE id = @id
-            `).run(params)
+                WHERE id = ?
+            `).run(...params)
 
             return result.changes > 0
         } catch {
