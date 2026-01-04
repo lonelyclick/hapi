@@ -13,6 +13,12 @@ const filePathSchema = z.object({
     path: z.string().min(1)
 })
 
+const imageUploadSchema = z.object({
+    filename: z.string().min(1),
+    content: z.string().min(1), // Base64 encoded image content
+    mimeType: z.string().min(1)
+})
+
 function parseBooleanParam(value: string | undefined): boolean | undefined {
     if (value === 'true') return true
     if (value === 'false') return false
@@ -206,6 +212,41 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         const combined = [...matchingDirs, ...matchingFiles].slice(0, limit)
 
         return c.json({ success: true, files: combined })
+    })
+
+    // Upload image endpoint
+    app.post('/sessions/:id/upload-image', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        let body: unknown
+        try {
+            body = await c.req.json()
+        } catch {
+            return c.json({ success: false, error: 'Invalid JSON body' }, 400)
+        }
+
+        const parsed = imageUploadSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ success: false, error: 'Invalid request: ' + parsed.error.message }, 400)
+        }
+
+        const { filename, content, mimeType } = parsed.data
+
+        const result = await runRpc(() => engine.uploadImage(
+            sessionResult.sessionId,
+            filename,
+            content,
+            mimeType
+        ))
+        return c.json(result)
     })
 
     return app

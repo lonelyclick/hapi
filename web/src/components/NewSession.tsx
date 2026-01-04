@@ -106,13 +106,24 @@ export function NewSession(props: {
 
     const recentPaths = useMemo(() => getRecentPaths(machineId), [getRecentPaths, machineId])
     const projectSuggestions = useMemo(() => {
+        // 创建路径到项目名的映射
+        const pathToName = new Map<string, string>()
+        for (const project of projects) {
+            pathToName.set(project.path, project.name)
+        }
+
         const seen = new Set<string>()
         const suggestions: Array<{ value: string; label?: string }> = []
+
+        // 先添加最近使用的路径，如果能匹配到项目则使用项目名
         for (const recent of recentPaths) {
             if (seen.has(recent)) continue
             seen.add(recent)
-            suggestions.push({ value: recent })
+            const projectName = pathToName.get(recent)
+            suggestions.push({ value: recent, label: projectName })
         }
+
+        // 再添加未使用过的项目
         for (const project of projects) {
             if (seen.has(project.path)) continue
             seen.add(project.path)
@@ -272,7 +283,7 @@ export function NewSession(props: {
                             )}
                             {projectSuggestions.map((suggestion) => (
                                 <option key={suggestion.value} value={suggestion.value}>
-                                    {suggestion.label ? `${suggestion.label} (${suggestion.value})` : suggestion.value}
+                                    {suggestion.label ?? suggestion.value}
                                 </option>
                             ))}
                         </select>

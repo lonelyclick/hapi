@@ -79,6 +79,26 @@ function MicIcon() {
     )
 }
 
+function ImageIcon() {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+        </svg>
+    )
+}
+
 function AbortIcon(props: { spinning: boolean }) {
     if (props.spinning) {
         return (
@@ -155,6 +175,10 @@ export function ComposerButtons(props: {
     voiceStopping: boolean
     voiceModeActive: boolean
     onVoiceToggle: () => void
+    showImageButton: boolean
+    imageDisabled: boolean
+    isUploading: boolean
+    onImageClick: () => void
     showSettingsButton: boolean
     onSettingsToggle: () => void
     showTerminalButton: boolean
@@ -192,6 +216,21 @@ export function ComposerButtons(props: {
                         onClick={props.onVoiceToggle}
                     >
                         <MicIcon />
+                    </button>
+                ) : null}
+
+                {props.showImageButton ? (
+                    <button
+                        type="button"
+                        aria-label={props.isUploading ? 'Uploading...' : 'Upload image'}
+                        title={props.isUploading ? 'Uploading...' : 'Upload image'}
+                        disabled={props.imageDisabled || props.controlsDisabled || props.isUploading}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-fg)]/60 transition-colors hover:bg-[var(--app-bg)] hover:text-[var(--app-link)] disabled:cursor-not-allowed disabled:opacity-50 ${
+                            props.isUploading ? 'animate-pulse text-[var(--app-link)]' : ''
+                        }`}
+                        onClick={props.onImageClick}
+                    >
+                        <ImageIcon />
                     </button>
                 ) : null}
 

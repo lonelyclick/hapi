@@ -248,7 +248,26 @@ export class AdvisorService {
         const decisions: string[] = previousSummary?.decisions ? filterInitPrompt([...previousSummary.decisions]) : []
         const codeChanges: string[] = previousSummary?.codeChanges ? filterInitPrompt([...previousSummary.codeChanges]) : []
 
-        for (const msg of messages) {
+        // 预过滤消息：排除 advisor 发送的消息和 SESSION_SUMMARY 消息
+        const filteredMessages = messages.filter(msg => {
+            const content = msg.content as Record<string, unknown> | null
+            if (!content) return false
+
+            // 检查 meta.sentFrom
+            const meta = content.meta as Record<string, unknown> | null
+            if (meta?.sentFrom === 'advisor') return false
+
+            // 检查 event/output 类型
+            const innerContent = content.content as Record<string, unknown> | null
+            if (innerContent && typeof innerContent === 'object') {
+                const contentType = (innerContent as Record<string, unknown>).type as string
+                if (contentType === 'event' || contentType === 'output') return false
+            }
+
+            return true
+        })
+
+        for (const msg of filteredMessages) {
             const content = msg.content as Record<string, unknown> | null
             if (!content) continue
 
@@ -270,14 +289,11 @@ export class AdvisorService {
                         isAgentMessage = role === 'agent'
                     }
                     // 跳过非 message 类型的 codex 消息 (token_count, tool-call, tool-call-result 等)
-                } else if (contentType === 'event' || contentType === 'output') {
-                    // 跳过 event 和 output 消息
-                    continue
                 } else if (contentType === 'text') {
                     // 用户消息格式: { role: 'user', content: { type: 'text', text: '...' } }
                     text = ((innerContent as Record<string, unknown>).text as string) || ''
                 } else {
-                    // 其他对象格式
+                    // 其他对象格式（event/output 已在预过滤中排除）
                     text = ((innerContent as Record<string, unknown>).text as string) || ''
                 }
             } else if (typeof innerContent === 'string') {
@@ -289,6 +305,11 @@ export class AdvisorService {
             // 跳过 init prompt 消息（以 #InitPrompt- 开头的消息）
             const trimmedText = text.trim()
             if (trimmedText.startsWith('#InitPrompt-')) {
+                continue
+            }
+
+            // 跳过 SESSION_SUMMARY 消息（避免递归）
+            if (trimmedText.startsWith('[[SESSION_SUMMARY]]')) {
                 continue
             }
 
@@ -330,8 +351,8 @@ export class AdvisorService {
             codeChanges: codeChanges.slice(-5),
             errors: errors.slice(-3),
             decisions: decisions.slice(-3),
-            messageCount: messages.length,
-            lastMessageSeq: messages[messages.length - 1]?.seq ?? 0,
+            messageCount: filteredMessages.length,
+            lastMessageSeq: filteredMessages[filteredMessages.length - 1]?.seq ?? 0,
             timestamp: Date.now()
         }
     }

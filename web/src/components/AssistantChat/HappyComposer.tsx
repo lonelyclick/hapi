@@ -247,8 +247,10 @@ export function HappyComposer(props: {
     const [optimizePreview, setOptimizePreview] = useState<{ original: string; optimized: string } | null>(null)
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const imageInputRef = useRef<HTMLInputElement>(null)
     const prevControlledByUser = useRef(controlledByUser)
     const sttPrefixRef = useRef<string>('')
+    const [isUploading, setIsUploading] = useState(false)
 
     // Session 草稿管理
     const { getDraft, setDraft, clearDraft } = useSessionDraft(sessionId)
@@ -659,6 +661,77 @@ export function HappyComposer(props: {
         })
         haptic('light')
     }, [haptic])
+
+    const handleImageClick = useCallback(() => {
+        imageInputRef.current?.click()
+    }, [])
+
+    const handleImageChange = useCallback(async (e: ReactChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        // Reset input for next selection
+        e.target.value = ''
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            haptic('error')
+            console.error('Selected file is not an image')
+            return
+        }
+
+        // Validate file size (max 10MB)
+        const maxSize = 10 * 1024 * 1024
+        if (file.size > maxSize) {
+            haptic('error')
+            console.error('Image file too large (max 10MB)')
+            return
+        }
+
+        setIsUploading(true)
+        haptic('light')
+
+        try {
+            // Read file as base64
+            const reader = new FileReader()
+            const base64Promise = new Promise<string>((resolve, reject) => {
+                reader.onload = () => {
+                    const result = reader.result as string
+                    // Remove data URL prefix (e.g., "data:image/png;base64,")
+                    const base64 = result.split(',')[1]
+                    resolve(base64)
+                }
+                reader.onerror = reject
+            })
+            reader.readAsDataURL(file)
+            const content = await base64Promise
+
+            // Upload to server
+            const result = await apiClient.uploadImage(sessionId, file.name, content, file.type)
+
+            if (result.success && result.path) {
+                haptic('success')
+                // Append image path to input
+                const imagePath = result.path
+                const currentText = composerText.trim()
+                const separator = currentText ? '\n' : ''
+                const newText = `${currentText}${separator}[Image: ${imagePath}]`
+                assistantApi.composer().setText(newText)
+                setInputState({
+                    text: newText,
+                    selection: { start: newText.length, end: newText.length }
+                })
+            } else {
+                haptic('error')
+                console.error('Failed to upload image:', result.error)
+            }
+        } catch (error) {
+            haptic('error')
+            console.error('Failed to upload image:', error)
+        } finally {
+            setIsUploading(false)
+        }
+    }, [apiClient, sessionId, composerText, assistantApi, haptic])
 
     const handlePreviewConfirm = useCallback(() => {
         if (!optimizePreview) return
@@ -1212,6 +1285,10 @@ export function HappyComposer(props: {
                             voiceStopping={speechToText.status === 'stopping'}
                             voiceModeActive={voiceMode}
                             onVoiceToggle={handleVoiceToggle}
+                            showImageButton={active}
+                            imageDisabled={controlsDisabled}
+                            isUploading={isUploading}
+                            onImageClick={handleImageClick}
                             showSettingsButton={showSettingsButton}
                             onSettingsToggle={handleSettingsToggle}
                             showTerminalButton={showTerminalButton}
@@ -1228,6 +1305,14 @@ export function HappyComposer(props: {
                             autoOptimizeEnabled={autoOptimize}
                             isOptimizing={isOptimizing}
                             onOptimizeSend={handleOptimizeForPreview}
+                        />
+                        {/* Hidden image input */}
+                        <input
+                            ref={imageInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleImageChange}
                         />
                     </div>
                 </ComposerPrimitive.Root>

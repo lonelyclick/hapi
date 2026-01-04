@@ -140,6 +140,12 @@ export type RpcReadFileResponse = {
     error?: string
 }
 
+export type RpcWriteFileResponse = {
+    success: boolean
+    path?: string
+    error?: string
+}
+
 export type RpcPathExistsResponse = {
     exists: Record<string, boolean>
 }
@@ -1043,6 +1049,10 @@ export class SyncEngine {
 
     async runRipgrep(sessionId: string, args: string[], cwd?: string): Promise<RpcCommandResponse> {
         return await this.sessionRpc(sessionId, 'ripgrep', { args, cwd }) as RpcCommandResponse
+    }
+
+    async uploadImage(sessionId: string, filename: string, content: string, mimeType: string): Promise<RpcWriteFileResponse> {
+        return await this.sessionRpc(sessionId, 'uploadImage', { filename, content, mimeType }) as RpcWriteFileResponse
     }
 
     async listSlashCommands(sessionId: string, agent: string): Promise<{

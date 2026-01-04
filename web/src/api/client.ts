@@ -7,6 +7,7 @@ import type {
     FileReadResponse,
     FileSearchResponse,
     GitCommandResponse,
+    ImageUploadResponse,
     InputPresetsResponse,
     MachinePathsExistsResponse,
     MachinesResponse,
@@ -261,6 +262,13 @@ export class ApiClient {
         const params = new URLSearchParams()
         params.set('path', path)
         return await this.request<FileReadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/file?${params.toString()}`)
+    }
+
+    async uploadImage(sessionId: string, filename: string, content: string, mimeType: string): Promise<ImageUploadResponse> {
+        return await this.request<ImageUploadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload-image`, {
+            method: 'POST',
+            body: JSON.stringify({ filename, content, mimeType })
+        })
     }
 
     async sendMessage(sessionId: string, text: string, localId?: string | null): Promise<void> {

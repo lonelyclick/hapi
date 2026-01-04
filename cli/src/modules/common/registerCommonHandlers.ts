@@ -1,9 +1,9 @@
 import { logger } from '@/ui/logger';
 import { exec, ExecOptions } from 'child_process';
 import { promisify } from 'util';
-import { readFile, writeFile, readdir, stat } from 'fs/promises';
+import { readFile, writeFile, readdir, stat, mkdir } from 'fs/promises';
 import { createHash } from 'crypto';
-import { basename, join, resolve } from 'path';
+import { basename, join, resolve, extname } from 'path';
 import { run as runRipgrep } from '@/modules/ripgrep/index';
 import { run as runDifftastic } from '@/modules/difftastic/index';
 import { RpcHandlerManager } from '../../api/rpc/RpcHandlerManager';
@@ -109,6 +109,18 @@ interface DifftasticResponse {
     exitCode?: number;
     stdout?: string;
     stderr?: string;
+    error?: string;
+}
+
+interface UploadImageRequest {
+    filename: string;
+    content: string; // base64 encoded image
+    mimeType: string;
+}
+
+interface UploadImageResponse {
+    success: boolean;
+    path?: string;
     error?: string;
 }
 
@@ -515,5 +527,55 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
         }
     });
 
+    // Upload image handler - saves image to .hapi/uploads directory
+    rpcHandlerManager.registerHandler<UploadImageRequest, UploadImageResponse>('uploadImage', async (data) => {
+        logger.debug('Upload image request:', data.filename, 'mimeType:', data.mimeType);
+
+        try {
+            // Create uploads directory under .hapi
+            const uploadsDir = join(workingDirectory, '.hapi', 'uploads');
+            await mkdir(uploadsDir, { recursive: true });
+
+            // Generate unique filename with timestamp
+            const timestamp = Date.now();
+            const ext = extname(data.filename) || getExtensionFromMimeType(data.mimeType);
+            const baseFilename = basename(data.filename, extname(data.filename));
+            const uniqueFilename = `${baseFilename}-${timestamp}${ext}`;
+            const filePath = join(uploadsDir, uniqueFilename);
+
+            // Decode base64 and write file
+            const buffer = Buffer.from(data.content, 'base64');
+            await writeFile(filePath, buffer);
+
+            // Return relative path from working directory
+            const relativePath = join('.hapi', 'uploads', uniqueFilename);
+            logger.debug('Image uploaded to:', relativePath);
+
+            return { success: true, path: relativePath };
+        } catch (error) {
+            logger.debug('Failed to upload image:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to upload image'
+            };
+        }
+    });
+
     registerGitHandlers(rpcHandlerManager, workingDirectory);
+}
+
+function getExtensionFromMimeType(mimeType: string): string {
+    const mimeToExt: Record<string, string> = {
+        'image/jpeg': '.jpg',
+        'image/jpg': '.jpg',
+        'image/png': '.png',
+        'image/gif': '.gif',
+        'image/webp': '.webp',
+        'image/svg+xml': '.svg',
+        'image/bmp': '.bmp',
+        'image/tiff': '.tiff',
+        'image/heic': '.heic',
+        'image/heif': '.heif'
+    };
+    return mimeToExt[mimeType] || '.png';
 }

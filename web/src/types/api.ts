@@ -256,6 +256,12 @@ export type FileReadResponse = {
     error?: string
 }
 
+export type ImageUploadResponse = {
+    success: boolean
+    path?: string
+    error?: string
+}
+
 export type GitFileStatus = {
     fileName: string
     filePath: string
