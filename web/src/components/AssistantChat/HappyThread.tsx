@@ -154,7 +154,7 @@ function InlineSuggestionChips(props: {
                 {hasMinimaxError && (
                     <div className={`flex items-center gap-2 text-xs text-orange-600 dark:text-orange-400 ${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
                         <span>⚠️</span>
-                        <span>MiniMax 审查失败</span>
+                        <span>MiniMax 审查失败{props.minimaxError ? `：${props.minimaxError}` : ''}</span>
                     </div>
                 )}
             </div>
