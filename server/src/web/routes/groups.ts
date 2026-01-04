@@ -285,16 +285,21 @@ export function createGroupRoutes(
             }
 
             try {
-                // Format message with group context
+                // Get sender name for metadata
                 const senderName = parsed.data.sourceSessionId
                     ? syncEngine.getSession(parsed.data.sourceSessionId)?.metadata?.name ?? parsed.data.sourceSessionId
                     : 'System'
 
-                const groupMessage = `[群组消息 - ${group.name}]\n发送者: ${senderName}\n类型: ${parsed.data.messageType}\n\n${parsed.data.content}`
-
                 await syncEngine.sendMessage(member.sessionId, {
-                    text: groupMessage,
-                    sentFrom: 'webapp'
+                    text: parsed.data.content,
+                    sentFrom: 'webapp',
+                    meta: {
+                        groupId: groupId,
+                        groupName: group.name,
+                        senderName: senderName,
+                        messageType: parsed.data.messageType,
+                        isGroupMessage: true
+                    }
                 })
                 results.push({ sessionId: member.sessionId, success: true })
             } catch (error) {

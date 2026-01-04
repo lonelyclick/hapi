@@ -384,6 +384,7 @@ export async function startDaemon(): Promise<void> {
             case 'minimax': return 'minimax';
             case 'grok': return 'grok';
             case 'openrouter': return 'openrouter';
+            case 'aider-cli': return 'aider-cli';
             default: return 'claude';
           }
         })();
