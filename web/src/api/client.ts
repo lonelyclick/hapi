@@ -719,6 +719,19 @@ export class ApiClient {
     }
 
     /**
+     * 获取当前用户订阅的所有 session ID
+     * @param options - chatId 或 clientId
+     */
+    async getMySubscriptions(options: { chatId?: string; clientId?: string }): Promise<{
+        sessionIds: string[]
+    }> {
+        const params = new URLSearchParams()
+        if (options.chatId) params.set('chatId', options.chatId)
+        if (options.clientId) params.set('clientId', options.clientId)
+        return await this.request(`/api/my-subscriptions?${params.toString()}`)
+    }
+
+    /**
      * 移除指定订阅者
      * @param sessionId - session ID
      * @param subscriberId - 订阅者 ID（chatId 或 clientId）

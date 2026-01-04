@@ -2968,6 +2968,13 @@ export class Store {
         return rows.map(r => r.session_id)
     }
 
+    getSubscribedSessionsForClient(clientId: string): string[] {
+        const rows = this.db.prepare(
+            'SELECT session_id FROM session_notification_subscriptions WHERE client_id = ?'
+        ).all(clientId) as Array<{ session_id: string }>
+        return rows.map(r => r.session_id)
+    }
+
     /**
      * 获取应该接收 session 通知的所有 chatId
      * 包括：session 创建者 + 所有订阅者（去重）

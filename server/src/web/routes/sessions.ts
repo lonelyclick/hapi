@@ -886,6 +886,29 @@ export function createSessionsRoutes(
     })
 
     /**
+     * 获取当前用户订阅的所有 session ID
+     * GET /my-subscriptions
+     * Query: chatId 或 clientId
+     */
+    app.get('/my-subscriptions', async (c) => {
+        const chatId = c.req.query('chatId')
+        const clientId = c.req.query('clientId')
+
+        if (!chatId && !clientId) {
+            return c.json({ error: 'Either chatId or clientId is required' }, 400)
+        }
+
+        let sessionIds: string[] = []
+        if (chatId) {
+            sessionIds = store.getSubscribedSessionsForChat(chatId)
+        } else if (clientId) {
+            sessionIds = store.getSubscribedSessionsForClient(clientId)
+        }
+
+        return c.json({ sessionIds })
+    })
+
+    /**
      * 设置 session 的创建者 chatId
      * POST /sessions/:id/creator
      * Body: { chatId: string }

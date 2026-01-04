@@ -306,6 +306,8 @@ export function SessionHeader(props: {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: subscribersQueryKey })
+            // 同时刷新全局订阅列表，用于控制通知
+            queryClient.invalidateQueries({ queryKey: ['my-subscriptions'] })
         }
     })
 
@@ -316,6 +318,8 @@ export function SessionHeader(props: {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: subscribersQueryKey })
+            // 同时刷新全局订阅列表
+            queryClient.invalidateQueries({ queryKey: ['my-subscriptions'] })
         }
     })
 
