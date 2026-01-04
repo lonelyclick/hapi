@@ -129,11 +129,12 @@ export class ApiMachineClient {
 
             switch (result.type) {
                 case 'success':
-                    return { type: 'success', sessionId: result.sessionId }
+                    return { type: 'success', sessionId: result.sessionId, logs: result.logs }
                 case 'requestToApproveDirectoryCreation':
-                    return { type: 'requestToApproveDirectoryCreation', directory: result.directory }
+                    return { type: 'requestToApproveDirectoryCreation', directory: result.directory, logs: result.logs }
                 case 'error':
-                    throw new Error(result.errorMessage)
+                    // Include logs in error response for debugging
+                    return { type: 'error', errorMessage: result.errorMessage, logs: result.logs }
             }
         })
 

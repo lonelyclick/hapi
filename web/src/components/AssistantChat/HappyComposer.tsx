@@ -79,6 +79,49 @@ const CODEX_MODELS = [
 
 const CODEX_MODEL_IDS = new Set(CODEX_MODELS.map((model) => model.id))
 
+const GROK_MODELS = [
+    {
+        id: 'grok-4-1-fast-reasoning',
+        label: 'grok-4-1-fast-reasoning',
+        description: '2M context, fast reasoning model.'
+    },
+    {
+        id: 'grok-4-1-fast-non-reasoning',
+        label: 'grok-4-1-fast-non-reasoning',
+        description: '2M context, fast non-reasoning model.'
+    },
+    {
+        id: 'grok-code-fast-1',
+        label: 'grok-code-fast-1',
+        description: '256K context, optimized for coding.'
+    },
+    {
+        id: 'grok-4-fast-reasoning',
+        label: 'grok-4-fast-reasoning',
+        description: '2M context, fast reasoning.'
+    },
+    {
+        id: 'grok-4-fast-non-reasoning',
+        label: 'grok-4-fast-non-reasoning',
+        description: '2M context, fast non-reasoning.'
+    },
+    {
+        id: 'grok-4-0709',
+        label: 'grok-4-0709',
+        description: '256K context, flagship model.'
+    },
+    {
+        id: 'grok-3-mini',
+        label: 'grok-3-mini',
+        description: '131K context, lightweight model.'
+    },
+    {
+        id: 'grok-3',
+        label: 'grok-3',
+        description: '131K context, previous generation.'
+    }
+] as const
+
 function isCodexModel(mode: ModelMode | undefined): mode is typeof CODEX_MODELS[number]['id'] {
     return Boolean(mode && CODEX_MODEL_IDS.has(mode as typeof CODEX_MODELS[number]['id']))
 }
@@ -654,7 +697,9 @@ export function HappyComposer(props: {
     const showSettingsButton = true // Always show settings for auto-optimize toggle
     const showAbortButton = true
     const isCodex = agentFlavor === 'codex'
+    const isGrok = agentFlavor === 'grok'
     const codexModel = isCodex && isCodexModel(modelMode) ? modelMode : 'gpt-5.2-codex'
+    const grokModel = isGrok ? (modelMode as string || 'grok-code-fast-1') : 'grok-code-fast-1'
     const codexReasoningEffort: ModelReasoningEffort = modelReasoningEffort ?? 'medium'
     const shouldShowCodexReasoning = isCodex && codexModel === 'gpt-5.2-codex'
     const speechToText = useSpeechToText({
@@ -898,6 +943,43 @@ export function HappyComposer(props: {
                                             </button>
                                         ))}
                                     </div>
+                                ) : isGrok ? (
+                                    <div className="space-y-1">
+                                        {GROK_MODELS.map((mode) => (
+                                            <button
+                                                key={mode.id}
+                                                type="button"
+                                                disabled={controlsDisabled}
+                                                className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                                                    controlsDisabled
+                                                        ? 'cursor-not-allowed opacity-50'
+                                                        : 'cursor-pointer hover:bg-[var(--app-secondary-bg)]'
+                                                }`}
+                                                onClick={() => handleModelChange({ model: mode.id as ModelMode })}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                            >
+                                                <div
+                                                    className={`mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                                                        grokModel === mode.id
+                                                            ? 'border-[var(--app-link)]'
+                                                            : 'border-[var(--app-hint)]'
+                                                    }`}
+                                                >
+                                                    {grokModel === mode.id && (
+                                                        <div className="h-2 w-2 rounded-full bg-[var(--app-link)]" />
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className={grokModel === mode.id ? 'text-[var(--app-link)]' : ''}>
+                                                        {mode.label}
+                                                    </span>
+                                                    <span className="text-xs text-[var(--app-hint)]">
+                                                        {mode.description}
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
                                 ) : (
                                     MODEL_MODES.map((mode) => (
                                         <button
@@ -1012,6 +1094,8 @@ export function HappyComposer(props: {
         codexModel,
         codexReasoningEffort,
         shouldShowCodexReasoning,
+        isGrok,
+        grokModel,
         permissionModes,
         handlePermissionChange,
         handleModelChange,

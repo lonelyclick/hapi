@@ -1,8 +1,9 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { resolve } from 'node:path'
+import { resolve, join } from 'node:path'
 import { execSync } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
 
 const base = process.env.VITE_BASE_URL || '/'
 
@@ -24,14 +25,68 @@ function getBuildVersion() {
         const get = (type: string) => parts.find(p => p.type === type)?.value || ''
         const version = `v${get('year')}.${get('month')}.${get('day')}.${get('hour')}${get('minute')}`
 
-        const commitMessage = execSync('git log -1 --format=%s', { encoding: 'utf-8' }).trim()
+        // Use cwd option to ensure git command works from any directory
+        const commitMessage = execSync('git log -1 --format=%s', {
+            encoding: 'utf-8',
+            cwd: resolve(__dirname, '..')
+        }).trim()
         return { version, commitMessage }
-    } catch {
-        return { version: 'unknown', commitMessage: 'unknown' }
+    } catch (e) {
+        console.warn('[getBuildVersion] Failed to get version:', e)
+        // Fallback: still use the timestamp version even if git fails
+        const now = new Date()
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Shanghai',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        })
+        const parts = formatter.formatToParts(now)
+        const get = (type: string) => parts.find(p => p.type === type)?.value || ''
+        const version = `v${get('year')}.${get('month')}.${get('day')}.${get('hour')}${get('minute')}`
+        return { version, commitMessage: 'unknown' }
     }
 }
 
 const buildInfo = getBuildVersion()
+
+// Plugin to inject build version into sw-push.js
+// We inject into public/sw-push.js BEFORE build so Workbox calculates correct hash
+function swVersionPlugin(): Plugin {
+    const publicSwPushPath = join(__dirname, 'public', 'sw-push.js')
+    let originalContent: string | null = null
+
+    return {
+        name: 'sw-version-inject',
+        apply: 'build',
+        buildStart() {
+            try {
+                // Save original content
+                originalContent = readFileSync(publicSwPushPath, 'utf-8')
+                // Inject version before build so Workbox sees the updated file
+                const injected = originalContent.replace("'__SW_BUILD_VERSION__'", `'${buildInfo.version}'`)
+                writeFileSync(publicSwPushPath, injected)
+                console.log(`[sw-version-inject] Injected version ${buildInfo.version} into public/sw-push.js`)
+            } catch (error) {
+                console.warn('[sw-version-inject] Failed to inject version:', error)
+            }
+        },
+        closeBundle() {
+            // Restore original content after build
+            if (originalContent) {
+                try {
+                    writeFileSync(publicSwPushPath, originalContent)
+                    console.log('[sw-version-inject] Restored public/sw-push.js')
+                } catch (error) {
+                    console.warn('[sw-version-inject] Failed to restore sw-push.js:', error)
+                }
+            }
+        }
+    }
+}
 
 export default defineConfig({
     define: {
@@ -54,6 +109,7 @@ export default defineConfig({
     },
     plugins: [
         react(),
+        swVersionPlugin(),
         VitePWA({
             registerType: 'autoUpdate',
             includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'pwa-192x192.png'],

@@ -225,7 +225,8 @@ Be concise, accurate, and helpful.`
                 onUpdate({ type: 'turn_complete', stopReason: 'cancelled' });
                 return;
             }
-            const message = error instanceof Error ? error.message : 'Unknown error';
+            const message = error instanceof Error ? error.message : String(error);
+            logger.debug(`[Grok] Prompt error: ${message}`, error instanceof Error ? error.stack : '');
             onUpdate({ type: 'error', message });
             throw error;
         } finally {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import type { Machine } from '@/types/api'
+import type { Machine, SpawnLogEntry } from '@/types/api'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/Spinner'
 import { usePlatform } from '@/hooks/usePlatform'
@@ -9,6 +9,59 @@ import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 import { useRecentPaths } from '@/hooks/useRecentPaths'
 
 type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok'
+
+function SpawnLogPanel({ logs }: { logs: SpawnLogEntry[] }) {
+    if (logs.length === 0) return null
+
+    const getStatusIcon = (status: SpawnLogEntry['status']) => {
+        switch (status) {
+            case 'pending':
+                return <span className="text-gray-400">○</span>
+            case 'running':
+                return <span className="text-blue-500 animate-pulse">●</span>
+            case 'success':
+                return <span className="text-green-500">✓</span>
+            case 'error':
+                return <span className="text-red-500">✗</span>
+        }
+    }
+
+    const getStatusColor = (status: SpawnLogEntry['status']) => {
+        switch (status) {
+            case 'pending':
+                return 'text-gray-400'
+            case 'running':
+                return 'text-blue-600'
+            case 'success':
+                return 'text-green-600'
+            case 'error':
+                return 'text-red-600'
+        }
+    }
+
+    return (
+        <div className="px-3 py-2 bg-[var(--app-bg-secondary)] border-t border-[var(--app-divider)]">
+            <div className="text-xs font-medium text-[var(--app-hint)] mb-2">
+                Creation Log
+            </div>
+            <div className="space-y-1 max-h-48 overflow-y-auto font-mono text-xs">
+                {logs.map((log, index) => (
+                    <div key={index} className="flex items-start gap-2">
+                        <span className="flex-shrink-0 w-4">
+                            {getStatusIcon(log.status)}
+                        </span>
+                        <span className="text-[var(--app-hint)] flex-shrink-0 w-16">
+                            [{log.step}]
+                        </span>
+                        <span className={getStatusColor(log.status)}>
+                            {log.message}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
 
 function getMachineTitle(machine: Machine): string {
     if (machine.metadata?.displayName) return machine.metadata.displayName
@@ -34,6 +87,7 @@ export function NewSession(props: {
     const [claudeAgent, setClaudeAgent] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
+    const [spawnLogs, setSpawnLogs] = useState<SpawnLogEntry[]>([])
 
     // Fetch projects
     const { data: projectsData, isLoading: projectsLoading } = useQuery({
@@ -106,6 +160,14 @@ export function NewSession(props: {
         if (!directory) return
 
         setError(null)
+        setSpawnLogs([])
+
+        // Add initial local log entries to show progress
+        const localLogs: SpawnLogEntry[] = [
+            { timestamp: Date.now(), step: 'request', message: `Sending spawn request for ${agent} agent...`, status: 'running' }
+        ]
+        setSpawnLogs([...localLogs])
+
         try {
             const result = await spawnSession({
                 machineId,
@@ -115,6 +177,11 @@ export function NewSession(props: {
                 sessionType: 'simple',
                 claudeAgent: agent === 'claude' ? (claudeAgent.trim() || undefined) : undefined
             })
+
+            // Update logs from server response
+            if (result.logs && result.logs.length > 0) {
+                setSpawnLogs(result.logs)
+            }
 
             if (result.type === 'success') {
                 haptic.notification('success')
@@ -128,6 +195,10 @@ export function NewSession(props: {
             setError(result.message)
         } catch (e) {
             haptic.notification('error')
+            setSpawnLogs(prev => [
+                ...prev,
+                { timestamp: Date.now(), step: 'error', message: e instanceof Error ? e.message : 'Failed to create session', status: 'error' }
+            ])
             setError(e instanceof Error ? e.message : 'Failed to create session')
         }
     }
@@ -257,6 +328,11 @@ export function NewSession(props: {
                     </div>
                 </div>
             ) : null}
+
+            {/* Spawn Logs */}
+            {spawnLogs.length > 0 && (
+                <SpawnLogPanel logs={spawnLogs} />
+            )}
 
             {/* Error Message */}
             {(error ?? spawnError) ? (

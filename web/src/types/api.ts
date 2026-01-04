@@ -1,6 +1,7 @@
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
 export type CodexModelMode = 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
-export type ModelMode = 'default' | 'sonnet' | 'opus' | CodexModelMode
+export type GrokModelMode = 'grok-4-1-fast-reasoning' | 'grok-4-1-fast-non-reasoning' | 'grok-code-fast-1' | 'grok-4-fast-reasoning' | 'grok-4-fast-non-reasoning' | 'grok-4-0709' | 'grok-3-mini' | 'grok-3'
+export type ModelMode = 'default' | 'sonnet' | 'opus' | CodexModelMode | GrokModelMode
 export type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
 export type WorktreeMetadata = {
@@ -217,9 +218,16 @@ export type MessagesResponse = {
 export type MachinesResponse = { machines: Machine[] }
 export type MachinePathsExistsResponse = { exists: Record<string, boolean> }
 
+export type SpawnLogEntry = {
+    timestamp: number
+    step: string
+    message: string
+    status: 'pending' | 'running' | 'success' | 'error'
+}
+
 export type SpawnResponse =
-    | { type: 'success'; sessionId: string }
-    | { type: 'error'; message: string }
+    | { type: 'success'; sessionId: string; logs?: SpawnLogEntry[] }
+    | { type: 'error'; message: string; logs?: SpawnLogEntry[] }
 
 export type GitCommandResponse = {
     success: boolean

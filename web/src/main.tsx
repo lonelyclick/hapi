@@ -55,6 +55,19 @@ async function bootstrap() {
         // Ignore if storage is unavailable.
     }
 
+    // Listen for SW update messages and reload when notified
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data?.type === 'SW_UPDATED') {
+                console.log('[bootstrap] SW updated to version:', event.data.version)
+                // Give a small delay to ensure caches are cleared, then reload
+                setTimeout(() => {
+                    window.location.reload()
+                }, 100)
+            }
+        })
+    }
+
     const updateSW = registerSW({
         immediate: true,
         onNeedRefresh() {

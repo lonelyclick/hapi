@@ -959,7 +959,7 @@ export class SyncEngine {
             modelMode?: Session['modelMode']
             modelReasoningEffort?: Session['modelReasoningEffort']
         }
-    ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
+    ): Promise<{ type: 'success'; sessionId: string; logs?: unknown[] } | { type: 'error'; message: string; logs?: unknown[] }> {
         try {
             const result = await this.machineRpc(
                 machineId,
@@ -982,11 +982,12 @@ export class SyncEngine {
             )
             if (result && typeof result === 'object') {
                 const obj = result as Record<string, unknown>
+                const logs = Array.isArray(obj.logs) ? obj.logs : undefined
                 if (obj.type === 'success' && typeof obj.sessionId === 'string') {
-                    return { type: 'success', sessionId: obj.sessionId }
+                    return { type: 'success', sessionId: obj.sessionId, logs }
                 }
                 if (obj.type === 'error' && typeof obj.errorMessage === 'string') {
-                    return { type: 'error', message: obj.errorMessage }
+                    return { type: 'error', message: obj.errorMessage, logs }
                 }
             }
             return { type: 'error', message: 'Unexpected spawn result' }

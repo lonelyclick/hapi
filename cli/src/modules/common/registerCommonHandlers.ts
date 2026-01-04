@@ -134,10 +134,17 @@ export interface SpawnSessionOptions {
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
 }
 
+export interface SpawnLogEntry {
+    timestamp: number;
+    step: string;
+    message: string;
+    status: 'pending' | 'running' | 'success' | 'error';
+}
+
 export type SpawnSessionResult =
-    | { type: 'success'; sessionId: string }
-    | { type: 'requestToApproveDirectoryCreation'; directory: string }
-    | { type: 'error'; errorMessage: string };
+    | { type: 'success'; sessionId: string; logs?: SpawnLogEntry[] }
+    | { type: 'requestToApproveDirectoryCreation'; directory: string; logs?: SpawnLogEntry[] }
+    | { type: 'error'; errorMessage: string; logs?: SpawnLogEntry[] };
 
 /**
  * Register all RPC handlers with the session

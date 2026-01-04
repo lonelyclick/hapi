@@ -16,7 +16,8 @@ export type Usage = z.infer<typeof UsageSchema>
 export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
 export type CodexPermissionMode = 'default' | 'read-only' | 'safe-yolo' | 'yolo'
 export type SessionPermissionMode = ClaudePermissionMode | CodexPermissionMode
-export type SessionModelMode = 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+export type GrokModelMode = 'grok-4-1-fast-reasoning' | 'grok-4-1-fast-non-reasoning' | 'grok-code-fast-1' | 'grok-4-fast-reasoning' | 'grok-4-fast-non-reasoning' | 'grok-4-0709' | 'grok-3-mini' | 'grok-3'
+export type SessionModelMode = 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2' | GrokModelMode
 export type SessionModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
 export type Metadata = {

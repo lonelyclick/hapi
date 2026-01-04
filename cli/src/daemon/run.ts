@@ -4,7 +4,7 @@ import os from 'os';
 import { ApiClient } from '@/api/api';
 import { TrackedSession } from './types';
 import { MachineMetadata, DaemonState, Metadata } from '@/api/types';
-import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/registerCommonHandlers';
+import { SpawnSessionOptions, SpawnSessionResult, SpawnLogEntry } from '@/modules/common/registerCommonHandlers';
 import { logger } from '@/ui/logger';
 import { authAndSetupMachineIfNeeded } from '@/ui/auth';
 import { configuration } from '@/configuration';
@@ -186,6 +186,14 @@ export async function startDaemon(): Promise<void> {
     const spawnSession = async (options: SpawnSessionOptions): Promise<SpawnSessionResult> => {
       logger.debugLargeJson('[DAEMON RUN] Spawning session', options);
 
+      // Collect spawn logs for detailed debugging
+      const spawnLogs: SpawnLogEntry[] = [];
+      const addLog = (step: string, message: string, status: SpawnLogEntry['status']) => {
+        const entry: SpawnLogEntry = { timestamp: Date.now(), step, message, status };
+        spawnLogs.push(entry);
+        logger.debug(`[SPAWN LOG] [${step}] ${message} (${status})`);
+      };
+
       const { directory, sessionId, machineId, approvedNewDirectoryCreation = true } = options;
       const agent = options.agent ?? 'claude';
       const yolo = options.yolo === true;
@@ -196,19 +204,26 @@ export async function startDaemon(): Promise<void> {
       let worktreeInfo: WorktreeInfo | null = null;
       let happyProcess: ReturnType<typeof spawnHappyCLI> | null = null;
 
+      addLog('init', `Starting session spawn: agent=${agent}, directory=${directory}, sessionType=${sessionType}`, 'running');
+
       if (sessionType === 'simple') {
+        addLog('directory', `Checking directory: ${directory}`, 'running');
         try {
           await fs.access(directory);
           logger.debug(`[DAEMON RUN] Directory exists: ${directory}`);
+          addLog('directory', `Directory exists: ${directory}`, 'success');
         } catch (error) {
           logger.debug(`[DAEMON RUN] Directory doesn't exist, creating: ${directory}`);
+          addLog('directory', `Directory doesn't exist, will create: ${directory}`, 'running');
 
           // Check if directory creation is approved
           if (!approvedNewDirectoryCreation) {
             logger.debug(`[DAEMON RUN] Directory creation not approved for: ${directory}`);
+            addLog('directory', `Directory creation not approved`, 'error');
             return {
               type: 'requestToApproveDirectoryCreation',
-              directory
+              directory,
+              logs: spawnLogs
             };
           }
 
@@ -216,6 +231,7 @@ export async function startDaemon(): Promise<void> {
             await fs.mkdir(directory, { recursive: true });
             logger.debug(`[DAEMON RUN] Successfully created directory: ${directory}`);
             directoryCreated = true;
+            addLog('directory', `Successfully created directory: ${directory}`, 'success');
           } catch (mkdirError: any) {
             let errorMessage = `Unable to create directory at '${directory}'. `;
 
@@ -233,40 +249,50 @@ export async function startDaemon(): Promise<void> {
             }
 
             logger.debug(`[DAEMON RUN] Directory creation failed: ${errorMessage}`);
+            addLog('directory', `Directory creation failed: ${errorMessage}`, 'error');
             return {
               type: 'error',
-              errorMessage
+              errorMessage,
+              logs: spawnLogs
             };
           }
         }
       } else {
+        addLog('worktree', `Checking worktree base directory: ${directory}`, 'running');
         try {
           await fs.access(directory);
           logger.debug(`[DAEMON RUN] Worktree base directory exists: ${directory}`);
+          addLog('worktree', `Worktree base directory exists`, 'success');
         } catch (error) {
           logger.debug(`[DAEMON RUN] Worktree base directory missing: ${directory}`);
+          addLog('worktree', `Worktree base directory missing: ${directory}`, 'error');
           return {
             type: 'error',
-            errorMessage: `Worktree sessions require an existing Git repository. Directory not found: ${directory}`
+            errorMessage: `Worktree sessions require an existing Git repository. Directory not found: ${directory}`,
+            logs: spawnLogs
           };
         }
       }
 
       if (sessionType === 'worktree') {
+        addLog('worktree', `Creating worktree from base: ${directory}`, 'running');
         const worktreeResult = await createWorktree({
           basePath: directory,
           nameHint: worktreeName
         });
         if (!worktreeResult.ok) {
           logger.debug(`[DAEMON RUN] Worktree creation failed: ${worktreeResult.error}`);
+          addLog('worktree', `Worktree creation failed: ${worktreeResult.error}`, 'error');
           return {
             type: 'error',
-            errorMessage: worktreeResult.error
+            errorMessage: worktreeResult.error,
+            logs: spawnLogs
           };
         }
         worktreeInfo = worktreeResult.info;
         spawnDirectory = worktreeInfo.worktreePath;
         logger.debug(`[DAEMON RUN] Created worktree ${worktreeInfo.worktreePath} (branch ${worktreeInfo.branch})`);
+        addLog('worktree', `Created worktree: ${worktreeInfo.worktreePath} (branch: ${worktreeInfo.branch})`, 'success');
       }
 
       const cleanupWorktree = async () => {
@@ -297,12 +323,13 @@ export async function startDaemon(): Promise<void> {
       };
 
       try {
+        addLog('env', `Preparing environment for agent: ${agent}`, 'running');
 
         // Resolve authentication token if provided
         let extraEnv: Record<string, string> = {};
         if (options.token) {
           if (options.agent === 'codex') {
-
+            addLog('env', `Setting up Codex authentication`, 'running');
             // Create a temporary directory for Codex
             const codexHomeDir = await fs.mkdtemp(join(os.tmpdir(), 'hapi-codex-'));
 
@@ -313,10 +340,13 @@ export async function startDaemon(): Promise<void> {
             extraEnv = {
               CODEX_HOME: codexHomeDir
             };
+            addLog('env', `Codex authentication configured`, 'success');
           } else if (options.agent === 'claude' || !options.agent) {
+            addLog('env', `Setting up Claude authentication`, 'running');
             extraEnv = {
               CLAUDE_CODE_OAUTH_TOKEN: options.token
             };
+            addLog('env', `Claude authentication configured`, 'success');
           }
         }
 
@@ -341,6 +371,8 @@ export async function startDaemon(): Promise<void> {
         if (options.modelReasoningEffort) {
           extraEnv = { ...extraEnv, HAPI_MODEL_REASONING_EFFORT: options.modelReasoningEffort };
         }
+
+        addLog('env', `Environment prepared successfully`, 'success');
 
         // Construct arguments for the CLI
         const agentCommand = (() => {
@@ -371,6 +403,10 @@ export async function startDaemon(): Promise<void> {
         if (yolo) {
           args.push('--yolo');
         }
+
+        addLog('spawn', `Spawning CLI process: hapi ${args.join(' ')}`, 'running');
+        addLog('spawn', `Working directory: ${spawnDirectory}`, 'running');
+
         const MAX_TAIL_CHARS = 4000;
         let stderrTail = '';
         const appendTail = (current: string, chunk: Buffer | string): string => {
@@ -405,15 +441,18 @@ export async function startDaemon(): Promise<void> {
 
         if (!happyProcess.pid) {
           logger.debug('[DAEMON RUN] Failed to spawn process - no PID returned');
+          addLog('spawn', `Failed to spawn process - no PID returned`, 'error');
           await maybeCleanupWorktree('no-pid');
           return {
             type: 'error',
-            errorMessage: 'Failed to spawn HAPI process - no PID returned'
+            errorMessage: 'Failed to spawn HAPI process - no PID returned',
+            logs: spawnLogs
           };
         }
 
         const pid = happyProcess.pid;
         logger.debug(`[DAEMON RUN] Spawned process with PID ${pid}`);
+        addLog('spawn', `Process spawned with PID: ${pid}`, 'success');
 
         const trackedSession: TrackedSession = {
           startedBy: 'daemon',
@@ -440,6 +479,7 @@ export async function startDaemon(): Promise<void> {
 
         // Wait for webhook to populate session with happySessionId
         logger.debug(`[DAEMON RUN] Waiting for session webhook for PID ${pid}`);
+        addLog('webhook', `Waiting for session to report back (PID: ${pid})...`, 'running');
 
         const spawnResult = await new Promise<SpawnSessionResult>((resolve) => {
           // Set timeout for webhook
@@ -447,9 +487,11 @@ export async function startDaemon(): Promise<void> {
             pidToAwaiter.delete(pid);
             logger.debug(`[DAEMON RUN] Session webhook timeout for PID ${pid}`);
             logStderrTail();
+            addLog('webhook', `Session webhook timeout for PID ${pid}`, 'error');
             resolve({
               type: 'error',
-              errorMessage: `Session webhook timeout for PID ${pid}`
+              errorMessage: `Session webhook timeout for PID ${pid}`,
+              logs: spawnLogs
             });
             // 15 second timeout - I have seen timeouts on 10 seconds
             // even though session was still created successfully in ~2 more seconds
@@ -459,9 +501,12 @@ export async function startDaemon(): Promise<void> {
           pidToAwaiter.set(pid, (completedSession) => {
             clearTimeout(timeout);
             logger.debug(`[DAEMON RUN] Session ${completedSession.happySessionId} fully spawned with webhook`);
+            addLog('webhook', `Session ready: ${completedSession.happySessionId}`, 'success');
+            addLog('complete', `Session created successfully`, 'success');
             resolve({
               type: 'success',
-              sessionId: completedSession.happySessionId!
+              sessionId: completedSession.happySessionId!,
+              logs: spawnLogs
             });
           });
         });
@@ -472,10 +517,12 @@ export async function startDaemon(): Promise<void> {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.debug('[DAEMON RUN] Failed to spawn session:', error);
+        addLog('error', `Failed to spawn session: ${errorMessage}`, 'error');
         await maybeCleanupWorktree('exception');
         return {
           type: 'error',
-          errorMessage: `Failed to spawn session: ${errorMessage}`
+          errorMessage: `Failed to spawn session: ${errorMessage}`,
+          logs: spawnLogs
         };
       }
     };

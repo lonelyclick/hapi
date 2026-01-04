@@ -227,10 +227,13 @@ export async function runAgentSession(opts: {
                     }
                 });
             } catch (error) {
-                logger.warn('[ACP] Prompt failed', error);
+                const errorMessage = error instanceof Error
+                    ? `${error.name}: ${error.message}${error.stack ? `\n${error.stack}` : ''}`
+                    : String(error);
+                logger.warn('[ACP] Prompt failed:', errorMessage);
                 session.sendSessionEvent({
                     type: 'message',
-                    message: 'Agent prompt failed. Check logs for details.'
+                    message: `Agent prompt failed: ${error instanceof Error ? error.message : String(error)}`
                 });
             } finally {
                 thinking = false;
