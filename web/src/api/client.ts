@@ -623,4 +623,17 @@ export class ApiClient {
             body: JSON.stringify({ notificationLevel: level })
         })
     }
+
+    async get<T>(path: string): Promise<{ data: T }> {
+        const data = await this.request<T>(`/api${path}`)
+        return { data }
+    }
+
+    async put<T>(path: string, body: unknown): Promise<{ data: T }> {
+        const data = await this.request<T>(`/api${path}`, {
+            method: 'PUT',
+            body: JSON.stringify(body)
+        })
+        return { data }
+    }
 }

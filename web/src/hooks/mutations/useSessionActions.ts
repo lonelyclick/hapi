@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import type { ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
+import type { ClearMessagesResponse, ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 
 type PermissionModeValue = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
@@ -30,6 +30,7 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
     setPermissionMode: (mode: PermissionMode) => Promise<void>
     setModelMode: (config: ModelConfig) => Promise<void>
     deleteSession: () => Promise<void>
+    clearMessages: (keepCount: number) => Promise<ClearMessagesResponse>
     isPending: boolean
 } {
     const queryClient = useQueryClient()
@@ -98,16 +99,32 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         },
     })
 
+    const clearMessagesMutation = useMutation({
+        mutationFn: async (keepCount: number = 30) => {
+            if (!api || !sessionId) {
+                throw new Error('Session unavailable')
+            }
+            return await api.clearMessages(sessionId, keepCount)
+        },
+        onSuccess: async () => {
+            if (!sessionId) return
+            // Reset messages query to refetch fresh data
+            await queryClient.resetQueries({ queryKey: queryKeys.messages(sessionId) })
+        },
+    })
+
     return {
         abortSession: abortMutation.mutateAsync,
         switchSession: switchMutation.mutateAsync,
         setPermissionMode: permissionMutation.mutateAsync,
         setModelMode: modelMutation.mutateAsync,
         deleteSession: deleteMutation.mutateAsync,
+        clearMessages: clearMessagesMutation.mutateAsync,
         isPending: abortMutation.isPending
             || switchMutation.isPending
             || permissionMutation.isPending
             || modelMutation.isPending
-            || deleteMutation.isPending,
+            || deleteMutation.isPending
+            || clearMessagesMutation.isPending,
     }
 }
