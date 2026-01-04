@@ -1,36 +1,15 @@
 /**
  * Layer 2 智能建议服务
- * 使用 Gemini API 生成智能建议
+ * 使用 Gemini CLI 生成智能建议（免费额度）
  */
 
-import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { spawn } from 'node:child_process'
 import type { SessionSummary } from './types'
 import type { SuggestionChip } from '../sync/syncEngine'
 
-// 使用 Gemini API
-const API_TIMEOUT_MS = 30_000  // 30秒超时
-
-// 从凭证文件加载 Gemini 配置
-function loadGeminiConfig(): { apiKey: string; model: string } {
-    const credPath = join(homedir(), 'happy/yoho-task-v2/data/credentials/gemini/default.json')
-    try {
-        if (existsSync(credPath)) {
-            const content = readFileSync(credPath, 'utf-8')
-            const creds = JSON.parse(content)
-            return {
-                apiKey: creds.apiKey || '',
-                model: creds.model || 'gemini-2.0-flash'
-            }
-        }
-    } catch (error) {
-        console.error('[MinimaxService] Failed to load Gemini credentials:', error)
-    }
-    return { apiKey: '', model: 'gemini-2.0-flash' }
-}
-
-const GEMINI_CONFIG = loadGeminiConfig()
+// 使用 Gemini CLI
+const CLI_TIMEOUT_MS = 60_000  // 60秒超时（CLI 启动较慢）
+const GEMINI_MODEL = 'gemini-2.5-flash'  // 支持 thinking 的模型
 
 export interface MinimaxReviewRequest {
     sessionId: string
@@ -42,20 +21,6 @@ export interface MinimaxReviewResponse {
     error?: string
 }
 
-// Gemini API 响应格式
-interface GeminiApiResponse {
-    candidates?: Array<{
-        content?: {
-            parts?: Array<{
-                text?: string
-            }>
-        }
-    }>
-    error?: {
-        message: string
-        code?: number
-    }
-}
 
 export class MinimaxService {
     /**
@@ -134,67 +99,58 @@ export class MinimaxService {
     }
 
     /**
-     * 调用 Gemini API
+     * 调用 Gemini CLI
      */
     private async callApi(prompt: string): Promise<string> {
-        if (!GEMINI_CONFIG.apiKey) {
-            throw new Error('Gemini API key not configured')
-        }
-
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
-
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_CONFIG.model}:generateContent?key=${GEMINI_CONFIG.apiKey}`
-
-        try {
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: [
-                        {
-                            parts: [
-                                { text: prompt }
-                            ]
-                        }
-                    ],
-                    generationConfig: {
-                        temperature: 0.3,
-                        maxOutputTokens: 1024,
-                        responseMimeType: 'application/json'
-                    }
-                }),
-                signal: controller.signal
+        return new Promise((resolve, reject) => {
+            const args = ['--model', GEMINI_MODEL, prompt]
+            const child = spawn('gemini', args, {
+                stdio: ['pipe', 'pipe', 'pipe'],
+                timeout: CLI_TIMEOUT_MS
             })
 
-            clearTimeout(timeoutId)
+            let stdout = ''
+            let stderr = ''
 
-            if (!response.ok) {
-                const errorText = await response.text()
-                throw new Error(`API request failed: ${response.status} ${errorText}`)
-            }
+            child.stdout.on('data', (data: Buffer) => {
+                stdout += data.toString()
+            })
 
-            const data = await response.json() as GeminiApiResponse
+            child.stderr.on('data', (data: Buffer) => {
+                stderr += data.toString()
+            })
 
-            if (data.error) {
-                throw new Error(`API error: ${data.error.message}`)
-            }
+            child.on('error', (error) => {
+                reject(new Error(`Gemini CLI error: ${error.message}`))
+            })
 
-            const content = data.candidates?.[0]?.content?.parts?.[0]?.text
-            if (!content) {
-                throw new Error('Empty response from API')
-            }
+            child.on('close', (code) => {
+                if (code !== 0) {
+                    reject(new Error(`Gemini CLI exited with code ${code}: ${stderr}`))
+                    return
+                }
 
-            return content
-        } catch (error) {
-            clearTimeout(timeoutId)
-            if (error instanceof Error && error.name === 'AbortError') {
-                throw new Error('API request timeout (30s)')
-            }
-            throw error
-        }
+                // 过滤掉 CLI 的提示信息，只保留实际输出
+                const lines = stdout.split('\n')
+                const output = lines
+                    .filter(line => !line.startsWith('Loaded cached') && !line.startsWith('Error executing tool'))
+                    .join('\n')
+                    .trim()
+
+                if (!output) {
+                    reject(new Error('Empty response from Gemini CLI'))
+                    return
+                }
+
+                resolve(output)
+            })
+
+            // 设置超时
+            setTimeout(() => {
+                child.kill('SIGTERM')
+                reject(new Error(`Gemini CLI timeout (${CLI_TIMEOUT_MS / 1000}s)`))
+            }, CLI_TIMEOUT_MS)
+        })
     }
 
     /**
