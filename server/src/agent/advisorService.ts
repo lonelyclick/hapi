@@ -246,18 +246,22 @@ export class AdvisorService {
     private quickLocalCheck(session: Session): Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }> {
         const issues: Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }> = []
 
-        // 1. 检查 Todos 完成情况
+        // 1. 检查 Todos 完成情况 - 包括 in_progress 和 pending
         if (session.todos && Array.isArray(session.todos) && session.todos.length > 0) {
-            const todos = session.todos as Array<{ content?: string; status?: string }>
+            const todos = session.todos as Array<{ content?: string; status?: string; activeForm?: string }>
             const inProgressTodos = todos.filter(t => t.status === 'in_progress')
             const pendingTodos = todos.filter(t => t.status === 'pending')
+            const incompleteTodos = [...inProgressTodos, ...pendingTodos]
 
-            if (inProgressTodos.length > 0) {
-                const todoTitles = inProgressTodos.slice(0, 3).map(t => t.content || '未命名任务').join(', ')
+            if (incompleteTodos.length > 0) {
+                const todoTitles = incompleteTodos.slice(0, 3).map(t => t.content || t.activeForm || '未命名任务').join(', ')
+                const severity = inProgressTodos.length > 0 ? 'medium' : 'low'
                 issues.push({
                     type: 'incomplete_todos',
-                    description: `有 ${inProgressTodos.length} 个任务正在进行中: ${todoTitles}`,
-                    severity: 'medium',
+                    description: inProgressTodos.length > 0
+                        ? `有 ${inProgressTodos.length} 个任务正在进行中: ${todoTitles}`
+                        : `有 ${pendingTodos.length} 个待处理任务: ${todoTitles}`,
+                    severity,
                     data: { inProgressCount: inProgressTodos.length, pendingCount: pendingTodos.length, titles: todoTitles }
                 })
             }
@@ -355,8 +359,11 @@ export class AdvisorService {
 
         const suggestedTextMap: Record<string, (data: unknown) => string> = {
             'incomplete_todos': (data) => {
-                const d = data as { titles?: string }
-                return `请继续完成任务: ${d?.titles || '进行中的任务'}`
+                const d = data as { titles?: string; inProgressCount?: number; pendingCount?: number }
+                if (d?.inProgressCount && d.inProgressCount > 0) {
+                    return `请继续完成任务: ${d?.titles || '进行中的任务'}`
+                }
+                return `请处理待办任务: ${d?.titles || '待处理任务'}`
             },
             'recent_errors': (data) => {
                 const d = data as { lastError?: string }

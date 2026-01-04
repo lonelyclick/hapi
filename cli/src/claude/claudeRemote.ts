@@ -9,6 +9,7 @@ import { getProjectPath } from "./utils/path";
 import { awaitFileExist } from "@/modules/watcher/awaitFileExist";
 import { systemPrompt } from "./utils/systemPrompt";
 import { PermissionResult } from "./sdk/types";
+import { buildMessageContent } from "./utils/imageMessage";
 
 export async function claudeRemote(opts: {
 
@@ -137,13 +138,14 @@ export async function claudeRemote(opts: {
         }
     };
 
-    // Push initial message
+    // Push initial message with image support
     let messages = new PushableAsyncIterable<SDKUserMessage>();
+    const initialContent = await buildMessageContent(initial.message, opts.path);
     messages.push({
         type: 'user',
         message: {
             role: 'user',
-            content: initial.message,
+            content: initialContent,
         },
     });
 
@@ -198,14 +200,15 @@ export async function claudeRemote(opts: {
                 // Send ready event
                 opts.onReady();
 
-                // Push next message
+                // Push next message with image support
                 const next = await opts.nextMessage();
                 if (!next) {
                     messages.end();
                     return;
                 }
                 mode = next.mode;
-                messages.push({ type: 'user', message: { role: 'user', content: next.message } });
+                const nextContent = await buildMessageContent(next.message, opts.path);
+                messages.push({ type: 'user', message: { role: 'user', content: nextContent } });
             }
 
             // Handle tool result
