@@ -187,15 +187,21 @@ export default function UsagePage() {
                                         <span className="text-sm font-medium">OpenAI Codex</span>
                                     </div>
 
-                                    {data?.codex?.error ? (
-                                        <div className="text-xs text-[var(--app-hint)]">
-                                            {data.codex.error}
-                                        </div>
-                                    ) : (
-                                        <div className="text-xs text-[var(--app-hint)]">
-                                            Codex usage tracking not yet implemented
-                                        </div>
-                                    )}
+                                    <div className="text-xs text-[var(--app-hint)] space-y-2">
+                                        <p>Codex uses ChatGPT Plus subscription quota. OpenAI does not provide a public API for usage data.</p>
+                                        <p>
+                                            View usage in{' '}
+                                            <a
+                                                href="https://platform.openai.com/usage"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-[var(--app-accent)] hover:underline"
+                                            >
+                                                OpenAI Dashboard
+                                            </a>
+                                            {' '}or use <code className="bg-[var(--app-border)] px-1 rounded">/status</code> in a Codex session.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 
