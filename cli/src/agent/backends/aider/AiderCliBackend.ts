@@ -27,19 +27,21 @@ type AiderSession = {
 
 export type AiderCliBackendOptions = {
     model?: string;
+    openrouterApiKey?: string;
     yesAlways?: boolean;
     stream?: boolean;
     autoCommit?: boolean;
 };
 
-// 默认模型
-const DEFAULT_MODEL = 'claude-sonnet-4';
+// 默认模型 - 使用 OpenRouter 格式
+const DEFAULT_MODEL = 'openrouter/anthropic/claude-sonnet-4';
 
 // 临时文件目录
 const TEMP_DIR = join(tmpdir(), 'hapi-aider');
 
 export class AiderCliBackend implements AgentBackend {
     private readonly model: string;
+    private readonly openrouterApiKey: string | undefined;
     private readonly yesAlways: boolean;
     private readonly streamOutput: boolean;
     private readonly autoCommit: boolean;
@@ -48,12 +50,14 @@ export class AiderCliBackend implements AgentBackend {
 
     constructor(options: AiderCliBackendOptions = {}) {
         this.model = options.model ?? DEFAULT_MODEL;
+        this.openrouterApiKey = options.openrouterApiKey;
         this.yesAlways = options.yesAlways ?? true;
         this.streamOutput = options.stream ?? true;
         this.autoCommit = options.autoCommit ?? false;
 
         logger.debug('[Aider] Backend created', {
             model: this.model,
+            hasApiKey: !!this.openrouterApiKey,
             yesAlways: this.yesAlways,
             stream: this.streamOutput,
             autoCommit: this.autoCommit
@@ -262,6 +266,12 @@ export class AiderCliBackend implements AgentBackend {
         // 模型
         if (this.model) {
             args.push('--model', this.model);
+        }
+
+        // OpenRouter API Key
+        if (this.openrouterApiKey) {
+            args.push('--api-key', `openrouter=${this.openrouterApiKey}`);
+            logger.debug('[Aider] Added OpenRouter API key to args');
         }
 
         // Git 控制

@@ -87,7 +87,16 @@ export function createGroupRoutes(
         }
 
         const members = store.getGroupMembers(id)
-        return c.json({ group, members })
+        const membersWithDetails = members.map(m => {
+            const session = syncEngine?.getSession(m.sessionId)
+            return {
+                ...m,
+                sessionName: session?.metadata?.name || `Session ${m.sessionId.slice(0, 8)}`,
+                sessionActive: session?.active || false,
+                agentType: m.agentType || session?.metadata?.agent || 'unknown'
+            }
+        })
+        return c.json({ group, members: membersWithDetails })
     })
 
     // PUT /groups/:id - 更新群组
