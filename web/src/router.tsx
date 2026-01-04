@@ -512,6 +512,13 @@ const groupsRoute = createRoute({
     component: GroupsPage,
 })
 
+// /chat route - shows groups/chat list (same as /groups)
+const chatRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/chat',
+    component: GroupsPage,
+})
+
 const groupChatRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/groups/$groupId/chat',
@@ -530,6 +537,7 @@ export const routeTree = rootRoute.addChildren([
     usageRoute,
     groupsRoute,
     groupChatRoute,
+    chatRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']

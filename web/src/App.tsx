@@ -25,6 +25,7 @@ import { addAlert } from '@/hooks/useAdvisorAlert'
 import { addIdleSuggestion, setMinimaxStart, setMinimaxComplete, setMinimaxError } from '@/hooks/useIdleSuggestion'
 import { AdvisorAlertBanner } from '@/components/AdvisorAlertBanner'
 import { useAiSuggestionSetting } from '@/hooks/useAiSuggestionSetting'
+import { BottomTabs, useShowBottomTabs } from '@/components/BottomTabs'
 
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
