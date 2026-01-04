@@ -126,8 +126,8 @@ export class AdvisorService {
 
         // 检查是否是 Advisor 会话
         if (this.scheduler.isAdvisorSession(sessionId)) {
-            // 解析 Advisor 输出
-            if (content.role === 'assistant') {
+            // 解析 Advisor 输出 (agent 角色的 codex 消息)
+            if (content.role === 'agent' || content.role === 'assistant') {
                 this.parseAdvisorOutput(sessionId, content)
             }
             return
@@ -237,13 +237,36 @@ export class AdvisorService {
             if (!content) continue
 
             const role = content.role as string
-            const msgContent = content.content as Record<string, unknown> | string | null
 
+            // 提取消息文本 - 处理多种消息格式
             let text = ''
-            if (typeof msgContent === 'string') {
-                text = msgContent
-            } else if (msgContent && typeof msgContent === 'object') {
-                text = (msgContent.text as string) || ''
+            let isAgentMessage = false
+
+            const innerContent = content.content as Record<string, unknown> | string | null
+
+            // 格式 1: codex 消息 { role: 'agent', content: { type: 'codex', data: { type: 'message', message: '...' } } }
+            if (innerContent && typeof innerContent === 'object') {
+                const contentType = (innerContent as Record<string, unknown>).type as string
+                if (contentType === 'codex') {
+                    const data = (innerContent as Record<string, unknown>).data as Record<string, unknown>
+                    if (data?.type === 'message' && typeof data.message === 'string') {
+                        text = data.message
+                        isAgentMessage = role === 'agent'
+                    }
+                } else if (contentType === 'event') {
+                    // 跳过 event 消息
+                    continue
+                } else {
+                    // 其他对象格式
+                    text = ((innerContent as Record<string, unknown>).text as string) || ''
+                }
+            } else if (typeof innerContent === 'string') {
+                text = innerContent
+            }
+
+            // 格式 2: 用户消息 { role: 'user', content: '...' }
+            if (!text && role === 'user' && typeof content.content === 'string') {
+                text = content.content
             }
 
             if (!text) continue
@@ -256,17 +279,17 @@ export class AdvisorService {
             }
 
             // 检测错误
-            if (/error|failed|exception|crash/i.test(text)) {
+            if (/error|failed|exception|crash|错误|失败/i.test(text)) {
                 errors.push(text.slice(0, 100))
             }
 
             // 检测决策
-            if (/decided|choose|选择|决定|采用/i.test(text)) {
+            if (/decided|choose|选择|决定|采用|will use|using|用/i.test(text)) {
                 decisions.push(text.slice(0, 100))
             }
 
-            // 检测代码变更
-            if (role === 'assistant' && /created|modified|edited|deleted|wrote/i.test(text)) {
+            // 检测代码变更 (来自 agent 的消息)
+            if (isAgentMessage && /created|modified|edited|deleted|wrote|创建|修改|编辑|删除|写入/i.test(text)) {
                 codeChanges.push(text.slice(0, 100))
             }
         }
@@ -316,10 +339,20 @@ export class AdvisorService {
     private parseAdvisorOutput(sessionId: string, content: Record<string, unknown>): void {
         const msgContent = content.content as Record<string, unknown> | string | null
         let text = ''
-        if (typeof msgContent === 'string') {
+
+        // 处理 codex 格式: { type: 'codex', data: { type: 'message', message: '...' } }
+        if (msgContent && typeof msgContent === 'object') {
+            const contentType = (msgContent as Record<string, unknown>).type as string
+            if (contentType === 'codex') {
+                const data = (msgContent as Record<string, unknown>).data as Record<string, unknown>
+                if (data?.type === 'message' && typeof data.message === 'string') {
+                    text = data.message
+                }
+            } else {
+                text = ((msgContent as Record<string, unknown>).text as string) || ''
+            }
+        } else if (typeof msgContent === 'string') {
             text = msgContent
-        } else if (msgContent && typeof msgContent === 'object') {
-            text = (msgContent.text as string) || ''
         }
 
         if (!text) {
