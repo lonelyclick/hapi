@@ -1,17 +1,28 @@
 import type {
     AddInputPresetResponse,
+    AddMemberResponse,
     AddProjectResponse,
     AddUserResponse,
+    AgentGroupType,
     AuthResponse,
     AutoIterationConfigUpdateRequest,
     AutoIterationData,
     AutoIterationLogsResponse,
     AutoIterationNotificationLevel,
+    BroadcastResponse,
     ClearMessagesResponse,
+    CreateGroupResponse,
+    DeleteGroupResponse,
     DeleteSessionResponse,
     FileReadResponse,
     FileSearchResponse,
     GitCommandResponse,
+    GroupMessagesResponse,
+    GroupMemberRole,
+    GroupMessageType,
+    GroupResponse,
+    GroupSenderType,
+    GroupsResponse,
     ImageUploadResponse,
     InputPresetsResponse,
     MachinePathsExistsResponse,
@@ -21,10 +32,12 @@ import type {
     OnlineUsersResponse,
     ProjectsResponse,
     RemoveInputPresetResponse,
+    RemoveMemberResponse,
     RemoveProjectResponse,
     RemoveUserResponse,
     ResumeSessionResponse,
     RolePromptsResponse,
+    SendGroupMessageResponse,
     SetRolePromptResponse,
     SlashCommandsResponse,
     SpeechToTextStreamRequest,
@@ -32,6 +45,7 @@ import type {
     SpawnResponse,
     SessionResponse,
     SessionsResponse,
+    UpdateGroupResponse,
     UpdateInputPresetResponse,
     UpdateProjectResponse,
     UpdateUserRoleResponse,
@@ -658,5 +672,114 @@ export class ApiClient {
             body: JSON.stringify(body)
         })
         return { data }
+    }
+
+    // ==================== Agent Groups ====================
+
+    async getGroups(): Promise<GroupsResponse> {
+        return await this.request<GroupsResponse>('/api/groups')
+    }
+
+    async getGroup(groupId: string): Promise<GroupResponse> {
+        return await this.request<GroupResponse>(`/api/groups/${encodeURIComponent(groupId)}`)
+    }
+
+    async createGroup(
+        name: string,
+        type: AgentGroupType = 'collaboration',
+        description?: string
+    ): Promise<CreateGroupResponse> {
+        return await this.request<CreateGroupResponse>('/api/groups', {
+            method: 'POST',
+            body: JSON.stringify({ name, type, description })
+        })
+    }
+
+    async updateGroupStatus(
+        groupId: string,
+        status: 'active' | 'paused' | 'completed'
+    ): Promise<UpdateGroupResponse> {
+        return await this.request<UpdateGroupResponse>(
+            `/api/groups/${encodeURIComponent(groupId)}`,
+            {
+                method: 'PUT',
+                body: JSON.stringify({ status })
+            }
+        )
+    }
+
+    async deleteGroup(groupId: string): Promise<DeleteGroupResponse> {
+        return await this.request<DeleteGroupResponse>(
+            `/api/groups/${encodeURIComponent(groupId)}`,
+            { method: 'DELETE' }
+        )
+    }
+
+    async addGroupMember(
+        groupId: string,
+        sessionId: string,
+        role: GroupMemberRole = 'member',
+        agentType?: string
+    ): Promise<AddMemberResponse> {
+        return await this.request<AddMemberResponse>(
+            `/api/groups/${encodeURIComponent(groupId)}/members`,
+            {
+                method: 'POST',
+                body: JSON.stringify({ sessionId, role, agentType })
+            }
+        )
+    }
+
+    async removeGroupMember(groupId: string, sessionId: string): Promise<RemoveMemberResponse> {
+        return await this.request<RemoveMemberResponse>(
+            `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(sessionId)}`,
+            { method: 'DELETE' }
+        )
+    }
+
+    async getGroupMessages(groupId: string, limit?: number, beforeId?: string): Promise<GroupMessagesResponse> {
+        const params = new URLSearchParams()
+        if (limit !== undefined) {
+            params.set('limit', `${limit}`)
+        }
+        if (beforeId) {
+            params.set('beforeId', beforeId)
+        }
+        const qs = params.toString()
+        return await this.request<GroupMessagesResponse>(
+            `/api/groups/${encodeURIComponent(groupId)}/messages${qs ? `?${qs}` : ''}`
+        )
+    }
+
+    async sendGroupMessage(
+        groupId: string,
+        content: string,
+        sourceSessionId?: string,
+        senderType: GroupSenderType = 'user',
+        messageType: GroupMessageType = 'chat'
+    ): Promise<SendGroupMessageResponse> {
+        return await this.request<SendGroupMessageResponse>(
+            `/api/groups/${encodeURIComponent(groupId)}/messages`,
+            {
+                method: 'POST',
+                body: JSON.stringify({ content, sourceSessionId, senderType, messageType })
+            }
+        )
+    }
+
+    async broadcastToGroup(
+        groupId: string,
+        content: string,
+        sourceSessionId?: string,
+        senderType: GroupSenderType = 'user',
+        messageType: GroupMessageType = 'chat'
+    ): Promise<BroadcastResponse> {
+        return await this.request<BroadcastResponse>(
+            `/api/groups/${encodeURIComponent(groupId)}/broadcast`,
+            {
+                method: 'POST',
+                body: JSON.stringify({ content, sourceSessionId, senderType, messageType })
+            }
+        )
     }
 }
