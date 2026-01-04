@@ -9,7 +9,7 @@ import { HappySystemMessage } from '@/components/AssistantChat/messages/SystemMe
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/Spinner'
 import { useIdleSuggestion } from '@/hooks/useIdleSuggestion'
-import type { SuggestionChip } from '@/hooks/useIdleSuggestion'
+import type { SuggestionChip, MinimaxStatus } from '@/hooks/useIdleSuggestion'
 
 function NewMessagesIndicator(props: { count: number; onClick: () => void }) {
     if (props.count === 0) {
@@ -38,8 +38,20 @@ function InlineSuggestionChips(props: {
     reason?: string
     onSelect: (chipId: string) => void
     onDismiss: () => void
+    // MiniMax Layer 2
+    minimaxStatus?: MinimaxStatus
+    minimaxChips?: SuggestionChip[]
+    minimaxError?: string
 }) {
-    if (props.chips.length === 0) return null
+    const hasLayer1Chips = props.chips.length > 0
+    const hasLayer2Chips = props.minimaxChips && props.minimaxChips.length > 0
+    const isMinimaxReviewing = props.minimaxStatus === 'reviewing'
+    const hasMinimaxError = props.minimaxStatus === 'error'
+
+    // 如果两层都没内容且不在审查中，不显示
+    if (!hasLayer1Chips && !hasLayer2Chips && !isMinimaxReviewing && !hasMinimaxError) {
+        return null
+    }
 
     return (
         <div className="flex justify-start">
@@ -76,27 +88,75 @@ function InlineSuggestionChips(props: {
                     </button>
                 </div>
 
-                {/* 芯片列表 */}
-                <div className="flex flex-wrap gap-1.5">
-                    {props.chips.map((chip) => (
-                        <button
-                            key={chip.id}
-                            type="button"
-                            onClick={() => props.onSelect(chip.id)}
-                            className={`
-                                inline-flex items-center gap-1 px-2.5 py-1
-                                rounded-full border text-xs font-medium
-                                transition-all duration-150 ease-out
-                                active:scale-[0.97]
-                                ${chipCategoryStyles[chip.category] || chipCategoryStyles.general}
-                            `}
-                            title={chip.text}
-                        >
-                            {chip.icon && <span>{chip.icon}</span>}
-                            <span className="whitespace-nowrap">{chip.label}</span>
-                        </button>
-                    ))}
-                </div>
+                {/* Layer 1 芯片列表 */}
+                {hasLayer1Chips && (
+                    <div className="flex flex-wrap gap-1.5">
+                        {props.chips.map((chip) => (
+                            <button
+                                key={chip.id}
+                                type="button"
+                                onClick={() => props.onSelect(chip.id)}
+                                className={`
+                                    inline-flex items-center gap-1 px-2.5 py-1
+                                    rounded-full border text-xs font-medium
+                                    transition-all duration-150 ease-out
+                                    active:scale-[0.97]
+                                    ${chipCategoryStyles[chip.category] || chipCategoryStyles.general}
+                                `}
+                                title={chip.text}
+                            >
+                                {chip.icon && <span>{chip.icon}</span>}
+                                <span className="whitespace-nowrap">{chip.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {/* Layer 2: MiniMax 审查状态 */}
+                {isMinimaxReviewing && (
+                    <div className={`flex items-center gap-2 text-xs text-[var(--app-hint)] ${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
+                        <Spinner className="w-3 h-3" />
+                        <span>MiniMax 正在审查...</span>
+                    </div>
+                )}
+
+                {/* Layer 2: MiniMax 芯片 */}
+                {hasLayer2Chips && (
+                    <div className={`${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
+                        <div className="flex items-center gap-1 mb-2 text-xs text-[var(--app-hint)]">
+                            <span>✨</span>
+                            <span>MiniMax 建议</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {props.minimaxChips!.map((chip) => (
+                                <button
+                                    key={chip.id}
+                                    type="button"
+                                    onClick={() => props.onSelect(chip.id)}
+                                    className={`
+                                        inline-flex items-center gap-1 px-2.5 py-1
+                                        rounded-full border text-xs font-medium
+                                        transition-all duration-150 ease-out
+                                        active:scale-[0.97]
+                                        ${chipCategoryStyles[chip.category] || chipCategoryStyles.general}
+                                    `}
+                                    title={chip.text}
+                                >
+                                    {chip.icon && <span>{chip.icon}</span>}
+                                    <span className="whitespace-nowrap">{chip.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Layer 2: MiniMax 错误 */}
+                {hasMinimaxError && (
+                    <div className={`flex items-center gap-2 text-xs text-orange-600 dark:text-orange-400 ${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
+                        <span>⚠️</span>
+                        <span>MiniMax 审查失败</span>
+                    </div>
+                )}
             </div>
         </div>
     )
@@ -249,29 +309,43 @@ export function HappyThread(props: {
         hasBootstrappedRef.current = false
     }, [props.sessionId])
 
-    // Idle suggestion chips
+    // Idle suggestion chips (Layer 1 + Layer 2)
     const {
         suggestion: idleSuggestion,
         chips: idleChips,
         hasChips: hasIdleChips,
         applyChip: applyIdleChip,
         dismiss: dismissIdleSuggestion,
-        markViewed: markIdleSuggestionViewed
+        markViewed: markIdleSuggestionViewed,
+        // MiniMax Layer 2
+        minimaxStatus,
+        minimaxChips,
+        minimaxError,
+        hasMinimaxChips,
+        applyMinimaxChip
     } = useIdleSuggestion(props.sessionId)
 
     // Mark suggestion as viewed when displayed
     useEffect(() => {
-        if (hasIdleChips) {
+        if (hasIdleChips || minimaxStatus !== 'idle') {
             markIdleSuggestionViewed()
         }
-    }, [hasIdleChips, markIdleSuggestionViewed])
+    }, [hasIdleChips, minimaxStatus, markIdleSuggestionViewed])
 
     const handleChipSelect = useCallback((chipId: string) => {
-        const text = applyIdleChip(chipId)
+        // 先尝试 Layer 1 芯片
+        let text = applyIdleChip(chipId)
+        // 如果不是 Layer 1 芯片，尝试 Layer 2
+        if (!text) {
+            text = applyMinimaxChip(chipId)
+        }
         if (text && props.onApplyChip) {
             props.onApplyChip(text)
         }
-    }, [applyIdleChip, props.onApplyChip])
+    }, [applyIdleChip, applyMinimaxChip, props.onApplyChip])
+
+    // 是否显示建议区域（Layer 1 有芯片 或 Layer 2 正在审查/有芯片/有错误）
+    const showSuggestionArea = hasIdleChips || minimaxStatus === 'reviewing' || hasMinimaxChips || minimaxStatus === 'error'
 
     const handleLoadMore = useCallback(() => {
         if (props.isLoadingMessages || !props.hasMoreMessages || props.isLoadingMoreMessages || loadLockRef.current) {
@@ -419,13 +493,16 @@ export function HappyThread(props: {
                             )}
                             <div className="flex flex-col gap-3">
                                 <ThreadPrimitive.Messages components={THREAD_MESSAGE_COMPONENTS} />
-                                {/* AI 建议芯片 - 融入对话流 */}
-                                {hasIdleChips && (
+                                {/* AI 建议芯片 - 融入对话流 (Layer 1 + Layer 2) */}
+                                {showSuggestionArea && (
                                     <InlineSuggestionChips
                                         chips={idleChips}
                                         reason={idleSuggestion?.reason}
                                         onSelect={handleChipSelect}
                                         onDismiss={dismissIdleSuggestion}
+                                        minimaxStatus={minimaxStatus}
+                                        minimaxChips={minimaxChips}
+                                        minimaxError={minimaxError}
                                     />
                                 )}
                             </div>

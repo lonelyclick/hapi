@@ -21,12 +21,19 @@ export interface IdleSuggestion {
     createdAt: number
 }
 
+// MiniMax 审查状态
+export type MinimaxStatus = 'idle' | 'reviewing' | 'complete' | 'error'
+
 interface StoredIdleSuggestion {
     suggestion: IdleSuggestion
     status: 'pending' | 'applied' | 'dismissed'
     createdAt: number
     viewedAt?: number
     usedChipIds?: string[]  // 已使用的芯片 ID
+    // MiniMax Layer 2 状态
+    minimaxStatus: MinimaxStatus
+    minimaxChips?: SuggestionChip[]
+    minimaxError?: string
 }
 
 const STORAGE_KEY_PREFIX = 'hapi:idle-suggestion:'
@@ -72,18 +79,84 @@ function removeFromStorage(sessionId: string): void {
 }
 
 /**
- * 添加空闲建议（供 SSE 事件处理调用）
+ * 添加空闲建议（供 SSE 事件处理调用）- Layer 1
  */
 export function addIdleSuggestion(suggestion: IdleSuggestion): void {
     const stored: StoredIdleSuggestion = {
         suggestion,
         status: 'pending',
         createdAt: Date.now(),
-        usedChipIds: []
+        usedChipIds: [],
+        minimaxStatus: 'idle'
     }
     globalSuggestions.set(suggestion.sessionId, stored)
     saveToStorage(suggestion.sessionId, stored)
     notifyListeners()
+}
+
+/**
+ * 设置 MiniMax 审查开始状态
+ */
+export function setMinimaxStart(sessionId: string): void {
+    const stored = globalSuggestions.get(sessionId)
+    if (stored) {
+        const updated = { ...stored, minimaxStatus: 'reviewing' as MinimaxStatus }
+        globalSuggestions.set(sessionId, updated)
+        saveToStorage(sessionId, updated)
+        notifyListeners()
+    } else {
+        // 如果没有 Layer 1 建议，创建一个空的建议容器
+        const newStored: StoredIdleSuggestion = {
+            suggestion: {
+                suggestionId: `minimax_${Date.now()}`,
+                sessionId,
+                chips: [],
+                reason: 'MiniMax 审查中',
+                createdAt: Date.now()
+            },
+            status: 'pending',
+            createdAt: Date.now(),
+            usedChipIds: [],
+            minimaxStatus: 'reviewing'
+        }
+        globalSuggestions.set(sessionId, newStored)
+        saveToStorage(sessionId, newStored)
+        notifyListeners()
+    }
+}
+
+/**
+ * 设置 MiniMax 审查完成
+ */
+export function setMinimaxComplete(sessionId: string, chips: SuggestionChip[]): void {
+    const stored = globalSuggestions.get(sessionId)
+    if (stored) {
+        const updated = {
+            ...stored,
+            minimaxStatus: 'complete' as MinimaxStatus,
+            minimaxChips: chips
+        }
+        globalSuggestions.set(sessionId, updated)
+        saveToStorage(sessionId, updated)
+        notifyListeners()
+    }
+}
+
+/**
+ * 设置 MiniMax 审查错误
+ */
+export function setMinimaxError(sessionId: string, error: string): void {
+    const stored = globalSuggestions.get(sessionId)
+    if (stored) {
+        const updated = {
+            ...stored,
+            minimaxStatus: 'error' as MinimaxStatus,
+            minimaxError: error
+        }
+        globalSuggestions.set(sessionId, updated)
+        saveToStorage(sessionId, updated)
+        notifyListeners()
+    }
 }
 
 /**
@@ -164,6 +237,27 @@ export function useIdleSuggestion(sessionId: string | null) {
         saveToStorage(sessionId, updated)
     }, [sessionId, stored])
 
+    // MiniMax 芯片（未使用的）
+    const minimaxChips = stored?.minimaxChips
+        ? stored.minimaxChips.filter(chip => !stored.usedChipIds?.includes(chip.id))
+        : []
+
+    // 应用 MiniMax 芯片
+    const applyMinimaxChip = useCallback((chipId: string): string | undefined => {
+        if (!sessionId || !stored || !stored.minimaxChips) return undefined
+        const chip = stored.minimaxChips.find(c => c.id === chipId)
+        if (!chip) return undefined
+
+        const usedChipIds = [...(stored.usedChipIds || []), chipId]
+        const updated = { ...stored, usedChipIds }
+
+        globalSuggestions.set(sessionId, updated)
+        saveToStorage(sessionId, updated)
+        notifyListeners()
+
+        return chip.text
+    }, [sessionId, stored])
+
     return {
         suggestion: hasPendingSuggestion ? stored.suggestion : null,
         chips: availableChips,
@@ -171,6 +265,12 @@ export function useIdleSuggestion(sessionId: string | null) {
         hasPendingSuggestion,
         applyChip,
         dismiss,
-        markViewed
+        markViewed,
+        // MiniMax Layer 2 状态
+        minimaxStatus: stored?.minimaxStatus ?? 'idle',
+        minimaxChips,
+        minimaxError: stored?.minimaxError,
+        hasMinimaxChips: minimaxChips.length > 0,
+        applyMinimaxChip
     }
 }

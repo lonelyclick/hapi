@@ -22,7 +22,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
 import { notifyTaskComplete, getPendingNotification, clearPendingNotification, useWebPushSubscription } from '@/hooks/useNotification'
 import { addAlert } from '@/hooks/useAdvisorAlert'
-import { addIdleSuggestion } from '@/hooks/useIdleSuggestion'
+import { addIdleSuggestion, setMinimaxStart, setMinimaxComplete, setMinimaxError } from '@/hooks/useIdleSuggestion'
 import { AdvisorAlertBanner } from '@/components/AdvisorAlertBanner'
 
 export function App() {
@@ -266,10 +266,27 @@ export function App() {
             return
         }
 
-        // 处理空闲建议事件（芯片格式）
+        // 处理空闲建议事件（芯片格式）- Layer 1
         if (event.type === 'advisor-idle-suggestion' && event.idleSuggestion) {
             console.log('[advisor] idle suggestion received', event.idleSuggestion)
             addIdleSuggestion(event.idleSuggestion)
+            return
+        }
+
+        // 处理 MiniMax 审查事件 - Layer 2
+        if (event.type === 'advisor-minimax-start' && event.sessionId) {
+            console.log('[advisor] minimax review started', event.sessionId)
+            setMinimaxStart(event.sessionId)
+            return
+        }
+        if (event.type === 'advisor-minimax-complete' && event.minimaxComplete) {
+            console.log('[advisor] minimax review completed', event.minimaxComplete)
+            setMinimaxComplete(event.minimaxComplete.sessionId, event.minimaxComplete.chips)
+            return
+        }
+        if (event.type === 'advisor-minimax-error' && event.minimaxError) {
+            console.log('[advisor] minimax review error', event.minimaxError)
+            setMinimaxError(event.minimaxError.sessionId, event.minimaxError.error)
             return
         }
 

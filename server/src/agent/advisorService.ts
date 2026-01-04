@@ -7,6 +7,7 @@ import type { SyncEngine, SyncEvent, DecryptedMessage, Session, AdvisorAlertData
 import type { Store, StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { AdvisorScheduler } from './advisorScheduler'
 import { SuggestionEvaluator } from './suggestionEvaluator'
+import { MinimaxService } from './minimaxService'
 import type {
     SessionSummary,
     AdvisorOutput,
@@ -29,6 +30,7 @@ export class AdvisorService {
     private store: Store
     private scheduler: AdvisorScheduler
     private evaluator: SuggestionEvaluator
+    private minimaxService: MinimaxService
     private namespace: string
     private summaryThreshold: number
     private summaryIdleTimeoutMs: number
@@ -50,6 +52,9 @@ export class AdvisorService {
     private lastSummaryTime: Map<string, number> = new Map()       // sessionId -> 上次推送时间戳
     private readonly summaryMinIntervalMs = 30_000                 // 最小推送间隔 30 秒
 
+    // MiniMax 审查并发控制
+    private minimaxReviewingSet: Set<string> = new Set()           // 正在审查的 sessionId
+
     constructor(
         syncEngine: SyncEngine,
         store: Store,
@@ -64,6 +69,7 @@ export class AdvisorService {
         this.summaryIdleTimeoutMs = config.summaryIdleTimeoutMs ?? 60_000
         this.evaluationIntervalMs = config.evaluationIntervalMs ?? 300_000  // 5分钟
         this.evaluator = new SuggestionEvaluator(store, syncEngine)
+        this.minimaxService = new MinimaxService()
     }
 
     /**
@@ -128,6 +134,191 @@ export class AdvisorService {
         if (event.type === 'message-received' && event.sessionId && event.message) {
             this.onMessage(event.sessionId, event.message)
         }
+
+        // 监听 session-updated 事件，检测 AI 回复完成
+        if (event.type === 'session-updated' && event.sessionId) {
+            const data = event.data as { wasThinking?: boolean; thinking?: boolean } | null
+            // wasThinking=true 且 thinking=false 表示 AI 刚完成回复
+            if (data?.wasThinking && data.thinking === false) {
+                this.onThinkingComplete(event.sessionId)
+            }
+        }
+    }
+
+    /**
+     * AI 回复完成时触发双层建议
+     */
+    private onThinkingComplete(sessionId: string): void {
+        const session = this.syncEngine.getSession(sessionId)
+        if (!session || session.namespace !== this.namespace) {
+            return
+        }
+
+        // 排除 Advisor 会话
+        if (this.scheduler.isAdvisorSession(sessionId)) {
+            return
+        }
+
+        console.log(`[AdvisorService] Thinking complete for session ${sessionId}, triggering dual-layer suggestions`)
+
+        // Layer 1: 立即执行本地检查（同步）
+        this.performIdleCheck(sessionId).catch(error => {
+            console.error('[AdvisorService] Layer 1 idle check error:', error)
+        })
+
+        // Layer 2: 异步启动 MiniMax 审查（不阻塞）
+        this.performMinimaxReview(sessionId).catch(error => {
+            console.error('[AdvisorService] Layer 2 MiniMax review error:', error)
+        })
+    }
+
+    /**
+     * 执行 MiniMax 审查（Layer 2）
+     */
+    private async performMinimaxReview(sessionId: string): Promise<void> {
+        // 并发控制：同一 session 同时只能有一个审查
+        if (this.minimaxReviewingSet.has(sessionId)) {
+            console.log(`[AdvisorService] MiniMax review already in progress for ${sessionId}`)
+            return
+        }
+
+        const session = this.syncEngine.getSession(sessionId)
+        if (!session) {
+            return
+        }
+
+        this.minimaxReviewingSet.add(sessionId)
+
+        try {
+            // 1. 广播开始事件
+            this.broadcastMinimaxStart(sessionId)
+
+            // 2. 构建摘要
+            const summary = this.buildSummaryForMinimax(session)
+
+            // 3. 调用 MiniMax
+            const result = await this.minimaxService.reviewSession({ sessionId, summary })
+
+            // 4. 广播结果或错误
+            if (result.error) {
+                this.broadcastMinimaxError(sessionId, result.error)
+            } else if (result.chips.length > 0) {
+                this.broadcastMinimaxComplete(sessionId, result.chips)
+            } else {
+                // 没有建议时也广播完成（空芯片）
+                this.broadcastMinimaxComplete(sessionId, [])
+            }
+        } finally {
+            this.minimaxReviewingSet.delete(sessionId)
+        }
+    }
+
+    /**
+     * 为 MiniMax 构建摘要
+     */
+    private buildSummaryForMinimax(session: Session): SessionSummary {
+        const metadata = session.metadata
+        const workDir = metadata?.path || 'unknown'
+        const project = workDir.split('/').pop() || 'unknown'
+
+        // 获取最近消息
+        const recentMessages = this.syncEngine.getMessagesAfter(session.id, {
+            afterSeq: Math.max(0, session.seq - 50),
+            limit: 50
+        })
+
+        // 提取活动、代码变更、错误、决策
+        const activities: string[] = []
+        const codeChanges: string[] = []
+        const errors: string[] = []
+        const decisions: string[] = []
+
+        for (const msg of recentMessages) {
+            const content = msg.content as Record<string, unknown> | null
+            if (!content) continue
+
+            const text = this.extractMessageText(content)
+            if (!text || text.startsWith('#InitPrompt-') || text.startsWith('[[SESSION_SUMMARY]]')) {
+                continue
+            }
+
+            const shortText = text.slice(0, 100)
+            activities.push(shortText)
+
+            if (/error|failed|exception|错误|失败/i.test(text)) {
+                errors.push(shortText)
+            }
+            if (/decided|choose|选择|决定|采用/i.test(text)) {
+                decisions.push(shortText)
+            }
+            if (/created|modified|edited|wrote|创建|修改|编辑|写入/i.test(text)) {
+                codeChanges.push(shortText)
+            }
+        }
+
+        // 简化 todos
+        const simplifiedTodos = session.todos && Array.isArray(session.todos)
+            ? (session.todos as Array<{ content?: string; status?: string }>)
+                .slice(0, 5)
+                .map(t => ({ s: t.status?.charAt(0), t: t.content?.slice(0, 50) }))
+            : undefined
+
+        return {
+            sessionId: session.id,
+            namespace: session.namespace,
+            workDir,
+            project,
+            recentActivity: activities.slice(-5).join('\n'),
+            todos: simplifiedTodos,
+            codeChanges: codeChanges.slice(-3),
+            errors: errors.slice(-2),
+            decisions: decisions.slice(-2),
+            messageCount: recentMessages.length,
+            lastMessageSeq: recentMessages[recentMessages.length - 1]?.seq ?? 0,
+            timestamp: Date.now()
+        }
+    }
+
+    /**
+     * 广播 MiniMax 开始事件
+     */
+    private broadcastMinimaxStart(sessionId: string): void {
+        const event: SyncEvent = {
+            type: 'advisor-minimax-start',
+            namespace: this.namespace,
+            sessionId,
+            minimaxStart: { sessionId }
+        }
+        this.syncEngine.emit(event)
+        console.log(`[AdvisorService] MiniMax review started for ${sessionId}`)
+    }
+
+    /**
+     * 广播 MiniMax 完成事件
+     */
+    private broadcastMinimaxComplete(sessionId: string, chips: SuggestionChip[]): void {
+        const event: SyncEvent = {
+            type: 'advisor-minimax-complete',
+            namespace: this.namespace,
+            sessionId,
+            minimaxComplete: { sessionId, chips }
+        }
+        this.syncEngine.emit(event)
+        console.log(`[AdvisorService] MiniMax review complete for ${sessionId}: ${chips.length} chips`)
+    }
+
+    /**
+     * 广播 MiniMax 错误事件
+     */
+    private broadcastMinimaxError(sessionId: string, error: string): void {
+        const event: SyncEvent = {
+            type: 'advisor-minimax-error',
+            namespace: this.namespace,
+            sessionId,
+            minimaxError: { sessionId, error }
+        }
+        this.syncEngine.emit(event)
+        console.log(`[AdvisorService] MiniMax review error for ${sessionId}: ${error}`)
     }
 
     /**

@@ -161,6 +161,9 @@ export type SyncEventType =
     | 'typing-changed'
     | 'advisor-alert'
     | 'advisor-idle-suggestion'
+    | 'advisor-minimax-start'
+    | 'advisor-minimax-complete'
+    | 'advisor-minimax-error'
 
 export type OnlineUser = {
     email: string
@@ -201,6 +204,21 @@ export type AdvisorIdleSuggestionData = {
     createdAt: number
 }
 
+// MiniMax 审查相关数据
+export type AdvisorMinimaxStartData = {
+    sessionId: string
+}
+
+export type AdvisorMinimaxCompleteData = {
+    sessionId: string
+    chips: SuggestionChip[]
+}
+
+export type AdvisorMinimaxErrorData = {
+    sessionId: string
+    error: string
+}
+
 export interface SyncEvent {
     type: SyncEventType
     namespace?: string
@@ -212,6 +230,9 @@ export interface SyncEvent {
     typing?: TypingUser
     alert?: AdvisorAlertData
     idleSuggestion?: AdvisorIdleSuggestionData
+    minimaxStart?: AdvisorMinimaxStartData
+    minimaxComplete?: AdvisorMinimaxCompleteData
+    minimaxError?: AdvisorMinimaxErrorData
 }
 
 export type SyncEventListener = (event: SyncEvent) => void
@@ -236,6 +257,10 @@ export class SyncEngine {
     private readonly todoBackfillAttemptedSessionIds: Set<string> = new Set()
     private readonly deletingSessions: Set<string> = new Set()
     private inactivityTimer: NodeJS.Timeout | null = null
+
+    // 推送频率限制：每个 session 最少间隔 30 秒才能再次发送推送
+    private readonly lastPushNotificationAt: Map<string, number> = new Map()
+    private readonly PUSH_NOTIFICATION_MIN_INTERVAL_MS = 30_000
 
     constructor(
         private readonly store: Store,
@@ -365,6 +390,7 @@ export class SyncEngine {
         this.sessionMessages.delete(sessionId)
         this.lastBroadcastAtBySessionId.delete(sessionId)
         this.todoBackfillAttemptedSessionIds.delete(sessionId)
+        this.lastPushNotificationAt.delete(sessionId)
         this.deletingSessions.delete(sessionId)
         this.emit({ type: 'session-removed', sessionId })
         return deleted || Boolean(session)
@@ -569,6 +595,16 @@ export class SyncEngine {
         if (!webPush || !webPush.isConfigured()) {
             return
         }
+
+        // 频率限制：同一 session 30 秒内最多发送一次推送
+        const now = Date.now()
+        const lastPushAt = this.lastPushNotificationAt.get(session.id) ?? 0
+        if (now - lastPushAt < this.PUSH_NOTIFICATION_MIN_INTERVAL_MS) {
+            console.log('[webpush] rate limited for session:', session.id,
+                `(last push ${Math.round((now - lastPushAt) / 1000)}s ago)`)
+            return
+        }
+        this.lastPushNotificationAt.set(session.id, now)
 
         const title = session.metadata?.summary?.text || session.metadata?.name || 'Task completed'
         const projectName = session.metadata?.path?.split('/').pop() || 'Session'

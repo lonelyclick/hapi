@@ -344,6 +344,21 @@ export type AdvisorIdleSuggestionData = {
     createdAt: number
 }
 
+// MiniMax 审查相关数据 (Layer 2)
+export type AdvisorMinimaxStartData = {
+    sessionId: string
+}
+
+export type AdvisorMinimaxCompleteData = {
+    sessionId: string
+    chips: SuggestionChip[]
+}
+
+export type AdvisorMinimaxErrorData = {
+    sessionId: string
+    error: string
+}
+
 export type SyncEvent =
     | { type: 'session-added'; sessionId: string; data?: unknown; namespace?: string }
     | { type: 'session-updated'; sessionId: string; data?: unknown; namespace?: string }
@@ -355,5 +370,8 @@ export type SyncEvent =
     | { type: 'typing-changed'; sessionId: string; typing: TypingUser; namespace?: string }
     | { type: 'advisor-alert'; alert: AdvisorAlertData; namespace?: string }
     | { type: 'advisor-idle-suggestion'; sessionId: string; idleSuggestion: AdvisorIdleSuggestionData; namespace?: string }
+    | { type: 'advisor-minimax-start'; sessionId: string; minimaxStart?: AdvisorMinimaxStartData; namespace?: string }
+    | { type: 'advisor-minimax-complete'; sessionId: string; minimaxComplete: AdvisorMinimaxCompleteData; namespace?: string }
+    | { type: 'advisor-minimax-error'; sessionId: string; minimaxError: AdvisorMinimaxErrorData; namespace?: string }
 
 export type OnlineUsersResponse = { users: OnlineUser[] }
