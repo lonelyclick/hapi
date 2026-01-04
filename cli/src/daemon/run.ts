@@ -383,7 +383,7 @@ export async function startDaemon(): Promise<void> {
             case 'glm': return 'glm';
             case 'minimax': return 'minimax';
             case 'grok': return 'grok';
-            case 'aider': return 'aider';
+            case 'openrouter': return 'openrouter';
             default: return 'claude';
           }
         })();
@@ -396,9 +396,9 @@ export async function startDaemon(): Promise<void> {
         if (agent === 'claude' && claudeAgent) {
           args.push('--agent', claudeAgent);
         }
-        const aiderModel = typeof options.aiderModel === 'string' ? options.aiderModel.trim() : '';
-        if (agent === 'aider' && aiderModel) {
-          args.push('--model', aiderModel);
+        const openrouterModel = typeof options.openrouterModel === 'string' ? options.openrouterModel.trim() : '';
+        if (agent === 'openrouter' && openrouterModel) {
+          args.push('--model', openrouterModel);
         }
         if (options.sessionId) {
           args.push('--hapi-session-id', options.sessionId);

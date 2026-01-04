@@ -263,8 +263,8 @@ import { getCliArgs } from './utils/cliArgs'
       process.exit(1)
     }
     return;
-  } else if (subcommand === 'aider') {
-    // Handle aider command (OpenRouter-powered coding assistant)
+  } else if (subcommand === 'openrouter') {
+    // Handle openrouter command (OpenRouter-powered coding assistant)
     try {
       let startedBy: 'daemon' | 'terminal' | undefined = undefined;
       let model: string | undefined = undefined;
@@ -276,13 +276,13 @@ import { getCliArgs } from './utils/cliArgs'
         }
       }
 
-      const { registerAiderAgent } = await import('./agent/runners/aider');
+      const { registerOpenRouterAgent } = await import('./agent/runners/openrouter');
       const { runAgentSession } = await import('./agent/runners/runAgentSession');
-      registerAiderAgent(model);
+      registerOpenRouterAgent(model);
 
       await initializeToken();
       await authAndSetupMachineIfNeeded();
-      await runAgentSession({ agentType: 'aider', startedBy });
+      await runAgentSession({ agentType: 'openrouter', startedBy });
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
       if (process.env.DEBUG) {

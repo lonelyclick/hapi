@@ -401,16 +401,16 @@ export class ApiClient {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'aider',
+        agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
         claudeAgent?: string,
-        aiderModel?: string
+        openrouterModel?: string
     ): Promise<SpawnResponse> {
         return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn`, {
             method: 'POST',
-            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeAgent, aiderModel })
+            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeAgent, openrouterModel })
         })
     }
 

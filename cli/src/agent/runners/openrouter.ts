@@ -6,8 +6,8 @@ import { OpenRouterBackend } from '@/agent/backends/openrouter';
 import { configuration } from '@/configuration';
 import { logger } from '@/ui/logger';
 
-// Default model for Aider - Claude Sonnet is a good coding model
-const DEFAULT_AIDER_MODEL = 'anthropic/claude-sonnet-4';
+// Default model for OpenRouter - Claude Sonnet is a good coding model
+const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-sonnet-4';
 
 type HapiSettingsFile = {
     openrouterApiKey?: unknown;
@@ -20,7 +20,7 @@ function readJsonFile(path: string): unknown | null {
         }
         return JSON.parse(readFileSync(path, 'utf8')) as unknown;
     } catch (error) {
-        logger.debug(`[Aider] Failed to read JSON from ${path}:`, error);
+        logger.debug(`[OpenRouter] Failed to read JSON from ${path}:`, error);
         return null;
     }
 }
@@ -37,7 +37,7 @@ function loadOpenRouterApiKey(): string | null {
     // First check environment variable
     const envKey = process.env.OPENROUTER_API_KEY;
     if (envKey) {
-        logger.debug('[Aider] Using API key from OPENROUTER_API_KEY env');
+        logger.debug('[OpenRouter] Using API key from OPENROUTER_API_KEY env');
         return envKey;
     }
 
@@ -46,7 +46,7 @@ function loadOpenRouterApiKey(): string | null {
     const credentialFile = readJsonFile(credentialPath) as { apiKey?: unknown } | null;
     const credentialKey = asNonEmptyString(credentialFile?.apiKey);
     if (credentialKey) {
-        logger.debug(`[Aider] Loaded API key from ${credentialPath}`);
+        logger.debug(`[OpenRouter] Loaded API key from ${credentialPath}`);
         return credentialKey;
     }
 
@@ -54,26 +54,26 @@ function loadOpenRouterApiKey(): string | null {
     const settingsFile = readJsonFile(configuration.settingsFile) as HapiSettingsFile | null;
     const settingsKey = asNonEmptyString(settingsFile?.openrouterApiKey);
     if (settingsKey) {
-        logger.debug(`[Aider] Loaded API key from ${configuration.settingsFile}`);
+        logger.debug(`[OpenRouter] Loaded API key from ${configuration.settingsFile}`);
         return settingsKey;
     }
 
     return null;
 }
 
-export function registerAiderAgent(model?: string): void {
+export function registerOpenRouterAgent(model?: string): void {
     const apiKey = loadOpenRouterApiKey();
-    const selectedModel = model || DEFAULT_AIDER_MODEL;
+    const selectedModel = model || DEFAULT_OPENROUTER_MODEL;
 
     if (!apiKey) {
-        logger.warn('[Aider] No OpenRouter API key found. Set OPENROUTER_API_KEY or add openrouterApiKey to settings.');
+        logger.warn('[OpenRouter] No OpenRouter API key found. Set OPENROUTER_API_KEY or add openrouterApiKey to settings.');
         // Still register but will fail when used
-        AgentRegistry.register('aider', () => {
+        AgentRegistry.register('openrouter', () => {
             throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY environment variable or add openrouterApiKey to HAPI settings.');
         });
         return;
     }
 
-    logger.debug(`[Aider] Registering with model: ${selectedModel}`);
-    AgentRegistry.register('aider', () => new OpenRouterBackend(selectedModel, apiKey));
+    logger.debug(`[OpenRouter] Registering with model: ${selectedModel}`);
+    AgentRegistry.register('openrouter', () => new OpenRouterBackend(selectedModel, apiKey));
 }

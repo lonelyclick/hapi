@@ -62,7 +62,7 @@ export class OpenRouterBackend implements AgentBackend {
     }
 
     private buildSystemPrompt(cwd: string): string {
-        return `You are Aider, an AI pair programming assistant. You help users with coding tasks.
+        return `You are OpenRouter, an AI pair programming assistant. You help users with coding tasks.
 
 Current working directory: ${cwd}
 
@@ -99,7 +99,7 @@ Always explain your reasoning and approach.`;
                     'Authorization': `Bearer ${this.apiKey}`,
                     'Content-Type': 'application/json',
                     'HTTP-Referer': 'https://yoho.run',
-                    'X-Title': 'HAPI Aider'
+                    'X-Title': 'HAPI OpenRouter'
                 },
                 body: JSON.stringify({
                     model: session.model,

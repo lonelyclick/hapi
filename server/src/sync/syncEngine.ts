@@ -1058,7 +1058,7 @@ export class SyncEngine {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'aider' = 'claude',
+        agent: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' = 'claude',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
@@ -1067,7 +1067,7 @@ export class SyncEngine {
             resumeSessionId?: string
             token?: string
             claudeAgent?: string
-            aiderModel?: string
+            openrouterModel?: string
             permissionMode?: Session['permissionMode']
             modelMode?: Session['modelMode']
             modelReasoningEffort?: Session['modelReasoningEffort']
@@ -1088,7 +1088,7 @@ export class SyncEngine {
                     resumeSessionId: options?.resumeSessionId,
                     token: options?.token,
                     claudeAgent: options?.claudeAgent,
-                    aiderModel: options?.aiderModel,
+                    openrouterModel: options?.openrouterModel,
                     permissionMode: options?.permissionMode,
                     modelMode: options?.modelMode,
                     modelReasoningEffort: options?.modelReasoningEffort

@@ -7,10 +7,10 @@ import { Spinner } from '@/components/Spinner'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 
-type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'aider'
+type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter'
 
-// Popular OpenRouter models for Aider
-const AIDER_MODELS = [
+// Popular OpenRouter models
+const OPENROUTER_MODELS = [
     { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
     { value: 'anthropic/claude-opus-4', label: 'Claude Opus 4' },
     { value: 'anthropic/claude-3.7-sonnet', label: 'Claude 3.7 Sonnet' },
@@ -99,7 +99,7 @@ export function NewSession(props: {
     const [projectPath, setProjectPath] = useState('')
     const [agent, setAgent] = useState<AgentType>('claude')
     const [claudeAgent, setClaudeAgent] = useState('')
-    const [aiderModel, setAiderModel] = useState(AIDER_MODELS[0].value)
+    const [openrouterModel, setOpenrouterModel] = useState(OPENROUTER_MODELS[0].value)
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
     const [spawnLogs, setSpawnLogs] = useState<SpawnLogEntry[]>([])
@@ -171,7 +171,7 @@ export function NewSession(props: {
                 yolo: true,
                 sessionType: 'simple',
                 claudeAgent: agent === 'claude' ? (claudeAgent.trim() || undefined) : undefined,
-                aiderModel: agent === 'aider' ? aiderModel : undefined
+                openrouterModel: agent === 'openrouter' ? openrouterModel : undefined
             })
 
             // Update logs from server response
@@ -285,7 +285,7 @@ export function NewSession(props: {
                     Agents
                 </label>
                 <div className="flex flex-wrap gap-x-3 gap-y-2">
-                    {(['claude', 'codex', 'gemini', 'aider'] as const).map((agentType) => (
+                    {(['claude', 'codex', 'gemini'] as const).map((agentType) => (
                         <label
                             key={agentType}
                             className="flex items-center gap-1 cursor-pointer"
@@ -311,7 +311,7 @@ export function NewSession(props: {
                     Chat Models
                 </label>
                 <div className="flex flex-wrap gap-x-3 gap-y-2">
-                    {(['glm', 'minimax', 'grok'] as const).map((agentType) => (
+                    {(['glm', 'minimax', 'grok', 'openrouter'] as const).map((agentType) => (
                         <label
                             key={agentType}
                             className="flex items-center gap-1 cursor-pointer"
@@ -348,18 +348,18 @@ export function NewSession(props: {
                     </div>
                 </div>
             ) : null}
-            {agent === 'aider' ? (
+            {agent === 'openrouter' ? (
                 <div className="flex flex-col gap-1.5 px-3 pb-3">
                     <label className="text-xs font-medium text-[var(--app-hint)]">
                         Model (OpenRouter)
                     </label>
                     <select
-                        value={aiderModel}
-                        onChange={(e) => setAiderModel(e.target.value)}
+                        value={openrouterModel}
+                        onChange={(e) => setOpenrouterModel(e.target.value)}
                         disabled={isFormDisabled}
                         className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
                     >
-                        {AIDER_MODELS.map((model) => (
+                        {OPENROUTER_MODELS.map((model) => (
                             <option key={model.value} value={model.value}>
                                 {model.label}
                             </option>
