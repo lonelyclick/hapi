@@ -184,7 +184,7 @@ export type AdvisorAlertData = {
     title: string
     detail?: string
     category?: string
-    severity: 'critical' | 'high'
+    severity: 'critical' | 'high' | 'medium' | 'low'
     sourceSessionId?: string
 }
 

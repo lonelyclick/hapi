@@ -1358,10 +1358,9 @@ export class AdvisorService {
         const sessions = this.syncEngine.getActiveSessions()
             .filter(s => s.namespace === suggestion.namespace)
 
-        // 对于 critical/high 级别的建议，发送全局 alert 事件
-        if (suggestion.severity === 'critical' || suggestion.severity === 'high') {
-            this.broadcastAlert(suggestion)
-        }
+        // 对于所有级别的建议，发送全局 alert 事件
+        // 之前只有 critical/high，现在改为所有级别都广播
+        this.broadcastAlert(suggestion)
 
         for (const session of sessions) {
             // 排除 Advisor 会话
@@ -1400,7 +1399,7 @@ export class AdvisorService {
             title: suggestion.title,
             detail: suggestion.detail ?? undefined,
             category: suggestion.category ?? undefined,
-            severity: suggestion.severity as 'critical' | 'high',
+            severity: suggestion.severity as 'critical' | 'high' | 'medium' | 'low',
             sourceSessionId: suggestion.sourceSessionId ?? undefined
         }
 
