@@ -782,7 +782,7 @@ export class Store {
                 updated_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_push_subscriptions_namespace ON push_subscriptions(namespace);
-            CREATE INDEX IF NOT EXISTS idx_push_subscriptions_chat_id ON push_subscriptions(chat_id);
+            -- Note: idx_push_subscriptions_chat_id is created after migration to ensure chat_id column exists
 
             CREATE TABLE IF NOT EXISTS input_presets (
                 id TEXT PRIMARY KEY,
