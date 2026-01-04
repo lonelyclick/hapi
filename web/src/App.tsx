@@ -21,6 +21,8 @@ import { LoadingState } from '@/components/LoadingState'
 import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
 import { notifyTaskComplete, getPendingNotification, clearPendingNotification, useWebPushSubscription } from '@/hooks/useNotification'
+import { addAlert } from '@/hooks/useAdvisorAlert'
+import { AdvisorAlertBanner } from '@/components/AdvisorAlertBanner'
 
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
@@ -256,6 +258,13 @@ export function App() {
             return
         }
 
+        // 处理 Advisor 警告（critical/high 级别建议）
+        if (event.type === 'advisor-alert' && event.alert) {
+            console.log('[advisor] alert received', event.alert)
+            addAlert(event.alert)
+            return
+        }
+
         // 检测任务完成 (thinking: true -> false)
         if (event.type === 'session-updated') {
             const data = ('data' in event ? event.data : null) as { active?: boolean; thinking?: boolean; wasThinking?: boolean } | null
@@ -447,6 +456,7 @@ export function App() {
 
     return (
         <AppContextProvider value={{ api, token }}>
+            <AdvisorAlertBanner />
             {hasUpdate && <UpdateBanner onRefresh={refreshApp} onDismiss={dismissUpdate} />}
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />

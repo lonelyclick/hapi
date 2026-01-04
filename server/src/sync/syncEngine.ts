@@ -153,6 +153,7 @@ export type SyncEventType =
     | 'connection-changed'
     | 'online-users-changed'
     | 'typing-changed'
+    | 'advisor-alert'
 
 export type OnlineUser = {
     email: string
@@ -168,6 +169,15 @@ export type TypingUser = {
     updatedAt: number
 }
 
+export type AdvisorAlertData = {
+    suggestionId: string
+    title: string
+    detail?: string
+    category?: string
+    severity: 'critical' | 'high'
+    sourceSessionId?: string
+}
+
 export interface SyncEvent {
     type: SyncEventType
     namespace?: string
@@ -177,6 +187,7 @@ export interface SyncEvent {
     message?: DecryptedMessage
     users?: OnlineUser[]
     typing?: TypingUser
+    alert?: AdvisorAlertData
 }
 
 export type SyncEventListener = (event: SyncEvent) => void

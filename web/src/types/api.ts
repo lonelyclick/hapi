@@ -313,6 +313,15 @@ export type TypingUser = {
     updatedAt: number
 }
 
+export type AdvisorAlertData = {
+    suggestionId: string
+    title: string
+    detail?: string
+    category?: string
+    severity: 'critical' | 'high'
+    sourceSessionId?: string
+}
+
 export type SyncEvent =
     | { type: 'session-added'; sessionId: string; data?: unknown; namespace?: string }
     | { type: 'session-updated'; sessionId: string; data?: unknown; namespace?: string }
@@ -322,5 +331,6 @@ export type SyncEvent =
     | { type: 'connection-changed'; data?: { status: string }; namespace?: string }
     | { type: 'online-users-changed'; users: OnlineUser[]; namespace?: string }
     | { type: 'typing-changed'; sessionId: string; typing: TypingUser; namespace?: string }
+    | { type: 'advisor-alert'; alert: AdvisorAlertData; namespace?: string }
 
 export type OnlineUsersResponse = { users: OnlineUser[] }

@@ -3,7 +3,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { SyncEngine, SyncEvent, DecryptedMessage, Session } from '../sync/syncEngine'
+import type { SyncEngine, SyncEvent, DecryptedMessage, Session, AdvisorAlertData } from '../sync/syncEngine'
 import type { Store, StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { AdvisorScheduler } from './advisorScheduler'
 import { SuggestionEvaluator } from './suggestionEvaluator'
@@ -493,6 +493,11 @@ export class AdvisorService {
         const sessions = this.syncEngine.getActiveSessions()
             .filter(s => s.namespace === suggestion.namespace)
 
+        // 对于 critical/high 级别的建议，发送全局 alert 事件
+        if (suggestion.severity === 'critical' || suggestion.severity === 'high') {
+            this.broadcastAlert(suggestion)
+        }
+
         for (const session of sessions) {
             // 排除 Advisor 会话
             if (this.scheduler.isAdvisorSession(session.id)) {
@@ -519,6 +524,29 @@ export class AdvisorService {
                 sourceSessionId: suggestion.sourceSessionId ?? undefined
             })
         }
+    }
+
+    /**
+     * 广播全局 alert（用于 critical/high 级别建议）
+     */
+    private broadcastAlert(suggestion: StoredAgentSuggestion): void {
+        const alertData: AdvisorAlertData = {
+            suggestionId: suggestion.id,
+            title: suggestion.title,
+            detail: suggestion.detail ?? undefined,
+            category: suggestion.category ?? undefined,
+            severity: suggestion.severity as 'critical' | 'high',
+            sourceSessionId: suggestion.sourceSessionId ?? undefined
+        }
+
+        const event: SyncEvent = {
+            type: 'advisor-alert',
+            namespace: suggestion.namespace,
+            alert: alertData
+        }
+
+        this.syncEngine.emit(event)
+        console.log(`[AdvisorService] Broadcasted alert: ${suggestion.severity} - ${suggestion.title}`)
     }
 
     /**
