@@ -278,6 +278,7 @@ function SessionItem(props: {
     const progress = getTodoProgress(s)
     const hasPending = s.pendingRequestsCount > 0
     const runtimeAgent = s.metadata?.runtimeAgent?.trim()
+    const isAdvisorCreated = Boolean(s.advisorTaskId)
 
     return (
         <button
@@ -289,6 +290,7 @@ function SessionItem(props: {
                 hover:bg-[var(--app-secondary-bg)]
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]
                 ${!s.active ? 'opacity-40' : ''}
+                ${isAdvisorCreated ? 'border-l-2 border-l-cyan-500 bg-cyan-500/5' : ''}
             `}
         >
             {/* Status indicator */}
@@ -304,9 +306,14 @@ function SessionItem(props: {
             {/* Main content */}
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-[var(--app-fg)]">
+                    <span className={`truncate text-sm font-medium ${isAdvisorCreated ? 'text-cyan-400' : 'text-[var(--app-fg)]'}`}>
                         {getSessionTitle(s)}
                     </span>
+                    {isAdvisorCreated && (
+                        <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400">
+                            Advisor
+                        </span>
+                    )}
                     {hasPending && (
                         <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600">
                             {s.pendingRequestsCount} pending

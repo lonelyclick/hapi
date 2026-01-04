@@ -167,6 +167,7 @@ export type SessionSummary = {
     modelMode?: ModelMode
     modelReasoningEffort?: ModelReasoningEffort
     viewers?: SessionViewer[]
+    advisorTaskId?: string | null
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'failed'

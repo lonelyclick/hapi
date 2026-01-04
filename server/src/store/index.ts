@@ -2834,6 +2834,22 @@ export class Store {
         return row?.creator_chat_id ?? null
     }
 
+    clearSessionCreatorChatId(sessionId: string, namespace: string): boolean {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                UPDATE sessions
+                SET creator_chat_id = NULL,
+                    updated_at = @updated_at,
+                    seq = seq + 1
+                WHERE id = @id AND namespace = @namespace
+            `).run({ id: sessionId, updated_at: now, namespace })
+            return result.changes === 1
+        } catch {
+            return false
+        }
+    }
+
     // ==================== Session Notification Subscriptions ====================
 
     /**

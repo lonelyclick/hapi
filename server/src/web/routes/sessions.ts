@@ -42,6 +42,7 @@ type SessionSummary = {
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     viewers?: SessionViewer[]
+    advisorTaskId?: string | null
 }
 
 function toSessionSummary(session: Session): SessionSummary {
@@ -73,7 +74,8 @@ function toSessionSummary(session: Session): SessionSummary {
         todoProgress,
         pendingRequestsCount,
         modelMode: session.modelMode,
-        modelReasoningEffort: session.modelReasoningEffort
+        modelReasoningEffort: session.modelReasoningEffort,
+        advisorTaskId: session.advisorTaskId
     }
 }
 
@@ -623,6 +625,7 @@ export function createSessionsRoutes(
 
         const claudeModels = new Set(['default', 'sonnet', 'opus'])
         const codexModels = new Set(['gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'])
+        const grokModels = new Set(['grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-code-fast-1', 'grok-4-fast-reasoning', 'grok-4-fast-non-reasoning', 'grok-4-0709', 'grok-3-mini', 'grok-3'])
         const reasoningLevels = new Set(['low', 'medium', 'high', 'xhigh'])
 
         if (flavor === 'claude' && !claudeModels.has(parsed.data.model)) {
@@ -630,6 +633,13 @@ export function createSessionsRoutes(
         }
         if (flavor === 'codex' && parsed.data.model !== 'default' && !codexModels.has(parsed.data.model)) {
             return c.json({ error: 'Invalid model for Codex sessions' }, 400)
+        }
+        if (flavor === 'grok' && parsed.data.model !== 'default' && !grokModels.has(parsed.data.model)) {
+            return c.json({ error: 'Invalid model for Grok sessions' }, 400)
+        }
+        // OpenRouter accepts any model string (provider/model format)
+        if (flavor === 'openrouter' && !parsed.data.model.includes('/')) {
+            return c.json({ error: 'Invalid model for OpenRouter sessions (expected format: provider/model)' }, 400)
         }
         if (parsed.data.reasoningEffort && !reasoningLevels.has(parsed.data.reasoningEffort)) {
             return c.json({ error: 'Invalid reasoning level' }, 400)
