@@ -79,6 +79,7 @@ export interface AdvisorSpawnSessionOutput {
     reason: string                    // 为什么需要创建这个会话
     expectedOutcome?: string          // 预期结果
     parentSessionId?: string          // 父会话 ID（用于追踪）
+    aiProfileId?: string              // 关联的 AI Profile ID
 }
 
 // Advisor 向子会话发送消息

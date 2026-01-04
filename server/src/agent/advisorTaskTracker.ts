@@ -23,6 +23,7 @@ export interface AdvisorTask {
     completedAt?: number
     result?: string                   // 完成结果或失败原因
     keywords: string[]                // 关键词，用于检测重复
+    aiProfileId?: string              // 关联的 AI Profile ID
 }
 
 export class AdvisorTaskTracker {
@@ -54,6 +55,7 @@ export class AdvisorTaskTracker {
         reason: string
         expectedOutcome?: string
         workingDir: string
+        aiProfileId?: string
     }): AdvisorTask {
         const now = Date.now()
         const keywords = this.extractKeywords(params.taskDescription)
@@ -69,7 +71,7 @@ export class AdvisorTaskTracker {
         this.tasks.set(task.id, task)
         this.sessionToTask.set(params.sessionId, task.id)
 
-        console.log(`[TaskTracker] Created task ${task.id} for session ${params.sessionId}`)
+        console.log(`[TaskTracker] Created task ${task.id} for session ${params.sessionId}${params.aiProfileId ? `, aiProfileId=${params.aiProfileId}` : ''}`)
         return task
     }
 

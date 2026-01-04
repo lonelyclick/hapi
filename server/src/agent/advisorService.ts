@@ -310,10 +310,34 @@ export class AdvisorService {
         } else {
             this.taskTracker.markSessionCompleted(sessionId, lastMessage.slice(0, 200))
             console.log(`[AdvisorService] Advisor-spawned session ${sessionId} completed successfully`)
+
+            // 更新 AI Profile 统计数据
+            if (task.aiProfileId) {
+                this.updateAIProfileStatsOnTaskComplete(task.aiProfileId)
+            }
         }
 
         // 向 Advisor 反馈任务完成状态
         this.feedbackToAdvisor(task, hasError ? 'failed' : 'completed', lastMessage.slice(0, 500))
+    }
+
+    /**
+     * 任务完成时更新 AI Profile 统计
+     */
+    private updateAIProfileStatsOnTaskComplete(aiProfileId: string): void {
+        const profile = this.store.getAIProfile(aiProfileId)
+        if (!profile) {
+            console.log(`[AdvisorService] AI Profile ${aiProfileId} not found, skip stats update`)
+            return
+        }
+
+        const newTasksCompleted = (profile.stats?.tasksCompleted ?? 0) + 1
+        this.store.updateAIProfileStats(aiProfileId, {
+            tasksCompleted: newTasksCompleted,
+            lastActiveAt: Date.now()
+        })
+
+        console.log(`[AdvisorService] AI Profile ${aiProfileId} stats updated: tasksCompleted=${newTasksCompleted}`)
     }
 
     /**
@@ -1766,7 +1790,8 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
                     taskDescription: output.taskDescription,
                     reason: output.reason,
                     expectedOutcome: output.expectedOutcome,
-                    workingDir
+                    workingDir,
+                    aiProfileId: output.aiProfileId
                 })
 
                 // 8. 等待会话就绪后发送任务消息
