@@ -244,6 +244,32 @@ export async function runAgentSession(opts: {
 
     registerKillSessionHandler(session.rpcHandlerManager, handleKillSession);
 
+    // Handle model mode changes from the web UI
+    session.rpcHandlerManager.registerHandler('set-session-config', async (payload: unknown) => {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Invalid session config payload');
+        }
+        const config = payload as {
+            modelMode?: string;
+        };
+
+        if (config.modelMode !== undefined && 'setModel' in backend && typeof backend.setModel === 'function') {
+            backend.setModel(agentSessionId, config.modelMode);
+            // Update runtimeModel metadata
+            session.updateMetadata((currentMetadata) => ({
+                ...currentMetadata,
+                runtimeModel: config.modelMode
+            }));
+            logger.debug(`[ACP] Model changed to: ${config.modelMode}`);
+        }
+
+        return {
+            applied: {
+                modelMode: config.modelMode
+            }
+        };
+    });
+
     try {
         while (!shouldExit) {
             waitAbortController = new AbortController();
