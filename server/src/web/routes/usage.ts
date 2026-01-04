@@ -118,13 +118,14 @@ async function getClaudeUsage(): Promise<ClaudeUsageData> {
             seven_day?: { utilization?: number; resets_at?: string }
         }
 
+        // Anthropic API returns utilization as 0-100 percentage, convert to 0-1 ratio
         return {
             fiveHour: data.five_hour ? {
-                utilization: data.five_hour.utilization ?? 0,
+                utilization: (data.five_hour.utilization ?? 0) / 100,
                 resetsAt: data.five_hour.resets_at ?? ''
             } : null,
             sevenDay: data.seven_day ? {
-                utilization: data.seven_day.utilization ?? 0,
+                utilization: (data.seven_day.utilization ?? 0) / 100,
                 resetsAt: data.seven_day.resets_at ?? ''
             } : null
         }

@@ -651,6 +651,51 @@ export class Store {
             );
             CREATE INDEX IF NOT EXISTS idx_agent_feedback_suggestion ON agent_feedback(suggestion_id);
         `)
+
+        // Step 5: Create Auto-Iteration tables
+        this.db.exec(`
+            -- 自动迭代配置（每个 namespace 一条记录）
+            CREATE TABLE IF NOT EXISTS auto_iteration_config (
+                namespace TEXT PRIMARY KEY,
+                enabled INTEGER DEFAULT 0,
+                policy_json TEXT,
+                allowed_projects TEXT DEFAULT '[]',
+                notification_level TEXT DEFAULT 'all',
+                keep_logs_days INTEGER DEFAULT 30,
+                created_at INTEGER DEFAULT (unixepoch() * 1000),
+                updated_at INTEGER DEFAULT (unixepoch() * 1000),
+                updated_by TEXT
+            );
+
+            -- 自动迭代执行日志
+            CREATE TABLE IF NOT EXISTS auto_iteration_logs (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                source_suggestion_id TEXT,
+                source_session_id TEXT,
+                project_path TEXT,
+                action_type TEXT NOT NULL,
+                action_detail TEXT,
+                reason TEXT,
+                execution_status TEXT DEFAULT 'pending',
+                approval_method TEXT,
+                approved_by TEXT,
+                approved_at INTEGER,
+                result_json TEXT,
+                error_message TEXT,
+                rollback_available INTEGER DEFAULT 0,
+                rollback_data TEXT,
+                rolled_back INTEGER DEFAULT 0,
+                rolled_back_at INTEGER,
+                created_at INTEGER DEFAULT (unixepoch() * 1000),
+                executed_at INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_auto_iteration_logs_namespace ON auto_iteration_logs(namespace);
+            CREATE INDEX IF NOT EXISTS idx_auto_iteration_logs_status ON auto_iteration_logs(execution_status);
+            CREATE INDEX IF NOT EXISTS idx_auto_iteration_logs_created ON auto_iteration_logs(created_at);
+            CREATE INDEX IF NOT EXISTS idx_auto_iteration_logs_project ON auto_iteration_logs(project_path);
+        `)
     }
 
     getOrCreateSession(tag: string, metadata: unknown, agentState: unknown, namespace: string): StoredSession {
