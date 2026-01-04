@@ -13,62 +13,57 @@ const SW_VERSION = '__SW_BUILD_VERSION__'
 console.log('[sw-push] version:', SW_VERSION)
 
 // Handle incoming push notifications
+// CRITICAL for iOS: event.waitUntil() must receive the showNotification promise directly
+// Safari will revoke push permission after 3 "silent pushes" (push events that don't show a notification)
 self.addEventListener('push', (event) => {
     console.log('[sw-push] push event received at', new Date().toISOString())
 
-    const showNotification = async () => {
-        let data = {
-            title: 'Yoho Remote',
-            body: 'Task completed',
-            icon: '/pwa-192x192.png',
-            badge: '/pwa-64x64.png',
-            tag: 'default-' + Date.now()
-        }
+    // Parse notification data
+    let title = 'Yoho Remote'
+    let body = 'Task completed'
+    let icon = '/pwa-192x192.png'
+    let badge = '/pwa-64x64.png'
+    let tag = 'push-' + Date.now()
+    let notificationData = {}
 
-        if (event.data) {
-            try {
-                const payload = event.data.json()
-                console.log('[sw-push] payload:', JSON.stringify(payload))
-                data = {
-                    title: payload.title || data.title,
-                    body: payload.body || data.body,
-                    icon: payload.icon || data.icon,
-                    badge: payload.badge || data.badge,
-                    tag: payload.tag || data.tag,
-                    data: payload.data || {}
-                }
-            } catch (e) {
-                console.error('[sw-push] failed to parse payload:', e)
-                try {
-                    data.body = event.data.text() || data.body
-                } catch (e2) {
-                    console.error('[sw-push] failed to get text:', e2)
-                }
-            }
-        }
-
-        // iOS Safari requires minimal options
-        const options = {
-            body: data.body,
-            icon: data.icon,
-            badge: data.badge,
-            tag: data.tag,
-            data: data.data,
-            // iOS 需要 renotify 为 true 才能显示相同 tag 的通知
-            renotify: true
-        }
-
-        console.log('[sw-push] showing notification:', data.title, JSON.stringify(options))
-
+    if (event.data) {
         try {
-            await self.registration.showNotification(data.title, options)
-            console.log('[sw-push] notification shown successfully')
-        } catch (err) {
-            console.error('[sw-push] showNotification failed:', err)
+            const payload = event.data.json()
+            console.log('[sw-push] payload:', JSON.stringify(payload))
+            title = payload.title || title
+            body = payload.body || body
+            icon = payload.icon || icon
+            badge = payload.badge || badge
+            tag = payload.tag || tag
+            notificationData = payload.data || {}
+        } catch (e) {
+            console.error('[sw-push] failed to parse payload:', e)
+            try {
+                body = event.data.text() || body
+            } catch (e2) {
+                console.error('[sw-push] failed to get text:', e2)
+            }
         }
     }
 
-    event.waitUntil(showNotification())
+    // iOS Safari requires minimal options and immediate notification display
+    const options = {
+        body: body,
+        icon: icon,
+        badge: badge,
+        tag: tag,
+        data: notificationData,
+        renotify: true  // iOS needs this to show notifications with same tag
+    }
+
+    console.log('[sw-push] showing notification:', title, JSON.stringify(options))
+
+    // CRITICAL: Pass the promise directly to waitUntil, not wrapped in async function
+    event.waitUntil(
+        self.registration.showNotification(title, options)
+            .then(() => console.log('[sw-push] notification shown successfully'))
+            .catch(err => console.error('[sw-push] showNotification failed:', err))
+    )
 })
 
 // Handle notification click
