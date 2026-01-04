@@ -8,7 +8,7 @@ import { GrokBackend } from '@/agent/backends/grok';
 // - grok-4-fast-reasoning: Fast reasoning (2M context)
 // - grok-4-fast-non-reasoning: Fast non-reasoning (2M context)
 // - grok-code-fast-1: Code-focused fast model (256K context)
-const DEFAULT_MODEL = process.env.GROK_MODEL || 'grok-3';
+const DEFAULT_MODEL = process.env.GROK_MODEL || 'grok-code-fast-1';
 
 export function registerGrokAgent(_yolo: boolean): void {
     AgentRegistry.register('grok', () => new GrokBackend(DEFAULT_MODEL));

@@ -8,7 +8,7 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 import { useRecentPaths } from '@/hooks/useRecentPaths'
 
-type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax'
+type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok'
 
 function getMachineTitle(machine: Machine): string {
     if (machine.metadata?.displayName) return machine.metadata.displayName
@@ -218,7 +218,7 @@ export function NewSession(props: {
                     Agent
                 </label>
                 <div className="flex gap-3">
-                    {(['claude', 'codex', 'gemini', 'glm', 'minimax'] as const).map((agentType) => (
+                    {(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok'] as const).map((agentType) => (
                         <label
                             key={agentType}
                             className="flex items-center gap-1.5 cursor-pointer"
