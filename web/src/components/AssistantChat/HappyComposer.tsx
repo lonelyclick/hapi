@@ -123,46 +123,101 @@ const GROK_MODELS = [
 ] as const
 
 const OPENROUTER_MODELS = [
-    {
-        id: 'anthropic/claude-sonnet-4',
-        label: 'Claude Sonnet 4',
-        description: 'Anthropic\'s latest efficient model.'
-    },
-    {
-        id: 'anthropic/claude-opus-4',
-        label: 'Claude Opus 4',
-        description: 'Anthropic\'s most capable model.'
-    },
-    {
-        id: 'anthropic/claude-3.5-sonnet',
-        label: 'Claude 3.5 Sonnet',
-        description: 'Previous generation Sonnet.'
-    },
-    {
-        id: 'openai/gpt-4o',
-        label: 'GPT-4o',
-        description: 'OpenAI\'s multimodal flagship.'
-    },
-    {
-        id: 'openai/o1',
-        label: 'OpenAI o1',
-        description: 'OpenAI\'s reasoning model.'
-    },
-    {
-        id: 'google/gemini-2.0-flash-001',
-        label: 'Gemini 2.0 Flash',
-        description: 'Google\'s fast model.'
-    },
-    {
-        id: 'deepseek/deepseek-r1',
-        label: 'DeepSeek R1',
-        description: 'DeepSeek\'s reasoning model.'
-    },
-    {
-        id: 'deepseek/deepseek-chat',
-        label: 'DeepSeek Chat',
-        description: 'DeepSeek\'s chat model.'
-    }
+    // === Anthropic Claude ===
+    { id: 'anthropic/claude-opus-4.5', label: 'Claude Opus 4.5', description: 'Anthropic\'s most capable model.' },
+    { id: 'anthropic/claude-sonnet-4.5', label: 'Claude Sonnet 4.5', description: 'Anthropic\'s latest efficient model.' },
+    { id: 'anthropic/claude-opus-4', label: 'Claude Opus 4', description: 'Anthropic\'s previous flagship.' },
+    { id: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4', description: 'Balanced performance.' },
+    { id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5', description: 'Fast and affordable.' },
+    { id: 'anthropic/claude-3.7-sonnet', label: 'Claude 3.7 Sonnet', description: 'Previous generation.' },
+    { id: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet', description: 'Previous generation.' },
+    { id: 'anthropic/claude-3.5-haiku', label: 'Claude 3.5 Haiku', description: 'Fast, previous gen.' },
+    { id: 'anthropic/claude-3-opus', label: 'Claude 3 Opus', description: 'Claude 3 flagship.' },
+    { id: 'anthropic/claude-3-haiku', label: 'Claude 3 Haiku', description: 'Claude 3 fast.' },
+    // === OpenAI ===
+    { id: 'openai/gpt-5.2', label: 'GPT-5.2', description: 'OpenAI\'s latest flagship.' },
+    { id: 'openai/gpt-5.1', label: 'GPT-5.1', description: 'OpenAI flagship.' },
+    { id: 'openai/gpt-5', label: 'GPT-5', description: 'OpenAI GPT-5.' },
+    { id: 'openai/gpt-5-mini', label: 'GPT-5 Mini', description: 'Lighter GPT-5.' },
+    { id: 'openai/gpt-5.1-codex', label: 'GPT-5.1 Codex', description: 'Coding optimized.' },
+    { id: 'openai/gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max', description: 'Max coding.' },
+    { id: 'openai/o4-mini', label: 'o4 Mini', description: 'Fast reasoning.' },
+    { id: 'openai/o3', label: 'o3', description: 'Reasoning model.' },
+    { id: 'openai/o3-mini', label: 'o3 Mini', description: 'Fast reasoning.' },
+    { id: 'openai/o1', label: 'o1', description: 'Reasoning model.' },
+    { id: 'openai/gpt-4o', label: 'GPT-4o', description: 'Multimodal flagship.' },
+    { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini', description: 'Fast multimodal.' },
+    { id: 'openai/gpt-4.1', label: 'GPT-4.1', description: 'GPT-4 series.' },
+    { id: 'openai/gpt-4-turbo', label: 'GPT-4 Turbo', description: 'Fast GPT-4.' },
+    // === Google Gemini ===
+    { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Google\'s best model.' },
+    { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', description: 'Fast and capable.' },
+    { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', description: 'Lightweight.' },
+    { id: 'google/gemini-3-pro-preview', label: 'Gemini 3 Pro Preview', description: 'Next gen preview.' },
+    { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', description: 'Next gen flash.' },
+    { id: 'google/gemini-2.0-flash-001', label: 'Gemini 2.0 Flash', description: 'Previous gen fast.' },
+    { id: 'google/gemma-3-27b-it', label: 'Gemma 3 27B', description: 'Open model.' },
+    // === xAI Grok ===
+    { id: 'x-ai/grok-4', label: 'Grok 4', description: 'xAI flagship.' },
+    { id: 'x-ai/grok-4.1-fast', label: 'Grok 4.1 Fast', description: 'Fast Grok.' },
+    { id: 'x-ai/grok-4-fast', label: 'Grok 4 Fast', description: 'Fast version.' },
+    { id: 'x-ai/grok-3', label: 'Grok 3', description: 'Previous gen.' },
+    { id: 'x-ai/grok-3-mini', label: 'Grok 3 Mini', description: 'Lightweight.' },
+    { id: 'x-ai/grok-code-fast-1', label: 'Grok Code Fast 1', description: 'Coding optimized.' },
+    // === DeepSeek ===
+    { id: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2', description: 'Latest DeepSeek.' },
+    { id: 'deepseek/deepseek-chat-v3.1', label: 'DeepSeek V3.1', description: 'Previous version.' },
+    { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3', description: 'DeepSeek chat.' },
+    { id: 'deepseek/deepseek-r1', label: 'DeepSeek R1', description: 'Reasoning model.' },
+    { id: 'deepseek/deepseek-r1-0528', label: 'DeepSeek R1 0528', description: 'R1 updated.' },
+    // === Qwen ===
+    { id: 'qwen/qwen3-235b-a22b', label: 'Qwen3 235B', description: 'Alibaba flagship.' },
+    { id: 'qwen/qwen3-coder', label: 'Qwen3 Coder 480B', description: 'Coding model.' },
+    { id: 'qwen/qwen3-32b', label: 'Qwen3 32B', description: 'Medium size.' },
+    { id: 'qwen/qwq-32b', label: 'QwQ 32B', description: 'Reasoning model.' },
+    { id: 'qwen/qwen-max', label: 'Qwen Max', description: 'Commercial API.' },
+    { id: 'qwen/qwen-plus', label: 'Qwen Plus', description: 'Commercial API.' },
+    // === Meta Llama ===
+    { id: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick', description: 'Latest Llama.' },
+    { id: 'meta-llama/llama-4-scout', label: 'Llama 4 Scout', description: 'Llama 4 variant.' },
+    { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', description: 'Open model.' },
+    { id: 'meta-llama/llama-3.1-405b-instruct', label: 'Llama 3.1 405B', description: 'Largest Llama.' },
+    { id: 'meta-llama/llama-3.1-70b-instruct', label: 'Llama 3.1 70B', description: 'Large Llama.' },
+    { id: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B', description: 'Small Llama.' },
+    // === Mistral ===
+    { id: 'mistralai/mistral-large-2512', label: 'Mistral Large 2512', description: 'Latest Mistral.' },
+    { id: 'mistralai/mistral-medium-3.1', label: 'Mistral Medium 3.1', description: 'Medium model.' },
+    { id: 'mistralai/mistral-small-3.2-24b-instruct', label: 'Mistral Small 3.2', description: 'Small model.' },
+    { id: 'mistralai/codestral-2508', label: 'Codestral 2508', description: 'Coding model.' },
+    { id: 'mistralai/devstral-2512', label: 'Devstral 2512', description: 'Dev model.' },
+    { id: 'mistralai/mixtral-8x22b-instruct', label: 'Mixtral 8x22B', description: 'MoE model.' },
+    // === MiniMax ===
+    { id: 'minimax/minimax-m2.1', label: 'MiniMax M2.1', description: 'Latest MiniMax.' },
+    { id: 'minimax/minimax-m2', label: 'MiniMax M2', description: 'MiniMax model.' },
+    // === Moonshot/Kimi ===
+    { id: 'moonshotai/kimi-k2-0905', label: 'Kimi K2 0905', description: 'Moonshot flagship.' },
+    { id: 'moonshotai/kimi-k2-thinking', label: 'Kimi K2 Thinking', description: 'Reasoning mode.' },
+    { id: 'moonshotai/kimi-k2', label: 'Kimi K2', description: 'Kimi model.' },
+    // === Z.AI GLM ===
+    { id: 'z-ai/glm-4.7', label: 'GLM 4.7', description: 'Zhipu AI latest.' },
+    { id: 'z-ai/glm-4.6', label: 'GLM 4.6', description: 'Zhipu AI model.' },
+    { id: 'z-ai/glm-4.5', label: 'GLM 4.5', description: 'Zhipu AI model.' },
+    // === NVIDIA ===
+    { id: 'nvidia/llama-3.1-nemotron-ultra-253b-v1', label: 'Nemotron Ultra 253B', description: 'NVIDIA flagship.' },
+    { id: 'nvidia/llama-3.3-nemotron-super-49b-v1.5', label: 'Nemotron Super 49B', description: 'NVIDIA model.' },
+    // === Cohere ===
+    { id: 'cohere/command-a', label: 'Command A', description: 'Cohere latest.' },
+    { id: 'cohere/command-r-plus-08-2024', label: 'Command R+', description: 'Cohere R+.' },
+    // === Perplexity ===
+    { id: 'perplexity/sonar-pro', label: 'Sonar Pro', description: 'Search enhanced.' },
+    { id: 'perplexity/sonar-reasoning-pro', label: 'Sonar Reasoning Pro', description: 'Reasoning + search.' },
+    { id: 'perplexity/sonar-deep-research', label: 'Sonar Deep Research', description: 'Deep research.' },
+    // === Free Models ===
+    { id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (free)', description: 'Free tier.' },
+    { id: 'qwen/qwen3-coder:free', label: 'Qwen3 Coder (free)', description: 'Free coding.' },
+    { id: 'google/gemma-3-27b-it:free', label: 'Gemma 3 27B (free)', description: 'Free open model.' },
+    { id: 'deepseek/deepseek-r1-0528:free', label: 'DeepSeek R1 (free)', description: 'Free reasoning.' },
+    { id: 'mistralai/devstral-2512:free', label: 'Devstral (free)', description: 'Free dev model.' }
 ] as const
 
 function isCodexModel(mode: ModelMode | undefined): mode is typeof CODEX_MODELS[number]['id'] {

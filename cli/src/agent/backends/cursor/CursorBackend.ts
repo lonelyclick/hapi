@@ -214,7 +214,7 @@ export class CursorBackend implements AgentBackend {
     private async runCursorProcess(
         session: CursorSession,
         args: string[],
-        parser: CursorStreamParser,
+        _parser: CursorStreamParser,
         onUpdate: (msg: AgentMessage) => void
     ): Promise<string> {
         return new Promise((resolve, reject) => {
@@ -234,29 +234,28 @@ export class CursorBackend implements AgentBackend {
             let textContent = '';
             let lastStderr = '';
 
-            // 处理 stdout
-            child.stdout.setEncoding('utf8');
-            child.stdout.on('data', (chunk: string) => {
-                parser.handleChunk(chunk);
-
-                // 收集文本用于历史记录
-                // 通过监听 text 消息来累积
-            });
-
-            // 包装 onUpdate 以收集文本
-            const originalOnUpdate = parser['onMessage'];
-            parser['onMessage'] = (msg: AgentMessage) => {
+            // 创建包装的 onUpdate 函数来收集文本
+            const wrappedOnUpdate = (msg: AgentMessage) => {
                 if (msg.type === 'text') {
                     textContent += msg.text;
                 }
                 onUpdate(msg);
             };
 
+            // 使用包装的 parser
+            const wrappedParser = new CursorStreamParser(wrappedOnUpdate);
+
+            // 处理 stdout
+            child.stdout.setEncoding('utf8');
+            child.stdout.on('data', (chunk: string) => {
+                wrappedParser.handleChunk(chunk);
+            });
+
             // 处理 stderr
             child.stderr.setEncoding('utf8');
             child.stderr.on('data', (chunk: string) => {
                 lastStderr = chunk;
-                parser.handleStderr(chunk);
+                wrappedParser.handleStderr(chunk);
             });
 
             // 处理进程退出
@@ -265,7 +264,7 @@ export class CursorBackend implements AgentBackend {
 
                 if (code === 0 || signal === 'SIGTERM') {
                     // 检查是否有未处理的 buffer
-                    const remaining = parser.getRemaining();
+                    const remaining = wrappedParser.getRemaining();
                     if (remaining) {
                         logger.debug('[Cursor] Remaining buffer after exit', {
                             length: remaining.length
@@ -273,7 +272,7 @@ export class CursorBackend implements AgentBackend {
                     }
 
                     // 检查是否有未完成的工具调用
-                    const pendingTools = parser.getPendingToolCalls();
+                    const pendingTools = wrappedParser.getPendingToolCalls();
                     if (pendingTools > 0) {
                         logger.warn('[Cursor] Pending tool calls at exit', { count: pendingTools });
                     }
