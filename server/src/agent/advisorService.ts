@@ -24,6 +24,7 @@ import { ADVISOR_OUTPUT_MARKER, extractJsonFromPosition } from './types'
 import type { AutoIterationService } from './autoIteration'
 import type { ActionRequest } from './autoIteration/types'
 import { findBestProfileForTask } from './profileMatcher'
+import { MemoryExtractor } from './memoryExtractor'
 
 export interface AdvisorServiceConfig {
     namespace: string
@@ -40,6 +41,7 @@ export class AdvisorService {
     private evaluator: SuggestionEvaluator
     private minimaxService: MinimaxService
     private taskTracker: AdvisorTaskTracker
+    private memoryExtractor: MemoryExtractor
     private namespace: string
     private summaryThreshold: number
     private summaryIdleTimeoutMs: number
@@ -87,6 +89,7 @@ export class AdvisorService {
         this.evaluator = new SuggestionEvaluator(store, syncEngine)
         this.minimaxService = new MinimaxService()
         this.taskTracker = new AdvisorTaskTracker(store)
+        this.memoryExtractor = new MemoryExtractor(store)
     }
 
     /**
@@ -318,6 +321,11 @@ export class AdvisorService {
             }
         }
 
+        // 提取并保存会话记忆（如果有关联的 AI Profile）
+        if (task.aiProfileId) {
+            this.extractAndSaveSessionMemories(sessionId, task.aiProfileId, task.taskDescription || '')
+        }
+
         // 向 Advisor 反馈任务完成状态
         this.feedbackToAdvisor(task, hasError ? 'failed' : 'completed', lastMessage.slice(0, 500))
     }
@@ -339,6 +347,31 @@ export class AdvisorService {
         })
 
         console.log(`[AdvisorService] AI Profile ${aiProfileId} stats updated: tasksCompleted=${newTasksCompleted}`)
+    }
+
+    /**
+     * 提取并保存会话记忆
+     */
+    private extractAndSaveSessionMemories(sessionId: string, aiProfileId: string, taskDescription: string): void {
+        const session = this.syncEngine.getSession(sessionId)
+        if (!session) {
+            console.log(`[AdvisorService] Session ${sessionId} not found, skip memory extraction`)
+            return
+        }
+
+        // 构建会话摘要
+        const summary = this.buildSummaryForMinimax(session)
+
+        // 使用记忆提取器提取并保存记忆
+        this.memoryExtractor.extractAndSaveMemories(summary, aiProfileId, this.namespace)
+            .then(savedMemories => {
+                if (savedMemories.length > 0) {
+                    console.log(`[AdvisorService] Extracted and saved ${savedMemories.length} memories for profile ${aiProfileId}`)
+                }
+            })
+            .catch(error => {
+                console.error(`[AdvisorService] Failed to extract memories for session ${sessionId}:`, error)
+            })
     }
 
     /**
