@@ -92,6 +92,7 @@ export interface Session {
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
+    advisorTaskId?: string | null  // Advisor 创建的会话的任务 ID
 }
 
 export interface Machine {
@@ -781,7 +782,8 @@ export class SyncEngine {
             todos,
             permissionMode: existing?.permissionMode,
             modelMode: existing?.modelMode,
-            modelReasoningEffort: existing?.modelReasoningEffort
+            modelReasoningEffort: existing?.modelReasoningEffort,
+            advisorTaskId: stored.advisorTaskId
         }
 
         this.sessions.set(sessionId, session)

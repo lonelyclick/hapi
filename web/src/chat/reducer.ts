@@ -657,5 +657,8 @@ export function reduceChatBlocks(
         }
     }
 
+    // Sort blocks by createdAt to ensure permission-only blocks appear in correct order
+    rootResult.blocks.sort((a, b) => a.createdAt - b.createdAt)
+
     return { blocks: dedupeAgentEvents(rootResult.blocks), hasReadyEvent, latestUsage }
 }

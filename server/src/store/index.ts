@@ -19,6 +19,7 @@ export type StoredSession = {
     active: boolean
     activeAt: number | null
     seq: number
+    advisorTaskId: string | null  // Advisor 创建的会话的任务 ID
 }
 
 export type StoredMachine = {
@@ -215,6 +216,7 @@ type DbSessionRow = {
     active: number
     active_at: number | null
     seq: number
+    advisor_task_id: string | null
 }
 
 type DbMachineRow = {
@@ -374,7 +376,8 @@ function toStoredSession(row: DbSessionRow): StoredSession {
         todosUpdatedAt: row.todos_updated_at,
         active: row.active === 1,
         activeAt: row.active_at,
-        seq: row.seq
+        seq: row.seq,
+        advisorTaskId: row.advisor_task_id
     }
 }
 
@@ -687,6 +690,9 @@ export class Store {
         if (!sessionColumnNames.has('todos_updated_at')) {
             this.db.exec('ALTER TABLE sessions ADD COLUMN todos_updated_at INTEGER')
         }
+        if (!sessionColumnNames.has('advisor_task_id')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN advisor_task_id TEXT')
+        }
 
         const machineColumns = this.db.prepare('PRAGMA table_info(machines)').all() as Array<{ name: string }>
         const machineColumnNames = new Set(machineColumns.map((c) => c.name))
@@ -997,6 +1003,26 @@ export class Store {
                 updated_at: todosUpdatedAt,
                 namespace
             })
+
+            return result.changes === 1
+        } catch {
+            return false
+        }
+    }
+
+    /**
+     * 设置会话的 Advisor 任务 ID（用于标记 Advisor 创建的会话）
+     */
+    setSessionAdvisorTaskId(id: string, advisorTaskId: string, namespace: string): boolean {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                UPDATE sessions
+                SET advisor_task_id = @advisor_task_id,
+                    updated_at = @updated_at,
+                    seq = seq + 1
+                WHERE id = @id AND namespace = @namespace
+            `).run({ id, advisor_task_id: advisorTaskId, updated_at: now, namespace })
 
             return result.changes === 1
         } catch {

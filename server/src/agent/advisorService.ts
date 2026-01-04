@@ -8,6 +8,7 @@ import type { Store, StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { AdvisorScheduler } from './advisorScheduler'
 import { SuggestionEvaluator } from './suggestionEvaluator'
 import { MinimaxService } from './minimaxService'
+import { AdvisorTaskTracker } from './advisorTaskTracker'
 import type {
     SessionSummary,
     AdvisorOutput,
@@ -36,6 +37,7 @@ export class AdvisorService {
     private scheduler: AdvisorScheduler
     private evaluator: SuggestionEvaluator
     private minimaxService: MinimaxService
+    private taskTracker: AdvisorTaskTracker
     private namespace: string
     private summaryThreshold: number
     private summaryIdleTimeoutMs: number
@@ -78,6 +80,7 @@ export class AdvisorService {
         this.summaryDeliveryEnabled = config.summaryDeliveryEnabled ?? false  // 默认关闭
         this.evaluator = new SuggestionEvaluator(store, syncEngine)
         this.minimaxService = new MinimaxService()
+        this.taskTracker = new AdvisorTaskTracker(store)
     }
 
     /**
@@ -238,12 +241,133 @@ export class AdvisorService {
 
         // 监听 session-updated 事件，检测 AI 回复完成
         if (event.type === 'session-updated' && event.sessionId) {
-            const data = event.data as { wasThinking?: boolean; thinking?: boolean } | null
+            const data = event.data as { wasThinking?: boolean; thinking?: boolean; active?: boolean } | null
             // wasThinking=true 且 thinking=false 表示 AI 刚完成回复
             if (data?.wasThinking && data.thinking === false) {
                 this.onThinkingComplete(event.sessionId)
+
+                // 检测 Advisor 创建的会话是否在等待输入
+                if (this.taskTracker.isAdvisorSpawnedSession(event.sessionId)) {
+                    this.checkAdvisorSpawnedSessionWaitingForInput(event.sessionId)
+                }
+            }
+
+            // 检测 Advisor 创建的会话是否结束（active=false）
+            if (data?.active === false && this.taskTracker.isAdvisorSpawnedSession(event.sessionId)) {
+                this.onAdvisorSpawnedSessionEnded(event.sessionId)
             }
         }
+    }
+
+    /**
+     * Advisor 创建的会话结束时的处理
+     */
+    private onAdvisorSpawnedSessionEnded(sessionId: string): void {
+        const task = this.taskTracker.getTaskBySessionId(sessionId)
+        if (!task) return
+
+        // 获取会话的最后几条消息，判断任务状态
+        const messages = this.syncEngine.getMessagesAfter(sessionId, {
+            afterSeq: Math.max(0, (this.syncEngine.getSession(sessionId)?.seq ?? 0) - 10),
+            limit: 10
+        })
+
+        // 简单判断：检查最后消息是否有错误关键词
+        let hasError = false
+        let lastMessage = ''
+        for (const msg of messages) {
+            const content = msg.content as Record<string, unknown> | null
+            if (!content) continue
+            const text = this.extractMessageText(content)
+            if (text) {
+                lastMessage = text
+                if (/error|failed|exception|失败|错误/i.test(text)) {
+                    hasError = true
+                }
+            }
+        }
+
+        if (hasError) {
+            this.taskTracker.markSessionFailed(sessionId, lastMessage.slice(0, 200))
+            console.log(`[AdvisorService] Advisor-spawned session ${sessionId} ended with errors`)
+        } else {
+            this.taskTracker.markSessionCompleted(sessionId, lastMessage.slice(0, 200))
+            console.log(`[AdvisorService] Advisor-spawned session ${sessionId} completed successfully`)
+        }
+
+        // 向 Advisor 反馈任务完成状态
+        this.feedbackToAdvisor(task, hasError ? 'failed' : 'completed', lastMessage.slice(0, 500))
+    }
+
+    /**
+     * 检测 Advisor 创建的会话是否在等待用户输入
+     */
+    private checkAdvisorSpawnedSessionWaitingForInput(sessionId: string): void {
+        const task = this.taskTracker.getTaskBySessionId(sessionId)
+        if (!task || task.status !== 'running') return
+
+        // 获取最后几条消息
+        const messages = this.syncEngine.getMessagesAfter(sessionId, {
+            afterSeq: Math.max(0, (this.syncEngine.getSession(sessionId)?.seq ?? 0) - 5),
+            limit: 5
+        })
+
+        // 检测是否在等待输入（AI 提问、需要确认等）
+        let waitingForInput = false
+        let question = ''
+        for (const msg of messages) {
+            const content = msg.content as Record<string, unknown> | null
+            if (!content) continue
+            const role = content.role as string
+            if (role !== 'agent' && role !== 'assistant') continue
+
+            const text = this.extractMessageText(content)
+            if (!text) continue
+
+            // 检测常见的等待输入模式
+            if (/\?$|请确认|请选择|你想要|需要你|告诉我|which|choose|confirm|would you|should I|do you want/i.test(text)) {
+                waitingForInput = true
+                question = text.slice(0, 300)
+                break
+            }
+        }
+
+        if (waitingForInput && question) {
+            console.log(`[AdvisorService] Advisor-spawned session ${sessionId} is waiting for input`)
+            // 向 Advisor 反馈，让它决定如何回答
+            this.feedbackToAdvisor(task, 'waiting_for_input', question)
+        }
+    }
+
+    /**
+     * 向 Advisor 反馈任务状态
+     */
+    private feedbackToAdvisor(task: import('./advisorTaskTracker').AdvisorTask, status: string, message: string): void {
+        const advisorSessionId = this.scheduler.getAdvisorSessionId()
+        if (!advisorSessionId) {
+            console.log('[AdvisorService] No advisor session, skip feedback')
+            return
+        }
+
+        const feedback = `[[TASK_FEEDBACK]]
+任务 ID: ${task.id}
+会话 ID: ${task.sessionId}
+状态: ${status}
+原因: ${task.reason}
+
+${status === 'waiting_for_input' ? '子会话正在等待输入，问题如下：' : '任务结果：'}
+${message}
+
+${status === 'waiting_for_input' ? '请决定如何回答这个问题，或者直接向子会话发送消息。' : ''}`
+
+        this.syncEngine.sendMessage(advisorSessionId, {
+            text: feedback,
+            sentFrom: 'system'
+        }).catch(error => {
+            console.error('[AdvisorService] Failed to send feedback to Advisor:', error)
+        })
+
+        console.log(`[AdvisorService] Feedback sent to Advisor: task=${task.id}, status=${status}`)
     }
 
     /**
@@ -1487,6 +1611,15 @@ export class AdvisorService {
     private async handleSpawnSession(advisorSessionId: string, output: AdvisorSpawnSessionOutput): Promise<void> {
         console.log(`[AdvisorService] Spawn session request: ${output.reason}`)
 
+        // 0. 检查是否有类似的进行中任务，避免重复开发
+        const similarTask = this.taskTracker.hasSimilarRunningTask(output.taskDescription)
+        if (similarTask) {
+            console.log(`[AdvisorService] Found similar running task ${similarTask.id}: ${similarTask.reason}`)
+            console.log(`[AdvisorService] Skipping spawn to avoid duplicate work`)
+            // 可以选择向 Advisor 反馈，告知存在重复任务
+            return
+        }
+
         // 1. 获取在线机器
         const machines = this.syncEngine.getOnlineMachinesByNamespace(this.namespace)
         if (machines.length === 0) {
@@ -1513,8 +1646,9 @@ export class AdvisorService {
             ((targetMachine.metadata as Record<string, unknown> | undefined)?.advisorWorkingDir as string) ||
             '/home/guang/softwares/hapi'
 
-        // 4. 生成会话 ID
-        const sessionId = output.id || `advisor-spawn-${Date.now().toString(36)}`
+        // 4. 生成任务 ID 和会话 ID
+        const taskId = output.id || `task-${Date.now().toString(36)}`
+        const sessionId = `advisor-spawn-${taskId}`
 
         console.log(`[AdvisorService] Spawning session ${sessionId} on machine ${targetMachine.id}, dir: ${workingDir}`)
 
@@ -1533,8 +1667,25 @@ export class AdvisorService {
             if (result.type === 'success') {
                 console.log(`[AdvisorService] Session spawned successfully: ${result.sessionId}`)
 
-                // 6. 等待会话就绪后发送任务消息
+                // 6. 设置会话的 advisorTaskId（用于 UI 显示）
+                this.store.setSessionAdvisorTaskId(result.sessionId, taskId, this.namespace)
+
+                // 7. 创建任务追踪记录
+                this.taskTracker.createTask({
+                    id: taskId,
+                    sessionId: result.sessionId,
+                    advisorSessionId,
+                    taskDescription: output.taskDescription,
+                    reason: output.reason,
+                    expectedOutcome: output.expectedOutcome,
+                    workingDir
+                })
+
+                // 8. 等待会话就绪后发送任务消息
                 await this.waitAndSendTask(result.sessionId, output.taskDescription, advisorSessionId)
+
+                // 9. 标记任务开始运行
+                this.taskTracker.markSessionRunning(result.sessionId)
             } else {
                 console.error(`[AdvisorService] Failed to spawn session: ${result.message}`)
             }
