@@ -317,8 +317,16 @@ export function HappyComposer(props: {
     }, [composerText, setDraft])
 
     // 同步输入给其他用户（防抖 300ms）
+    // 用 ref 跟踪是否是本地输入，避免把远程同步的内容再发回去
+    const isLocalInputRef = useRef(true)
+
     useEffect(() => {
         if (!sessionId || !active) return
+        // 如果不是本地输入，不发送
+        if (!isLocalInputRef.current) {
+            isLocalInputRef.current = true
+            return
+        }
 
         if (typingTimeoutRef.current) {
             clearTimeout(typingTimeoutRef.current)
@@ -336,6 +344,26 @@ export function HappyComposer(props: {
             }
         }
     }, [composerText, sessionId, active, apiClient])
+
+    // 接收其他用户的输入并同步到输入框
+    const prevOtherUserTextRef = useRef<string | null>(null)
+    useEffect(() => {
+        if (!otherUserTyping) {
+            prevOtherUserTextRef.current = null
+            return
+        }
+        // 只有当其他用户输入内容变化时才同步
+        if (otherUserTyping.text === prevOtherUserTextRef.current) return
+        prevOtherUserTextRef.current = otherUserTyping.text
+
+        // 标记为非本地输入，避免把同步过来的内容再发回去
+        isLocalInputRef.current = false
+        assistantApi.composer().setText(otherUserTyping.text)
+        setInputState({
+            text: otherUserTyping.text,
+            selection: { start: otherUserTyping.text.length, end: otherUserTyping.text.length }
+        })
+    }, [otherUserTyping, assistantApi])
 
     useEffect(() => {
         setInputState((prev) => {
@@ -1274,17 +1302,6 @@ export function HappyComposer(props: {
                         permissionMode={permissionMode}
                         agentFlavor={agentFlavor}
                     />
-
-                    {/* 其他用户正在输入提示 */}
-                    {otherUserTyping && otherUserTyping.text ? (
-                        <div className="mb-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-xs text-blue-600 dark:text-blue-400">
-                            <span className="font-medium">{otherUserTyping.email.split('@')[0]}</span>
-                            <span className="text-blue-500 dark:text-blue-300"> 正在输入：</span>
-                            <span className="italic text-blue-500/80 dark:text-blue-300/80 line-clamp-2">
-                                {otherUserTyping.text.slice(0, 100)}{otherUserTyping.text.length > 100 ? '...' : ''}
-                            </span>
-                        </div>
-                    ) : null}
 
                     <div className="overflow-hidden rounded-[20px] bg-[var(--app-secondary-bg)]">
                         {/* Image Preview Area */}
