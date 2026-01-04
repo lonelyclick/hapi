@@ -18,4 +18,5 @@ export const queryKeys = {
     inputPresets: () => ['input-presets'] as const,
     autoIterationConfig: ['auto-iteration-config'] as const,
     autoIterationLogs: ['auto-iteration-logs'] as const,
+    aiProfiles: ['ai-profiles'] as const,
 }

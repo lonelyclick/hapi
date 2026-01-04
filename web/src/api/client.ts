@@ -4,6 +4,8 @@ import type {
     AddProjectResponse,
     AddUserResponse,
     AgentGroupType,
+    AIProfileResponse,
+    AIProfilesResponse,
     AuthResponse,
     AutoIterationConfigUpdateRequest,
     AutoIterationData,
@@ -11,6 +13,7 @@ import type {
     AutoIterationNotificationLevel,
     BroadcastResponse,
     ClearMessagesResponse,
+    CreateAIProfileRequest,
     CreateGroupResponse,
     DeleteGroupResponse,
     DeleteSessionResponse,
@@ -47,6 +50,7 @@ import type {
     SpawnResponse,
     SessionResponse,
     SessionsResponse,
+    UpdateAIProfileRequest,
     UpdateGroupResponse,
     UpdateInputPresetResponse,
     UpdateProjectResponse,
@@ -909,5 +913,35 @@ export class ApiClient {
                 })
             }
         )
+    }
+
+    // ==================== AI 员工档案 ====================
+
+    async getAIProfiles(): Promise<AIProfilesResponse> {
+        return await this.request<AIProfilesResponse>('/api/settings/ai-profiles')
+    }
+
+    async getAIProfile(id: string): Promise<AIProfileResponse> {
+        return await this.request<AIProfileResponse>(`/api/settings/ai-profiles/${encodeURIComponent(id)}`)
+    }
+
+    async createAIProfile(data: CreateAIProfileRequest): Promise<AIProfileResponse> {
+        return await this.request<AIProfileResponse>('/api/settings/ai-profiles', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        })
+    }
+
+    async updateAIProfile(id: string, data: UpdateAIProfileRequest): Promise<AIProfileResponse> {
+        return await this.request<AIProfileResponse>(`/api/settings/ai-profiles/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data)
+        })
+    }
+
+    async deleteAIProfile(id: string): Promise<{ ok: true }> {
+        return await this.request<{ ok: true }>(`/api/settings/ai-profiles/${encodeURIComponent(id)}`, {
+            method: 'DELETE'
+        })
     }
 }

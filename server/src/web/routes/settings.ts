@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
-import type { Store, UserRole, AutoIterExecutionStatus, AutoIterActionType } from '../../store'
+import type { Store, UserRole, AutoIterExecutionStatus, AutoIterActionType, AIProfileRole, AIProfileStatus } from '../../store'
 import type { AutoIterationService } from '../../agent/autoIteration'
 import type { AdvisorScheduler } from '../../agent/advisorScheduler'
 import type { AdvisorService } from '../../agent/advisorService'
@@ -81,6 +81,34 @@ const autoIterationLogsQuerySchema = z.object({
     projectPath: z.string().optional(),
     limit: z.coerce.number().min(1).max(100).optional(),
     offset: z.coerce.number().min(0).optional()
+})
+
+// ==================== AI 员工档案 Schema ====================
+
+const aiProfileRoleSchema = z.enum(['developer', 'architect', 'reviewer', 'pm', 'tester', 'devops'])
+const aiProfileStatusSchema = z.enum(['idle', 'working', 'resting'])
+
+const createAIProfileSchema = z.object({
+    name: z.string().min(1).max(50),
+    role: aiProfileRoleSchema,
+    specialties: z.array(z.string()).max(10).default([]),
+    personality: z.string().max(500).nullable().optional(),
+    greetingTemplate: z.string().max(500).nullable().optional(),
+    preferredProjects: z.array(z.string()).max(20).default([]),
+    workStyle: z.string().max(500).nullable().optional(),
+    avatarEmoji: z.string().max(10).default('🤖')
+})
+
+const updateAIProfileSchema = z.object({
+    name: z.string().min(1).max(50).optional(),
+    role: aiProfileRoleSchema.optional(),
+    specialties: z.array(z.string()).max(10).optional(),
+    personality: z.string().max(500).nullable().optional(),
+    greetingTemplate: z.string().max(500).nullable().optional(),
+    preferredProjects: z.array(z.string()).max(20).optional(),
+    workStyle: z.string().max(500).nullable().optional(),
+    avatarEmoji: z.string().max(10).optional(),
+    status: aiProfileStatusSchema.optional()
 })
 
 export function createSettingsRoutes(
@@ -536,6 +564,85 @@ export function createSettingsRoutes(
 
         if (!result.success) {
             return c.json({ error: result.error }, 404)
+        }
+
+        return c.json({ ok: true })
+    })
+
+    // ==================== AI 员工档案管理 ====================
+
+    // 获取所有 AI 员工档案
+    app.get('/settings/ai-profiles', (c) => {
+        const namespace = c.get('namespace')
+        const profiles = store.getAIProfiles(namespace)
+        return c.json({ profiles })
+    })
+
+    // 获取单个 AI 员工档案
+    app.get('/settings/ai-profiles/:id', (c) => {
+        const id = c.req.param('id')
+        const profile = store.getAIProfile(id)
+
+        if (!profile) {
+            return c.json({ error: 'Profile not found' }, 404)
+        }
+
+        return c.json({ profile })
+    })
+
+    // 创建 AI 员工档案
+    app.post('/settings/ai-profiles', async (c) => {
+        const namespace = c.get('namespace')
+        const json = await c.req.json()
+        const parsed = createAIProfileSchema.safeParse(json)
+
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid input', details: parsed.error.issues }, 400)
+        }
+
+        const data = parsed.data
+        const profile = store.createAIProfile(namespace, {
+            name: data.name,
+            role: data.role as AIProfileRole,
+            specialties: data.specialties,
+            personality: data.personality ?? null,
+            greetingTemplate: data.greetingTemplate ?? null,
+            preferredProjects: data.preferredProjects,
+            workStyle: data.workStyle ?? null,
+            avatarEmoji: data.avatarEmoji,
+            status: 'idle' as AIProfileStatus,
+            stats: { tasksCompleted: 0, activeMinutes: 0, lastActiveAt: null }
+        })
+
+        return c.json({ profile }, 201)
+    })
+
+    // 更新 AI 员工档案
+    app.patch('/settings/ai-profiles/:id', async (c) => {
+        const id = c.req.param('id')
+        const json = await c.req.json()
+        const parsed = updateAIProfileSchema.safeParse(json)
+
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid input', details: parsed.error.issues }, 400)
+        }
+
+        const profile = store.updateAIProfile(id, parsed.data)
+
+        if (!profile) {
+            return c.json({ error: 'Profile not found' }, 404)
+        }
+
+        return c.json({ profile })
+    })
+
+    // 删除 AI 员工档案
+    app.delete('/settings/ai-profiles/:id', (c) => {
+        const id = c.req.param('id')
+        const deleted = store.deleteAIProfile(id)
+
+        if (!deleted) {
+            return c.json({ error: 'Profile not found' }, 404)
         }
 
         return c.json({ ok: true })

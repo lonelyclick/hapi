@@ -518,3 +518,45 @@ export type SpawnMemberResponse = {
     sessionId: string
     members: AgentGroupMember[]
 }
+
+// ==================== AI 员工档案 ====================
+
+export type AIProfileRole = 'developer' | 'architect' | 'reviewer' | 'pm' | 'tester' | 'devops'
+export type AIProfileStatus = 'idle' | 'working' | 'resting'
+
+export type AIProfile = {
+    id: string
+    namespace: string
+    name: string
+    role: AIProfileRole
+    specialties: string[]
+    personality: string | null
+    greetingTemplate: string | null
+    preferredProjects: string[]
+    workStyle: string | null
+    avatarEmoji: string
+    status: AIProfileStatus
+    stats: {
+        tasksCompleted: number
+        activeMinutes: number
+        lastActiveAt: number | null
+    }
+    createdAt: number
+    updatedAt: number
+}
+
+export type AIProfilesResponse = { profiles: AIProfile[] }
+export type AIProfileResponse = { profile: AIProfile }
+
+export type CreateAIProfileRequest = {
+    name: string
+    role: AIProfileRole
+    specialties?: string[]
+    personality?: string | null
+    greetingTemplate?: string | null
+    preferredProjects?: string[]
+    workStyle?: string | null
+    avatarEmoji?: string
+}
+
+export type UpdateAIProfileRequest = Partial<Omit<AIProfile, 'id' | 'namespace' | 'createdAt' | 'updatedAt' | 'stats'>>

@@ -11,6 +11,7 @@ import { clearAllIdleSuggestions } from '@/hooks/useIdleSuggestion'
 import type { InputPreset, Project, UserRole } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { AutoIterationSettings } from '@/components/AutoIterationSettings'
+import { AIProfileSettings } from '@/components/AIProfileSettings'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -1031,6 +1032,9 @@ export default function SettingsPage() {
                             </div>
                         )}
                     </div>
+
+                    {/* AI Employees Section */}
+                    <AIProfileSettings />
 
                     {/* Auto-Iteration Section */}
                     <AutoIterationSettings />
