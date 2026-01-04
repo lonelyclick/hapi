@@ -30,6 +30,7 @@ import { loadEmbeddedAssetMap, type EmbeddedWebAsset } from './embeddedAssets'
 import { isBunCompiled } from '../utils/bunCompiled'
 import type { Store } from '../store'
 import type { AutoIterationService } from '../agent/autoIteration'
+import type { AdvisorScheduler } from '../agent/advisorScheduler'
 
 function findWebappDistDir(): { distDir: string; indexHtmlPath: string } {
     const candidates = [
@@ -77,6 +78,7 @@ function createWebApp(options: {
     store: Store
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
     autoIterationService: AutoIterationService | null
+    getAdvisorScheduler: () => AdvisorScheduler | null
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -107,7 +109,7 @@ function createWebApp(options: {
     app.route('/api', createSpeechRoutes())
     app.route('/api', createOptimizeRoutes())
     app.route('/api', createVersionRoutes(options.embeddedAssetMap))
-    app.route('/api', createSettingsRoutes(options.store, options.autoIterationService ?? undefined))
+    app.route('/api', createSettingsRoutes(options.store, options.autoIterationService ?? undefined, options.getAdvisorScheduler))
     app.route('/api', createPushRoutes())
     app.route('/api', createUsageRoutes(options.getSyncEngine))
 
@@ -235,6 +237,7 @@ export async function startWebServer(options: {
     store: Store
     socketEngine: SocketEngine
     autoIterationService: AutoIterationService | null
+    getAdvisorScheduler?: () => AdvisorScheduler | null
 }): Promise<BunServer<WebSocketData>> {
     const isCompiled = isBunCompiled()
     const embeddedAssetMap = isCompiled ? await loadEmbeddedAssetMap() : null
@@ -244,7 +247,8 @@ export async function startWebServer(options: {
         jwtSecret: options.jwtSecret,
         store: options.store,
         embeddedAssetMap,
-        autoIterationService: options.autoIterationService
+        autoIterationService: options.autoIterationService,
+        getAdvisorScheduler: options.getAdvisorScheduler ?? (() => null)
     })
 
     const socketHandler = options.socketEngine.handler()

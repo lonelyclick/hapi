@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
 import type { Store, UserRole, AutoIterExecutionStatus, AutoIterActionType } from '../../store'
 import type { AutoIterationService } from '../../agent/autoIteration'
+import type { AdvisorScheduler } from '../../agent/advisorScheduler'
 
 const userRoleSchema = z.enum(['developer', 'operator'])
 
@@ -81,7 +82,7 @@ const autoIterationLogsQuerySchema = z.object({
     offset: z.coerce.number().min(0).optional()
 })
 
-export function createSettingsRoutes(store: Store, autoIterationService?: AutoIterationService): Hono<WebAppEnv> {
+export function createSettingsRoutes(store: Store, autoIterationService?: AutoIterationService, getAdvisorScheduler?: () => AdvisorScheduler | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     // ==================== 用户管理 (合并了 Allowed Emails) ====================
@@ -465,6 +466,23 @@ export function createSettingsRoutes(store: Store, autoIterationService?: AutoIt
         const pending = autoIterationService.getPendingApprovals()
 
         return c.json({ pending })
+    })
+
+    // ==================== Advisor 审查 ====================
+
+    // 手动触发审查
+    app.post('/settings/advisor/trigger-review', async (c) => {
+        const advisorScheduler = getAdvisorScheduler?.()
+        if (!advisorScheduler) {
+            return c.json({ error: 'AdvisorScheduler not available' }, 503)
+        }
+
+        const json = await c.req.json().catch(() => ({})) as { type?: string }
+        const reviewType = json.type === 'daily' ? 'daily' : 'proactive'
+
+        await advisorScheduler.manualTriggerReview(reviewType)
+
+        return c.json({ ok: true, type: reviewType })
     })
 
     return app

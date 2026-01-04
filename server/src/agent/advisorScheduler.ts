@@ -391,6 +391,18 @@ export class AdvisorScheduler {
     }
 
     /**
+     * 手动触发审查（公开方法，供外部调用）
+     */
+    async manualTriggerReview(type: 'daily' | 'proactive' = 'proactive'): Promise<void> {
+        console.log(`[AdvisorScheduler] Manual trigger: ${type} review`)
+        if (type === 'daily') {
+            await this.triggerDailyReview()
+        } else {
+            await this.triggerProactiveReview()
+        }
+    }
+
+    /**
      * 构建每日审查提示词
      */
     private buildDailyReviewPrompt(): string {

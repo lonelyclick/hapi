@@ -139,7 +139,8 @@ async function main() {
         jwtSecret,
         store,
         socketEngine: socketServer.engine,
-        autoIterationService
+        autoIterationService,
+        getAdvisorScheduler: () => advisorScheduler
     })
 
     // Start the bot if configured
