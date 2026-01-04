@@ -1,10 +1,10 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import type { SyncEngine, Session } from '../../sync/syncEngine'
+import type { SyncEngine } from '../../sync/syncEngine'
 import type { Store, UserRole } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
-import { buildManualAdvisorPrompt } from '../../agent/advisorPrompt'
+import { isCTOSession } from '../../sync/syncEngine'
 
 /**
  * 解析用户角色
@@ -15,23 +15,6 @@ function resolveUserRole(store: Store, email?: string): UserRole {
     if (users.length === 0) return 'developer'
     const match = users.find(u => u.email.toLowerCase() === email.toLowerCase())
     return match?.role ?? 'developer'
-}
-
-/**
- * 检查是否为 CTO/Advisor 会话
- */
-function isCTOSession(session: Session | null): boolean {
-    if (!session) return false
-    const metadata = session.metadata as Record<string, unknown> | null
-    // 检查 claudeAgent 是否为 advisor 或 cto
-    const agent = metadata?.claudeAgent as string | undefined
-    if (agent === 'advisor' || agent === 'cto') return true
-    // 检查 isAdvisor 或 isCTO 标记
-    if (metadata?.isAdvisor === true || metadata?.isCTO === true) return true
-    // 检查会话名称是否包含 CTO 或 Advisor
-    const name = session.metadata?.name?.toLowerCase() || ''
-    if (name.includes('cto') || name.includes('advisor')) return true
-    return false
 }
 
 const querySchema = z.object({
@@ -94,14 +77,9 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
         // 获取会话信息
         const session = engine.getSession(sessionId)
 
-        // 检查是否为 CTO 会话 - 每条消息都注入 CTO 指令
-        if (isCTOSession(session)) {
-            const workingDir = (session?.metadata as Record<string, unknown>)?.path as string || undefined
-            const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
-            messageText = `${ctoPrompt}\n${messageText}`
-        }
-        // 普通会话：检查是否需要注入 Role Prompt（仅对首条用户消息生效）
-        else if (store && !store.isRolePromptSent(sessionId)) {
+        // 检查是否需要注入 Role Prompt（仅对首条用户消息生效，且非 CTO 会话）
+        // CTO 指令的注入已经在 syncEngine.sendMessage() 中统一处理
+        if (store && !isCTOSession(session) && !store.isRolePromptSent(sessionId)) {
             const email = c.get('email')
             const role = resolveUserRole(store, email)
             const rolePrompt = store.getRolePrompt(role)

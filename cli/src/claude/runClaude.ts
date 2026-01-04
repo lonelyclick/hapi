@@ -26,6 +26,7 @@ import { resolve } from 'node:path';
 import type { Session } from './session';
 import { readWorktreeEnv } from '@/utils/worktreeEnv';
 import { readModeEnv } from '@/utils/modeEnv';
+import { isCTOSession, buildCTOPrompt } from './ctoPrompt';
 
 const INIT_PROMPT_PREFIX = '#InitPrompt-';
 
@@ -267,6 +268,13 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         sessionInstance.setModelMode(currentModelMode);
         logger.debug(`[loop] Synced session modes for keepalive: permissionMode=${currentPermissionMode}, modelMode=${currentModelMode}`);
     };
+
+    // Check if this is a CTO session based on metadata
+    const sessionIsCTO = isCTOSession(response.metadata);
+    if (sessionIsCTO) {
+        logger.debug('[loop] Detected CTO session, will inject CTO prompt to all messages');
+    }
+
     session.onUserMessage((message) => {
         const sessionPermissionMode = currentSessionRef.current?.getPermissionMode();
         if (
@@ -366,7 +374,15 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             return;
         }
 
-        messageQueue.push(message.content.text, enhancedMode);
+        // Inject CTO prompt for CTO sessions
+        let finalMessageText = message.content.text;
+        if (sessionIsCTO) {
+            const ctoPrompt = buildCTOPrompt(workingDirectory);
+            finalMessageText = `${ctoPrompt}\n${message.content.text}`;
+            logger.debug('[loop] Injected CTO prompt to message');
+        }
+
+        messageQueue.push(finalMessageText, enhancedMode);
         logger.debugLargeJson('User message pushed to queue:', message)
     });
 

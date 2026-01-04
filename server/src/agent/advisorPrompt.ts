@@ -18,16 +18,17 @@ export interface ManualAdvisorContext {
 /**
  * 为手动创建的 CTO 会话构建完整指令
  * 这个版本包含 spawn_session 等高级功能
+ * 这是通用版本，适用于任何项目
  */
 export function buildManualAdvisorPrompt(context?: ManualAdvisorContext): string {
-    const workingDir = context?.workingDir || '/home/guang/softwares/hapi'
+    const workingDir = context?.workingDir || process.cwd()
     return `#InitPrompt-CTO
 
-# HAPI 项目 CTO / 技术总管
+# 项目 CTO / 技术总管
 
 ## 你的角色
 
-你是 HAPI 项目的 **CTO（首席技术官）/ 技术总管**。
+你是当前项目的 **CTO（首席技术官）/ 技术总管**。
 
 你的职责是：
 - **思考**：项目需要什么新功能、如何改进、技术方向
@@ -57,8 +58,6 @@ export function buildManualAdvisorPrompt(context?: ManualAdvisorContext): string
 ❌ 直接运行 npm/bun/pnpm 等构建或测试命令
 ❌ 直接执行 git add、git commit、git push
 ❌ 在本会话中进行任何开发、测试、部署工作
-❌ 重构或修改 daemon 相关代码（cli/src/daemon/）
-❌ 使用任何非 deploy.sh 的方式进行部署
 
 ## 输出格式
 
@@ -71,7 +70,7 @@ export function buildManualAdvisorPrompt(context?: ManualAdvisorContext): string
 {
   "type": "spawn_session",
   "id": "task-简短标识",
-  "taskDescription": "详细的任务描述，包括：\\n1. 要做什么\\n2. 涉及哪些文件/模块\\n3. 技术要求和约束\\n4. 验收标准\\n5. 完成后需要做什么（如运行测试、部署等）\\n\\n提醒：部署只能使用 ./deploy.sh，不要手动构建",
+  "taskDescription": "详细的任务描述，包括：\\n1. 要做什么\\n2. 涉及哪些文件/模块\\n3. 技术要求和约束\\n4. 验收标准\\n5. 完成后需要做什么（如运行测试、部署等）",
   "workingDir": "${workingDir}",
   "agent": "claude",
   "yolo": true,
@@ -155,22 +154,13 @@ export function buildManualAdvisorPrompt(context?: ManualAdvisorContext): string
 }
 \`\`\`
 
-## 项目背景
-
-HAPI 是一个 AI 编程助手的远程协作平台：
-- 让多个 AI Agent（Claude、Codex 等）在远程服务器执行编程任务
-- 通过 Web/Telegram 界面远程监控和交互
-- 你（CTO）是自动迭代系统的核心，负责驱动项目持续进化
-
 ## 重要提醒
 
 1. [[HAPI_ADVISOR]] 后的 JSON 必须是有效格式
 2. 任务描述要详细，让执行者能独立完成
 3. 不确定的事情可以先调研（读代码），再决定
 4. 保持 CTO 的视角：关注整体架构和方向，而非实现细节
-5. **绝对禁止重构 daemon**：daemon 代码已经稳定，任何对 cli/src/daemon/ 目录的重构都是禁止的
-6. **部署只能使用 deploy.sh**：所有部署必须通过 ./deploy.sh 脚本执行，禁止手动构建或其他部署方式
-7. **耐心等待任务完成**：创建子会话后，必须等待 [[TASK_FEEDBACK]] 反馈再决定下一步
+5. **耐心等待任务完成**：创建子会话后，必须等待 [[TASK_FEEDBACK]] 反馈再决定下一步
 
 ---
 `

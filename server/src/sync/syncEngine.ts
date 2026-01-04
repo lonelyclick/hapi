@@ -96,6 +96,27 @@ export interface Session {
     advisorTaskId?: string | null  // Advisor 创建的会话的任务 ID
 }
 
+/**
+ * 检查是否为 CTO/Advisor 会话
+ * 这个函数用于判断是否需要注入 CTO 指令
+ */
+export function isCTOSession(session: Session | null | undefined): boolean {
+    if (!session) return false
+    const metadata = session.metadata as Record<string, unknown> | null
+    // 检查 claudeAgent 是否为 advisor 或 cto
+    const agent = metadata?.claudeAgent as string | undefined
+    if (agent === 'advisor' || agent === 'cto') return true
+    // 检查 isAdvisor 或 isCTO 标记
+    if (metadata?.isAdvisor === true || metadata?.isCTO === true) return true
+    // 检查 runtimeAgent 是否为 advisor 或 cto
+    const runtimeAgent = metadata?.runtimeAgent as string | undefined
+    if (runtimeAgent === 'advisor' || runtimeAgent === 'cto') return true
+    // 检查会话名称是否包含 CTO 或 Advisor
+    const name = session.metadata?.name?.toLowerCase() || ''
+    if (name.includes('cto') || name.includes('advisor')) return true
+    return false
+}
+
 export interface Machine {
     id: string
     namespace: string
@@ -1089,17 +1110,26 @@ export class SyncEngine {
     async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'advisor' }): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
 
-        // 检查是否需要注入 CTO 指令（仅在首条消息时）
+        // 检查是否需要注入 CTO 指令
+        // 对于 CTO 会话，每条消息都注入（因为 Claude 可能会清空上下文）
         let messageText = payload.text
-        if (this.store.shouldInjectAdvisorPrompt(sessionId)) {
-            const session = this.sessions.get(sessionId)
+        const session = this.sessions.get(sessionId)
+
+        if (isCTOSession(session)) {
+            // CTO 会话：每条消息都注入
+            const workingDir = session?.metadata?.path || session?.metadata?.worktree?.basePath || undefined
+            const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
+            messageText = ctoPrompt + '\n\n' + payload.text
+            console.log(`[SyncEngine] Injected CTO prompt for CTO session ${sessionId}`)
+        } else if (this.store.shouldInjectAdvisorPrompt(sessionId)) {
+            // 使用 advisor_mode 标志的会话：仅首条消息注入
             const workingDir = session?.metadata?.path || session?.metadata?.worktree?.basePath || undefined
             const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
             messageText = ctoPrompt + '\n\n' + payload.text
             // 标记已注入，防止重复
             const namespace = session?.namespace || 'default'
             this.store.setSessionAdvisorPromptInjected(sessionId, namespace)
-            console.log(`[SyncEngine] Injected CTO prompt for session ${sessionId}`)
+            console.log(`[SyncEngine] Injected CTO prompt for advisor_mode session ${sessionId}`)
         }
 
         const content = {
