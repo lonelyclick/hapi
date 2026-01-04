@@ -58,14 +58,35 @@ function getAgentIcon(agentType: string | null | undefined): string {
     return agentType.charAt(0).toUpperCase()
 }
 
+function PlusIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+    )
+}
+
 type GroupChatHeaderProps = {
     group: AgentGroup
     members: AgentGroupMember[]
     onBack: () => void
+    onMembersClick?: () => void
 }
 
 export function GroupChatHeader(props: GroupChatHeaderProps) {
-    const { group, members, onBack } = props
+    const { group, members, onBack, onMembersClick } = props
 
     const sortedMembers = useMemo(() => {
         return [...members].sort((a, b) => {
@@ -99,8 +120,12 @@ export function GroupChatHeader(props: GroupChatHeaderProps) {
                     </div>
                 </div>
 
-                {/* Members row */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mb-1">
+                {/* Members row - clickable to open members sheet */}
+                <button
+                    type="button"
+                    onClick={onMembersClick}
+                    className="flex items-center gap-1.5 overflow-x-auto pb-1 -mb-1 w-full text-left hover:opacity-80 transition-opacity"
+                >
                     {/* User avatar */}
                     <div className="flex flex-col items-center gap-0.5 shrink-0 min-w-[48px]">
                         <div className="relative">
@@ -143,7 +168,17 @@ export function GroupChatHeader(props: GroupChatHeaderProps) {
                             </div>
                         )
                     })}
-                </div>
+
+                    {/* Add member button */}
+                    <div className="flex flex-col items-center gap-0.5 shrink-0 min-w-[48px]">
+                        <div className="w-8 h-8 rounded-full border-2 border-dashed border-[var(--app-hint)] flex items-center justify-center text-[var(--app-hint)]">
+                            <PlusIcon />
+                        </div>
+                        <span className="text-[10px] text-[var(--app-hint)]">
+                            添加
+                        </span>
+                    </div>
+                </button>
             </div>
         </div>
     )

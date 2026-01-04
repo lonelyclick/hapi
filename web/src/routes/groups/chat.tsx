@@ -6,6 +6,8 @@ import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { GroupChatHeader } from '@/components/GroupChat/GroupChatHeader'
 import { GroupMessageList } from '@/components/GroupChat/GroupMessageList'
 import { GroupComposer } from '@/components/GroupChat/GroupComposer'
+import { GroupMembersSheet } from '@/components/GroupChat/GroupMembersSheet'
+import { AddMemberSheet } from '@/components/GroupChat/AddMemberSheet'
 import { Spinner } from '@/components/Spinner'
 
 export default function GroupChatPage() {
@@ -15,6 +17,8 @@ export default function GroupChatPage() {
     const queryClient = useQueryClient()
     const { groupId } = useParams({ from: '/groups/$groupId/chat' })
     const [isSending, setIsSending] = useState(false)
+    const [membersSheetOpen, setMembersSheetOpen] = useState(false)
+    const [addMemberSheetOpen, setAddMemberSheetOpen] = useState(false)
 
     // Fetch group details
     const {
@@ -85,6 +89,29 @@ export default function GroupChatPage() {
         goBack()
     }, [goBack])
 
+    const handleMembersClick = useCallback(() => {
+        setMembersSheetOpen(true)
+    }, [])
+
+    const handleAddMemberClick = useCallback(() => {
+        setMembersSheetOpen(false)
+        setAddMemberSheetOpen(true)
+    }, [])
+
+    const handleRemoveMember = useCallback(async (sessionId: string) => {
+        if (!api) return
+        await api.removeGroupMember(groupId, sessionId)
+        void queryClient.invalidateQueries({ queryKey: ['group', groupId] })
+    }, [api, groupId, queryClient])
+
+    const handleAddMembers = useCallback(async (sessions: Array<{ sessionId: string; agentType?: string }>) => {
+        if (!api) return
+        for (const session of sessions) {
+            await api.addGroupMember(groupId, session.sessionId, 'member', session.agentType)
+        }
+        void queryClient.invalidateQueries({ queryKey: ['group', groupId] })
+    }, [api, groupId, queryClient])
+
     if (groupLoading) {
         return (
             <div className="flex h-full items-center justify-center">
@@ -113,6 +140,7 @@ export default function GroupChatPage() {
                 group={group}
                 members={members}
                 onBack={handleBack}
+                onMembersClick={handleMembersClick}
             />
 
             <GroupMessageList
@@ -126,6 +154,24 @@ export default function GroupChatPage() {
                 onSend={handleSend}
                 placeholder={group.status === 'active' ? '发送消息给群组...' : '群组已暂停'}
                 members={members}
+            />
+
+            {/* Members Management Sheet */}
+            <GroupMembersSheet
+                open={membersSheetOpen}
+                onOpenChange={setMembersSheetOpen}
+                group={group}
+                members={members}
+                onRemoveMember={handleRemoveMember}
+                onAddMemberClick={handleAddMemberClick}
+            />
+
+            {/* Add Member Sheet */}
+            <AddMemberSheet
+                open={addMemberSheetOpen}
+                onOpenChange={setAddMemberSheetOpen}
+                existingMembers={members}
+                onAddMembers={handleAddMembers}
             />
         </div>
     )
