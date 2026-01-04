@@ -226,5 +226,85 @@ export function createGroupRoutes(
         }
     })
 
+    // POST /groups/:id/broadcast - 广播消息给所有群组成员
+    app.post('/groups/:id/broadcast', async (c) => {
+        const groupId = c.req.param('id')
+        const group = store.getAgentGroup(groupId)
+
+        if (!group) {
+            return c.json({ error: 'Group not found' }, 404)
+        }
+
+        if (group.status !== 'active') {
+            return c.json({ error: 'Group is not active' }, 409)
+        }
+
+        if (!syncEngine) {
+            return c.json({ error: 'Sync engine not available' }, 503)
+        }
+
+        const json = await c.req.json().catch(() => null)
+        const parsed = sendMessageSchema.safeParse(json)
+
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid message data', details: parsed.error.issues }, 400)
+        }
+
+        // Store the message first
+        const message = store.addGroupMessage(
+            groupId,
+            parsed.data.sourceSessionId ?? null,
+            parsed.data.content,
+            parsed.data.senderType as GroupSenderType,
+            parsed.data.messageType as GroupMessageType
+        )
+
+        // Get all members and broadcast
+        const members = store.getGroupMembers(groupId)
+        const results: { sessionId: string; success: boolean; error?: string }[] = []
+
+        for (const member of members) {
+            // Skip the source session (don't echo back)
+            if (member.sessionId === parsed.data.sourceSessionId) {
+                continue
+            }
+
+            const session = syncEngine.getSession(member.sessionId)
+            if (!session?.active) {
+                results.push({ sessionId: member.sessionId, success: false, error: 'Session not active' })
+                continue
+            }
+
+            try {
+                // Format message with group context
+                const senderName = parsed.data.sourceSessionId
+                    ? syncEngine.getSession(parsed.data.sourceSessionId)?.metadata?.name ?? parsed.data.sourceSessionId
+                    : 'System'
+
+                const groupMessage = `[群组消息 - ${group.name}]\n发送者: ${senderName}\n类型: ${parsed.data.messageType}\n\n${parsed.data.content}`
+
+                await syncEngine.sendMessage(member.sessionId, {
+                    text: groupMessage,
+                    sentFrom: 'webapp'
+                })
+                results.push({ sessionId: member.sessionId, success: true })
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Failed to send'
+                results.push({ sessionId: member.sessionId, success: false, error: errorMessage })
+            }
+        }
+
+        return c.json({
+            ok: true,
+            message,
+            broadcast: {
+                total: members.length,
+                sent: results.filter(r => r.success).length,
+                failed: results.filter(r => !r.success).length,
+                results
+            }
+        })
+    })
+
     return app
 }
