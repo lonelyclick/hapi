@@ -480,46 +480,16 @@ export class ApiClient {
 
     // Usage 数据
     async getUsage(): Promise<{
-        machines: Array<{
-            machineId: string
-            machineName: string
-            usage: {
-                claude: {
-                    fiveHour: { utilization: number; resetsAt: string } | null
-                    sevenDay: { utilization: number; resetsAt: string } | null
-                    error?: string
-                } | null
-                codex: {
-                    model?: string
-                    approvalPolicy?: string
-                    writableRoots?: string[]
-                    tokenUsage?: { used?: number; remaining?: number }
-                    error?: string
-                } | null
-                timestamp: number
-            } | null
-            error?: string
-        }>
-        timestamp: number
-    }> {
-        return await this.request('/api/usage')
-    }
-
-    async getMachineUsage(machineId: string): Promise<{
         claude: {
             fiveHour: { utilization: number; resetsAt: string } | null
             sevenDay: { utilization: number; resetsAt: string } | null
             error?: string
         } | null
         codex: {
-            model?: string
-            approvalPolicy?: string
-            writableRoots?: string[]
-            tokenUsage?: { used?: number; remaining?: number }
             error?: string
         } | null
         timestamp: number
     }> {
-        return await this.request(`/api/machines/${encodeURIComponent(machineId)}/usage`)
+        return await this.request('/api/usage')
     }
 }

@@ -104,8 +104,6 @@ export default function UsagePage() {
         refetchInterval: 60000 // Refresh every minute
     })
 
-    const machines = data?.machines ?? []
-
     return (
         <div className="flex h-full flex-col">
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
@@ -140,117 +138,73 @@ export default function UsagePage() {
                         <div className="text-center py-8 text-red-500 text-sm">
                             {error instanceof Error ? error.message : 'Failed to load usage data'}
                         </div>
-                    ) : machines.length === 0 ? (
-                        <div className="text-center py-8 text-[var(--app-hint)] text-sm">
-                            No machines online. Start a daemon to see usage data.
-                        </div>
                     ) : (
-                        machines.map((machine) => (
-                            <div key={machine.machineId} className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                                <div className="px-3 py-2 border-b border-[var(--app-divider)]">
-                                    <h2 className="text-sm font-medium">{machine.machineName}</h2>
-                                    <p className="text-[10px] text-[var(--app-hint)] font-mono mt-0.5">
-                                        {machine.machineId.slice(0, 8)}...
-                                    </p>
+                        <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                            <div className="divide-y divide-[var(--app-divider)]">
+                                {/* Claude Code Usage */}
+                                <div className="px-3 py-3">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-6 h-6 rounded bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                                            <span className="text-white text-xs font-bold">C</span>
+                                        </div>
+                                        <span className="text-sm font-medium">Claude Code</span>
+                                    </div>
+
+                                    {data?.claude?.error ? (
+                                        <div className="text-xs text-[var(--app-hint)]">
+                                            {data.claude.error}
+                                        </div>
+                                    ) : data?.claude?.fiveHour || data?.claude?.sevenDay ? (
+                                        <div className="space-y-3">
+                                            {data.claude.fiveHour && (
+                                                <UsageBar
+                                                    utilization={data.claude.fiveHour.utilization}
+                                                    label="5-Hour Limit"
+                                                    resetsAt={data.claude.fiveHour.resetsAt}
+                                                />
+                                            )}
+                                            {data.claude.sevenDay && (
+                                                <UsageBar
+                                                    utilization={data.claude.sevenDay.utilization}
+                                                    label="7-Day Limit"
+                                                    resetsAt={data.claude.sevenDay.resetsAt}
+                                                />
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="text-xs text-[var(--app-hint)]">
+                                            No usage data available
+                                        </div>
+                                    )}
                                 </div>
 
-                                {machine.error ? (
-                                    <div className="px-3 py-4 text-sm text-red-500">
-                                        {machine.error}
-                                    </div>
-                                ) : machine.usage ? (
-                                    <div className="divide-y divide-[var(--app-divider)]">
-                                        {/* Claude Code Usage */}
-                                        <div className="px-3 py-3">
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <div className="w-6 h-6 rounded bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
-                                                    <span className="text-white text-xs font-bold">C</span>
-                                                </div>
-                                                <span className="text-sm font-medium">Claude Code</span>
-                                            </div>
-
-                                            {machine.usage.claude?.error ? (
-                                                <div className="text-xs text-[var(--app-hint)]">
-                                                    {machine.usage.claude.error}
-                                                </div>
-                                            ) : machine.usage.claude?.fiveHour || machine.usage.claude?.sevenDay ? (
-                                                <div className="space-y-3">
-                                                    {machine.usage.claude.fiveHour && (
-                                                        <UsageBar
-                                                            utilization={machine.usage.claude.fiveHour.utilization}
-                                                            label="5-Hour Limit"
-                                                            resetsAt={machine.usage.claude.fiveHour.resetsAt}
-                                                        />
-                                                    )}
-                                                    {machine.usage.claude.sevenDay && (
-                                                        <UsageBar
-                                                            utilization={machine.usage.claude.sevenDay.utilization}
-                                                            label="7-Day Limit"
-                                                            resetsAt={machine.usage.claude.sevenDay.resetsAt}
-                                                        />
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="text-xs text-[var(--app-hint)]">
-                                                    No usage data available
-                                                </div>
-                                            )}
+                                {/* Codex Usage */}
+                                <div className="px-3 py-3">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-6 h-6 rounded bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                                            <span className="text-white text-xs font-bold">X</span>
                                         </div>
+                                        <span className="text-sm font-medium">OpenAI Codex</span>
+                                    </div>
 
-                                        {/* Codex Usage */}
-                                        <div className="px-3 py-3">
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <div className="w-6 h-6 rounded bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                                                    <span className="text-white text-xs font-bold">X</span>
-                                                </div>
-                                                <span className="text-sm font-medium">OpenAI Codex</span>
-                                            </div>
-
-                                            {machine.usage.codex?.error ? (
-                                                <div className="text-xs text-[var(--app-hint)]">
-                                                    {machine.usage.codex.error}
-                                                </div>
-                                            ) : machine.usage.codex?.tokenUsage ? (
-                                                <div className="space-y-2">
-                                                    {machine.usage.codex.model && (
-                                                        <div className="flex justify-between text-xs">
-                                                            <span className="text-[var(--app-hint)]">Model</span>
-                                                            <span className="font-mono">{machine.usage.codex.model}</span>
-                                                        </div>
-                                                    )}
-                                                    {machine.usage.codex.tokenUsage.used !== undefined && (
-                                                        <div className="flex justify-between text-xs">
-                                                            <span className="text-[var(--app-hint)]">Tokens Used</span>
-                                                            <span className="font-mono">{machine.usage.codex.tokenUsage.used.toLocaleString()}</span>
-                                                        </div>
-                                                    )}
-                                                    {machine.usage.codex.tokenUsage.remaining !== undefined && (
-                                                        <div className="flex justify-between text-xs">
-                                                            <span className="text-[var(--app-hint)]">Remaining</span>
-                                                            <span className="font-mono">{machine.usage.codex.tokenUsage.remaining.toLocaleString()}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="text-xs text-[var(--app-hint)]">
-                                                    Codex usage tracking not yet implemented
-                                                </div>
-                                            )}
+                                    {data?.codex?.error ? (
+                                        <div className="text-xs text-[var(--app-hint)]">
+                                            {data.codex.error}
                                         </div>
-                                    </div>
-                                ) : (
-                                    <div className="px-3 py-4 text-sm text-[var(--app-hint)]">
-                                        No usage data available
-                                    </div>
-                                )}
-
-                                {machine.usage?.timestamp && (
-                                    <div className="px-3 py-2 border-t border-[var(--app-divider)] text-[10px] text-[var(--app-hint)]">
-                                        Updated: {new Date(machine.usage.timestamp).toLocaleTimeString()}
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div className="text-xs text-[var(--app-hint)]">
+                                            Codex usage tracking not yet implemented
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        ))
+
+                            {data?.timestamp && (
+                                <div className="px-3 py-2 border-t border-[var(--app-divider)] text-[10px] text-[var(--app-hint)]">
+                                    Updated: {new Date(data.timestamp).toLocaleTimeString()}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
