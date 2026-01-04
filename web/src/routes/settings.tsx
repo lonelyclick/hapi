@@ -4,7 +4,7 @@ import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
 import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
-import { useNotificationPermission } from '@/hooks/useNotification'
+import { useNotificationPermission, useWebPushSubscription } from '@/hooks/useNotification'
 import type { Project, UserRole } from '@/types/api'
 
 function BackIcon(props: { className?: string }) {
@@ -356,13 +356,28 @@ export default function SettingsPage() {
         isSupported: isNotificationSupported
     } = useNotificationPermission()
 
+    // Web Push subscription
+    const { subscribe: subscribePush, unsubscribe: unsubscribePush } = useWebPushSubscription(api)
+
     const handleNotificationToggle = useCallback(async () => {
         if (notificationPermission === 'default') {
-            await requestPermission()
+            const result = await requestPermission()
+            if (result === 'granted') {
+                // 权限获取成功后立即订阅 Web Push
+                await subscribePush()
+            }
         } else if (notificationPermission === 'granted') {
-            setNotificationEnabled(!notificationEnabled)
+            const newEnabled = !notificationEnabled
+            setNotificationEnabled(newEnabled)
+            if (newEnabled) {
+                // 开启通知时订阅 Web Push
+                await subscribePush()
+            } else {
+                // 关闭通知时取消订阅
+                await unsubscribePush()
+            }
         }
-    }, [notificationPermission, notificationEnabled, requestPermission, setNotificationEnabled])
+    }, [notificationPermission, notificationEnabled, requestPermission, setNotificationEnabled, subscribePush, unsubscribePush])
 
     return (
         <div className="flex h-full flex-col">
