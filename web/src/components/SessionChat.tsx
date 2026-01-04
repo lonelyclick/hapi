@@ -204,10 +204,10 @@ export function SessionChat(props: {
         setClearDialogOpen(true)
     }, [])
 
-    const handleClearMessagesConfirm = useCallback(async () => {
+    const handleClearMessagesConfirm = useCallback(async (compact: boolean) => {
         setClearDialogOpen(false)
         try {
-            await clearMessages(30)
+            await clearMessages(30, compact)
             haptic.notification('success')
             props.onRefresh()
         } catch (error) {
@@ -364,7 +364,12 @@ export function SessionChat(props: {
                     <DialogHeader>
                         <DialogTitle>清空聊天记录</DialogTitle>
                         <DialogDescription>
-                            清空显示的聊天记录？将保留最近 30 条消息以维持上下文。此操作不可撤销。
+                            清空显示的聊天记录？将保留最近 30 条消息。
+                            {props.session.active && (
+                                <span className="block mt-1 text-xs">
+                                    建议先 Compact（压缩总结），可保留更多上下文信息。
+                                </span>
+                            )}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="mt-4 flex justify-end gap-2">
@@ -375,12 +380,21 @@ export function SessionChat(props: {
                         >
                             取消
                         </button>
+                        {props.session.active && (
+                            <button
+                                type="button"
+                                onClick={() => handleClearMessagesConfirm(true)}
+                                className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+                            >
+                                Compact 后清空
+                            </button>
+                        )}
                         <button
                             type="button"
-                            onClick={handleClearMessagesConfirm}
+                            onClick={() => handleClearMessagesConfirm(false)}
                             className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
                         >
-                            确认清空
+                            直接清空
                         </button>
                     </div>
                 </DialogContent>

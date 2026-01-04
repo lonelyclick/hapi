@@ -207,12 +207,12 @@ export class ApiClient {
         )
     }
 
-    async clearMessages(sessionId: string, keepCount: number = 30): Promise<ClearMessagesResponse> {
+    async clearMessages(sessionId: string, keepCount: number = 30, compact: boolean = false): Promise<ClearMessagesResponse> {
         return await this.request<ClearMessagesResponse>(
             `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
             {
                 method: 'DELETE',
-                body: JSON.stringify({ keepCount })
+                body: JSON.stringify({ keepCount, compact })
             }
         )
     }

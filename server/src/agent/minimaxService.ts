@@ -143,7 +143,9 @@ ${todos}
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${GROK_CONFIG.apiKey}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'User-Agent': 'hapi-server/ai-suggestions'
                 },
                 body: JSON.stringify({
                     model: GROK_CONFIG.model,

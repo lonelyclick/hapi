@@ -205,7 +205,7 @@ export type AuthResponse = {
 export type SessionsResponse = { sessions: SessionSummary[] }
 export type SessionResponse = { session: Session }
 export type DeleteSessionResponse = { ok: true }
-export type ClearMessagesResponse = { ok: true; deleted: number; remaining: number }
+export type ClearMessagesResponse = { ok: true; deleted: number; remaining: number; compacted?: boolean }
 export type MessageCountResponse = { count: number }
 export type MessagesResponse = {
     messages: DecryptedMessage[]

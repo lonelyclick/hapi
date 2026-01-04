@@ -30,7 +30,7 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
     setPermissionMode: (mode: PermissionMode) => Promise<void>
     setModelMode: (config: ModelConfig) => Promise<void>
     deleteSession: () => Promise<void>
-    clearMessages: (keepCount: number) => Promise<ClearMessagesResponse>
+    clearMessages: (keepCount: number, compact?: boolean) => Promise<ClearMessagesResponse>
     isPending: boolean
 } {
     const queryClient = useQueryClient()
@@ -100,11 +100,11 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
     })
 
     const clearMessagesMutation = useMutation({
-        mutationFn: async (keepCount: number = 30) => {
+        mutationFn: async (params: { keepCount: number; compact?: boolean }) => {
             if (!api || !sessionId) {
                 throw new Error('Session unavailable')
             }
-            return await api.clearMessages(sessionId, keepCount)
+            return await api.clearMessages(sessionId, params.keepCount, params.compact ?? false)
         },
         onSuccess: async () => {
             if (!sessionId) return
@@ -119,7 +119,7 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         setPermissionMode: permissionMutation.mutateAsync,
         setModelMode: modelMutation.mutateAsync,
         deleteSession: deleteMutation.mutateAsync,
-        clearMessages: clearMessagesMutation.mutateAsync,
+        clearMessages: (keepCount: number, compact?: boolean) => clearMessagesMutation.mutateAsync({ keepCount, compact }),
         isPending: abortMutation.isPending
             || switchMutation.isPending
             || permissionMutation.isPending

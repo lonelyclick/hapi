@@ -15,7 +15,8 @@ const sendMessageBodySchema = z.object({
 })
 
 const clearMessagesBodySchema = z.object({
-    keepCount: z.coerce.number().int().min(0).max(100).optional()
+    keepCount: z.coerce.number().int().min(0).max(100).optional(),
+    compact: z.boolean().optional()
 })
 
 export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
@@ -78,6 +79,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
     })
 
     // Clear messages for a session, keeping the most recent N messages
+    // If compact=true and session is active, send /compact command first to preserve context
     app.delete('/sessions/:id/messages', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) {
@@ -92,9 +94,23 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         const body = await c.req.json().catch(() => ({}))
         const parsed = clearMessagesBodySchema.safeParse(body)
         const keepCount = parsed.success ? (parsed.data.keepCount ?? 30) : 30
+        const shouldCompact = parsed.success ? (parsed.data.compact ?? false) : false
+
+        // If compact requested and session is active, send /compact command first
+        if (shouldCompact) {
+            const session = engine.getSession(sessionResult.sessionId)
+            if (session && session.active) {
+                await engine.sendMessage(sessionResult.sessionId, {
+                    text: '/compact',
+                    sentFrom: 'webapp'
+                })
+                // Give Claude a moment to process the compact command
+                // The actual compaction happens asynchronously in the CLI
+            }
+        }
 
         const result = engine.clearSessionMessages(sessionResult.sessionId, keepCount)
-        return c.json({ ok: true, ...result })
+        return c.json({ ok: true, ...result, compacted: shouldCompact })
     })
 
     return app
