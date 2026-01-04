@@ -336,7 +336,9 @@ export function SessionChat(props: {
                             ? 'Resuming session...'
                             : resumeError
                                 ? 'Resume failed. Tap the composer to retry.'
-                                : 'Session is inactive. Tap the composer to resume.'}
+                                : props.messages.length === 0
+                                    ? 'Starting session...'
+                                    : 'Session is inactive. Tap the composer to resume.'}
                     </div>
                 </div>
             ) : null}
