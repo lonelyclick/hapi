@@ -624,6 +624,29 @@ export class ApiClient {
         })
     }
 
+    async getSessionAutoIteration(sessionId: string): Promise<{
+        sessionId: string
+        autoIterEnabled: boolean
+    }> {
+        return await this.request(
+            `/api/sessions/${encodeURIComponent(sessionId)}/auto-iteration`
+        )
+    }
+
+    async setSessionAutoIteration(sessionId: string, enabled: boolean): Promise<{
+        ok: boolean
+        sessionId: string
+        autoIterEnabled: boolean
+    }> {
+        return await this.request(
+            `/api/sessions/${encodeURIComponent(sessionId)}/auto-iteration`,
+            {
+                method: 'PUT',
+                body: JSON.stringify({ enabled })
+            }
+        )
+    }
+
     async get<T>(path: string): Promise<{ data: T }> {
         const data = await this.request<T>(`/api${path}`)
         return { data }

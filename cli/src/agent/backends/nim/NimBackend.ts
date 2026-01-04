@@ -77,7 +77,8 @@ export class NimBackend implements AgentBackend {
                 headers: {
                     'Authorization': `Bearer ${NIM_API_KEY}`,
                     'Content-Type': 'application/json',
-                    'Accept': 'text/event-stream'
+                    'Accept': 'text/event-stream',
+                    'User-Agent': 'hapi-cli/nim'
                 },
                 body: JSON.stringify({
                     model: this.model,

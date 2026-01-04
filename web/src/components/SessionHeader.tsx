@@ -188,21 +188,14 @@ export function SessionHeader(props: {
     const { data: autoIterConfig } = useQuery({
         queryKey: autoIterQueryKey,
         queryFn: async () => {
-            const res = await api.get<{ sessionId: string; autoIterEnabled: boolean }>(
-                `/sessions/${props.session.id}/auto-iteration`
-            )
-            return res.data
+            return await api.getSessionAutoIteration(props.session.id)
         },
         staleTime: 30000
     })
 
     const toggleAutoIterMutation = useMutation({
         mutationFn: async (enabled: boolean) => {
-            const res = await api.put<{ ok: boolean; sessionId: string; autoIterEnabled: boolean }>(
-                `/sessions/${props.session.id}/auto-iteration`,
-                { enabled }
-            )
-            return res.data
+            return await api.setSessionAutoIteration(props.session.id, enabled)
         },
         onSuccess: (data) => {
             queryClient.setQueryData(autoIterQueryKey, data)

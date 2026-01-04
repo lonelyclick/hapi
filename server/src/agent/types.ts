@@ -81,7 +81,15 @@ export interface AdvisorSpawnSessionOutput {
     parentSessionId?: string          // 父会话 ID（用于追踪）
 }
 
-export type AdvisorOutput = AdvisorSuggestionOutput | AdvisorActionRequestOutput | AdvisorMemoryOutput | AdvisorSpawnSessionOutput
+// Advisor 向子会话发送消息
+export interface AdvisorSendToSessionOutput {
+    type: 'send_to_session'
+    sessionId: string                 // 目标子会话 ID
+    message: string                   // 要发送的消息内容
+    reason?: string                   // 为什么发送这条消息
+}
+
+export type AdvisorOutput = AdvisorSuggestionOutput | AdvisorActionRequestOutput | AdvisorMemoryOutput | AdvisorSpawnSessionOutput | AdvisorSendToSessionOutput
 
 // 会话摘要格式
 export interface SessionSummary {

@@ -151,7 +151,8 @@ Be concise, accurate, and helpful.`
                 headers: {
                     'Authorization': `Bearer ${GROK_API_KEY}`,
                     'Content-Type': 'application/json',
-                    'Accept': 'text/event-stream'
+                    'Accept': 'text/event-stream',
+                    'User-Agent': 'hapi-cli/grok'
                 },
                 body: JSON.stringify({
                     model: this.model,

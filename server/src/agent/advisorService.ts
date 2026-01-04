@@ -17,7 +17,8 @@ import type {
     AdvisorEventMessage,
     AdvisorEventData,
     AdvisorActionRequestOutput,
-    AdvisorSpawnSessionOutput
+    AdvisorSpawnSessionOutput,
+    AdvisorSendToSessionOutput
 } from './types'
 import { ADVISOR_OUTPUT_MARKER, extractJsonFromPosition } from './types'
 import type { AutoIterationService } from './autoIteration'
@@ -63,6 +64,10 @@ export class AdvisorService {
 
     // MiniMax 审查并发控制
     private minimaxReviewingSet: Set<string> = new Set()           // 正在审查的 sessionId
+
+    // 任务监控定时器
+    private taskMonitorTimer: NodeJS.Timeout | null = null
+    private readonly taskMonitorIntervalMs = 60_000  // 每分钟检查一次任务状态
 
     constructor(
         syncEngine: SyncEngine,
@@ -114,6 +119,13 @@ export class AdvisorService {
             })
         }, this.evaluationIntervalMs)
 
+        // 启动任务监控（定期向 Advisor 推送任务状态汇总）
+        this.taskMonitorTimer = setInterval(() => {
+            this.pushTaskStatusToAdvisor().catch(error => {
+                console.error('[AdvisorService] Task monitor error:', error)
+            })
+        }, this.taskMonitorIntervalMs)
+
         console.log('[AdvisorService] Started')
     }
 
@@ -129,6 +141,11 @@ export class AdvisorService {
         if (this.evaluationTimer) {
             clearInterval(this.evaluationTimer)
             this.evaluationTimer = null
+        }
+
+        if (this.taskMonitorTimer) {
+            clearInterval(this.taskMonitorTimer)
+            this.taskMonitorTimer = null
         }
 
         // 清理所有空闲计时器
@@ -368,6 +385,52 @@ ${status === 'waiting_for_input' ? '请决定如何回答这个问题，或者�
         })
 
         console.log(`[AdvisorService] Feedback sent to Advisor: task=${task.id}, status=${status}`)
+    }
+
+    /**
+     * 定期推送任务状态汇总给 Advisor
+     */
+    private async pushTaskStatusToAdvisor(): Promise<void> {
+        const advisorSessionId = this.scheduler.getAdvisorSessionId()
+        if (!advisorSessionId) {
+            return  // 没有 Advisor 会话，静默跳过
+        }
+
+        // 获取任务汇总
+        const summary = this.taskTracker.getTasksSummary()
+        if (!summary) {
+            return  // 没有任务，不推送
+        }
+
+        // 检查是否有需要关注的任务（运行中或失败的）
+        const runningTasks = this.taskTracker.getRunningTasks()
+        const needAttention = runningTasks.some(task => {
+            // 检查任务是否运行时间过长（超过 10 分钟）
+            const runningTime = Date.now() - task.createdAt
+            return runningTime > 10 * 60 * 1000
+        })
+
+        if (!needAttention && runningTasks.length === 0) {
+            return  // 没有需要关注的任务
+        }
+
+        const statusMessage = `[[TASK_STATUS_SUMMARY]]
+当前时间: ${new Date().toISOString()}
+
+${summary}
+
+${runningTasks.length > 0 ? `\n正在运行的任务: ${runningTasks.length} 个` : ''}
+${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要干预。' : ''}`
+
+        try {
+            await this.syncEngine.sendMessage(advisorSessionId, {
+                text: statusMessage,
+                sentFrom: 'advisor'
+            })
+            console.log('[AdvisorService] Task status summary pushed to Advisor')
+        } catch (error) {
+            console.error('[AdvisorService] Failed to push task status:', error)
+        }
     }
 
     /**
@@ -1509,6 +1572,9 @@ ${status === 'waiting_for_input' ? '请决定如何回答这个问题，或者�
             case 'spawn_session':
                 this.handleSpawnSession(advisorSessionId, output as AdvisorSpawnSessionOutput)
                 break
+            case 'send_to_session':
+                this.handleSendToSession(advisorSessionId, output as AdvisorSendToSessionOutput)
+                break
         }
     }
 
@@ -1732,6 +1798,50 @@ ${taskDescription}
         }
 
         console.warn(`[AdvisorService] Session ${sessionId} not ready after ${maxWaitMs}ms, task not sent`)
+    }
+
+    /**
+     * 处理 Advisor 向子会话发送消息
+     */
+    private async handleSendToSession(advisorSessionId: string, output: AdvisorSendToSessionOutput): Promise<void> {
+        console.log(`[AdvisorService] Send to session request: ${output.sessionId}`)
+
+        // 验证目标会话存在
+        const targetSession = this.syncEngine.getSession(output.sessionId)
+        if (!targetSession) {
+            console.error(`[AdvisorService] Target session not found: ${output.sessionId}`)
+            return
+        }
+
+        // 验证是 Advisor 创建的会话（安全检查）
+        const task = this.taskTracker.getTaskBySessionId(output.sessionId)
+        if (!task) {
+            console.warn(`[AdvisorService] Session ${output.sessionId} is not an Advisor-spawned session, but allowing message`)
+        }
+
+        // 构建消息
+        const message = `[来自 Advisor 的回复]
+
+${output.message}
+
+---
+*此消息由 Advisor 自动发送${output.reason ? `，原因：${output.reason}` : ''}*`
+
+        try {
+            await this.syncEngine.sendMessage(output.sessionId, {
+                text: message,
+                sentFrom: 'advisor'
+            })
+            console.log(`[AdvisorService] Message sent to session ${output.sessionId}`)
+
+            // 更新任务状态为 running（如果之前是 waiting）
+            if (task && task.status === 'running') {
+                // 任务继续运行，记录 Advisor 已响应
+                console.log(`[AdvisorService] Advisor responded to session ${output.sessionId}`)
+            }
+        } catch (error) {
+            console.error(`[AdvisorService] Failed to send message to session ${output.sessionId}:`, error)
+        }
     }
 
     /**
