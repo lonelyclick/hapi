@@ -151,6 +151,15 @@ export type StoredAgentGroup = {
     status: AgentGroupStatus
 }
 
+export type StoredAgentGroupWithLastMessage = StoredAgentGroup & {
+    memberCount: number
+    lastMessage: {
+        content: string
+        senderType: GroupSenderType
+        createdAt: number
+    } | null
+}
+
 export type StoredAgentGroupMember = {
     groupId: string
     sessionId: string
@@ -2822,6 +2831,45 @@ export class Store {
             'SELECT * FROM agent_groups WHERE namespace = ? ORDER BY updated_at DESC'
         ).all(namespace) as DbAgentGroupRow[]
         return rows.map(toStoredAgentGroup)
+    }
+
+    getAgentGroupsWithLastMessage(namespace: string): StoredAgentGroupWithLastMessage[] {
+        // 使用一个更优化的查询来获取带最后消息的群组列表
+        const rows = this.db.prepare(`
+            SELECT
+                g.*,
+                (SELECT COUNT(*) FROM agent_group_members WHERE group_id = g.id) as member_count,
+                m.content as last_message_content,
+                m.sender_type as last_message_sender_type,
+                m.created_at as last_message_created_at
+            FROM agent_groups g
+            LEFT JOIN (
+                SELECT group_id, content, sender_type, created_at
+                FROM agent_group_messages m1
+                WHERE created_at = (
+                    SELECT MAX(created_at)
+                    FROM agent_group_messages m2
+                    WHERE m2.group_id = m1.group_id
+                )
+            ) m ON m.group_id = g.id
+            WHERE g.namespace = ?
+            ORDER BY COALESCE(m.created_at, g.updated_at) DESC
+        `).all(namespace) as Array<DbAgentGroupRow & {
+            member_count: number
+            last_message_content: string | null
+            last_message_sender_type: string | null
+            last_message_created_at: number | null
+        }>
+
+        return rows.map(row => ({
+            ...toStoredAgentGroup(row),
+            memberCount: row.member_count,
+            lastMessage: row.last_message_content ? {
+                content: row.last_message_content,
+                senderType: row.last_message_sender_type as GroupSenderType,
+                createdAt: row.last_message_created_at!
+            } : null
+        }))
     }
 
     updateAgentGroupStatus(id: string, status: AgentGroupStatus): void {

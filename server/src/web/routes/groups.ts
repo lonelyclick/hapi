@@ -78,10 +78,10 @@ export function createGroupRoutes(
         })
     }
 
-    // GET /groups - 获取群组列表
+    // GET /groups - 获取群组列表（包含最后消息和成员数）
     app.get('/groups', (c) => {
         const namespace = c.get('namespace') || 'default'
-        const groups = store.getAgentGroups(namespace)
+        const groups = store.getAgentGroupsWithLastMessage(namespace)
         return c.json({ groups })
     })
 

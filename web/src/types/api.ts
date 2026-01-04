@@ -451,7 +451,12 @@ export type AgentGroup = {
     createdAt: number
     updatedAt: number
     status: AgentGroupStatus
-    memberCount?: number
+    memberCount: number
+    lastMessage: {
+        content: string
+        senderType: GroupSenderType
+        createdAt: number
+    } | null
 }
 
 export type AgentGroupMember = {
