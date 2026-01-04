@@ -875,4 +875,31 @@ export class ApiClient {
             }
         )
     }
+
+    async spawnGroupMember(
+        groupId: string,
+        machineId: string,
+        directory: string,
+        agentType: SpawnAgentType,
+        options?: {
+            role?: GroupMemberRole
+            claudeAgent?: string
+            openrouterModel?: string
+            permissionMode?: string
+            modelMode?: string
+        }
+    ): Promise<SpawnMemberResponse> {
+        return await this.request<SpawnMemberResponse>(
+            `/api/groups/${encodeURIComponent(groupId)}/spawn-member`,
+            {
+                method: 'POST',
+                body: JSON.stringify({
+                    machineId,
+                    directory,
+                    agentType,
+                    ...options
+                })
+            }
+        )
+    }
 }

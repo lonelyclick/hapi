@@ -170,8 +170,12 @@ export default function GroupChatPage() {
             <AddMemberSheet
                 open={addMemberSheetOpen}
                 onOpenChange={setAddMemberSheetOpen}
+                groupId={groupId}
                 existingMembers={members}
                 onAddMembers={handleAddMembers}
+                onSpawnMember={() => {
+                    void queryClient.invalidateQueries({ queryKey: ['group', groupId] })
+                }}
             />
         </div>
     )
