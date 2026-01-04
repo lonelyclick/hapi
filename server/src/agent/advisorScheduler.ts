@@ -103,7 +103,9 @@ export class AdvisorScheduler {
                 return
             }
 
-            console.log(`[AdvisorScheduler] Advisor session spawned: ${spawnResult.sessionId}`)
+            // 使用实际返回的 sessionId（可能与请求的不同）
+            this.advisorSessionId = spawnResult.sessionId
+            console.log(`[AdvisorScheduler] Advisor session spawned: ${this.advisorSessionId}`)
 
             // 6. 发送 init prompt（仅在首次）
             if (!this.initPromptSent.has(this.advisorSessionId)) {
