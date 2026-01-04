@@ -15,7 +15,8 @@ const subscribeSchema = z.object({
         p256dh: z.string().min(1),
         auth: z.string().min(1)
     }),
-    clientId: z.string().optional()
+    clientId: z.string().optional(),
+    chatId: z.string().optional()  // Telegram chatId，用于关联 Web Push 和通知订阅
 })
 
 const unsubscribeSchema = z.object({
@@ -52,13 +53,15 @@ export function createPushRoutes(): Hono<WebAppEnv> {
         const namespace = c.get('namespace') || 'default'
         const userAgent = c.req.header('user-agent')
         const clientId = parsed.data.clientId
+        const chatId = parsed.data.chatId
 
         const subscription = webPush.subscribe(
             namespace,
             parsed.data.endpoint,
             parsed.data.keys,
             userAgent,
-            clientId
+            clientId,
+            chatId
         )
 
         if (!subscription) {

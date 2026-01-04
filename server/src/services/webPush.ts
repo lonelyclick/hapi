@@ -227,9 +227,10 @@ export class WebPushService {
         endpoint: string,
         keys: { p256dh: string; auth: string },
         userAgent?: string,
-        clientId?: string
+        clientId?: string,
+        chatId?: string
     ): StoredPushSubscription | null {
-        return this.store.addOrUpdatePushSubscription(namespace, endpoint, keys, userAgent, clientId)
+        return this.store.addOrUpdatePushSubscription(namespace, endpoint, keys, userAgent, clientId, chatId)
     }
 
     /**
@@ -237,6 +238,77 @@ export class WebPushService {
      */
     getSubscriptionsByClientId(namespace: string, clientId: string): StoredPushSubscription[] {
         return this.store.getPushSubscriptionsByClientId(namespace, clientId)
+    }
+
+    /**
+     * Send push notifications to all subscriptions for specified chat IDs
+     * Used for sending notifications to session owner/subscribers
+     */
+    async sendToChatIds(
+        namespace: string,
+        chatIds: string[],
+        payload: PushNotificationPayload
+    ): Promise<SendResult> {
+        if (!this.isConfigured()) {
+            console.warn('[webpush] not configured, skipping notification')
+            return { success: 0, failed: 0, removed: 0 }
+        }
+
+        if (chatIds.length === 0) {
+            console.log('[webpush] no chatIds provided')
+            return { success: 0, failed: 0, removed: 0 }
+        }
+
+        // Collect all subscriptions for all chatIds
+        const allSubscriptions: StoredPushSubscription[] = []
+        const seenEndpoints = new Set<string>()
+
+        for (const chatId of chatIds) {
+            const subs = this.store.getPushSubscriptionsByChatId(namespace, chatId)
+            for (const sub of subs) {
+                if (!seenEndpoints.has(sub.endpoint)) {
+                    seenEndpoints.add(sub.endpoint)
+                    allSubscriptions.push(sub)
+                }
+            }
+        }
+
+        if (allSubscriptions.length === 0) {
+            console.log('[webpush] no subscriptions for chatIds:', chatIds)
+            return { success: 0, failed: 0, removed: 0 }
+        }
+
+        console.log('[webpush] sending to', allSubscriptions.length, 'subscriptions for chatIds:', chatIds)
+
+        const results = await Promise.allSettled(
+            allSubscriptions.map(sub => this.sendToSubscription(sub, payload))
+        )
+
+        let success = 0
+        let failed = 0
+        let removed = 0
+
+        for (let i = 0; i < results.length; i++) {
+            const result = results[i]
+            const sub = allSubscriptions[i]
+
+            if (result.status === 'fulfilled') {
+                if (result.value.success) {
+                    success++
+                } else if (result.value.shouldRemove) {
+                    this.store.removePushSubscriptionById(sub.id)
+                    removed++
+                } else {
+                    failed++
+                }
+            } else {
+                failed++
+                console.error('[webpush] unexpected error:', result.reason)
+            }
+        }
+
+        console.log('[webpush] sent to chatIds:', { chatIds, success, failed, removed })
+        return { success, failed, removed }
     }
 
     /**
