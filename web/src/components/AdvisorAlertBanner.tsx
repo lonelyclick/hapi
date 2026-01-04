@@ -1,5 +1,8 @@
 import { useAdvisorAlerts, type AdvisorAlert } from '@/hooks/useAdvisorAlert'
 import { useNavigate } from '@tanstack/react-router'
+import { useMutation } from '@tanstack/react-query'
+import { useAppContext } from '@/lib/app-context'
+import { useState } from 'react'
 
 function AlertIcon(props: { severity: 'critical' | 'high' }) {
     const color = props.severity === 'critical' ? 'text-red-500' : 'text-amber-500'
@@ -42,12 +45,57 @@ function CloseIcon() {
     )
 }
 
+function CheckIcon() {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <polyline points="20 6 9 17 4 12" />
+        </svg>
+    )
+}
+
+async function acceptSuggestion(args: { suggestionId: string; token: string }): Promise<{ ok: boolean }> {
+    const res = await fetch(`/api/settings/advisor/suggestions/${args.suggestionId}/accept`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${args.token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    if (!res.ok) throw new Error('Failed to accept suggestion')
+    return res.json()
+}
+
+async function rejectSuggestion(args: { suggestionId: string; token: string }): Promise<{ ok: boolean }> {
+    const res = await fetch(`/api/settings/advisor/suggestions/${args.suggestionId}/reject`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${args.token}`,
+            'Content-Type': 'application/json'
+        }
+    })
+    if (!res.ok) throw new Error('Failed to reject suggestion')
+    return res.json()
+}
+
 function AlertItem(props: {
     alert: AdvisorAlert
     onDismiss: () => void
     onNavigate?: () => void
+    onAccept: () => void
+    onReject: () => void
+    isProcessing: boolean
 }) {
-    const { alert, onDismiss, onNavigate } = props
+    const { alert, onDismiss, onNavigate, onAccept, onReject, isProcessing } = props
     const bgColor = alert.severity === 'critical'
         ? 'bg-red-500/95'
         : 'bg-amber-500/95'
@@ -85,15 +133,36 @@ function AlertItem(props: {
                             {alert.detail}
                         </div>
                     )}
-                    {alert.sourceSessionId && onNavigate && (
+                    {/* 操作按钮 */}
+                    <div className="flex items-center gap-2 mt-3">
                         <button
                             type="button"
-                            onClick={onNavigate}
-                            className="text-xs mt-2 underline opacity-80 hover:opacity-100"
+                            onClick={onAccept}
+                            disabled={isProcessing}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded bg-white/25 hover:bg-white/35 transition-colors disabled:opacity-50"
                         >
-                            View source session
+                            <CheckIcon />
+                            Accept
                         </button>
-                    )}
+                        <button
+                            type="button"
+                            onClick={onReject}
+                            disabled={isProcessing}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded bg-black/20 hover:bg-black/30 transition-colors disabled:opacity-50"
+                        >
+                            <CloseIcon />
+                            Reject
+                        </button>
+                        {alert.sourceSessionId && onNavigate && (
+                            <button
+                                type="button"
+                                onClick={onNavigate}
+                                className="text-xs underline opacity-80 hover:opacity-100 ml-2"
+                            >
+                                View source
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <button
                     type="button"
@@ -111,6 +180,50 @@ function AlertItem(props: {
 export function AdvisorAlertBanner() {
     const { alerts, dismiss } = useAdvisorAlerts()
     const navigate = useNavigate()
+    const { token } = useAppContext()
+    const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
+
+    const acceptMutation = useMutation({
+        mutationFn: acceptSuggestion,
+        onMutate: (args) => {
+            setProcessingIds(prev => new Set(prev).add(args.suggestionId))
+        },
+        onSettled: (_, __, args) => {
+            setProcessingIds(prev => {
+                const next = new Set(prev)
+                next.delete(args.suggestionId)
+                return next
+            })
+        },
+        onSuccess: (_, args) => {
+            // 找到对应的 alert 并关闭
+            const alert = alerts.find(a => a.suggestionId === args.suggestionId)
+            if (alert) {
+                dismiss(alert.id)
+            }
+        }
+    })
+
+    const rejectMutation = useMutation({
+        mutationFn: rejectSuggestion,
+        onMutate: (args) => {
+            setProcessingIds(prev => new Set(prev).add(args.suggestionId))
+        },
+        onSettled: (_, __, args) => {
+            setProcessingIds(prev => {
+                const next = new Set(prev)
+                next.delete(args.suggestionId)
+                return next
+            })
+        },
+        onSuccess: (_, args) => {
+            // 找到对应的 alert 并关闭
+            const alert = alerts.find(a => a.suggestionId === args.suggestionId)
+            if (alert) {
+                dismiss(alert.id)
+            }
+        }
+    })
 
     if (alerts.length === 0) {
         return null
@@ -124,6 +237,9 @@ export function AdvisorAlertBanner() {
                         key={alert.id}
                         alert={alert}
                         onDismiss={() => dismiss(alert.id)}
+                        onAccept={() => acceptMutation.mutate({ suggestionId: alert.suggestionId, token })}
+                        onReject={() => rejectMutation.mutate({ suggestionId: alert.suggestionId, token })}
+                        isProcessing={processingIds.has(alert.suggestionId)}
                         onNavigate={alert.sourceSessionId ? () => {
                             navigate({
                                 to: '/sessions/$sessionId',

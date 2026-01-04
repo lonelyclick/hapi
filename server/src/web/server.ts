@@ -31,6 +31,7 @@ import { isBunCompiled } from '../utils/bunCompiled'
 import type { Store } from '../store'
 import type { AutoIterationService } from '../agent/autoIteration'
 import type { AdvisorScheduler } from '../agent/advisorScheduler'
+import type { AdvisorService } from '../agent/advisorService'
 
 function findWebappDistDir(): { distDir: string; indexHtmlPath: string } {
     const candidates = [
@@ -79,6 +80,7 @@ function createWebApp(options: {
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
     autoIterationService: AutoIterationService | null
     getAdvisorScheduler: () => AdvisorScheduler | null
+    getAdvisorService: () => AdvisorService | null
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -109,7 +111,7 @@ function createWebApp(options: {
     app.route('/api', createSpeechRoutes())
     app.route('/api', createOptimizeRoutes())
     app.route('/api', createVersionRoutes(options.embeddedAssetMap))
-    app.route('/api', createSettingsRoutes(options.store, options.autoIterationService ?? undefined, options.getAdvisorScheduler))
+    app.route('/api', createSettingsRoutes(options.store, options.autoIterationService ?? undefined, options.getAdvisorScheduler, options.getAdvisorService))
     app.route('/api', createPushRoutes())
     app.route('/api', createUsageRoutes(options.getSyncEngine))
 
@@ -238,6 +240,7 @@ export async function startWebServer(options: {
     socketEngine: SocketEngine
     autoIterationService: AutoIterationService | null
     getAdvisorScheduler?: () => AdvisorScheduler | null
+    getAdvisorService?: () => AdvisorService | null
 }): Promise<BunServer<WebSocketData>> {
     const isCompiled = isBunCompiled()
     const embeddedAssetMap = isCompiled ? await loadEmbeddedAssetMap() : null
@@ -248,7 +251,8 @@ export async function startWebServer(options: {
         store: options.store,
         embeddedAssetMap,
         autoIterationService: options.autoIterationService,
-        getAdvisorScheduler: options.getAdvisorScheduler ?? (() => null)
+        getAdvisorScheduler: options.getAdvisorScheduler ?? (() => null),
+        getAdvisorService: options.getAdvisorService ?? (() => null)
     })
 
     const socketHandler = options.socketEngine.handler()

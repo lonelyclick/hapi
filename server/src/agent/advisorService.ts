@@ -139,6 +139,91 @@ export class AdvisorService {
         console.log('[AdvisorService] Stopped')
     }
 
+    // ==================== 公开 API ====================
+
+    /**
+     * 接受建议并触发执行
+     */
+    async acceptSuggestion(suggestionId: string, userId?: string): Promise<{
+        success: boolean
+        error?: string
+        actionTriggered?: boolean
+    }> {
+        const suggestion = this.store.getAgentSuggestion(suggestionId)
+        if (!suggestion) {
+            return { success: false, error: 'Suggestion not found' }
+        }
+
+        // 更新状态
+        this.store.updateAgentSuggestionStatus(suggestionId, 'accepted')
+
+        // 记录反馈
+        this.store.createAgentFeedback({
+            suggestionId,
+            source: 'user',
+            userId,
+            action: 'accept'
+        })
+
+        // 广播状态变化
+        await this.broadcastSuggestionStatus(suggestionId, 'accepted')
+
+        console.log(`[AdvisorService] Suggestion ${suggestionId} accepted by user ${userId || 'unknown'}`)
+
+        // 如果有关联的 ActionRequest，触发执行
+        // TODO: 根据 suggestion 内容生成 ActionRequest
+
+        return { success: true, actionTriggered: false }
+    }
+
+    /**
+     * 拒绝建议
+     */
+    async rejectSuggestion(suggestionId: string, userId?: string, reason?: string): Promise<{
+        success: boolean
+        error?: string
+    }> {
+        const suggestion = this.store.getAgentSuggestion(suggestionId)
+        if (!suggestion) {
+            return { success: false, error: 'Suggestion not found' }
+        }
+
+        // 更新状态
+        this.store.updateAgentSuggestionStatus(suggestionId, 'rejected')
+
+        // 记录反馈
+        this.store.createAgentFeedback({
+            suggestionId,
+            source: 'user',
+            userId,
+            action: 'reject',
+            evidenceJson: reason ? { reason } : undefined
+        })
+
+        // 广播状态变化
+        await this.broadcastSuggestionStatus(suggestionId, 'rejected')
+
+        console.log(`[AdvisorService] Suggestion ${suggestionId} rejected by user ${userId || 'unknown'}`)
+
+        return { success: true }
+    }
+
+    /**
+     * 获取建议详情
+     */
+    getSuggestion(suggestionId: string): StoredAgentSuggestion | null {
+        return this.store.getAgentSuggestion(suggestionId)
+    }
+
+    /**
+     * 获取所有待处理的建议
+     */
+    getPendingSuggestions(): StoredAgentSuggestion[] {
+        return this.store.getAgentSuggestions(this.namespace, {
+            status: 'pending'
+        })
+    }
+
     /**
      * 处理 SyncEngine 事件
      */
@@ -1444,6 +1529,14 @@ export class AdvisorService {
 
         this.syncEngine.emit(event)
         console.log(`[AdvisorService] Broadcasted alert: ${suggestion.severity} - ${suggestion.title}`)
+    }
+
+    /**
+     * 广播建议状态变化（用于 accept/reject）
+     */
+    private async broadcastSuggestionStatus(suggestionId: string, status: string): Promise<void> {
+        // 目前只记录日志，未来可以扩展为 SSE 事件
+        console.log(`[AdvisorService] Suggestion ${suggestionId} status changed to: ${status}`)
     }
 
     /**

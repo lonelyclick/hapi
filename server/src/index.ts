@@ -140,7 +140,8 @@ async function main() {
         store,
         socketEngine: socketServer.engine,
         autoIterationService,
-        getAdvisorScheduler: () => advisorScheduler
+        getAdvisorScheduler: () => advisorScheduler,
+        getAdvisorService: () => advisorService
     })
 
     // Start the bot if configured

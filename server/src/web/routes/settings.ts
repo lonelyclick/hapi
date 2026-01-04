@@ -4,6 +4,7 @@ import type { WebAppEnv } from '../middleware/auth'
 import type { Store, UserRole, AutoIterExecutionStatus, AutoIterActionType } from '../../store'
 import type { AutoIterationService } from '../../agent/autoIteration'
 import type { AdvisorScheduler } from '../../agent/advisorScheduler'
+import type { AdvisorService } from '../../agent/advisorService'
 
 const userRoleSchema = z.enum(['developer', 'operator'])
 
@@ -82,7 +83,12 @@ const autoIterationLogsQuerySchema = z.object({
     offset: z.coerce.number().min(0).optional()
 })
 
-export function createSettingsRoutes(store: Store, autoIterationService?: AutoIterationService, getAdvisorScheduler?: () => AdvisorScheduler | null): Hono<WebAppEnv> {
+export function createSettingsRoutes(
+    store: Store,
+    autoIterationService?: AutoIterationService,
+    getAdvisorScheduler?: () => AdvisorScheduler | null,
+    getAdvisorService?: () => AdvisorService | null
+): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     // ==================== 用户管理 (合并了 Allowed Emails) ====================
@@ -483,6 +489,56 @@ export function createSettingsRoutes(store: Store, autoIterationService?: AutoIt
         await advisorScheduler.manualTriggerReview(reviewType)
 
         return c.json({ ok: true, type: reviewType })
+    })
+
+    // 获取待处理的建议
+    app.get('/settings/advisor/suggestions', (c) => {
+        const advisorService = getAdvisorService?.()
+        if (!advisorService) {
+            return c.json({ error: 'AdvisorService not available' }, 503)
+        }
+
+        const suggestions = advisorService.getPendingSuggestions()
+        return c.json({ suggestions })
+    })
+
+    // 接受建议
+    app.post('/settings/advisor/suggestions/:id/accept', async (c) => {
+        const advisorService = getAdvisorService?.()
+        if (!advisorService) {
+            return c.json({ error: 'AdvisorService not available' }, 503)
+        }
+
+        const id = c.req.param('id')
+        const userId = c.get('userId')
+
+        const result = await advisorService.acceptSuggestion(id, String(userId))
+
+        if (!result.success) {
+            return c.json({ error: result.error }, 404)
+        }
+
+        return c.json({ ok: true, actionTriggered: result.actionTriggered })
+    })
+
+    // 拒绝建议
+    app.post('/settings/advisor/suggestions/:id/reject', async (c) => {
+        const advisorService = getAdvisorService?.()
+        if (!advisorService) {
+            return c.json({ error: 'AdvisorService not available' }, 503)
+        }
+
+        const id = c.req.param('id')
+        const userId = c.get('userId')
+        const json = await c.req.json().catch(() => ({})) as { reason?: string }
+
+        const result = await advisorService.rejectSuggestion(id, String(userId), json.reason)
+
+        if (!result.success) {
+            return c.json({ error: result.error }, 404)
+        }
+
+        return c.json({ ok: true })
     })
 
     return app
