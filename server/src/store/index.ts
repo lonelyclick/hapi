@@ -321,6 +321,15 @@ export class Store {
                 updated_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_push_subscriptions_namespace ON push_subscriptions(namespace);
+
+            CREATE TABLE IF NOT EXISTS input_presets (
+                id TEXT PRIMARY KEY,
+                trigger TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
         `)
 
         // Step 2: Migrate existing tables (add missing columns)
@@ -1152,6 +1161,97 @@ export class Store {
 
     removePushSubscriptionById(id: number): boolean {
         const result = this.db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(id)
+        return result.changes > 0
+    }
+
+    // 输入预设管理
+    getAllInputPresets(): Array<{ id: string; trigger: string; title: string; prompt: string; createdAt: number; updatedAt: number }> {
+        const rows = this.db.prepare(
+            'SELECT id, trigger, title, prompt, created_at, updated_at FROM input_presets ORDER BY trigger ASC'
+        ).all() as Array<{
+            id: string
+            trigger: string
+            title: string
+            prompt: string
+            created_at: number
+            updated_at: number
+        }>
+        return rows.map(r => ({
+            id: r.id,
+            trigger: r.trigger,
+            title: r.title,
+            prompt: r.prompt,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at
+        }))
+    }
+
+    getInputPreset(id: string): { id: string; trigger: string; title: string; prompt: string; createdAt: number; updatedAt: number } | null {
+        const row = this.db.prepare(
+            'SELECT id, trigger, title, prompt, created_at, updated_at FROM input_presets WHERE id = ?'
+        ).get(id) as {
+            id: string
+            trigger: string
+            title: string
+            prompt: string
+            created_at: number
+            updated_at: number
+        } | undefined
+        if (!row) return null
+        return {
+            id: row.id,
+            trigger: row.trigger,
+            title: row.title,
+            prompt: row.prompt,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+        }
+    }
+
+    addInputPreset(trigger: string, title: string, prompt: string): { id: string; trigger: string; title: string; prompt: string; createdAt: number; updatedAt: number } | null {
+        try {
+            const id = randomUUID()
+            const now = Date.now()
+            this.db.prepare(`
+                INSERT INTO input_presets (id, trigger, title, prompt, created_at, updated_at)
+                VALUES (@id, @trigger, @title, @prompt, @created_at, @updated_at)
+            `).run({
+                id,
+                trigger: trigger.trim(),
+                title: title.trim(),
+                prompt: prompt.trim(),
+                created_at: now,
+                updated_at: now
+            })
+            return this.getInputPreset(id)
+        } catch {
+            return null
+        }
+    }
+
+    updateInputPreset(id: string, trigger: string, title: string, prompt: string): { id: string; trigger: string; title: string; prompt: string; createdAt: number; updatedAt: number } | null {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                UPDATE input_presets
+                SET trigger = @trigger, title = @title, prompt = @prompt, updated_at = @updated_at
+                WHERE id = @id
+            `).run({
+                id,
+                trigger: trigger.trim(),
+                title: title.trim(),
+                prompt: prompt.trim(),
+                updated_at: now
+            })
+            if (result.changes === 0) return null
+            return this.getInputPreset(id)
+        } catch {
+            return null
+        }
+    }
+
+    removeInputPreset(id: string): boolean {
+        const result = this.db.prepare('DELETE FROM input_presets WHERE id = ?').run(id)
         return result.changes > 0
     }
 }

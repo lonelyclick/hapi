@@ -9,12 +9,71 @@ import type {
 } from '@/agent/types';
 import { logger } from '@/ui/logger';
 import { randomUUID } from 'node:crypto';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
-const GROK_API_KEY = process.env.GROK_API_KEY || '';
 
-// Default model - can be overridden
-const DEFAULT_MODEL = 'grok-3';
+// Try to load API key from credentials file or environment variable
+function loadGrokApiKey(): string {
+    // First check environment variable
+    if (process.env.GROK_API_KEY) {
+        return process.env.GROK_API_KEY;
+    }
+
+    // Try to load from credentials file
+    const credentialPaths = [
+        join(homedir(), 'happy/yoho-task-v2/data/credentials/grok/default.json'),
+        join(homedir(), '.config/grok/credentials.json'),
+        join(homedir(), '.grok/credentials.json')
+    ];
+
+    for (const credPath of credentialPaths) {
+        try {
+            if (existsSync(credPath)) {
+                const content = readFileSync(credPath, 'utf-8');
+                const creds = JSON.parse(content);
+                if (creds.apiKey) {
+                    logger.debug(`[Grok] Loaded API key from ${credPath}`);
+                    return creds.apiKey;
+                }
+            }
+        } catch (error) {
+            logger.debug(`[Grok] Failed to load credentials from ${credPath}:`, error);
+        }
+    }
+
+    logger.debug('[Grok] No API key found in environment or credentials files');
+    return '';
+}
+
+// Load model from credentials file or environment variable
+function loadGrokModel(): string {
+    // First check environment variable
+    if (process.env.GROK_MODEL) {
+        return process.env.GROK_MODEL;
+    }
+
+    // Try to load from credentials file
+    const credPath = join(homedir(), 'happy/yoho-task-v2/data/credentials/grok/default.json');
+    try {
+        if (existsSync(credPath)) {
+            const content = readFileSync(credPath, 'utf-8');
+            const creds = JSON.parse(content);
+            if (creds.model) {
+                return creds.model;
+            }
+        }
+    } catch {
+        // Ignore errors
+    }
+
+    return 'grok-code-fast-1';
+}
+
+const GROK_API_KEY = loadGrokApiKey();
+const DEFAULT_MODEL = loadGrokModel();
 
 type ChatMessage = {
     role: 'system' | 'user' | 'assistant';
@@ -38,6 +97,9 @@ export class GrokBackend implements AgentBackend {
     }
 
     async initialize(): Promise<void> {
+        if (!GROK_API_KEY) {
+            throw new Error('Grok API key not configured. Set GROK_API_KEY environment variable or create credentials file at ~/happy/yoho-task-v2/data/credentials/grok/default.json');
+        }
         logger.debug(`[Grok] Initialized with model: ${this.model}`);
     }
 
