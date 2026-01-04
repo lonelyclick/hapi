@@ -395,7 +395,10 @@ export class SyncEngine {
     /**
      * 同步 agent 消息到群组
      * 当 AI 回复消息时，如果该 session 属于某个活跃群组，自动将回复同步到群组消息表
-     * 同时广播 SSE 事件给群组订阅者
+     * 同时广播 SSE 事件给群组订阅者（UI）
+     *
+     * 注意：AI 消息不会自动转发给其他 AI 成员，以避免无限循环对话
+     * 如需 AI 间通信，用户应通过 /broadcast 端点并使用 @mention 功能
      */
     private syncAgentMessageToGroups(sessionId: string, content: string): void {
         console.log(`[SyncEngine] syncAgentMessageToGroups called for session ${sessionId}, content length: ${content.length}`)
@@ -408,7 +411,7 @@ export class SyncEngine {
                 // 存储消息到群组
                 const message = this.store.addGroupMessage(group.id, sessionId, content, 'agent', 'chat')
 
-                // 广播 SSE 事件给群组订阅者
+                // 广播 SSE 事件给群组订阅者（仅 UI，不转发给其他 AI）
                 const groupMessageData: GroupMessageData = {
                     id: message.id,
                     groupId: message.groupId,
@@ -427,40 +430,10 @@ export class SyncEngine {
                     groupMessage: groupMessageData
                 })
 
-                // 转发消息给群组内其他 AI 成员
-                const members = this.store.getGroupMembers(group.id)
-                const senderName = session?.metadata?.name || sessionId.slice(0, 8)
-                const agentType = (session?.metadata as Record<string, unknown>)?.agent as string || 'unknown'
-
-                const forwardPromises = members
-                    .filter(member => member.sessionId !== sessionId) // 跳过消息发送者
-                    .map(async (member) => {
-                        const memberSession = this.sessions.get(member.sessionId)
-                        if (!memberSession?.active) {
-                            return { sessionId: member.sessionId, status: 'skipped', reason: 'inactive' }
-                        }
-
-                        try {
-                            await this.sendMessage(member.sessionId, {
-                                text: `[群组消息 from ${senderName} (${agentType})]\n${content}`,
-                                sentFrom: 'advisor'
-                            })
-                            return { sessionId: member.sessionId, status: 'sent' }
-                        } catch (error) {
-                            console.error(`[SyncEngine] Failed to forward message to ${member.sessionId}:`, error)
-                            return { sessionId: member.sessionId, status: 'failed', error }
-                        }
-                    })
-
-                // 使用 Promise.allSettled 并行发送，避免一个失败影响其他
-                Promise.allSettled(forwardPromises).then(results => {
-                    const sent = results.filter(r => r.status === 'fulfilled' && (r.value as { status: string }).status === 'sent').length
-                    const skipped = results.filter(r => r.status === 'fulfilled' && (r.value as { status: string }).status === 'skipped').length
-                    const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && (r.value as { status: string }).status === 'failed')).length
-                    console.log(`[SyncEngine] Forwarded group message to ${sent} AI members (skipped: ${skipped}, failed: ${failed}) in group ${group.id}`)
-                }).catch(error => {
-                    console.error('[SyncEngine] Error in Promise.allSettled:', error)
-                })
+                // 注意：不再自动转发 AI 消息给其他 AI 成员
+                // 这样做是为了防止 AI 之间的无限循环对话
+                // 用户可以通过 @mention 机制明确指定要通知的 AI
+                console.log(`[SyncEngine] AI message synced to group ${group.id} (UI only, no AI-to-AI forwarding)`)
             }
 
             if (groups.length > 0) {
