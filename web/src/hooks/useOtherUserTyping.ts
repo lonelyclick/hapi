@@ -17,7 +17,7 @@ type TypingData = {
 export function useOtherUserTyping(sessionId: string | null): TypingUser | null {
     const queryClient = useQueryClient()
     const [typingUser, setTypingUser] = useState<TypingUser | null>(null)
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => {
         if (!sessionId) {

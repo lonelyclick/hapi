@@ -259,7 +259,7 @@ export function HappyComposer(props: {
     const { addToHistory, navigateUp, navigateDown, resetNavigation, isNavigating } = useInputHistory()
 
     // 输入同步防抖
-    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // 加载草稿（切换 session 时）
     useEffect(() => {
