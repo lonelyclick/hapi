@@ -362,7 +362,7 @@ ${status === 'waiting_for_input' ? '请决定如何回答这个问题，或者�
 
         this.syncEngine.sendMessage(advisorSessionId, {
             text: feedback,
-            sentFrom: 'system'
+            sentFrom: 'advisor'
         }).catch(error => {
             console.error('[AdvisorService] Failed to send feedback to Advisor:', error)
         })
