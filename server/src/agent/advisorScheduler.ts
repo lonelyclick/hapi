@@ -325,12 +325,13 @@ export class AdvisorScheduler {
     }
 
     /**
-     * 触发每日审查
+     * 触发自迭代审查
+     * @param force 强制触发（忽略日期检查，用于手动触发）
      */
-    private async triggerDailyReview(): Promise<void> {
+    private async triggerDailyReview(force: boolean = false): Promise<void> {
         const today = new Date().toISOString().split('T')[0]
-        if (this.lastDailyReviewDate === today) {
-            console.log('[AdvisorScheduler] Daily review already done today, skipping')
+        if (!force && this.lastDailyReviewDate === today) {
+            console.log('[AdvisorScheduler] Self-iteration already done today, skipping')
             return
         }
 
@@ -409,7 +410,8 @@ export class AdvisorScheduler {
     async manualTriggerReview(type: 'daily' | 'proactive' = 'proactive'): Promise<void> {
         console.log(`[AdvisorScheduler] Manual trigger: ${type} review`)
         if (type === 'daily') {
-            await this.triggerDailyReview()
+            // 手动触发时跳过日期检查
+            await this.triggerDailyReview(true)
         } else {
             await this.triggerProactiveReview()
         }
@@ -526,6 +528,29 @@ HAPI 是一个 AI 编程助手的远程协作平台，核心功能：
   "scope": "module"
 }
 \`\`\`
+
+### 创建子会话执行复杂任务
+
+你可以创建一个新的 AI 会话来执行特定任务！输出以下格式：
+
+\`\`\`
+[[HAPI_ADVISOR]]
+{
+  "type": "spawn_session",
+  "id": "task-${Date.now()}",
+  "taskDescription": "详细描述要完成的任务...",
+  "workingDir": "${workingDir}",
+  "agent": "claude",
+  "yolo": true,
+  "reason": "为什么需要创建这个子会话",
+  "expectedOutcome": "预期完成什么"
+}
+\`\`\`
+
+这样你可以：
+- 创建一个会话去实现新功能
+- 创建另一个会话去写测试
+- 创建第三个会话去做代码审查
 
 ## 本次迭代方向参考
 

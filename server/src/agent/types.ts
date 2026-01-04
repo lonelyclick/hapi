@@ -67,7 +67,21 @@ export interface AdvisorMemoryOutput {
     expiresInDays?: number
 }
 
-export type AdvisorOutput = AdvisorSuggestionOutput | AdvisorActionRequestOutput | AdvisorMemoryOutput
+// Advisor 请求创建新会话
+export interface AdvisorSpawnSessionOutput {
+    type: 'spawn_session'
+    id?: string
+    taskDescription: string           // 任务描述，作为新会话的初始消息
+    workingDir?: string               // 工作目录（可选，默认使用 advisorWorkingDir）
+    agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok'  // Agent 类型
+    yolo?: boolean                    // 是否自动执行命令
+    sessionType?: 'simple' | 'worktree'  // 会话类型
+    reason: string                    // 为什么需要创建这个会话
+    expectedOutcome?: string          // 预期结果
+    parentSessionId?: string          // 父会话 ID（用于追踪）
+}
+
+export type AdvisorOutput = AdvisorSuggestionOutput | AdvisorActionRequestOutput | AdvisorMemoryOutput | AdvisorSpawnSessionOutput
 
 // 会话摘要格式
 export interface SessionSummary {

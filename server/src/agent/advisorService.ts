@@ -15,7 +15,8 @@ import type {
     AdvisorMemoryOutput,
     AdvisorEventMessage,
     AdvisorEventData,
-    AdvisorActionRequestOutput
+    AdvisorActionRequestOutput,
+    AdvisorSpawnSessionOutput
 } from './types'
 import { ADVISOR_OUTPUT_MARKER, extractJsonFromPosition } from './types'
 import type { AutoIterationService } from './autoIteration'
@@ -1381,6 +1382,9 @@ export class AdvisorService {
             case 'action_request':
                 this.handleActionRequest(advisorSessionId, output as AdvisorActionRequestOutput)
                 break
+            case 'spawn_session':
+                this.handleSpawnSession(advisorSessionId, output as AdvisorSpawnSessionOutput)
+                break
         }
     }
 
@@ -1475,6 +1479,108 @@ export class AdvisorService {
         this.autoIterationService.handleActionRequest(actionRequest).catch(error => {
             console.error('[AdvisorService] Failed to handle action request:', error)
         })
+    }
+
+    /**
+     * 处理 Advisor 请求创建新会话
+     */
+    private async handleSpawnSession(advisorSessionId: string, output: AdvisorSpawnSessionOutput): Promise<void> {
+        console.log(`[AdvisorService] Spawn session request: ${output.reason}`)
+
+        // 1. 获取在线机器
+        const machines = this.syncEngine.getOnlineMachinesByNamespace(this.namespace)
+        if (machines.length === 0) {
+            console.error('[AdvisorService] No online machines available for spawn session')
+            return
+        }
+
+        // 2. 选择机器（优先匹配工作目录）
+        let targetMachine = machines[0]
+        const requestedWorkDir = output.workingDir
+        if (requestedWorkDir) {
+            for (const machine of machines) {
+                const metadata = machine.metadata as Record<string, unknown> | undefined
+                const advisorWorkingDir = metadata?.advisorWorkingDir as string | undefined
+                if (advisorWorkingDir && advisorWorkingDir.includes(requestedWorkDir)) {
+                    targetMachine = machine
+                    break
+                }
+            }
+        }
+
+        // 3. 确定工作目录
+        const workingDir = output.workingDir ||
+            ((targetMachine.metadata as Record<string, unknown> | undefined)?.advisorWorkingDir as string) ||
+            '/home/guang/softwares/hapi'
+
+        // 4. 生成会话 ID
+        const sessionId = output.id || `advisor-spawn-${Date.now().toString(36)}`
+
+        console.log(`[AdvisorService] Spawning session ${sessionId} on machine ${targetMachine.id}, dir: ${workingDir}`)
+
+        // 5. 创建会话
+        try {
+            const result = await this.syncEngine.spawnSession(
+                targetMachine.id,
+                workingDir,
+                output.agent || 'claude',
+                output.yolo ?? true,  // 默认 yolo 模式
+                output.sessionType || 'simple',
+                undefined,
+                { sessionId }
+            )
+
+            if (result.type === 'success') {
+                console.log(`[AdvisorService] Session spawned successfully: ${result.sessionId}`)
+
+                // 6. 等待会话就绪后发送任务消息
+                await this.waitAndSendTask(result.sessionId, output.taskDescription, advisorSessionId)
+            } else {
+                console.error(`[AdvisorService] Failed to spawn session: ${result.message}`)
+            }
+        } catch (error) {
+            console.error('[AdvisorService] Error spawning session:', error)
+        }
+    }
+
+    /**
+     * 等待会话就绪并发送任务消息
+     */
+    private async waitAndSendTask(sessionId: string, taskDescription: string, parentSessionId: string): Promise<void> {
+        const maxWaitMs = 15000
+        const startTime = Date.now()
+
+        while (Date.now() - startTime < maxWaitMs) {
+            const session = this.syncEngine.getSession(sessionId)
+            if (session?.active) {
+                // 会话已就绪，发送任务
+                const taskMessage = `[由 Advisor 自动创建的任务会话]
+
+父会话: ${parentSessionId.slice(0, 8)}
+创建时间: ${new Date().toISOString()}
+
+## 任务描述
+
+${taskDescription}
+
+---
+请完成上述任务。完成后请提交代码并简要总结你做了什么。`
+
+                try {
+                    await this.syncEngine.sendMessage(sessionId, {
+                        text: taskMessage,
+                        sentFrom: 'advisor'
+                    })
+                    console.log(`[AdvisorService] Task sent to spawned session ${sessionId}`)
+                } catch (error) {
+                    console.error(`[AdvisorService] Failed to send task to session ${sessionId}:`, error)
+                }
+                return
+            }
+            await new Promise(resolve => setTimeout(resolve, 500))
+        }
+
+        console.warn(`[AdvisorService] Session ${sessionId} not ready after ${maxWaitMs}ms, task not sent`)
     }
 
     /**
