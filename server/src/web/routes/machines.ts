@@ -13,7 +13,8 @@ const spawnBodySchema = z.object({
     sessionType: z.enum(['simple', 'worktree']).optional(),
     worktreeName: z.string().optional(),
     claudeAgent: z.string().min(1).optional(),
-    openrouterModel: z.string().min(1).optional()
+    openrouterModel: z.string().min(1).optional(),
+    advisorMode: z.boolean().optional()  // 启用 Advisor/CTO 模式，会自动注入 CTO 指令
 })
 
 const pathsExistsSchema = z.object({

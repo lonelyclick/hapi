@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
+import type { Store } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
 
@@ -19,7 +20,7 @@ const clearMessagesBodySchema = z.object({
     compact: z.boolean().optional()
 })
 
-export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
+export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, store?: Store): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/sessions/:id/messages', async (c) => {
@@ -58,7 +59,30 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return c.json({ error: 'Invalid body' }, 400)
         }
 
-        await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: 'webapp' })
+        let messageText = parsed.data.text
+
+        // 检查是否需要注入 Role Prompt（仅对首条消息生效）
+        if (store) {
+            const email = c.get('email')
+            if (email) {
+                // 检查会话是否已有消息（判断是否为首条消息）
+                const messageCount = engine.getMessageCount(sessionId)
+                if (messageCount === 0) {
+                    // 获取用户角色
+                    const user = store.getAllowedUsers().find(u => u.email === email)
+                    if (user) {
+                        // 获取该角色的 Role Prompt
+                        const rolePrompt = store.getRolePrompt(user.role)
+                        if (rolePrompt) {
+                            // 将 Role Prompt 作为前缀注入
+                            messageText = `${rolePrompt}\n\n---\n\n${messageText}`
+                        }
+                    }
+                }
+            }
+        }
+
+        await engine.sendMessage(sessionId, { text: messageText, localId: parsed.data.localId, sentFrom: 'webapp' })
         return c.json({ ok: true })
     })
 
