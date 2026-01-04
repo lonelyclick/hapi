@@ -357,10 +357,27 @@ export class AdvisorService {
         const msgContent = content.content as Record<string, unknown> | string | null
         let text = ''
 
-        // 处理 codex 格式: { type: 'codex', data: { type: 'message', message: '...' } }
         if (msgContent && typeof msgContent === 'object') {
             const contentType = (msgContent as Record<string, unknown>).type as string
-            if (contentType === 'codex') {
+
+            // 格式 1: Claude Code 格式 { type: 'output', data: { type: 'assistant', message: { content: [...] } } }
+            if (contentType === 'output') {
+                const data = (msgContent as Record<string, unknown>).data as Record<string, unknown>
+                if (data?.type === 'assistant') {
+                    const message = data.message as Record<string, unknown>
+                    const contentArray = message?.content as Array<Record<string, unknown>>
+                    if (Array.isArray(contentArray)) {
+                        // 拼接所有 text 类型的内容
+                        for (const item of contentArray) {
+                            if (item.type === 'text' && typeof item.text === 'string') {
+                                text += item.text + '\n'
+                            }
+                        }
+                    }
+                }
+            }
+            // 格式 2: Codex 格式 { type: 'codex', data: { type: 'message', message: '...' } }
+            else if (contentType === 'codex') {
                 const data = (msgContent as Record<string, unknown>).data as Record<string, unknown>
                 if (data?.type === 'message' && typeof data.message === 'string') {
                     text = data.message
