@@ -463,62 +463,125 @@ export class AdvisorScheduler {
         return `[[DAILY_REVIEW]]
 # 每日自迭代审查 - ${today}
 
-你是 HAPI 项目的自迭代引擎。你的目标不仅仅是维护代码质量，而是**主动推动项目演进**。
+你是 HAPI 项目的自迭代引擎。**你必须执行实际的代码改进，而不仅仅是提出建议。**
 
 工作目录: ${workingDir}
 
-## 审查维度
+## 你的任务
 
-### 1. 功能演进 (Feature Evolution)
-- 分析现有功能，思考如何让它们更智能、更自动化
-- 发现用户可能需要但尚未实现的功能
-- 考虑如何让 AI Agent 能力更强大
-- 思考如何提升用户体验
+1. **阅读代码，找到一个可以改进的地方**
+   - 先运行 \`git log --oneline -20\` 看看最近的开发动态
+   - 浏览 server/src 或 web/src 下的代码
+   - 找到可以优化的代码、缺失的功能、或可以自动化的流程
 
-### 2. 架构优化 (Architecture)
-- 识别架构瓶颈和技术债务
-- 考虑可扩展性和可维护性
-- 评估当前设计是否适应未来需求
-- 发现可以模块化或解耦的地方
+2. **选择一个具体的改进并执行**
+   - 优先选择可以直接实现的小改进（1-3个文件的修改）
+   - 比如：添加日志、优化错误处理、补充类型定义、改进注释、简化逻辑
 
-### 3. AI 时代适应 (AI-Native)
-- 思考如何更好地利用 AI 能力（自然语言理解、代码生成、推理等）
-- 考虑引入新的 AI 技术（如 RAG、Agent 协作、工具调用优化）
-- 让项目更"AI-native"而不只是"AI-assisted"
-- 关注 AI 领域最新趋势如何应用到项目中
+3. **输出 ActionRequest 让系统自动执行**
 
-### 4. 自动化程度 (Automation)
-- 发现可以自动化的手动流程
-- 提升 CI/CD 和部署流程
-- 增强自我监控和自我修复能力
-- 减少人工干预的需求
+## ActionRequest 输出格式（必须使用）
 
-## 执行步骤
+当你确定了要做的改进，输出如下格式：
 
-1. **了解项目现状**
-   - 读取 README.md 和关键配置文件
-   - 查看最近的 git log 了解开发动态
-   - 浏览核心模块的代码结构
+\`\`\`
+[[HAPI_ADVISOR]]
+{
+  "type": "action_request",
+  "id": "action-${Date.now()}",
+  "actionType": "refactor",
+  "reason": "简要说明为什么要做这个改进",
+  "expectedOutcome": "改进后的预期效果",
+  "targetProject": "${workingDir}",
+  "reversible": true,
+  "steps": [
+    {
+      "type": "edit",
+      "description": "修改 xxx 文件的 xxx 函数",
+      "filePath": "server/src/xxx.ts",
+      "oldContent": "要替换的原代码片段",
+      "newContent": "替换后的新代码片段"
+    }
+  ]
+}
+\`\`\`
 
-2. **深入分析**
-   - 选择一个你认为最有价值的改进方向
-   - 深入阅读相关代码
-   - 思考具体的改进方案
+## ActionRequest 示例
 
-3. **输出行动**
-   - 对于可以立即执行的改进，输出 ActionRequest
-   - 对于需要讨论的大改动，输出 Suggestion
-   - 优先选择高 ROI（投入产出比）的改进
+### 示例 1: 添加错误日志
+\`\`\`
+[[HAPI_ADVISOR]]
+{
+  "type": "action_request",
+  "id": "action-add-error-logging",
+  "actionType": "refactor",
+  "reason": "syncEngine.ts 的 handleError 方法缺少详细日志，难以调试问题",
+  "expectedOutcome": "错误发生时会记录完整的错误栈和上下文信息",
+  "targetProject": "${workingDir}",
+  "reversible": true,
+  "steps": [
+    {
+      "type": "edit",
+      "description": "在 handleError 方法中添加详细日志",
+      "filePath": "server/src/sync/syncEngine.ts",
+      "oldContent": "console.error('[SyncEngine] Error:', error)",
+      "newContent": "console.error('[SyncEngine] Error:', error)\\nconsole.error('[SyncEngine] Error stack:', error instanceof Error ? error.stack : 'N/A')"
+    }
+  ]
+}
+\`\`\`
 
-## 输出期望
+### 示例 2: 优化类型定义
+\`\`\`
+[[HAPI_ADVISOR]]
+{
+  "type": "action_request",
+  "id": "action-fix-types",
+  "actionType": "fix_type_errors",
+  "reason": "SessionMetadata 类型过于宽松，使用 Record<string, unknown> 缺少类型安全",
+  "expectedOutcome": "更精确的类型定义，减少运行时错误",
+  "targetProject": "${workingDir}",
+  "reversible": true,
+  "steps": [
+    {
+      "type": "edit",
+      "description": "为 SessionMetadata 添加具体类型",
+      "filePath": "server/src/types.ts",
+      "oldContent": "type SessionMetadata = Record<string, unknown>",
+      "newContent": "type SessionMetadata = {\\n  path?: string\\n  host?: string\\n  version?: string\\n}"
+    }
+  ]
+}
+\`\`\`
 
-不要只报告"代码没有问题"。作为自迭代引擎，你应该：
-- 始终能找到至少一个可改进的地方
-- 提出具体、可执行的改进方案
-- 优先输出 ActionRequest（自动执行）而非 Suggestion（需人工确认）
-- 思考长远，不只是修 bug
+## 重要要求
 
-**记住：你的目标是让这个项目持续进化，变得更智能、更强大。**`
+1. **必须输出至少一个 ActionRequest** - 不要只输出 Suggestion
+2. **改进要具体可执行** - steps 里要有真实的 oldContent 和 newContent
+3. **从小处着手** - 一次只改一个小功能，确保改动可控
+4. **先读后写** - 在输出 ActionRequest 之前，先用工具读取相关文件确认代码内容
+
+## 可选：Suggestion 输出（用于大改动）
+
+对于需要人工确认的大改动，可以同时输出 Suggestion：
+
+\`\`\`
+[[HAPI_ADVISOR]]
+{
+  "type": "suggestion",
+  "id": "suggest-${Date.now()}",
+  "title": "建议标题",
+  "detail": "详细说明",
+  "category": "architecture",
+  "severity": "medium",
+  "confidence": 0.8,
+  "scope": "module"
+}
+\`\`\`
+
+---
+
+**现在开始审查，找到一个具体的代码改进并输出 ActionRequest。**`
     }
 
     /**
