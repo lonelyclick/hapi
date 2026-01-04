@@ -1,9 +1,20 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
-import type { Store } from '../../store'
+import type { Store, UserRole } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
+
+/**
+ * 解析用户角色
+ */
+function resolveUserRole(store: Store, email?: string): UserRole {
+    if (!email) return 'developer'
+    const users = store.getAllowedUsers()
+    if (users.length === 0) return 'developer'
+    const match = users.find(u => u.email.toLowerCase() === email.toLowerCase())
+    return match?.role ?? 'developer'
+}
 
 const querySchema = z.object({
     limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -60,25 +71,19 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
         }
 
         let messageText = parsed.data.text
+        const namespace = c.get('namespace')
 
-        // 检查是否需要注入 Role Prompt（仅对首条消息生效）
-        if (store) {
+        // 检查是否需要注入 Role Prompt（仅对首条用户消息生效）
+        if (store && !store.isRolePromptSent(sessionId)) {
             const email = c.get('email')
-            if (email) {
-                // 检查会话是否已有消息（判断是否为首条消息）
-                const messageCount = engine.getMessageCount(sessionId)
-                if (messageCount === 0) {
-                    // 获取用户角色
-                    const user = store.getAllowedUsers().find(u => u.email === email)
-                    if (user) {
-                        // 获取该角色的 Role Prompt
-                        const rolePrompt = store.getRolePrompt(user.role)
-                        if (rolePrompt) {
-                            // 将 Role Prompt 作为前缀注入
-                            messageText = `${rolePrompt}\n\n---\n\n${messageText}`
-                        }
-                    }
-                }
+            const role = resolveUserRole(store, email)
+            const rolePrompt = store.getRolePrompt(role)
+
+            if (rolePrompt?.trim()) {
+                // 将 Role Prompt 作为前缀注入
+                messageText = `${rolePrompt.trim()}\n\n---\n\n${messageText}`
+                // 标记已发送 Role Prompt
+                store.setSessionRolePromptSent(sessionId, namespace)
             }
         }
 

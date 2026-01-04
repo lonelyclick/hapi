@@ -23,6 +23,7 @@ export type StoredSession = {
     creatorChatId: string | null  // 创建者的 Telegram chatId（用于通知）
     advisorMode: boolean  // 是否启用 Advisor/CTO 模式（会自动注入 CTO 指令）
     advisorPromptInjected: boolean  // CTO 指令是否已注入（避免重复注入）
+    rolePromptSent: boolean  // Role Prompt 是否已发送（避免重复发送）
 }
 
 export type StoredMachine = {
@@ -269,6 +270,7 @@ type DbSessionRow = {
     creator_chat_id: string | null
     advisor_mode: number | null
     advisor_prompt_injected: number | null
+    role_prompt_sent: number | null
 }
 
 type DbMachineRow = {
@@ -462,7 +464,8 @@ function toStoredSession(row: DbSessionRow): StoredSession {
         advisorTaskId: row.advisor_task_id,
         creatorChatId: row.creator_chat_id,
         advisorMode: row.advisor_mode === 1,
-        advisorPromptInjected: row.advisor_prompt_injected === 1
+        advisorPromptInjected: row.advisor_prompt_injected === 1,
+        rolePromptSent: row.role_prompt_sent === 1
     }
 }
 
@@ -1335,6 +1338,36 @@ export class Store {
 
         if (!row) return false
         return row.advisor_mode === 1 && row.advisor_prompt_injected !== 1
+    }
+
+    /**
+     * 检查会话是否已发送过 Role Prompt
+     */
+    isRolePromptSent(id: string): boolean {
+        const row = this.db.prepare(
+            'SELECT role_prompt_sent FROM sessions WHERE id = ?'
+        ).get(id) as { role_prompt_sent: number | null } | undefined
+        return row?.role_prompt_sent === 1
+    }
+
+    /**
+     * 标记会话已发送 Role Prompt
+     */
+    setSessionRolePromptSent(id: string, namespace: string): boolean {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                UPDATE sessions
+                SET role_prompt_sent = 1,
+                    updated_at = @updated_at,
+                    seq = seq + 1
+                WHERE id = @id AND namespace = @namespace
+            `).run({ id, updated_at: now, namespace })
+
+            return result.changes > 0
+        } catch {
+            return false
+        }
     }
 
     getSession(id: string): StoredSession | null {

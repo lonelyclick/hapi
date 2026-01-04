@@ -26,6 +26,7 @@ export function SpawnSession(props: {
     const [directory, setDirectory] = useState('')
     const [sessionType, setSessionType] = useState<SessionType>('simple')
     const [worktreeName, setWorktreeName] = useState('')
+    const [advisorMode, setAdvisorMode] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
 

@@ -14,6 +14,7 @@ import type { RpcRegistry } from '../socket/rpcRegistry'
 import type { SSEManager } from '../sse/sseManager'
 import { extractTodoWriteTodosFromMessageContent, TodosSchema, type TodoItem } from './todos'
 import { getWebPushService } from '../services/webPush'
+import { buildManualAdvisorPrompt } from '../agent/advisorPrompt'
 
 export type ConnectionStatus = 'disconnected' | 'connected'
 
@@ -1088,11 +1089,24 @@ export class SyncEngine {
     async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'advisor' }): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
 
+        // 检查是否需要注入 CTO 指令（仅在首条消息时）
+        let messageText = payload.text
+        if (this.store.shouldInjectAdvisorPrompt(sessionId)) {
+            const session = this.sessions.get(sessionId)
+            const workingDir = session?.metadata?.path || session?.metadata?.worktree?.basePath || undefined
+            const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
+            messageText = ctoPrompt + '\n\n' + payload.text
+            // 标记已注入，防止重复
+            const namespace = session?.namespace || 'default'
+            this.store.setSessionAdvisorPromptInjected(sessionId, namespace)
+            console.log(`[SyncEngine] Injected CTO prompt for session ${sessionId}`)
+        }
+
         const content = {
             role: 'user',
             content: {
                 type: 'text',
-                text: payload.text
+                text: messageText
             },
             meta: {
                 sentFrom

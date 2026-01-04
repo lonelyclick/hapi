@@ -408,11 +408,12 @@ export class ApiClient {
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
         claudeAgent?: string,
-        openrouterModel?: string
+        openrouterModel?: string,
+        advisorMode?: boolean
     ): Promise<SpawnResponse> {
         return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn`, {
             method: 'POST',
-            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeAgent, openrouterModel })
+            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeAgent, openrouterModel, advisorMode })
         })
     }
 
