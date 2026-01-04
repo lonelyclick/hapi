@@ -67,8 +67,14 @@ export class AcpStdioTransport {
         this.process.on('error', (error) => {
             logger.debug('[ACP] Process error', error);
             const message = error instanceof Error ? error.message : String(error);
+            const isNotFound = message.includes('ENOENT') || message.includes('not found');
+            const installHint = options.command === 'gemini'
+                ? ' Install with: npm install -g @google/gemini-cli'
+                : options.command === 'codex'
+                    ? ' Install with: npm install -g @openai/codex'
+                    : '';
             this.rejectAllPending(new Error(
-                `Failed to spawn ${options.command}: ${message}. Is it installed and on PATH?`,
+                `Failed to spawn ${options.command}: ${message}.${isNotFound ? ` Is it installed and on PATH?${installHint}` : ''}`,
                 { cause: error }
             ));
         });

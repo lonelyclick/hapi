@@ -606,7 +606,10 @@ export class SyncEngine {
 
     /**
      * Send push notification when a task completes
-     * Only sends to users who were viewing this session
+     * Sends to users who were viewing this session (Web Push / iOS)
+     *
+     * 注意：Web Push 发给正在查看 session 的 viewers
+     * Telegram 通知则发给 owner/subscribers（在 bot.ts 中处理）
      */
     private sendTaskCompletePushNotification(session: Session): void {
         const webPush = getWebPushService()
@@ -627,7 +630,7 @@ export class SyncEngine {
         const title = session.metadata?.summary?.text || session.metadata?.name || 'Task completed'
         const projectName = session.metadata?.path?.split('/').pop() || 'Session'
 
-        // 获取正在查看这个 session 的用户
+        // 获取正在查看这个 session 的用户（Web Push）
         const viewers = this.sseManager.getSessionViewers(session.namespace, session.id)
         const clientIds = viewers.map(v => v.clientId).filter(Boolean)
 
