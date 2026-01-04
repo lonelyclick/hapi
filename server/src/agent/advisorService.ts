@@ -206,7 +206,9 @@ export class AdvisorService {
         const summary = this.buildSummary(session, incrementalMessages, previousSummary)
 
         // 如果摘要没有有意义的内容，跳过投递
-        if (!summary.recentActivity && summary.codeChanges.length === 0 && summary.errors.length === 0) {
+        const codeChangesCount = summary.codeChanges?.length ?? 0
+        const errorCount = summary.errors?.length ?? 0
+        if (!summary.recentActivity && codeChangesCount === 0 && errorCount === 0) {
             // 但仍然更新 lastSeq 避免重复处理相同消息
             const newSeq = incrementalMessages[incrementalMessages.length - 1]?.seq ?? lastSeq
             this.store.upsertAgentSessionState(sessionId, session.namespace, {
@@ -239,11 +241,12 @@ export class AdvisorService {
         const workDir = metadata?.path || 'unknown'
         const project = workDir.split('/').pop() || 'unknown'
 
-        // 从之前的摘要继承内容（如果有）
+        // 从之前的摘要继承内容（如果有），同时过滤掉 init prompt 内容
+        const filterInitPrompt = (items: string[]) => items.filter(item => !item.trim().startsWith('#InitPrompt-'))
         const activities: string[] = []
-        const errors: string[] = previousSummary?.errors ? [...previousSummary.errors] : []
-        const decisions: string[] = previousSummary?.decisions ? [...previousSummary.decisions] : []
-        const codeChanges: string[] = previousSummary?.codeChanges ? [...previousSummary.codeChanges] : []
+        const errors: string[] = previousSummary?.errors ? filterInitPrompt([...previousSummary.errors]) : []
+        const decisions: string[] = previousSummary?.decisions ? filterInitPrompt([...previousSummary.decisions]) : []
+        const codeChanges: string[] = previousSummary?.codeChanges ? filterInitPrompt([...previousSummary.codeChanges]) : []
 
         for (const msg of messages) {
             const content = msg.content as Record<string, unknown> | null
