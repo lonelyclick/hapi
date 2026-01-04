@@ -849,12 +849,59 @@ export class Store {
         this.db.exec('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_client_id ON push_subscriptions(client_id)')
         this.db.exec('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_chat_id ON push_subscriptions(chat_id)')
 
-        // Migrate session_notification_subscriptions table to add client_id column
-        const sessionNotifSubColumns = this.db.prepare('PRAGMA table_info(session_notification_subscriptions)').all() as Array<{ name: string }>
-        const sessionNotifSubColumnNames = new Set(sessionNotifSubColumns.map((c) => c.name))
-        if (sessionNotifSubColumnNames.size > 0 && !sessionNotifSubColumnNames.has('client_id')) {
-            this.db.exec('ALTER TABLE session_notification_subscriptions ADD COLUMN client_id TEXT')
-            this.db.exec('CREATE INDEX IF NOT EXISTS idx_session_notif_sub_client ON session_notification_subscriptions(client_id)')
+        // Migrate session_notification_subscriptions schema to allow client_id subscriptions.
+        const sessionNotifSubColumns = this.db.prepare('PRAGMA table_info(session_notification_subscriptions)').all() as Array<{ name: string; notnull: number }>
+        if (sessionNotifSubColumns.length > 0) {
+            const sessionNotifSubColumnNames = new Set(sessionNotifSubColumns.map((c) => c.name))
+            const chatIdColumn = sessionNotifSubColumns.find((c) => c.name === 'chat_id')
+            const chatIdNotNull = chatIdColumn?.notnull === 1
+            const hasClientId = sessionNotifSubColumnNames.has('client_id')
+
+            if (chatIdNotNull) {
+                this.db.exec('BEGIN')
+                try {
+                    this.db.exec('ALTER TABLE session_notification_subscriptions RENAME TO session_notification_subscriptions_old')
+                    this.db.exec(`
+                        CREATE TABLE session_notification_subscriptions (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            session_id TEXT NOT NULL,
+                            chat_id TEXT,
+                            client_id TEXT,
+                            namespace TEXT NOT NULL,
+                            subscribed_at INTEGER DEFAULT (unixepoch() * 1000),
+                            UNIQUE(session_id, chat_id),
+                            UNIQUE(session_id, client_id)
+                        );
+                    `)
+
+                    const copySql = hasClientId
+                        ? `
+                            INSERT INTO session_notification_subscriptions (id, session_id, chat_id, client_id, namespace, subscribed_at)
+                            SELECT id, session_id, chat_id, client_id, namespace, subscribed_at
+                            FROM session_notification_subscriptions_old
+                        `
+                        : `
+                            INSERT INTO session_notification_subscriptions (id, session_id, chat_id, client_id, namespace, subscribed_at)
+                            SELECT id, session_id, chat_id, NULL as client_id, namespace, subscribed_at
+                            FROM session_notification_subscriptions_old
+                        `
+                    this.db.exec(copySql)
+                    this.db.exec('DROP TABLE session_notification_subscriptions_old')
+                    this.db.exec('CREATE INDEX IF NOT EXISTS idx_session_notif_sub_session ON session_notification_subscriptions(session_id)')
+                    this.db.exec('CREATE INDEX IF NOT EXISTS idx_session_notif_sub_chat ON session_notification_subscriptions(chat_id)')
+                    this.db.exec('CREATE INDEX IF NOT EXISTS idx_session_notif_sub_client ON session_notification_subscriptions(client_id)')
+                    this.db.exec('COMMIT')
+                } catch (error) {
+                    this.db.exec('ROLLBACK')
+                    throw error
+                }
+            } else {
+                if (!hasClientId) {
+                    this.db.exec('ALTER TABLE session_notification_subscriptions ADD COLUMN client_id TEXT')
+                }
+                this.db.exec('CREATE INDEX IF NOT EXISTS idx_session_notif_sub_client ON session_notification_subscriptions(client_id)')
+                this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_session_notif_sub_session_client ON session_notification_subscriptions(session_id, client_id) WHERE client_id IS NOT NULL')
+            }
         }
 
         // Step 3: Create indexes that depend on namespace column (after migration)
