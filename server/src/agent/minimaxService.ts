@@ -1,16 +1,37 @@
 /**
- * MiniMax API 调用服务
- * 用于 Layer 2 智能建议生成
+ * Layer 2 智能建议服务
+ * 使用 Grok API 生成智能建议
  */
 
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 import type { SessionSummary } from './types'
 import type { SuggestionChip } from '../sync/syncEngine'
 
-// 使用 NVIDIA NIM API 调用 MiniMax 模型
-const NIM_API_URL = 'https://integrate.api.nvidia.com/v1/chat/completions'
-const NIM_API_KEY = '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'
-const MINIMAX_MODEL = 'minimaxai/minimax-m2.1'
-const MINIMAX_TIMEOUT_MS = 60_000
+// 使用 Grok API (更快更稳定)
+const GROK_API_URL = 'https://api.x.ai/v1/chat/completions'
+const API_TIMEOUT_MS = 30_000  // 30秒超时
+
+// 从凭证文件加载 Grok 配置
+function loadGrokConfig(): { apiKey: string; model: string } {
+    const credPath = join(homedir(), 'happy/yoho-task-v2/data/credentials/grok/default.json')
+    try {
+        if (existsSync(credPath)) {
+            const content = readFileSync(credPath, 'utf-8')
+            const creds = JSON.parse(content)
+            return {
+                apiKey: creds.apiKey || '',
+                model: creds.model || 'grok-code-fast-1'
+            }
+        }
+    } catch (error) {
+        console.error('[MinimaxService] Failed to load Grok credentials:', error)
+    }
+    return { apiKey: '', model: 'grok-code-fast-1' }
+}
+
+const GROK_CONFIG = loadGrokConfig()
 
 export interface MinimaxReviewRequest {
     sessionId: string
@@ -22,8 +43,8 @@ export interface MinimaxReviewResponse {
     error?: string
 }
 
-// NIM API 使用 OpenAI 兼容格式
-interface NimApiResponse {
+// Grok API 使用 OpenAI 兼容格式
+interface GrokApiResponse {
     choices?: Array<{
         message?: {
             content: string
@@ -107,21 +128,25 @@ ${todos}
     }
 
     /**
-     * 调用 NIM API (MiniMax 模型)
+     * 调用 Grok API
      */
     private async callApi(prompt: string): Promise<string> {
+        if (!GROK_CONFIG.apiKey) {
+            throw new Error('Grok API key not configured')
+        }
+
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), MINIMAX_TIMEOUT_MS)
+        const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
 
         try {
-            const response = await fetch(NIM_API_URL, {
+            const response = await fetch(GROK_API_URL, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${NIM_API_KEY}`,
+                    'Authorization': `Bearer ${GROK_CONFIG.apiKey}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: MINIMAX_MODEL,
+                    model: GROK_CONFIG.model,
                     messages: [
                         { role: 'user', content: prompt }
                     ],
@@ -138,7 +163,7 @@ ${todos}
                 throw new Error(`API request failed: ${response.status} ${errorText}`)
             }
 
-            const data = await response.json() as NimApiResponse
+            const data = await response.json() as GrokApiResponse
 
             if (data.error) {
                 throw new Error(`API error: ${data.error.message}`)
@@ -153,7 +178,7 @@ ${todos}
         } catch (error) {
             clearTimeout(timeoutId)
             if (error instanceof Error && error.name === 'AbortError') {
-                throw new Error('API request timeout (60s)')
+                throw new Error('API request timeout (30s)')
             }
             throw error
         }
