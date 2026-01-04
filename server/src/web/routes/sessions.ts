@@ -737,5 +737,48 @@ export function createSessionsRoutes(
         return c.json({ ok: true })
     })
 
+    // ==================== Session Auto-Iteration Config ====================
+
+    // 获取 session 的自动迭代配置
+    app.get('/sessions/:sessionId/auto-iteration', (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const enabled = store.isSessionAutoIterEnabled(sessionResult.sessionId)
+        return c.json({ sessionId: sessionResult.sessionId, autoIterEnabled: enabled })
+    })
+
+    // 设置 session 的自动迭代配置
+    app.put('/sessions/:sessionId/auto-iteration', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const body = await c.req.json().catch(() => null)
+        if (!body || typeof body.enabled !== 'boolean') {
+            return c.json({ error: 'Invalid body, expected { enabled: boolean }' }, 400)
+        }
+
+        const config = store.setSessionAutoIterEnabled(sessionResult.sessionId, body.enabled)
+        if (!config) {
+            return c.json({ error: 'Failed to update config' }, 500)
+        }
+
+        return c.json({ ok: true, sessionId: sessionResult.sessionId, autoIterEnabled: config.autoIterEnabled })
+    })
+
     return app
 }

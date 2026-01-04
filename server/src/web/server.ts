@@ -29,6 +29,7 @@ import type { WebSocketData } from '@socket.io/bun-engine'
 import { loadEmbeddedAssetMap, type EmbeddedWebAsset } from './embeddedAssets'
 import { isBunCompiled } from '../utils/bunCompiled'
 import type { Store } from '../store'
+import type { AutoIterationService } from '../agent/autoIteration'
 
 function findWebappDistDir(): { distDir: string; indexHtmlPath: string } {
     const candidates = [
@@ -75,6 +76,7 @@ function createWebApp(options: {
     jwtSecret: Uint8Array
     store: Store
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
+    autoIterationService: AutoIterationService | null
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -105,7 +107,7 @@ function createWebApp(options: {
     app.route('/api', createSpeechRoutes())
     app.route('/api', createOptimizeRoutes())
     app.route('/api', createVersionRoutes(options.embeddedAssetMap))
-    app.route('/api', createSettingsRoutes(options.store))
+    app.route('/api', createSettingsRoutes(options.store, options.autoIterationService ?? undefined))
     app.route('/api', createPushRoutes())
     app.route('/api', createUsageRoutes(options.getSyncEngine))
 
@@ -232,6 +234,7 @@ export async function startWebServer(options: {
     jwtSecret: Uint8Array
     store: Store
     socketEngine: SocketEngine
+    autoIterationService: AutoIterationService | null
 }): Promise<BunServer<WebSocketData>> {
     const isCompiled = isBunCompiled()
     const embeddedAssetMap = isCompiled ? await loadEmbeddedAssetMap() : null
@@ -240,7 +243,8 @@ export async function startWebServer(options: {
         getSseManager: options.getSseManager,
         jwtSecret: options.jwtSecret,
         store: options.store,
-        embeddedAssetMap
+        embeddedAssetMap,
+        autoIterationService: options.autoIterationService
     })
 
     const socketHandler = options.socketEngine.handler()

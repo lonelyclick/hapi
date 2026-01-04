@@ -121,6 +121,12 @@ export type StoredAutoIterationLog = {
     executedAt: number | null
 }
 
+export type StoredSessionAutoIterConfig = {
+    sessionId: string
+    autoIterEnabled: boolean
+    updatedAt: number
+}
+
 export type StoredAdvisorState = {
     namespace: string
     advisorSessionId: string | null
@@ -337,6 +343,12 @@ type DbAutoIterationLogRow = {
     executed_at: number | null
 }
 
+type DbSessionAutoIterConfigRow = {
+    session_id: string
+    auto_iter_enabled: number
+    updated_at: number
+}
+
 function safeJsonParse(value: string | null): unknown | null {
     if (value === null) return null
     try {
@@ -510,6 +522,14 @@ function toStoredAutoIterationLog(row: DbAutoIterationLogRow): StoredAutoIterati
         rolledBackAt: row.rolled_back_at,
         createdAt: row.created_at,
         executedAt: row.executed_at
+    }
+}
+
+function toStoredSessionAutoIterConfig(row: DbSessionAutoIterConfigRow): StoredSessionAutoIterConfig {
+    return {
+        sessionId: row.session_id,
+        autoIterEnabled: row.auto_iter_enabled === 1,
+        updatedAt: row.updated_at
     }
 }
 
@@ -821,6 +841,14 @@ export class Store {
             CREATE INDEX IF NOT EXISTS idx_auto_iteration_logs_status ON auto_iteration_logs(execution_status);
             CREATE INDEX IF NOT EXISTS idx_auto_iteration_logs_created ON auto_iteration_logs(created_at);
             CREATE INDEX IF NOT EXISTS idx_auto_iteration_logs_project ON auto_iteration_logs(project_path);
+
+            -- 每个 session 的自动迭代配置
+            CREATE TABLE IF NOT EXISTS session_auto_iter_config (
+                session_id TEXT PRIMARY KEY,
+                auto_iter_enabled INTEGER DEFAULT 1,
+                updated_at INTEGER DEFAULT (unixepoch() * 1000),
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            );
         `)
     }
 
@@ -2280,5 +2308,33 @@ export class Store {
             'DELETE FROM auto_iteration_logs WHERE namespace = ? AND created_at < ?'
         ).run(namespace, cutoff)
         return result.changes
+    }
+
+    // ==================== Session Auto-Iteration Config ====================
+
+    getSessionAutoIterConfig(sessionId: string): StoredSessionAutoIterConfig | null {
+        const row = this.db.prepare(
+            'SELECT * FROM session_auto_iter_config WHERE session_id = ?'
+        ).get(sessionId) as DbSessionAutoIterConfigRow | undefined
+        return row ? toStoredSessionAutoIterConfig(row) : null
+    }
+
+    isSessionAutoIterEnabled(sessionId: string): boolean {
+        const config = this.getSessionAutoIterConfig(sessionId)
+        // Default to true if no config exists
+        return config ? config.autoIterEnabled : true
+    }
+
+    setSessionAutoIterEnabled(sessionId: string, enabled: boolean): StoredSessionAutoIterConfig | null {
+        const now = Date.now()
+        this.db.prepare(`
+            INSERT INTO session_auto_iter_config (session_id, auto_iter_enabled, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+                auto_iter_enabled = excluded.auto_iter_enabled,
+                updated_at = excluded.updated_at
+        `).run(sessionId, enabled ? 1 : 0, now)
+
+        return this.getSessionAutoIterConfig(sessionId)
     }
 }

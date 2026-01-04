@@ -17,7 +17,7 @@ import { getOrCreateJwtSecret } from './web/jwtSecret'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
-import { AdvisorScheduler, AdvisorService, createAdvisorTelegramNotifier } from './agent'
+import { AdvisorScheduler, AdvisorService, createAdvisorTelegramNotifier, AutoIterationService } from './agent'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -41,6 +41,7 @@ let webServer: BunServer<WebSocketData> | null = null
 let sseManager: SSEManager | null = null
 let advisorScheduler: AdvisorScheduler | null = null
 let advisorService: AdvisorService | null = null
+let autoIterationService: AutoIterationService | null = null
 
 async function main() {
     console.log('HAPI Server starting...')
@@ -116,6 +117,11 @@ async function main() {
 
     syncEngine = new SyncEngine(store, socketServer.io, socketServer.rpcRegistry, sseManager)
 
+    // Initialize AutoIteration service
+    const autoIterNamespace = process.env.HAPI_ADVISOR_NAMESPACE || 'default'
+    autoIterationService = new AutoIterationService(syncEngine, store, autoIterNamespace)
+    console.log(`[Server] AutoIteration Service: initialized for namespace '${autoIterNamespace}'`)
+
     // Initialize Telegram bot (optional)
     if (config.telegramEnabled && config.telegramBotToken) {
         happyBot = new HappyBot({
@@ -132,7 +138,8 @@ async function main() {
         getSseManager: () => sseManager,
         jwtSecret,
         store,
-        socketEngine: socketServer.engine
+        socketEngine: socketServer.engine,
+        autoIterationService
     })
 
     // Start the bot if configured
@@ -192,6 +199,7 @@ async function main() {
         console.log('\nShutting down...')
         advisorService?.stop()
         advisorScheduler?.stop()
+        autoIterationService?.shutdown()
         await happyBot?.stop()
         syncEngine?.stop()
         sseManager?.stop()

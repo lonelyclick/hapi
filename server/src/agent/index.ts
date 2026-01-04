@@ -7,4 +7,5 @@ export { AdvisorService, type AdvisorServiceConfig, type AdvisorTelegramNotifier
 export { SuggestionEvaluator } from './suggestionEvaluator'
 export { buildAdvisorInitPrompt, type AdvisorContext } from './advisorPrompt'
 export { AdvisorTelegramNotifierImpl, createAdvisorTelegramNotifier } from './advisorTelegram'
+export { AutoIterationService } from './autoIteration'
 export * from './types'
