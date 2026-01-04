@@ -1,6 +1,6 @@
 import axios from 'axios'
-import type { AgentState, CliMessagesResponse, CreateMachineResponse, CreateSessionResponse, DaemonState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
-import { AgentStateSchema, CliMessagesResponseSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, DaemonStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
+import type { AgentState, CliMessagesResponse, CreateMachineResponse, CreateSessionResponse, DaemonState, Machine, MachineMetadata, Metadata, Session, AIProfile, AIProfilesResponse } from '@/api/types'
+import { AgentStateSchema, CliMessagesResponseSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, DaemonStateSchema, MachineMetadataSchema, MetadataSchema, AIProfilesResponseSchema } from '@/api/types'
 import { configuration } from '@/configuration'
 import { getAuthToken } from '@/api/auth'
 import { ApiMachineClient } from './apiMachine'
@@ -215,5 +215,41 @@ export class ApiClient {
             localId: m.localId,
             content: m.content
         }))
+    }
+
+    /**
+     * 获取所有 AI 员工档案
+     */
+    async getAIProfiles(): Promise<AIProfile[]> {
+        try {
+            const response = await axios.get<AIProfilesResponse>(
+                `${configuration.serverUrl}/api/settings/ai-profiles`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 10_000
+                }
+            )
+
+            const parsed = AIProfilesResponseSchema.safeParse(response.data)
+            if (!parsed.success) {
+                return []
+            }
+
+            return parsed.data.profiles
+        } catch {
+            // 静默失败，返回空数组
+            return []
+        }
+    }
+
+    /**
+     * 获取第一个（默认）AI 员工档案
+     */
+    async getDefaultAIProfile(): Promise<AIProfile | null> {
+        const profiles = await this.getAIProfiles()
+        return profiles.length > 0 ? profiles[0] : null
     }
 }

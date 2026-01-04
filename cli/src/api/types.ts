@@ -418,3 +418,37 @@ export interface ClientToServerEvents {
     ping: (callback: () => void) => void
     'usage-report': (data: unknown) => void
 }
+
+// ==================== AI 员工档案 ====================
+
+export type AIProfileRole = 'developer' | 'architect' | 'reviewer' | 'pm' | 'tester' | 'devops'
+export type AIProfileStatus = 'idle' | 'working' | 'resting'
+
+export const AIProfileSchema = z.object({
+    id: z.string(),
+    namespace: z.string(),
+    name: z.string(),
+    role: z.enum(['developer', 'architect', 'reviewer', 'pm', 'tester', 'devops']),
+    specialties: z.array(z.string()),
+    personality: z.string().nullable(),
+    greetingTemplate: z.string().nullable(),
+    preferredProjects: z.array(z.string()),
+    workStyle: z.string().nullable(),
+    avatarEmoji: z.string(),
+    status: z.enum(['idle', 'working', 'resting']),
+    stats: z.object({
+        tasksCompleted: z.number(),
+        activeMinutes: z.number(),
+        lastActiveAt: z.number().nullable()
+    }),
+    createdAt: z.number(),
+    updatedAt: z.number()
+})
+
+export type AIProfile = z.infer<typeof AIProfileSchema>
+
+export const AIProfilesResponseSchema = z.object({
+    profiles: z.array(AIProfileSchema)
+})
+
+export type AIProfilesResponse = z.infer<typeof AIProfilesResponseSchema>
