@@ -1,23 +1,15 @@
 import { AgentRegistry } from '@/agent/AgentRegistry';
-import { AcpSdkBackend } from '@/agent/backends/acp';
+import { GrokBackend } from '@/agent/backends/grok';
 
-function buildEnv(): Record<string, string> {
-    return Object.keys(process.env).reduce((acc, key) => {
-        const value = process.env[key];
-        if (typeof value === 'string') {
-            acc[key] = value;
-        }
-        return acc;
-    }, {} as Record<string, string>);
-}
+// Available Grok models:
+// - grok-3: Standard model (131K context)
+// - grok-3-mini: Lightweight model (131K context)
+// - grok-4-0709: Reasoning model (256K context)
+// - grok-4-fast-reasoning: Fast reasoning (2M context)
+// - grok-4-fast-non-reasoning: Fast non-reasoning (2M context)
+// - grok-code-fast-1: Code-focused fast model (256K context)
+const DEFAULT_MODEL = process.env.GROK_MODEL || 'grok-3';
 
-export function registerGrokAgent(yolo: boolean): void {
-    const args: string[] = [];
-    if (yolo) args.push('--yolo');
-
-    AgentRegistry.register('grok', () => new AcpSdkBackend({
-        command: 'grok',
-        args,
-        env: buildEnv()
-    }));
+export function registerGrokAgent(_yolo: boolean): void {
+    AgentRegistry.register('grok', () => new GrokBackend(DEFAULT_MODEL));
 }

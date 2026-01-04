@@ -493,6 +493,15 @@ export class ApiClient {
             error?: string
         } | null
         codex: {
+            fiveHour: { utilization: number; resetsAt: string } | null
+            sevenDay: { utilization: number; resetsAt: string } | null
+            tokenUsage: {
+                inputTokens: number
+                outputTokens: number
+                cachedInputTokens: number
+                reasoningOutputTokens: number
+                totalTokens: number
+            } | null
             error?: string
         } | null
         local: {

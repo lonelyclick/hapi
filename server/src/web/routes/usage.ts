@@ -20,6 +20,21 @@ interface ClaudeUsageData {
 }
 
 interface CodexUsageData {
+    fiveHour: {
+        utilization: number
+        resetsAt: string
+    } | null
+    sevenDay: {
+        utilization: number
+        resetsAt: string
+    } | null
+    tokenUsage: {
+        inputTokens: number
+        outputTokens: number
+        cachedInputTokens: number
+        reasoningOutputTokens: number
+        totalTokens: number
+    } | null
     error?: string
 }
 
@@ -267,17 +282,149 @@ async function getLocalUsage(): Promise<LocalUsageData> {
 }
 
 /**
+ * Get Codex usage from local JSONL files
+ */
+async function getCodexUsage(): Promise<CodexUsageData> {
+    try {
+        const sessionsDir = join(homedir(), '.codex', 'sessions')
+
+        // Find the most recent JSONL file with rate_limits info
+        let latestRateLimits: {
+            primary?: { used_percent?: number; resets_at?: number }
+            secondary?: { used_percent?: number; resets_at?: number }
+        } | null = null
+        let latestTokenUsage: {
+            input_tokens?: number
+            output_tokens?: number
+            cached_input_tokens?: number
+            reasoning_output_tokens?: number
+            total_tokens?: number
+        } | null = null
+        let latestTimestamp = 0
+
+        // Get current date for path
+        const now = new Date()
+        const year = now.getFullYear()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const day = String(now.getDate()).padStart(2, '0')
+
+        // Check today's sessions directory first
+        const todayDir = join(sessionsDir, String(year), month, day)
+
+        try {
+            const files = await readdir(todayDir)
+            for (const file of files) {
+                if (!file.endsWith('.jsonl')) continue
+
+                const filePath = join(todayDir, file)
+                try {
+                    const fileStream = createReadStream(filePath)
+                    const rl = createInterface({
+                        input: fileStream,
+                        crlfDelay: Infinity
+                    })
+
+                    for await (const line of rl) {
+                        if (!line.trim()) continue
+                        try {
+                            const entry = JSON.parse(line) as {
+                                timestamp?: string
+                                type?: string
+                                payload?: {
+                                    type?: string
+                                    info?: {
+                                        total_token_usage?: {
+                                            input_tokens?: number
+                                            output_tokens?: number
+                                            cached_input_tokens?: number
+                                            reasoning_output_tokens?: number
+                                            total_tokens?: number
+                                        }
+                                    }
+                                    rate_limits?: {
+                                        primary?: { used_percent?: number; resets_at?: number }
+                                        secondary?: { used_percent?: number; resets_at?: number }
+                                    }
+                                }
+                            }
+
+                            if (entry.type === 'event_msg' && entry.payload?.type === 'token_count') {
+                                const entryTime = entry.timestamp ? new Date(entry.timestamp).getTime() : 0
+                                if (entryTime > latestTimestamp) {
+                                    latestTimestamp = entryTime
+                                    if (entry.payload.rate_limits) {
+                                        latestRateLimits = entry.payload.rate_limits
+                                    }
+                                    if (entry.payload.info?.total_token_usage) {
+                                        latestTokenUsage = entry.payload.info.total_token_usage
+                                    }
+                                }
+                            }
+                        } catch {
+                            // Skip invalid JSON lines
+                        }
+                    }
+                } catch {
+                    // Skip unreadable files
+                }
+            }
+        } catch {
+            // Today's directory doesn't exist
+        }
+
+        if (!latestRateLimits) {
+            return {
+                fiveHour: null,
+                sevenDay: null,
+                tokenUsage: null,
+                error: 'No Codex usage data found'
+            }
+        }
+
+        return {
+            fiveHour: latestRateLimits.primary ? {
+                utilization: (latestRateLimits.primary.used_percent ?? 0) / 100,
+                resetsAt: latestRateLimits.primary.resets_at
+                    ? new Date(latestRateLimits.primary.resets_at * 1000).toISOString()
+                    : ''
+            } : null,
+            sevenDay: latestRateLimits.secondary ? {
+                utilization: (latestRateLimits.secondary.used_percent ?? 0) / 100,
+                resetsAt: latestRateLimits.secondary.resets_at
+                    ? new Date(latestRateLimits.secondary.resets_at * 1000).toISOString()
+                    : ''
+            } : null,
+            tokenUsage: latestTokenUsage ? {
+                inputTokens: latestTokenUsage.input_tokens ?? 0,
+                outputTokens: latestTokenUsage.output_tokens ?? 0,
+                cachedInputTokens: latestTokenUsage.cached_input_tokens ?? 0,
+                reasoningOutputTokens: latestTokenUsage.reasoning_output_tokens ?? 0,
+                totalTokens: latestTokenUsage.total_tokens ?? 0
+            } : null
+        }
+    } catch (error) {
+        return {
+            fiveHour: null,
+            sevenDay: null,
+            tokenUsage: null,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        }
+    }
+}
+
+/**
  * Get usage data directly (server-side, no RPC)
  */
 async function getUsageDirectly(): Promise<UsageResponse> {
-    const [claude, local] = await Promise.all([
+    const [claude, codex, local] = await Promise.all([
         getClaudeUsage(),
+        getCodexUsage(),
         getLocalUsage()
     ])
 
     return {
         claude,
-        codex: { error: 'Codex usage API not available' },
+        codex,
         local,
         timestamp: Date.now()
     }

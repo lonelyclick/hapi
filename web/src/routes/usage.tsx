@@ -258,21 +258,52 @@ export default function UsagePage() {
                                         <span className="text-sm font-medium">OpenAI Codex</span>
                                     </div>
 
-                                    <div className="text-xs text-[var(--app-hint)] space-y-2">
-                                        <p>Codex uses ChatGPT Plus subscription quota. OpenAI does not provide a public API for usage data.</p>
-                                        <p>
-                                            View usage in{' '}
-                                            <a
-                                                href="https://platform.openai.com/usage"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-[var(--app-accent)] hover:underline"
-                                            >
-                                                OpenAI Dashboard
-                                            </a>
-                                            {' '}or use <code className="bg-[var(--app-border)] px-1 rounded">/status</code> in a Codex session.
-                                        </p>
-                                    </div>
+                                    {data?.codex?.error ? (
+                                        <div className="text-xs text-[var(--app-hint)]">
+                                            {data.codex.error}
+                                        </div>
+                                    ) : data?.codex?.fiveHour || data?.codex?.sevenDay ? (
+                                        <div className="space-y-3">
+                                            {data.codex.fiveHour && (
+                                                <UsageBar
+                                                    utilization={data.codex.fiveHour.utilization}
+                                                    label="5-Hour Limit"
+                                                    resetsAt={data.codex.fiveHour.resetsAt}
+                                                />
+                                            )}
+                                            {data.codex.sevenDay && (
+                                                <UsageBar
+                                                    utilization={data.codex.sevenDay.utilization}
+                                                    label="7-Day Limit"
+                                                    resetsAt={data.codex.sevenDay.resetsAt}
+                                                />
+                                            )}
+                                            {data.codex.tokenUsage && (
+                                                <div className="pt-2 border-t border-[var(--app-divider)] grid grid-cols-2 gap-2 text-[10px]">
+                                                    <div className="flex justify-between">
+                                                        <span className="text-[var(--app-hint)]">Input</span>
+                                                        <span className="font-mono">{formatTokens(data.codex.tokenUsage.inputTokens)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-[var(--app-hint)]">Output</span>
+                                                        <span className="font-mono">{formatTokens(data.codex.tokenUsage.outputTokens)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-[var(--app-hint)]">Cached</span>
+                                                        <span className="font-mono">{formatTokens(data.codex.tokenUsage.cachedInputTokens)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-[var(--app-hint)]">Reasoning</span>
+                                                        <span className="font-mono">{formatTokens(data.codex.tokenUsage.reasoningOutputTokens)}</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="text-xs text-[var(--app-hint)]">
+                                            No Codex usage data available
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
