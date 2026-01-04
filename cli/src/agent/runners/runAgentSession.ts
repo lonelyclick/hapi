@@ -124,12 +124,37 @@ export async function runAgentSession(opts: {
         messageQueue.push(message.content.text, {});
     });
 
+    const reportStartFailure = async (stage: string, error: unknown): Promise<void> => {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`[ACP] Failed to start ${opts.agentType} agent (${stage}): ${message}`);
+        session.sendSessionEvent({
+            type: 'message',
+            message: `Failed to start ${opts.agentType} agent (${stage}): ${message}`
+        });
+        session.sendSessionDeath();
+        await session.flush();
+        session.close();
+    };
+
     const backend: AgentBackend = AgentRegistry.create(opts.agentType);
-    await backend.initialize();
+    try {
+        await backend.initialize();
+    } catch (error) {
+        await reportStartFailure('initialize', error);
+        await backend.disconnect().catch(() => {});
+        return;
+    }
 
     const permissionAdapter = new PermissionAdapter(session, backend);
 
-    const happyServer = await startHappyServer(session);
+    let happyServer: Awaited<ReturnType<typeof startHappyServer>>;
+    try {
+        happyServer = await startHappyServer(session);
+    } catch (error) {
+        await reportStartFailure('start-mcp', error);
+        await backend.disconnect().catch(() => {});
+        return;
+    }
     const bridgeCommand = getHappyCliCommand(['mcp', '--url', happyServer.url]);
     const mcpServers = [
         {
@@ -140,10 +165,18 @@ export async function runAgentSession(opts: {
         }
     ];
 
-    const agentSessionId = await backend.newSession({
-        cwd: process.cwd(),
-        mcpServers
-    });
+    let agentSessionId: string;
+    try {
+        agentSessionId = await backend.newSession({
+            cwd: process.cwd(),
+            mcpServers
+        });
+    } catch (error) {
+        await reportStartFailure('session', error);
+        happyServer.stop();
+        await backend.disconnect().catch(() => {});
+        return;
+    }
 
     // Restore history messages if the backend supports it
     if (backend.restoreHistory) {
