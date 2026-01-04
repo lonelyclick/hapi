@@ -122,6 +122,49 @@ const GROK_MODELS = [
     }
 ] as const
 
+const OPENROUTER_MODELS = [
+    {
+        id: 'anthropic/claude-sonnet-4',
+        label: 'Claude Sonnet 4',
+        description: 'Anthropic\'s latest efficient model.'
+    },
+    {
+        id: 'anthropic/claude-opus-4',
+        label: 'Claude Opus 4',
+        description: 'Anthropic\'s most capable model.'
+    },
+    {
+        id: 'anthropic/claude-3.5-sonnet',
+        label: 'Claude 3.5 Sonnet',
+        description: 'Previous generation Sonnet.'
+    },
+    {
+        id: 'openai/gpt-4o',
+        label: 'GPT-4o',
+        description: 'OpenAI\'s multimodal flagship.'
+    },
+    {
+        id: 'openai/o1',
+        label: 'OpenAI o1',
+        description: 'OpenAI\'s reasoning model.'
+    },
+    {
+        id: 'google/gemini-2.0-flash-001',
+        label: 'Gemini 2.0 Flash',
+        description: 'Google\'s fast model.'
+    },
+    {
+        id: 'deepseek/deepseek-r1',
+        label: 'DeepSeek R1',
+        description: 'DeepSeek\'s reasoning model.'
+    },
+    {
+        id: 'deepseek/deepseek-chat',
+        label: 'DeepSeek Chat',
+        description: 'DeepSeek\'s chat model.'
+    }
+] as const
+
 function isCodexModel(mode: ModelMode | undefined): mode is typeof CODEX_MODELS[number]['id'] {
     return Boolean(mode && CODEX_MODEL_IDS.has(mode as typeof CODEX_MODELS[number]['id']))
 }
@@ -864,8 +907,10 @@ export function HappyComposer(props: {
     const showAbortButton = true
     const isCodex = agentFlavor === 'codex'
     const isGrok = agentFlavor === 'grok'
+    const isOpenRouter = agentFlavor === 'openrouter'
     const codexModel = isCodex && isCodexModel(modelMode) ? modelMode : 'gpt-5.2-codex'
     const grokModel = isGrok ? (modelMode as string || 'grok-code-fast-1') : 'grok-code-fast-1'
+    const openrouterModel = isOpenRouter ? (modelMode as string || 'anthropic/claude-sonnet-4') : 'anthropic/claude-sonnet-4'
     const codexReasoningEffort: ModelReasoningEffort = modelReasoningEffort ?? 'medium'
     const shouldShowCodexReasoning = isCodex && codexModel === 'gpt-5.2-codex'
     const speechToText = useSpeechToText({

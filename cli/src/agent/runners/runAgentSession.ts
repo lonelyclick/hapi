@@ -178,6 +178,18 @@ export async function runAgentSession(opts: {
         return;
     }
 
+    // Update runtimeModel metadata if the backend supports getModel
+    if ('getModel' in backend && typeof backend.getModel === 'function') {
+        const runtimeModel = backend.getModel(agentSessionId);
+        if (runtimeModel) {
+            session.updateMetadata((currentMetadata) => ({
+                ...currentMetadata,
+                runtimeModel
+            }));
+            logger.debug(`[START] Set runtimeModel: ${runtimeModel}`);
+        }
+    }
+
     // Restore history messages if the backend supports it
     if (backend.restoreHistory) {
         try {

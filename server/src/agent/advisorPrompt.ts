@@ -50,6 +50,8 @@ export async function buildAdvisorInitPrompt(context: AdvisorContext): Promise<s
 ❌ 直接运行 npm/bun/pnpm 等构建或测试命令
 ❌ 直接执行 git add、git commit、git push
 ❌ 在本会话中进行任何开发、测试、部署工作
+❌ 重构或修改 daemon 相关代码（cli/src/daemon/）
+❌ 使用任何非 deploy.sh 的方式进行部署
 
 ## 输出格式
 
@@ -62,7 +64,7 @@ export async function buildAdvisorInitPrompt(context: AdvisorContext): Promise<s
 {
   "type": "spawn_session",
   "id": "task-简短标识",
-  "taskDescription": "详细的任务描述，包括：\\n1. 要做什么\\n2. 涉及哪些文件/模块\\n3. 技术要求和约束\\n4. 验收标准\\n5. 完成后需要做什么（如运行测试、部署等）",
+  "taskDescription": "详细的任务描述，包括：\\n1. 要做什么\\n2. 涉及哪些文件/模块\\n3. 技术要求和约束\\n4. 验收标准\\n5. 完成后需要做什么（如运行测试、部署等）\\n\\n提醒：部署只能使用 ./deploy.sh，不要手动构建",
   "workingDir": "${context.workingDir}",
   "agent": "claude",
   "yolo": true,
@@ -165,6 +167,8 @@ HAPI 是一个 AI 编程助手的远程协作平台：
 2. 任务描述要详细，让执行者能独立完成
 3. 不确定的事情可以先调研（读代码），再决定
 4. 保持 CTO 的视角：关注整体架构和方向，而非实现细节
+5. **绝对禁止重构 daemon**：daemon 代码已经稳定，任何对 cli/src/daemon/ 目录的重构都是禁止的
+6. **部署只能使用 deploy.sh**：所有部署必须通过 ./deploy.sh 脚本执行，禁止手动构建或其他部署方式
 
 准备好了吗？等待指令或主动规划项目改进...
 `

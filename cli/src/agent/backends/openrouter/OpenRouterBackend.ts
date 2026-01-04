@@ -238,4 +238,15 @@ Always explain your reasoning and approach.`;
             logger.debug(`[OpenRouter] Changed model to ${model} for session: ${sessionId}`);
         }
     }
+
+    // Get current model for a session
+    getModel(sessionId: string): string | null {
+        const session = this.sessions.get(sessionId);
+        return session?.model ?? null;
+    }
+
+    // Get default model
+    getDefaultModel(): string {
+        return this.defaultModel;
+    }
 }
