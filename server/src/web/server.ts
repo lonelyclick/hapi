@@ -20,6 +20,7 @@ import { createSpeechRoutes } from './routes/speech'
 import { createOptimizeRoutes } from './routes/optimize'
 import { createVersionRoutes } from './routes/version'
 import { createSettingsRoutes } from './routes/settings'
+import { createPushRoutes } from './routes/push'
 import type { SSEManager } from '../sse/sseManager'
 import type { Server as BunServer } from 'bun'
 import type { Server as SocketEngine } from '@socket.io/bun-engine'
@@ -104,6 +105,7 @@ function createWebApp(options: {
     app.route('/api', createOptimizeRoutes())
     app.route('/api', createVersionRoutes(options.embeddedAssetMap))
     app.route('/api', createSettingsRoutes(options.store))
+    app.route('/api', createPushRoutes())
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap

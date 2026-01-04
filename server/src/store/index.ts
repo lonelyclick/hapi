@@ -46,6 +46,19 @@ export type StoredMessage = {
 
 export type UserRole = 'developer' | 'operator'
 
+export type StoredPushSubscription = {
+    id: number
+    namespace: string
+    endpoint: string
+    keys: {
+        p256dh: string
+        auth: string
+    }
+    userAgent: string | null
+    createdAt: number
+    updatedAt: number
+}
+
 export type StoredUser = {
     id: number
     platform: string
@@ -294,6 +307,18 @@ export class Store {
                 prompt TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                namespace TEXT NOT NULL DEFAULT 'default',
+                endpoint TEXT NOT NULL UNIQUE,
+                keys_p256dh TEXT NOT NULL,
+                keys_auth TEXT NOT NULL,
+                user_agent TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_push_subscriptions_namespace ON push_subscriptions(namespace);
         `)
 
         // Step 2: Migrate existing tables (add missing columns)
@@ -982,6 +1007,104 @@ export class Store {
 
     removeRolePrompt(role: UserRole): boolean {
         const result = this.db.prepare('DELETE FROM role_prompts WHERE role = ?').run(role)
+        return result.changes > 0
+    }
+
+    // Push 订阅管理
+    getPushSubscriptions(namespace: string): StoredPushSubscription[] {
+        const rows = this.db.prepare(
+            'SELECT id, namespace, endpoint, keys_p256dh, keys_auth, user_agent, created_at, updated_at FROM push_subscriptions WHERE namespace = ? ORDER BY created_at ASC'
+        ).all(namespace) as Array<{
+            id: number
+            namespace: string
+            endpoint: string
+            keys_p256dh: string
+            keys_auth: string
+            user_agent: string | null
+            created_at: number
+            updated_at: number
+        }>
+        return rows.map(r => ({
+            id: r.id,
+            namespace: r.namespace,
+            endpoint: r.endpoint,
+            keys: {
+                p256dh: r.keys_p256dh,
+                auth: r.keys_auth
+            },
+            userAgent: r.user_agent,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at
+        }))
+    }
+
+    getPushSubscriptionByEndpoint(endpoint: string): StoredPushSubscription | null {
+        const row = this.db.prepare(
+            'SELECT id, namespace, endpoint, keys_p256dh, keys_auth, user_agent, created_at, updated_at FROM push_subscriptions WHERE endpoint = ?'
+        ).get(endpoint) as {
+            id: number
+            namespace: string
+            endpoint: string
+            keys_p256dh: string
+            keys_auth: string
+            user_agent: string | null
+            created_at: number
+            updated_at: number
+        } | undefined
+        if (!row) return null
+        return {
+            id: row.id,
+            namespace: row.namespace,
+            endpoint: row.endpoint,
+            keys: {
+                p256dh: row.keys_p256dh,
+                auth: row.keys_auth
+            },
+            userAgent: row.user_agent,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+        }
+    }
+
+    addOrUpdatePushSubscription(
+        namespace: string,
+        endpoint: string,
+        keys: { p256dh: string; auth: string },
+        userAgent?: string
+    ): StoredPushSubscription | null {
+        try {
+            const now = Date.now()
+            this.db.prepare(`
+                INSERT INTO push_subscriptions (namespace, endpoint, keys_p256dh, keys_auth, user_agent, created_at, updated_at)
+                VALUES (@namespace, @endpoint, @keys_p256dh, @keys_auth, @user_agent, @created_at, @updated_at)
+                ON CONFLICT(endpoint) DO UPDATE SET
+                    namespace = @namespace,
+                    keys_p256dh = @keys_p256dh,
+                    keys_auth = @keys_auth,
+                    user_agent = @user_agent,
+                    updated_at = @updated_at
+            `).run({
+                namespace,
+                endpoint,
+                keys_p256dh: keys.p256dh,
+                keys_auth: keys.auth,
+                user_agent: userAgent ?? null,
+                created_at: now,
+                updated_at: now
+            })
+            return this.getPushSubscriptionByEndpoint(endpoint)
+        } catch {
+            return null
+        }
+    }
+
+    removePushSubscription(endpoint: string): boolean {
+        const result = this.db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint)
+        return result.changes > 0
+    }
+
+    removePushSubscriptionById(id: number): boolean {
+        const result = this.db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(id)
         return result.changes > 0
     }
 }

@@ -20,13 +20,17 @@ import { UpdateBanner } from '@/components/UpdateBanner'
 import { LoadingState } from '@/components/LoadingState'
 import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
-import { notifyTaskComplete, getPendingNotification, clearPendingNotification } from '@/hooks/useNotification'
+import { notifyTaskComplete, getPendingNotification, clearPendingNotification, useWebPushSubscription } from '@/hooks/useNotification'
 
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
     const { authSource, isLoading: isAuthSourceLoading, setAccessToken } = useAuthSource(baseUrl)
     const { token, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
     const { hasUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
+
+    // Subscribe to Web Push notifications when authenticated
+    // This enables true background push on iOS 16.4+ and other platforms
+    useWebPushSubscription(api)
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const pathname = useLocation({ select: (location) => location.pathname })

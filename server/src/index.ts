@@ -16,6 +16,7 @@ import { startWebServer } from './web/server'
 import { getOrCreateJwtSecret } from './web/jwtSecret'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
+import { initWebPushService } from './services/webPush'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -81,6 +82,21 @@ async function main() {
     }
 
     const store = new Store(config.dbPath)
+
+    // Initialize Web Push service
+    const webPushConfig = config.webPushVapidPublicKey && config.webPushVapidPrivateKey && config.webPushVapidSubject
+        ? {
+            vapidPublicKey: config.webPushVapidPublicKey,
+            vapidPrivateKey: config.webPushVapidPrivateKey,
+            vapidSubject: config.webPushVapidSubject
+        }
+        : null
+    initWebPushService(store, webPushConfig)
+    if (webPushConfig) {
+        console.log('[Server] Web Push: enabled')
+    } else {
+        console.log('[Server] Web Push: disabled (missing VAPID keys)')
+    }
     const jwtSecret = await getOrCreateJwtSecret()
 
     sseManager = new SSEManager(30_000)

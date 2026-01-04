@@ -1,9 +1,11 @@
-import { createElement, useCallback, useEffect, useState } from 'react'
+import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { getPlatform } from './usePlatform'
+import type { ApiClient } from '@/api/client'
 
 const NOTIFICATION_PERMISSION_KEY = 'hapi-notification-enabled'
 const PENDING_NOTIFICATION_KEY = 'hapi-pending-notification'
+const PUSH_SUBSCRIPTION_KEY = 'hapi-push-subscription-endpoint'
 
 export type PendingNotification = {
     sessionId: string
@@ -306,4 +308,206 @@ export function useTaskCompleteNotification() {
     }, [])
 
     return { notify }
+}
+
+// ==================== Web Push 订阅 ====================
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = (base64String + padding)
+        .replace(/-/g, '+')
+        .replace(/_/g, '/')
+
+    const rawData = window.atob(base64)
+    const outputArray = new Uint8Array(rawData.length)
+
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i)
+    }
+    return outputArray
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer)
+    let binary = ''
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i])
+    }
+    return window.btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '')
+}
+
+function getStoredPushEndpoint(): string | null {
+    try {
+        return localStorage.getItem(PUSH_SUBSCRIPTION_KEY)
+    } catch {
+        return null
+    }
+}
+
+function setStoredPushEndpoint(endpoint: string | null): void {
+    try {
+        if (endpoint) {
+            localStorage.setItem(PUSH_SUBSCRIPTION_KEY, endpoint)
+        } else {
+            localStorage.removeItem(PUSH_SUBSCRIPTION_KEY)
+        }
+    } catch {
+        // ignore
+    }
+}
+
+export type PushSubscriptionState = 'unsupported' | 'not-subscribed' | 'subscribed' | 'error'
+
+/**
+ * Hook for managing Web Push subscriptions
+ * This enables true background push notifications on iOS (16.4+) and other platforms
+ */
+export function useWebPushSubscription(apiClient: ApiClient | null) {
+    const [state, setState] = useState<PushSubscriptionState>('unsupported')
+    const [isSubscribing, setIsSubscribing] = useState(false)
+    const subscribeAttemptedRef = useRef(false)
+
+    // Check initial state
+    useEffect(() => {
+        if (!apiClient) return
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            setState('unsupported')
+            return
+        }
+
+        const checkSubscription = async () => {
+            try {
+                const registration = await navigator.serviceWorker.ready
+                const subscription = await registration.pushManager.getSubscription()
+                setState(subscription ? 'subscribed' : 'not-subscribed')
+            } catch {
+                setState('error')
+            }
+        }
+
+        void checkSubscription()
+    }, [apiClient])
+
+    // Auto-subscribe when permission is granted
+    useEffect(() => {
+        if (!apiClient) return
+        if (state !== 'not-subscribed') return
+        if (subscribeAttemptedRef.current) return
+        if (Notification.permission !== 'granted') return
+        if (!getStoredPreference()) return
+
+        subscribeAttemptedRef.current = true
+        void subscribe()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [apiClient, state])
+
+    const subscribe = useCallback(async (): Promise<boolean> => {
+        if (!apiClient) return false
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            console.log('[webpush] not supported')
+            return false
+        }
+
+        setIsSubscribing(true)
+        try {
+            // Get VAPID public key from server
+            const { publicKey } = await apiClient.getPushVapidPublicKey()
+            if (!publicKey) {
+                console.log('[webpush] server has no VAPID key configured')
+                setState('not-subscribed')
+                return false
+            }
+
+            // Get or wait for service worker
+            const registration = await navigator.serviceWorker.ready
+
+            // Check existing subscription
+            let subscription = await registration.pushManager.getSubscription()
+
+            // If no subscription, create one
+            if (!subscription) {
+                console.log('[webpush] creating new subscription...')
+                const applicationServerKey = urlBase64ToUint8Array(publicKey)
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: applicationServerKey.buffer as ArrayBuffer
+                })
+            }
+
+            // Send subscription to server
+            const p256dh = subscription.getKey('p256dh')
+            const auth = subscription.getKey('auth')
+
+            if (!p256dh || !auth) {
+                console.error('[webpush] subscription missing keys')
+                setState('error')
+                return false
+            }
+
+            const result = await apiClient.subscribePush({
+                endpoint: subscription.endpoint,
+                keys: {
+                    p256dh: arrayBufferToBase64(p256dh),
+                    auth: arrayBufferToBase64(auth)
+                }
+            })
+
+            if (result.ok) {
+                console.log('[webpush] subscribed successfully', result.subscriptionId)
+                setStoredPushEndpoint(subscription.endpoint)
+                setState('subscribed')
+                return true
+            } else {
+                console.error('[webpush] server rejected subscription')
+                setState('error')
+                return false
+            }
+        } catch (error) {
+            console.error('[webpush] subscription failed:', error)
+            setState('error')
+            return false
+        } finally {
+            setIsSubscribing(false)
+        }
+    }, [apiClient])
+
+    const unsubscribe = useCallback(async (): Promise<boolean> => {
+        if (!apiClient) return false
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            return false
+        }
+
+        try {
+            const registration = await navigator.serviceWorker.ready
+            const subscription = await registration.pushManager.getSubscription()
+
+            if (subscription) {
+                // Unsubscribe locally
+                await subscription.unsubscribe()
+
+                // Notify server
+                await apiClient.unsubscribePush(subscription.endpoint)
+            }
+
+            setStoredPushEndpoint(null)
+            setState('not-subscribed')
+            console.log('[webpush] unsubscribed')
+            return true
+        } catch (error) {
+            console.error('[webpush] unsubscribe failed:', error)
+            return false
+        }
+    }, [apiClient])
+
+    return {
+        state,
+        isSubscribed: state === 'subscribed',
+        isSupported: state !== 'unsupported',
+        isSubscribing,
+        subscribe,
+        unsubscribe
+    }
 }

@@ -696,8 +696,9 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
             } catch (error) {
                 logger.warn('Error in codex session:', error);
                 const isAbortError = error instanceof Error && error.name === 'AbortError';
+                const isAbortRequested = inFlightAbortRequested || lastAbortReason !== null;
 
-                if (isAbortError) {
+                if (isAbortError || isAbortRequested) {
                     const abortMessage = lastAbortReason
                         ? `Aborted (${lastAbortReason})`
                         : 'Aborted by user';

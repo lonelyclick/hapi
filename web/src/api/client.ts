@@ -458,4 +458,23 @@ export class ApiClient {
             }
         )
     }
+
+    // Push 通知
+    async getPushVapidPublicKey(): Promise<{ publicKey: string | null }> {
+        return await this.request<{ publicKey: string | null }>('/api/push/vapid-public-key')
+    }
+
+    async subscribePush(subscription: { endpoint: string; keys: { p256dh: string; auth: string } }): Promise<{ ok: boolean; subscriptionId?: number }> {
+        return await this.request<{ ok: boolean; subscriptionId?: number }>('/api/push/subscribe', {
+            method: 'POST',
+            body: JSON.stringify(subscription)
+        })
+    }
+
+    async unsubscribePush(endpoint: string): Promise<{ ok: boolean; removed: boolean }> {
+        return await this.request<{ ok: boolean; removed: boolean }>('/api/push/unsubscribe', {
+            method: 'POST',
+            body: JSON.stringify({ endpoint })
+        })
+    }
 }

@@ -95,6 +95,8 @@ export default defineConfig({
                 skipWaiting: true,
                 clientsClaim: true,
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+                // Import custom push notification handlers
+                importScripts: ['/sw-push.js'],
                 runtimeCaching: [
                     {
                         urlPattern: /^\/api\/sessions$/,

@@ -14,6 +14,7 @@ import { execSync } from 'child_process';
 import { randomUUID } from 'node:crypto';
 
 type ElicitResponseValue = string | number | boolean | string[];
+type ElicitContent = ElicitResponseValue | Record<string, ElicitResponseValue>;
 type ElicitRequestedSchema = {
     type?: string;
     properties?: Record<string, unknown>;
@@ -24,13 +25,53 @@ function isObject(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object';
 }
 
-function extractRequestedSchema(params: Record<string, unknown>): ElicitRequestedSchema | null {
-    const raw = params.requestedSchema;
-    if (!isObject(raw)) return null;
-    const properties = isObject(raw.properties) ? (raw.properties as Record<string, unknown>) : undefined;
-    const required = Array.isArray(raw.required) ? raw.required.filter((item) => typeof item === 'string') : undefined;
-    const type = typeof raw.type === 'string' ? raw.type : undefined;
+function normalizeText(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseSchemaCandidate(raw: unknown): ElicitRequestedSchema | null {
+    const candidate = (() => {
+        if (typeof raw === 'string') {
+            try {
+                return JSON.parse(raw) as unknown;
+            } catch {
+                return null;
+            }
+        }
+        return raw;
+    })();
+
+    if (!isObject(candidate)) return null;
+    const properties = isObject(candidate.properties) ? (candidate.properties as Record<string, unknown>) : undefined;
+    const required = Array.isArray(candidate.required) ? candidate.required.filter((item) => typeof item === 'string') : undefined;
+    const type = typeof candidate.type === 'string' ? candidate.type : undefined;
     return { type, properties, required };
+}
+
+function extractRequestedSchema(params: Record<string, unknown>): ElicitRequestedSchema | null {
+    const candidates = [
+        params.requestedSchema,
+        params.requested_schema,
+        params.schema,
+        params.jsonSchema,
+        params.json_schema
+    ];
+
+    for (const candidate of candidates) {
+        const parsed = parseSchemaCandidate(candidate);
+        if (parsed) return parsed;
+    }
+
+    const nested = [params.request, params.payload, params.data];
+    for (const candidate of nested) {
+        if (!isObject(candidate)) continue;
+        const parsed = extractRequestedSchema(candidate);
+        if (parsed) return parsed;
+    }
+
+    return null;
 }
 
 function extractToolCallId(params: Record<string, unknown>): string | null {
@@ -38,6 +79,8 @@ function extractToolCallId(params: Record<string, unknown>): string | null {
         'codex_call_id',
         'codex_mcp_tool_call_id',
         'codex_event_id',
+        'request_id',
+        'requestId',
         'call_id',
         'tool_call_id',
         'toolCallId',
@@ -56,52 +99,132 @@ function extractToolCallId(params: Record<string, unknown>): string | null {
     return null;
 }
 
-function extractCommand(params: Record<string, unknown>): string[] | null {
-    const command = params.codex_command ?? params.command ?? params.cmd;
-    if (Array.isArray(command) && command.every((item) => typeof item === 'string')) {
-        return command as string[];
+const COMMAND_KEYS = [
+    'codex_command',
+    'command',
+    'cmd',
+    'command_line',
+    'commandLine',
+    'shell_command',
+    'shellCommand',
+    'raw_command',
+    'rawCommand',
+    'argv',
+    'args'
+];
+
+function extractCommandFromValue(value: unknown): string[] | null {
+    if (Array.isArray(value)) {
+        const parts = value.filter((item) => typeof item === 'string' && item.trim().length > 0);
+        return parts.length > 0 ? parts : null;
     }
-    if (typeof command === 'string' && command.length > 0) {
-        return [command];
+
+    const text = normalizeText(value);
+    if (text) {
+        return [text];
+    }
+
+    if (!isObject(value)) {
+        return null;
+    }
+
+    for (const key of COMMAND_KEYS) {
+        if (!Object.prototype.hasOwnProperty.call(value, key)) {
+            continue;
+        }
+        const extracted = extractCommandFromValue(value[key]);
+        if (extracted) return extracted;
+    }
+
+    return null;
+}
+
+function extractCommand(params: Record<string, unknown>): string[] | null {
+    const direct = extractCommandFromValue(params);
+    if (direct) return direct;
+
+    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request];
+    for (const candidate of nestedCandidates) {
+        const extracted = extractCommandFromValue(candidate);
+        if (extracted) return extracted;
+    }
+
+    return null;
+}
+
+const CWD_KEYS = [
+    'codex_cwd',
+    'cwd',
+    'workdir',
+    'workDir',
+    'working_directory',
+    'workingDirectory'
+];
+
+function extractCwd(params: Record<string, unknown>): string | null {
+    const direct = pickStringByKeys(params, CWD_KEYS);
+    if (direct) return direct;
+
+    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request];
+    for (const candidate of nestedCandidates) {
+        if (!isObject(candidate)) continue;
+        const extracted = pickStringByKeys(candidate, CWD_KEYS);
+        if (extracted) return extracted;
+    }
+
+    return null;
+}
+
+function pickStringByKeys(params: Record<string, unknown>, keys: string[]): string | null {
+    for (const key of keys) {
+        if (!Object.prototype.hasOwnProperty.call(params, key)) {
+            continue;
+        }
+        const value = normalizeText(params[key]);
+        if (value) return value;
     }
     return null;
 }
 
-function extractCwd(params: Record<string, unknown>): string | null {
-    const cwd = params.codex_cwd ?? params.cwd;
-    return typeof cwd === 'string' && cwd.length > 0 ? cwd : null;
+const PROMPT_KEYS = ['prompt', 'message', 'text'];
+const DESCRIPTION_KEYS = ['title', 'description', 'label'];
+
+function extractPrompt(params: Record<string, unknown>): { prompt: string | null; description: string | null } {
+    const prompt = pickStringByKeys(params, PROMPT_KEYS);
+    const description = pickStringByKeys(params, DESCRIPTION_KEYS);
+    if (prompt || description) {
+        return { prompt, description };
+    }
+
+    const nestedCandidates = [params.arguments, params.args, params.payload, params.data, params.request];
+    for (const candidate of nestedCandidates) {
+        if (!isObject(candidate)) continue;
+        const nestedPrompt = pickStringByKeys(candidate, PROMPT_KEYS);
+        const nestedDescription = pickStringByKeys(candidate, DESCRIPTION_KEYS);
+        if (nestedPrompt || nestedDescription) {
+            return { prompt: nestedPrompt, description: nestedDescription };
+        }
+    }
+
+    return { prompt: null, description: null };
 }
 
-function buildElicitationResult(
+function truncateText(value: string, maxLen: number): string {
+    if (value.length <= maxLen) return value;
+    return `${value.slice(0, maxLen)}...`;
+}
+
+function buildElicitationContent(
     decision: 'approved' | 'approved_for_session' | 'denied' | 'abort',
     requestedSchema: ElicitRequestedSchema | null,
     reason?: string
-): {
-    action: 'accept' | 'decline' | 'cancel';
-    content?: Record<string, ElicitResponseValue>;
-    decision?: string;
-    reason?: string;
-} {
-    const action: 'accept' | 'decline' | 'cancel' =
-        decision === 'approved' || decision === 'approved_for_session'
-            ? 'accept'
-            : decision === 'abort'
-                ? 'cancel'
-                : 'decline';
+): ElicitContent {
+    const approved = decision === 'approved' || decision === 'approved_for_session';
 
-    if (!requestedSchema?.properties || Object.keys(requestedSchema.properties).length === 0) {
-        return reason ? { action, decision, reason } : { action, decision };
-    }
-
-    if (action !== 'accept') {
-        return reason ? { action, decision, reason } : { action, decision };
-    }
-
-    const properties = requestedSchema?.properties ?? null;
-    const content: Record<string, ElicitResponseValue> = {};
-
-    if (properties && Object.keys(properties).length > 0) {
-        const approved = decision === 'approved' || decision === 'approved_for_session';
+    if (requestedSchema?.properties && Object.keys(requestedSchema.properties).length > 0) {
+        const content: Record<string, ElicitResponseValue> = {};
+        const properties = requestedSchema.properties;
+        const required = requestedSchema.required ?? [];
 
         if (Object.prototype.hasOwnProperty.call(properties, 'decision')) {
             content.decision = decision;
@@ -116,19 +239,57 @@ function buildElicitationResult(
             content.reason = reason;
         }
 
+        for (const key of required) {
+            if (!Object.prototype.hasOwnProperty.call(content, key)) {
+                content[key] = decision;
+            }
+        }
+
         if (Object.keys(content).length === 0) {
-            const [fallbackKey] = Object.keys(properties);
+            const fallbackKey = required[0] ?? Object.keys(properties)[0];
             if (fallbackKey) {
                 content[fallbackKey] = decision;
             }
         }
-    } else {
-        content.decision = decision;
-        if (reason) {
-            content.reason = reason;
-        }
+
+        return content;
     }
 
+    const schemaType = requestedSchema?.type;
+    if (schemaType === 'boolean') return approved;
+    if (schemaType === 'string') return decision;
+    if (schemaType === 'array') return [decision];
+    if (schemaType === 'number') return approved ? 1 : 0;
+
+    const fallback: Record<string, ElicitResponseValue> = {
+        decision,
+        approved,
+        allow: approved
+    };
+    if (reason) {
+        fallback.reason = reason;
+    }
+    return fallback;
+}
+
+function buildElicitationResult(
+    decision: 'approved' | 'approved_for_session' | 'denied' | 'abort',
+    requestedSchema: ElicitRequestedSchema | null,
+    reason?: string
+): {
+    action: 'accept' | 'decline' | 'cancel';
+    content?: ElicitContent;
+    decision?: string;
+    reason?: string;
+} {
+    const action: 'accept' | 'decline' | 'cancel' =
+        decision === 'approved' || decision === 'approved_for_session'
+            ? 'accept'
+            : decision === 'abort'
+                ? 'cancel'
+                : 'decline';
+
+    const content = buildElicitationContent(decision, requestedSchema, reason);
     return reason ? { action, content, decision, reason } : { action, content, decision };
 }
 

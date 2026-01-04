@@ -35,6 +35,9 @@ export interface ConfigSources {
     feishuAppSecret: ConfigSource
     feishuBaseUrl: ConfigSource
     geminiApiKey: ConfigSource
+    webPushVapidPublicKey?: ConfigSource
+    webPushVapidPrivateKey?: ConfigSource
+    webPushVapidSubject?: ConfigSource
     cliApiToken: 'env' | 'file' | 'generated'
 }
 
@@ -84,6 +87,15 @@ class Configuration {
     /** Gemini API key (text optimization) */
     public readonly geminiApiKey: string | null
 
+    /** Web Push VAPID public key */
+    public readonly webPushVapidPublicKey: string | null
+
+    /** Web Push VAPID private key */
+    public readonly webPushVapidPrivateKey: string | null
+
+    /** Web Push VAPID subject (mailto: or https: URL) */
+    public readonly webPushVapidSubject: string | null
+
     /** Sources of each configuration value */
     public readonly sources: ConfigSources
 
@@ -108,6 +120,9 @@ class Configuration {
         this.feishuAppSecret = serverSettings.feishuAppSecret
         this.feishuBaseUrl = serverSettings.feishuBaseUrl
         this.geminiApiKey = serverSettings.geminiApiKey
+        this.webPushVapidPublicKey = serverSettings.webPushVapidPublicKey
+        this.webPushVapidPrivateKey = serverSettings.webPushVapidPrivateKey
+        this.webPushVapidSubject = serverSettings.webPushVapidSubject
 
         // CLI API token - will be set by _setCliApiToken() before create() returns
         this.cliApiToken = ''

@@ -20,6 +20,9 @@ export interface ServerSettings {
     feishuAppSecret: string | null
     feishuBaseUrl: string
     geminiApiKey: string | null
+    webPushVapidPublicKey: string | null
+    webPushVapidPrivateKey: string | null
+    webPushVapidSubject: string | null
 }
 
 export interface ServerSettingsResult {
@@ -33,6 +36,9 @@ export interface ServerSettingsResult {
         feishuAppSecret: 'env' | 'file' | 'default'
         feishuBaseUrl: 'env' | 'file' | 'default'
         geminiApiKey: 'env' | 'file' | 'default'
+        webPushVapidPublicKey: 'env' | 'file' | 'default'
+        webPushVapidPrivateKey: 'env' | 'file' | 'default'
+        webPushVapidSubject: 'env' | 'file' | 'default'
     }
     savedToFile: boolean
 }
@@ -98,6 +104,9 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         feishuAppSecret: 'default',
         feishuBaseUrl: 'default',
         geminiApiKey: 'default',
+        webPushVapidPublicKey: 'default',
+        webPushVapidPrivateKey: 'default',
+        webPushVapidSubject: 'default',
     }
 
     // telegramBotToken: env > file > null
@@ -224,6 +233,48 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
         sources.geminiApiKey = 'file'
     }
 
+    // webPushVapidPublicKey: env > file > null
+    let webPushVapidPublicKey: string | null = null
+    if (process.env.WEB_PUSH_VAPID_PUBLIC_KEY) {
+        webPushVapidPublicKey = process.env.WEB_PUSH_VAPID_PUBLIC_KEY
+        sources.webPushVapidPublicKey = 'env'
+        if (settings.webPushVapidPublicKey === undefined) {
+            settings.webPushVapidPublicKey = webPushVapidPublicKey
+            needsSave = true
+        }
+    } else if (settings.webPushVapidPublicKey !== undefined) {
+        webPushVapidPublicKey = settings.webPushVapidPublicKey ?? null
+        sources.webPushVapidPublicKey = 'file'
+    }
+
+    // webPushVapidPrivateKey: env > file > null
+    let webPushVapidPrivateKey: string | null = null
+    if (process.env.WEB_PUSH_VAPID_PRIVATE_KEY) {
+        webPushVapidPrivateKey = process.env.WEB_PUSH_VAPID_PRIVATE_KEY
+        sources.webPushVapidPrivateKey = 'env'
+        if (settings.webPushVapidPrivateKey === undefined) {
+            settings.webPushVapidPrivateKey = webPushVapidPrivateKey
+            needsSave = true
+        }
+    } else if (settings.webPushVapidPrivateKey !== undefined) {
+        webPushVapidPrivateKey = settings.webPushVapidPrivateKey ?? null
+        sources.webPushVapidPrivateKey = 'file'
+    }
+
+    // webPushVapidSubject: env > file > null (should be a mailto: or https: URL)
+    let webPushVapidSubject: string | null = null
+    if (process.env.WEB_PUSH_VAPID_SUBJECT) {
+        webPushVapidSubject = process.env.WEB_PUSH_VAPID_SUBJECT
+        sources.webPushVapidSubject = 'env'
+        if (settings.webPushVapidSubject === undefined) {
+            settings.webPushVapidSubject = webPushVapidSubject
+            needsSave = true
+        }
+    } else if (settings.webPushVapidSubject !== undefined) {
+        webPushVapidSubject = settings.webPushVapidSubject ?? null
+        sources.webPushVapidSubject = 'file'
+    }
+
     // Save settings if any new values were added
     if (needsSave) {
         await writeSettings(settingsFile, settings)
@@ -239,6 +290,9 @@ export async function loadServerSettings(dataDir: string): Promise<ServerSetting
             feishuAppSecret,
             feishuBaseUrl,
             geminiApiKey,
+            webPushVapidPublicKey,
+            webPushVapidPrivateKey,
+            webPushVapidSubject,
         },
         sources,
         savedToFile: needsSave,

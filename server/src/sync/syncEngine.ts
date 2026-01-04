@@ -13,6 +13,7 @@ import type { Store } from '../store'
 import type { RpcRegistry } from '../socket/rpcRegistry'
 import type { SSEManager } from '../sse/sseManager'
 import { extractTodoWriteTodosFromMessageContent, TodosSchema, type TodoItem } from './todos'
+import { getWebPushService } from '../services/webPush'
 
 export type ConnectionStatus = 'disconnected' | 'connected'
 
@@ -485,19 +486,53 @@ export class SyncEngine {
 
         if (shouldBroadcast) {
             this.lastBroadcastAtBySessionId.set(session.id, now)
+            const taskJustCompleted = wasThinking && !session.thinking
             this.emit({
                 type: 'session-updated',
                 sessionId: session.id,
                 data: {
                     activeAt: session.activeAt,
                     thinking: session.thinking,
-                    wasThinking: wasThinking && !session.thinking,
+                    wasThinking: taskJustCompleted,
                     permissionMode: session.permissionMode,
                     modelMode: session.modelMode,
                     modelReasoningEffort: session.modelReasoningEffort
                 }
             })
+
+            // Send push notification when task completes (thinking: true -> false)
+            if (taskJustCompleted) {
+                this.sendTaskCompletePushNotification(session)
+            }
         }
+    }
+
+    /**
+     * Send push notification when a task completes
+     */
+    private sendTaskCompletePushNotification(session: Session): void {
+        const webPush = getWebPushService()
+        if (!webPush || !webPush.isConfigured()) {
+            return
+        }
+
+        const title = session.metadata?.summary?.text || session.metadata?.name || 'Task completed'
+        const projectName = session.metadata?.path?.split('/').pop() || 'Session'
+
+        webPush.sendToNamespace(session.namespace, {
+            title: `${projectName}: Task completed`,
+            body: title,
+            icon: '/pwa-192x192.png',
+            badge: '/pwa-64x64.png',
+            tag: `task-complete-${session.id}`,
+            data: {
+                type: 'task-complete',
+                sessionId: session.id,
+                url: `/sessions/${session.id}`
+            }
+        }).catch(error => {
+            console.error('[webpush] failed to send notification:', error)
+        })
     }
 
     handleSessionEnd(payload: { sid: string; time: number }): void {

@@ -27,6 +27,9 @@ export interface Settings {
     appId?: string
     appSecret?: string
     geminiApiKey?: string
+    webPushVapidPublicKey?: string
+    webPushVapidPrivateKey?: string
+    webPushVapidSubject?: string
 }
 
 export interface CliApiTokenResult {
