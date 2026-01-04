@@ -20,6 +20,7 @@ export type StoredSession = {
     activeAt: number | null
     seq: number
     advisorTaskId: string | null  // Advisor 创建的会话的任务 ID
+    creatorChatId: string | null  // 创建者的 Telegram chatId（用于通知）
 }
 
 export type StoredMachine = {
@@ -253,6 +254,7 @@ type DbSessionRow = {
     active_at: number | null
     seq: number
     advisor_task_id: string | null
+    creator_chat_id: string | null
 }
 
 type DbMachineRow = {
@@ -443,7 +445,8 @@ function toStoredSession(row: DbSessionRow): StoredSession {
         active: row.active === 1,
         activeAt: row.active_at,
         seq: row.seq,
-        advisorTaskId: row.advisor_task_id
+        advisorTaskId: row.advisor_task_id,
+        creatorChatId: row.creator_chat_id
     }
 }
 
@@ -794,6 +797,9 @@ export class Store {
         }
         if (!sessionColumnNames.has('advisor_task_id')) {
             this.db.exec('ALTER TABLE sessions ADD COLUMN advisor_task_id TEXT')
+        }
+        if (!sessionColumnNames.has('creator_chat_id')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN creator_chat_id TEXT')
         }
 
         const machineColumns = this.db.prepare('PRAGMA table_info(machines)').all() as Array<{ name: string }>
