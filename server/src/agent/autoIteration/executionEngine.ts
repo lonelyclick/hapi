@@ -10,6 +10,16 @@ interface SyncEngineInterface {
     getSession(sessionId: string): { id: string; active: boolean; metadata: { path?: string } | null } | undefined
     getActiveSessions(namespace: string): Array<{ id: string; active: boolean; metadata: { path?: string } | null }>
     sendMessage(sessionId: string, payload: { text: string; sentFrom?: string }): Promise<void>
+    getOnlineMachines(namespace: string): Array<{ id: string; namespace: string; metadata?: unknown }>
+    spawnSession(
+        machineId: string,
+        directory: string,
+        agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok',
+        yolo?: boolean,
+        sessionType?: 'simple' | 'worktree',
+        worktreeName?: string,
+        options?: { sessionId?: string; permissionMode?: string }
+    ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }>
 }
 
 export interface ExecutionResult {
@@ -44,21 +54,22 @@ export class ExecutionEngine {
     async execute(request: ActionRequest, log: AutoIterationLog): Promise<ExecutionResult> {
         console.log(`[AutoIteration] Executing action ${request.actionType} for log ${log.id}`)
 
-        // 1. 选择目标会话
-        const targetSession = await this.selectTargetSession(request)
-        if (!targetSession) {
+        // 1. 为 Action 创建新会话（可见的独立会话）
+        const sessionResult = await this.createActionSession(request, log.id)
+        if (!sessionResult.success) {
             return {
                 success: false,
-                error: '未找到合适的活跃会话来执行操作'
+                error: sessionResult.error || '无法创建执行会话'
             }
         }
 
-        console.log(`[AutoIteration] Using session ${targetSession.id}`)
+        const sessionId = sessionResult.sessionId!
+        console.log(`[AutoIteration] Created action session: ${sessionId}`)
 
         // 2. 创建回滚点（如果可能）
         let rollbackData: RollbackData | undefined
         if (request.reversible) {
-            rollbackData = await this.createRollbackPoint(request, targetSession.id)
+            rollbackData = await this.createRollbackPoint(request, sessionId)
         }
 
         // 3. 标记为执行中
@@ -67,22 +78,23 @@ export class ExecutionEngine {
         // 4. 构建执行消息
         const message = this.buildExecutionMessage(request)
 
-        // 5. 发送到会话执行
+        // 5. 等待会话准备就绪（最多 10 秒）
+        await this.waitForSession(sessionId, 10000)
+
+        // 6. 发送到会话执行
         try {
-            await this.syncEngine.sendMessage(targetSession.id, {
+            await this.syncEngine.sendMessage(sessionId, {
                 text: message,
                 sentFrom: 'advisor'
             })
 
-            console.log(`[AutoIteration] Action sent to session ${targetSession.id}`)
+            console.log(`[AutoIteration] Action sent to session ${sessionId}`)
 
-            // 注意：这里只是发送了消息，实际执行结果需要通过会话事件来跟踪
-            // 暂时认为发送成功就是执行成功
             return {
                 success: true,
                 result: {
-                    sessionId: targetSession.id,
-                    message: 'Action request sent to session'
+                    sessionId,
+                    message: 'Action 会话已创建，正在执行'
                 },
                 rollbackData
             }
@@ -95,6 +107,86 @@ export class ExecutionEngine {
                 rollbackData
             }
         }
+    }
+
+    /**
+     * 为 Action 创建新会话
+     */
+    private async createActionSession(
+        request: ActionRequest,
+        logId: string
+    ): Promise<{ success: boolean; sessionId?: string; error?: string }> {
+        // 1. 选择在线机器
+        const machines = this.syncEngine.getOnlineMachines(this.namespace)
+        if (machines.length === 0) {
+            return { success: false, error: '没有在线的机器' }
+        }
+
+        // 优先选择有匹配项目路径的机器
+        let targetMachine = machines[0]
+        if (request.targetProject) {
+            for (const machine of machines) {
+                const metadata = machine.metadata as Record<string, unknown> | undefined
+                const advisorWorkingDir = metadata?.advisorWorkingDir as string | undefined
+                if (advisorWorkingDir && this.pathMatches(advisorWorkingDir, request.targetProject)) {
+                    targetMachine = machine
+                    break
+                }
+            }
+        }
+
+        // 2. 确定工作目录
+        const workingDir = request.targetProject ||
+            ((targetMachine.metadata as Record<string, unknown> | undefined)?.advisorWorkingDir as string) ||
+            '/home/guang/softwares/hapi'
+
+        // 3. 生成会话 ID（包含 action 标识）
+        const actionSessionId = `action-${request.actionType}-${logId.slice(0, 8)}`
+
+        console.log(`[AutoIteration] Creating action session on machine ${targetMachine.id}, dir: ${workingDir}`)
+
+        // 4. 创建会话（yolo 模式，自动执行命令）
+        try {
+            const result = await this.syncEngine.spawnSession(
+                targetMachine.id,
+                workingDir,
+                'claude',  // 使用 Claude
+                true,      // yolo 模式，自动执行
+                'simple',
+                undefined,
+                {
+                    sessionId: actionSessionId,
+                    permissionMode: 'auto-accept'  // 自动接受权限请求
+                }
+            )
+
+            if (result.type === 'success') {
+                return { success: true, sessionId: result.sessionId }
+            } else {
+                return { success: false, error: result.message }
+            }
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error)
+            }
+        }
+    }
+
+    /**
+     * 等待会话准备就绪
+     */
+    private async waitForSession(sessionId: string, timeoutMs: number): Promise<boolean> {
+        const startTime = Date.now()
+        while (Date.now() - startTime < timeoutMs) {
+            const session = this.syncEngine.getSession(sessionId)
+            if (session?.active) {
+                return true
+            }
+            await new Promise(resolve => setTimeout(resolve, 500))
+        }
+        console.warn(`[AutoIteration] Session ${sessionId} not ready after ${timeoutMs}ms`)
+        return false
     }
 
     /**

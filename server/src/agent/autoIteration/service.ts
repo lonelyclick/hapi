@@ -24,6 +24,16 @@ interface SyncEngineInterface {
     getSession(sessionId: string): { id: string; active: boolean; metadata: { path?: string } | null } | undefined
     getActiveSessions(namespace: string): Array<{ id: string; active: boolean; metadata: { path?: string } | null }>
     sendMessage(sessionId: string, payload: { text: string; sentFrom?: string }): Promise<void>
+    getOnlineMachines(namespace: string): Array<{ id: string; namespace: string; metadata?: unknown }>
+    spawnSession(
+        machineId: string,
+        directory: string,
+        agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok',
+        yolo?: boolean,
+        sessionType?: 'simple' | 'worktree',
+        worktreeName?: string,
+        options?: { sessionId?: string; permissionMode?: string }
+    ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }>
 }
 
 export interface AutoIterationServiceEvents {

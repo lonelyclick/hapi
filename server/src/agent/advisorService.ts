@@ -1158,6 +1158,12 @@ export class AdvisorService {
             return
         }
 
+        // 检查是否正在审查中（审查期间暂停 Summary 推送）
+        if (this.scheduler.isReviewing()) {
+            console.log(`[AdvisorService] Skip summary for session ${summary.sessionId}: review in progress`)
+            return
+        }
+
         const sessionId = summary.sessionId
         const hash = this.computeSummaryHash(summary)
 
@@ -1260,6 +1266,11 @@ export class AdvisorService {
 
         if (text.includes('[[HAPI_ADVISOR]]') && matchCount === 0) {
             console.warn('[AdvisorService] Found [[HAPI_ADVISOR]] markers but extracted 0 valid outputs')
+        }
+
+        // 如果解析到了输出，说明审查可能已完成，结束审查状态
+        if (matchCount > 0 && this.scheduler.isReviewing()) {
+            this.scheduler.endReview()
         }
     }
 

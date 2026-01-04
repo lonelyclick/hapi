@@ -35,6 +35,11 @@ export class AdvisorScheduler {
     private proactiveReviewTimer: NodeJS.Timeout | null = null
     private lastDailyReviewDate: string | null = null
 
+    // 审查状态（审查期间暂停 Summary 推送）
+    private _isReviewing = false
+    private reviewStartTime: number | null = null
+    private readonly reviewTimeoutMs = 5 * 60 * 1000  // 审查超时 5 分钟
+
     constructor(
         syncEngine: SyncEngine,
         store: Store,
@@ -343,6 +348,9 @@ export class AdvisorScheduler {
         console.log('[AdvisorScheduler] Triggering daily project review')
         this.lastDailyReviewDate = today
 
+        // 开始审查，暂停 Summary 推送
+        this.startReview()
+
         const reviewPrompt = this.buildDailyReviewPrompt()
         try {
             await this.syncEngine.sendMessage(this.advisorSessionId, {
@@ -352,6 +360,7 @@ export class AdvisorScheduler {
             console.log('[AdvisorScheduler] Daily review prompt sent')
         } catch (error) {
             console.error('[AdvisorScheduler] Failed to send daily review prompt:', error)
+            this.endReview()  // 失败时恢复
         }
     }
 
@@ -379,6 +388,9 @@ export class AdvisorScheduler {
 
         console.log(`[AdvisorScheduler] Triggering proactive review for ${activeSessions.length} active sessions`)
 
+        // 开始审查，暂停 Summary 推送
+        this.startReview()
+
         const reviewPrompt = this.buildProactiveReviewPrompt(activeSessions)
         try {
             await this.syncEngine.sendMessage(this.advisorSessionId, {
@@ -387,6 +399,7 @@ export class AdvisorScheduler {
             })
         } catch (error) {
             console.error('[AdvisorScheduler] Failed to send proactive review prompt:', error)
+            this.endReview()  // 失败时恢复
         }
     }
 
@@ -400,6 +413,40 @@ export class AdvisorScheduler {
         } else {
             await this.triggerProactiveReview()
         }
+    }
+
+    /**
+     * 检查是否正在审查中（审查期间暂停 Summary 推送）
+     */
+    isReviewing(): boolean {
+        // 检查超时
+        if (this._isReviewing && this.reviewStartTime) {
+            const elapsed = Date.now() - this.reviewStartTime
+            if (elapsed > this.reviewTimeoutMs) {
+                console.log('[AdvisorScheduler] Review timed out, resetting state')
+                this._isReviewing = false
+                this.reviewStartTime = null
+            }
+        }
+        return this._isReviewing
+    }
+
+    /**
+     * 开始审查（暂停 Summary 推送）
+     */
+    private startReview(): void {
+        this._isReviewing = true
+        this.reviewStartTime = Date.now()
+        console.log('[AdvisorScheduler] Review started, Summary delivery paused')
+    }
+
+    /**
+     * 结束审查（恢复 Summary 推送）
+     */
+    endReview(): void {
+        this._isReviewing = false
+        this.reviewStartTime = null
+        console.log('[AdvisorScheduler] Review ended, Summary delivery resumed')
     }
 
     /**

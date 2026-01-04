@@ -148,10 +148,29 @@ export const ADVISOR_OUTPUT_MARKER = /\[\[HAPI_ADVISOR\]\]/g
 
 // 从位置开始提取完整 JSON 对象
 export function extractJsonFromPosition(text: string, startPos: number): string | null {
-    // 跳过空白
+    // 跳过空白和 markdown 代码块标记
     let pos = startPos
-    while (pos < text.length && /\s/.test(text[pos])) {
-        pos++
+    while (pos < text.length) {
+        const char = text[pos]
+        // 跳过空白
+        if (/\s/.test(char)) {
+            pos++
+            continue
+        }
+        // 跳过 markdown 代码块开始标记 ```json 或 ```
+        if (text.slice(pos, pos + 3) === '```') {
+            pos += 3
+            // 跳过可能的语言标识符（如 json）
+            while (pos < text.length && text[pos] !== '\n' && text[pos] !== '{') {
+                pos++
+            }
+            // 跳过换行
+            if (text[pos] === '\n') {
+                pos++
+            }
+            continue
+        }
+        break
     }
 
     if (text[pos] !== '{') {
