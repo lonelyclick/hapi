@@ -835,6 +835,7 @@ export function createSessionsRoutes(
      */
     app.delete('/:id/subscribe', async (c) => {
         const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
 
         if (!body) {
@@ -850,7 +851,14 @@ export function createSessionsRoutes(
 
         let success = false
         if (chatId) {
+            // First try to remove from subscriptions table
             success = store.unsubscribeFromSessionNotifications(sessionId, chatId)
+            // Also check if this chatId is the creator and clear it
+            const creatorChatId = store.getSessionCreatorChatId(sessionId)
+            if (creatorChatId === chatId) {
+                const cleared = store.clearSessionCreatorChatId(sessionId, namespace)
+                success = success || cleared
+            }
         } else if (clientId) {
             success = store.unsubscribeFromSessionNotificationsByClientId(sessionId, clientId)
         }
