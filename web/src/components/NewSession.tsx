@@ -264,10 +264,36 @@ export function NewSession(props: {
             {/* Agent Selector */}
             <div className="flex flex-col gap-1.5 px-3 py-3">
                 <label className="text-xs font-medium text-[var(--app-hint)]">
-                    Agent
+                    Agents
                 </label>
                 <div className="flex flex-wrap gap-x-3 gap-y-2">
-                    {(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok'] as const).map((agentType) => (
+                    {(['claude', 'codex', 'gemini'] as const).map((agentType) => (
+                        <label
+                            key={agentType}
+                            className="flex items-center gap-1 cursor-pointer"
+                        >
+                            <input
+                                type="radio"
+                                name="agent"
+                                value={agentType}
+                                checked={agent === agentType}
+                                onChange={() => setAgent(agentType)}
+                                disabled={isFormDisabled}
+                                className="accent-[var(--app-link)] w-3.5 h-3.5"
+                            />
+                            <span className="text-xs capitalize">{agentType}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            {/* Chat Models Selector */}
+            <div className="flex flex-col gap-1.5 px-3 py-3">
+                <label className="text-xs font-medium text-[var(--app-hint)]">
+                    Chat Models
+                </label>
+                <div className="flex flex-wrap gap-x-3 gap-y-2">
+                    {(['glm', 'minimax', 'grok'] as const).map((agentType) => (
                         <label
                             key={agentType}
                             className="flex items-center gap-1 cursor-pointer"
