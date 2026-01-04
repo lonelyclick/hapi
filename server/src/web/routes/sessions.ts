@@ -932,7 +932,7 @@ export function createSessionsRoutes(
      * subscriberId 可以是 chatId 或 clientId
      * Query: type=chatId|clientId （可选，默认为 chatId）
      */
-    app.delete('/:id/subscribers/:subscriberId', async (c) => {
+    app.delete('/sessions/:id/subscribers/:subscriberId', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const subscriberId = c.req.param('subscriberId')
@@ -959,7 +959,7 @@ export function createSessionsRoutes(
      * DELETE /sessions/:id/subscribers
      * 清除所有订阅者，包括 creator
      */
-    app.delete('/:id/subscribers', async (c) => {
+    app.delete('/sessions/:id/subscribers', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
 
