@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
+import { useGroupSSE } from '@/hooks/useGroupSSE'
 import { GroupChatHeader } from '@/components/GroupChat/GroupChatHeader'
 import { GroupMessageList } from '@/components/GroupChat/GroupMessageList'
 import { GroupComposer } from '@/components/GroupChat/GroupComposer'
@@ -11,7 +12,7 @@ import { AddMemberSheet } from '@/components/GroupChat/AddMemberSheet'
 import { Spinner } from '@/components/Spinner'
 
 export default function GroupChatPage() {
-    const { api } = useAppContext()
+    const { api, token, baseUrl } = useAppContext()
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
@@ -19,13 +20,21 @@ export default function GroupChatPage() {
     const [isSending, setIsSending] = useState(false)
     const [membersSheetOpen, setMembersSheetOpen] = useState(false)
     const [addMemberSheetOpen, setAddMemberSheetOpen] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
+
+    // 使用 SSE 实时接收群组消息
+    useGroupSSE({
+        enabled: Boolean(api && groupId && token && baseUrl),
+        groupId,
+        token: token || '',
+        baseUrl: baseUrl || ''
+    })
 
     // Fetch group details
     const {
         data: groupData,
         isLoading: groupLoading,
-        error: groupError,
-        refetch: refetchGroup
+        error: groupError
     } = useQuery({
         queryKey: ['group', groupId],
         queryFn: async () => {
@@ -33,22 +42,21 @@ export default function GroupChatPage() {
             return await api.getGroup(groupId)
         },
         enabled: Boolean(api && groupId),
-        refetchInterval: 5000 // Poll every 5 seconds to update member status
+        refetchInterval: 10000 // 改为每10秒刷新成员状态
     })
 
-    // Fetch group messages
+    // Fetch group messages - 初始加载一次，后续靠 SSE
     const {
         data: messagesData,
-        isLoading: messagesLoading,
-        refetch: refetchMessages
+        isLoading: messagesLoading
     } = useQuery({
         queryKey: ['group-messages', groupId],
         queryFn: async () => {
             if (!api) throw new Error('API unavailable')
-            return await api.getGroupMessages(groupId, 50)
+            return await api.getGroupMessages(groupId, 100)
         },
         enabled: Boolean(api && groupId),
-        refetchInterval: 3000 // Poll every 3 seconds for new messages
+        staleTime: 30000 // 30秒内不重新请求
     })
 
     const group = groupData?.group
@@ -67,10 +75,19 @@ export default function GroupChatPage() {
         mutationFn: async ({ content, mentions }: { content: string; mentions?: string[] }) => {
             if (!api) throw new Error('API unavailable')
             return await api.broadcastToGroup(groupId, content, undefined, 'user', 'chat', mentions)
+        }
+        // 不需要在 onSuccess 中刷新了，SSE 会处理
+    })
+
+    // Delete group mutation
+    const deleteGroupMutation = useMutation({
+        mutationFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.deleteGroup(groupId)
         },
         onSuccess: () => {
-            // Refetch messages after sending
-            void queryClient.invalidateQueries({ queryKey: ['group-messages', groupId] })
+            queryClient.invalidateQueries({ queryKey: ['groups'] })
+            navigate({ to: '/groups', replace: true })
         }
     })
 
@@ -112,6 +129,19 @@ export default function GroupChatPage() {
         void queryClient.invalidateQueries({ queryKey: ['group', groupId] })
     }, [api, groupId, queryClient])
 
+    const handleDeleteGroup = useCallback(async () => {
+        if (!confirm('确定要删除此群组吗？所有消息将被永久删除。')) return
+        setIsDeleting(true)
+        try {
+            await deleteGroupMutation.mutateAsync()
+        } catch (error) {
+            console.error('Failed to delete group:', error)
+            alert('删除失败')
+        } finally {
+            setIsDeleting(false)
+        }
+    }, [deleteGroupMutation])
+
     if (groupLoading) {
         return (
             <div className="flex h-full items-center justify-center">
@@ -141,6 +171,8 @@ export default function GroupChatPage() {
                 members={members}
                 onBack={handleBack}
                 onMembersClick={handleMembersClick}
+                onDeleteClick={handleDeleteGroup}
+                isDeleting={isDeleting}
             />
 
             <GroupMessageList

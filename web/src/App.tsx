@@ -491,7 +491,7 @@ export function App() {
     }
 
     return (
-        <AppContextProvider value={{ api, token }}>
+        <AppContextProvider value={{ api, token, baseUrl }}>
             <AdvisorAlertBanner />
             {hasUpdate && <UpdateBanner onRefresh={refreshApp} onDismiss={dismissUpdate} />}
             <SyncingBanner isSyncing={isSyncing} />
