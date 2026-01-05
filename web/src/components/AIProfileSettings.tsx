@@ -347,7 +347,7 @@ export function AIProfileSettings() {
         }
     }, [deleteMutation])
 
-    const profiles = data?.profiles ?? []
+    const profiles = Array.isArray(data?.profiles) ? data.profiles : []
 
     const profileToFormData = (profile: AIProfile): AIProfileFormData => ({
         name: profile.name,

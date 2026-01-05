@@ -529,8 +529,8 @@ export default function GroupsPage() {
         enabled: Boolean(api && expandedGroupId)
     })
 
-    const groups = groupsData?.groups ?? []
-    const sessions = sessionsData?.sessions ?? []
+    const groups = Array.isArray(groupsData?.groups) ? groupsData.groups : []
+    const sessions = Array.isArray(sessionsData?.sessions) ? sessionsData.sessions : []
 
     // Create group mutation
     const createGroupMutation = useMutation({
@@ -684,7 +684,7 @@ export default function GroupsPage() {
                             {expandedGroupId === group.id ? (
                                 <GroupCard
                                     group={group}
-                                    members={groupDetailData?.members ?? []}
+                                    members={Array.isArray(groupDetailData?.members) ? groupDetailData.members : []}
                                     sessions={sessions}
                                     onDelete={() => deleteGroupMutation.mutate(group.id)}
                                     onUpdateStatus={(status) => updateStatusMutation.mutate({ groupId: group.id, status })}

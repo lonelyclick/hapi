@@ -466,7 +466,7 @@ export default function SettingsPage() {
         removePresetMutation.mutate(id)
     }, [removePresetMutation])
 
-    const presets = presetsData?.presets ?? []
+    const presets = Array.isArray(presetsData?.presets) ? presetsData.presets : []
 
     const handleLogout = useCallback(async () => {
         // 清除 localStorage

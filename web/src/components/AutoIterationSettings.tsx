@@ -146,7 +146,7 @@ export function AutoIterationSettings() {
     const config = data?.config
     const stats = data?.stats
     const policySummary = data?.policySummary
-    const logs = logsData?.logs ?? []
+    const logs = Array.isArray(logsData?.logs) ? logsData.logs : []
 
     return (
         <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">

@@ -48,8 +48,8 @@ export default function GroupChatPage() {
     })
 
     const group = groupData?.group
-    const members = groupData?.members ?? []
-    const messages = messagesData?.messages ?? []
+    const members = Array.isArray(groupData?.members) ? groupData.members : []
+    const messages = Array.isArray(messagesData?.messages) ? messagesData.messages : []
 
     // Redirect if group not found
     useEffect(() => {

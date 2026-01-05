@@ -112,7 +112,7 @@ export function NewSession(props: {
         }
     })
 
-    const projects = projectsData?.projects ?? []
+    const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
 
     const selectedProject = useMemo(
         () => projects.find((p) => p.path === projectPath.trim()) ?? null,
