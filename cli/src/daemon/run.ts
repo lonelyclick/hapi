@@ -695,6 +695,37 @@ export async function startDaemon(): Promise<void> {
       logger.debug(`[DAEMON RUN] Persisted ${reAdoptedSessions.length} re-adopted sessions to state file`);
     }
 
+    // Clean up orphan session processes (processes not tracked by daemon)
+    // These are session processes that survived previous daemon crashes but lost their tracking
+    try {
+      const { execSync } = await import('child_process');
+      // Find all hapi session processes (claude or codex)
+      const pgrepResult = execSync('pgrep -f "hapi (claude|codex)" 2>/dev/null || true', { encoding: 'utf-8' });
+      const allSessionPids = pgrepResult.trim().split('\n').filter(Boolean).map(Number).filter(n => !isNaN(n));
+
+      if (allSessionPids.length > 0) {
+        const trackedPids = new Set(pidToTrackedSession.keys());
+        const orphanPids = allSessionPids.filter(pid => !trackedPids.has(pid) && pid !== process.pid);
+
+        if (orphanPids.length > 0) {
+          logger.debug(`[DAEMON RUN] Found ${orphanPids.length} orphan session processes: ${orphanPids.join(', ')}`);
+          for (const orphanPid of orphanPids) {
+            try {
+              process.kill(orphanPid, 'SIGTERM');
+              logger.debug(`[DAEMON RUN] Killed orphan session process ${orphanPid}`);
+            } catch (e) {
+              // Process may have already exited
+              logger.debug(`[DAEMON RUN] Failed to kill orphan ${orphanPid}: ${e}`);
+            }
+          }
+        } else {
+          logger.debug(`[DAEMON RUN] No orphan session processes found (${allSessionPids.length} session(s) all tracked)`);
+        }
+      }
+    } catch (error) {
+      logger.debug('[DAEMON RUN] Failed to scan for orphan processes:', error);
+    }
+
     // Every 60 seconds:
     // 1. Prune stale sessions
     // 2. Check if daemon needs update
