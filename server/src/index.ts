@@ -11,6 +11,8 @@
 import { createConfiguration, type ConfigSource } from './configuration'
 import { Store } from './store'
 import { SqliteStore } from './store/sqlite'
+import { PostgresStore } from './store/postgres'
+import type { IStore } from './store/interface'
 import { SyncEngine, type SyncEvent } from './sync/syncEngine'
 import { HappyBot } from './telegram/bot'
 import { startWebServer } from './web/server'
@@ -86,8 +88,29 @@ async function main() {
         console.log(`[Server] Feishu STT: enabled (${appIdSource}/${appSecretSource})`)
     }
 
-    const store = new Store(config.dbPath)
-    const asyncStore = new SqliteStore(config.dbPath)  // For async IStore interface
+    // Initialize store based on STORE_TYPE environment variable
+    const storeType = process.env.STORE_TYPE || 'sqlite'
+    let store: Store
+    let asyncStore: IStore
+
+    if (storeType === 'postgres') {
+        const pgConfig = {
+            host: process.env.PG_HOST || 'localhost',
+            port: parseInt(process.env.PG_PORT || '5432', 10),
+            user: process.env.PG_USER || 'postgres',
+            password: process.env.PG_PASSWORD || '',
+            database: process.env.PG_DATABASE || 'hapi',
+            ssl: process.env.PG_SSL === 'true'
+        }
+        console.log(`[Server] Store: PostgreSQL (${pgConfig.host}/${pgConfig.database})`)
+        asyncStore = await PostgresStore.create(pgConfig)
+        // For backwards compatibility, create a SQLite store for sync operations that still need it
+        store = new Store(config.dbPath)
+    } else {
+        console.log(`[Server] Store: SQLite (${config.dbPath})`)
+        store = new Store(config.dbPath)
+        asyncStore = new SqliteStore(config.dbPath)
+    }
 
     // Initialize Web Push service
     const webPushConfig = config.webPushVapidPublicKey && config.webPushVapidPrivateKey && config.webPushVapidSubject
