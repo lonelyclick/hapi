@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import type { Store, StoredMachine, StoredSession } from '../../store'
+import type { IStore, StoredMachine, StoredSession } from '../../store'
 import { RpcRegistry } from '../rpcRegistry'
 import type { SyncEvent } from '../../sync/syncEngine'
 import { extractTodoWriteTodosFromMessageContent } from '../../sync/todos'
@@ -91,7 +91,7 @@ const terminalErrorSchema = z.object({
 
 export type CliHandlersDeps = {
     io: SocketServer
-    store: Store
+    store: IStore
     rpcRegistry: RpcRegistry
     terminalRegistry: TerminalRegistry
     onSessionAlive?: (payload: SessionAlivePayload) => void
@@ -110,29 +110,29 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
     const terminalNamespace = io.of('/terminal')
     const namespace = typeof socket.data.namespace === 'string' ? socket.data.namespace : null
 
-    const resolveSessionAccess = (sessionId: string): AccessResult<StoredSession> => {
+    const resolveSessionAccess = async (sessionId: string): Promise<AccessResult<StoredSession>> => {
         if (!namespace) {
             return { ok: false, reason: 'namespace-missing' }
         }
-        const session = store.getSessionByNamespace(sessionId, namespace)
+        const session = await store.getSessionByNamespace(sessionId, namespace)
         if (session) {
             return { ok: true, value: session }
         }
-        if (store.getSession(sessionId)) {
+        if (await store.getSession(sessionId)) {
             return { ok: false, reason: 'access-denied' }
         }
         return { ok: false, reason: 'not-found' }
     }
 
-    const resolveMachineAccess = (machineId: string): AccessResult<StoredMachine> => {
+    const resolveMachineAccess = async (machineId: string): Promise<AccessResult<StoredMachine>> => {
         if (!namespace) {
             return { ok: false, reason: 'namespace-missing' }
         }
-        const machine = store.getMachineByNamespace(machineId, namespace)
+        const machine = await store.getMachineByNamespace(machineId, namespace)
         if (machine) {
             return { ok: true, value: machine }
         }
-        if (store.getMachine(machineId)) {
+        if (await store.getMachine(machineId)) {
             return { ok: false, reason: 'access-denied' }
         }
         return { ok: false, reason: 'not-found' }
@@ -140,13 +140,21 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
 
     const auth = socket.handshake.auth as Record<string, unknown> | undefined
     const sessionId = typeof auth?.sessionId === 'string' ? auth.sessionId : null
-    if (sessionId && resolveSessionAccess(sessionId).ok) {
-        socket.join(`session:${sessionId}`)
+    if (sessionId) {
+        resolveSessionAccess(sessionId).then((result) => {
+            if (result.ok) {
+                socket.join(`session:${sessionId}`)
+            }
+        })
     }
 
     const machineId = typeof auth?.machineId === 'string' ? auth.machineId : null
-    if (machineId && resolveMachineAccess(machineId).ok) {
-        socket.join(`machine:${machineId}`)
+    if (machineId) {
+        resolveMachineAccess(machineId).then((result) => {
+            if (result.ok) {
+                socket.join(`machine:${machineId}`)
+            }
+        })
     }
 
     const emitAccessError = (scope: 'session' | 'machine', id: string, reason: AccessErrorReason) => {
@@ -186,7 +194,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
     })
 
-    socket.on('message', (data: unknown) => {
+    socket.on('message', async (data: unknown) => {
         const parsed = messageSchema.safeParse(data)
         if (!parsed.success) {
             return
@@ -205,18 +213,18 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
             })()
             : raw
 
-        const sessionAccess = resolveSessionAccess(sid)
+        const sessionAccess = await resolveSessionAccess(sid)
         if (!sessionAccess.ok) {
             emitAccessError('session', sid, sessionAccess.reason)
             return
         }
         const session = sessionAccess.value
 
-        const msg = store.addMessage(sid, content, localId)
+        const msg = await store.addMessage(sid, content, localId)
 
         const todos = extractTodoWriteTodosFromMessageContent(content)
         if (todos) {
-            const updated = store.setSessionTodos(sid, todos, msg.createdAt, session.namespace)
+            const updated = await store.setSessionTodos(sid, todos, msg.createdAt, session.namespace)
             if (updated) {
                 onWebappEvent?.({ type: 'session-updated', sessionId: sid, data: { sid } })
             }

@@ -9,7 +9,7 @@
  */
 
 import type { IStore } from '../store/interface'
-import type { StoredAIProfile, StoredAIProfileMemory } from '../store'
+import type { StoredAIProfile, StoredAIProfileMemory } from '../store/types'
 
 // 任务机会类型
 export type TaskOpportunityType =

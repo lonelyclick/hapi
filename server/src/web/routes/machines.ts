@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
-import type { Store, UserRole } from '../../store'
+import type { IStore, UserRole } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { buildInitPrompt } from '../prompts/initPrompt'
 import { requireMachine } from './guards'
@@ -87,7 +87,7 @@ async function sendInitPromptAfterOnline(engine: SyncEngine, sessionId: string, 
     await sendInitPrompt(engine, sessionId, role)
 }
 
-export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: Store): Hono<WebAppEnv> {
+export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/machines', (c) => {

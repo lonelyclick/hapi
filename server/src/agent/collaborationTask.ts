@@ -9,7 +9,8 @@
  * 5. 进度追踪 - 实时追踪各参与者的进度
  */
 
-import type { Store, StoredAIProfile } from '../store'
+import type { IStore } from '../store/interface'
+import type { StoredAIProfile } from '../store/types'
 
 // 协作任务类型
 export type CollaborationTaskType =
@@ -141,9 +142,9 @@ export interface CollaborationMessage {
 export class CollaborationTaskManager {
     private tasks: Map<string, CollaborationTask> = new Map()
     private messages: Map<string, CollaborationMessage[]> = new Map()
-    private store: Store
+    private store: IStore
 
-    constructor(store: Store) {
+    constructor(store: IStore) {
         this.store = store
     }
 
@@ -696,21 +697,21 @@ export class CollaborationTaskManager {
      * 生成协作任务的 Prompt 片段
      * 用于注入到 AI 会话中，让 AI 了解当前协作上下文
      */
-    generateCollaborationPrompt(taskId: string, forProfileId: string): string {
+    async generateCollaborationPrompt(taskId: string, forProfileId: string): Promise<string> {
         const task = this.tasks.get(taskId)
         if (!task) return ''
 
         const participant = task.participants.find(p => p.profileId === forProfileId)
         if (!participant) return ''
 
-        const profile = this.store.getAIProfile(forProfileId)
-        const otherParticipants = task.participants
+        const profile = await this.store.getAIProfile(forProfileId)
+        const otherParticipantsPromises = task.participants
             .filter(p => p.profileId !== forProfileId)
-            .map(p => {
-                const pProfile = this.store.getAIProfile(p.profileId)
+            .map(async p => {
+                const pProfile = await this.store.getAIProfile(p.profileId)
                 return `- ${pProfile?.name ?? p.profileId} (${p.role})`
             })
-            .join('\n')
+        const otherParticipants = (await Promise.all(otherParticipantsPromises)).join('\n')
 
         const mySubtasks = task.subtasks
             .filter(s => s.assigneeProfileId === forProfileId)

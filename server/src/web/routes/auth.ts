@@ -7,7 +7,7 @@ import { parseAccessToken } from '../../utils/accessToken'
 import { validateTelegramInitData } from '../telegramInitData'
 import { getOrCreateOwnerId } from '../ownerId'
 import type { WebAppEnv } from '../middleware/auth'
-import type { Store } from '../../store'
+import type { IStore } from '../../store'
 
 const telegramAuthSchema = z.object({
     initData: z.string()
@@ -22,7 +22,7 @@ const accessTokenAuthSchema = z.object({
 
 const authBodySchema = z.union([telegramAuthSchema, accessTokenAuthSchema])
 
-export function createAuthRoutes(jwtSecret: Uint8Array, store: Store): Hono<WebAppEnv> {
+export function createAuthRoutes(jwtSecret: Uint8Array, store: IStore): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.post('/auth', async (c) => {

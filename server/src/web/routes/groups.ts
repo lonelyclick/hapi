@@ -3,7 +3,7 @@ import { streamSSE } from 'hono/streaming'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
-import type { Store, AgentGroupType, AgentGroupStatus, GroupMemberRole, GroupSenderType, GroupMessageType } from '../../store'
+import type { IStore, AgentGroupType, AgentGroupStatus, GroupMemberRole, GroupSenderType, GroupMessageType } from '../../store'
 import type { SyncEngine, GroupMessageData } from '../../sync/syncEngine'
 import type { SSEManager } from '../../sse/sseManager'
 
@@ -46,7 +46,7 @@ const messagesQuerySchema = z.object({
 })
 
 export function createGroupRoutes(
-    store: Store,
+    store: IStore,
     syncEngine: SyncEngine | null,
     sseManager: SSEManager | null = null
 ): Hono<WebAppEnv> {

@@ -3,7 +3,8 @@
  * 根据任务描述自动推荐最合适的 AI Profile
  */
 
-import type { Store, StoredAIProfile, AIProfileRole } from '../store'
+import type { IStore } from '../store/interface'
+import type { StoredAIProfile, AIProfileRole } from '../store/types'
 
 /**
  * 匹配结果
@@ -119,13 +120,13 @@ function calculateStatusScore(status: string): number {
  * @param taskDescription - 任务描述
  * @returns 最佳匹配的 profileId，如果没有匹配则返回 null
  */
-export function findBestProfileForTask(
-    store: Store,
+export async function findBestProfileForTask(
+    store: IStore,
     namespace: string,
     taskDescription: string
-): string | null {
+): Promise<string | null> {
     // 获取所有 AI Profiles
-    const profiles = store.getAIProfiles(namespace)
+    const profiles = await store.getAIProfiles(namespace)
 
     if (profiles.length === 0) {
         return null
@@ -184,12 +185,12 @@ export function findBestProfileForTask(
 /**
  * 获取所有匹配结果（用于调试或 UI 展示）
  */
-export function getAllProfileMatches(
-    store: Store,
+export async function getAllProfileMatches(
+    store: IStore,
     namespace: string,
     taskDescription: string
-): ProfileMatchResult[] {
-    const profiles = store.getAIProfiles(namespace)
+): Promise<ProfileMatchResult[]> {
+    const profiles = await store.getAIProfiles(namespace)
 
     if (profiles.length === 0) {
         return []

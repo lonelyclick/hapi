@@ -3,7 +3,7 @@
  */
 
 import { EventEmitter } from 'node:events'
-import type { Store } from '../../store'
+import type { IStore } from '../../store'
 import type {
     ActionRequest,
     ActionType,
@@ -50,36 +50,45 @@ export interface AutoIterationServiceEvents {
  * 自动迭代核心服务
  */
 export class AutoIterationService extends EventEmitter {
-    private policyEngine: PolicyEngine
-    private executionEngine: ExecutionEngine
-    private approvalFlow: ApprovalFlow
-    private auditLogger: AuditLogger
-    private config: AutoIterationConfig
+    private policyEngine!: PolicyEngine
+    private executionEngine!: ExecutionEngine
+    private approvalFlow!: ApprovalFlow
+    private auditLogger!: AuditLogger
+    private config!: AutoIterationConfig
+    private initialized = false
 
     constructor(
         private syncEngine: SyncEngineInterface,
-        private store: Store,
+        private store: IStore,
         private namespace: string = 'default'
     ) {
         super()
+    }
+
+    /**
+     * 异步初始化服务
+     */
+    async init(): Promise<void> {
+        if (this.initialized) return
 
         // 加载配置
-        this.config = this.loadConfig()
+        this.config = await this.loadConfig()
 
         // 初始化组件
-        this.auditLogger = new AuditLogger(store, namespace)
+        this.auditLogger = new AuditLogger(this.store, this.namespace)
         this.policyEngine = new PolicyEngine(this.config)
-        this.executionEngine = new ExecutionEngine(syncEngine, this.auditLogger, namespace)
+        this.executionEngine = new ExecutionEngine(this.syncEngine, this.auditLogger, this.namespace)
         this.approvalFlow = new ApprovalFlow(this.auditLogger)
 
-        console.log(`[AutoIteration] Service initialized for namespace: ${namespace}, enabled: ${this.config.enabled}`)
+        this.initialized = true
+        console.log(`[AutoIteration] Service initialized for namespace: ${this.namespace}, enabled: ${this.config.enabled}`)
     }
 
     /**
      * 加载配置
      */
-    private loadConfig(): AutoIterationConfig {
-        const stored = this.store.getAutoIterationConfig(this.namespace)
+    private async loadConfig(): Promise<AutoIterationConfig> {
+        const stored = await this.store.getAutoIterationConfig(this.namespace)
         if (stored) {
             return {
                 namespace: stored.namespace,

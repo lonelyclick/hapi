@@ -30,7 +30,7 @@ import type { Server as SocketEngine } from '@socket.io/bun-engine'
 import type { WebSocketData } from '@socket.io/bun-engine'
 import { loadEmbeddedAssetMap, type EmbeddedWebAsset } from './embeddedAssets'
 import { isBunCompiled } from '../utils/bunCompiled'
-import type { Store } from '../store'
+import type { IStore } from '../store'
 import type { AutoIterationService } from '../agent/autoIteration'
 import type { AdvisorScheduler } from '../agent/advisorScheduler'
 import type { AdvisorService } from '../agent/advisorService'
@@ -78,7 +78,7 @@ function createWebApp(options: {
     getSyncEngine: () => SyncEngine | null
     getSseManager: () => SSEManager | null
     jwtSecret: Uint8Array
-    store: Store
+    store: IStore
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
     autoIterationService: AutoIterationService | null
     getAdvisorScheduler: () => AdvisorScheduler | null
@@ -240,7 +240,7 @@ export async function startWebServer(options: {
     getSyncEngine: () => SyncEngine | null
     getSseManager: () => SSEManager | null
     jwtSecret: Uint8Array
-    store: Store
+    store: IStore
     socketEngine: SocketEngine
     autoIterationService: AutoIterationService | null
     getAdvisorScheduler?: () => AdvisorScheduler | null

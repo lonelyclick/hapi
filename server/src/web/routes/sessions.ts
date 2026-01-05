@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { DecryptedMessage, Session, SyncEngine } from '../../sync/syncEngine'
 import type { SSEManager } from '../../sse/sseManager'
-import type { Store, UserRole } from '../../store'
+import type { IStore, UserRole } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
 import { buildInitPrompt } from '../prompts/initPrompt'
@@ -100,7 +100,7 @@ const RESUME_TIMEOUT_MS = 60_000
 const RESUME_CONTEXT_MAX_LINES = 20
 const RESUME_CONTEXT_MAX_CHARS = 16_000
 
-function resolveUserRole(store: Store, email?: string): UserRole {
+function resolveUserRole(store: IStore, email?: string): UserRole {
     if (!email) return 'developer'
     const users = store.getAllowedUsers()
     if (users.length === 0) return 'developer'
@@ -335,7 +335,7 @@ function buildResumeContextMessage(session: Session, messages: DecryptedMessage[
 export function createSessionsRoutes(
     getSyncEngine: () => SyncEngine | null,
     getSseManager: () => SSEManager | null,
-    store: Store
+    store: IStore
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -547,7 +547,7 @@ export function createSessionsRoutes(
         await sendInitPrompt(engine, newSessionId, role)
 
         if (!resumeSessionId) {
-            const page = engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
+            const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
             const contextMessage = buildResumeContextMessage(session, page.messages)
             if (contextMessage) {
                 await engine.sendMessage(newSessionId, { text: contextMessage, sentFrom: 'webapp' })

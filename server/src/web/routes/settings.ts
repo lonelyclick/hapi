@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
-import type { Store, UserRole, AutoIterExecutionStatus, AutoIterActionType } from '../../store'
+import type { IStore, UserRole, AutoIterExecutionStatus, AutoIterActionType } from '../../store'
 import type { AutoIterationService } from '../../agent/autoIteration'
 import type { AdvisorScheduler } from '../../agent/advisorScheduler'
 import type { AdvisorService } from '../../agent/advisorService'
@@ -84,7 +84,7 @@ const autoIterationLogsQuerySchema = z.object({
 })
 
 export function createSettingsRoutes(
-    store: Store,
+    store: IStore,
     autoIterationService?: AutoIterationService,
     getAdvisorScheduler?: () => AdvisorScheduler | null,
     getAdvisorService?: () => AdvisorService | null

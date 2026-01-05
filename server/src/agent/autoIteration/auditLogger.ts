@@ -3,7 +3,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { Store } from '../../store'
+import type { IStore } from '../../store'
 import type {
     ActionRequest,
     AutoIterationLog,
@@ -16,17 +16,17 @@ import type {
  */
 export class AuditLogger {
     constructor(
-        private store: Store,
+        private store: IStore,
         private namespace: string = 'default'
     ) {}
 
     /**
      * 创建执行日志
      */
-    createLog(request: ActionRequest, suggestionId?: string): AutoIterationLog | null {
+    async createLog(request: ActionRequest, suggestionId?: string): Promise<AutoIterationLog | null> {
         const id = `ail_${Date.now()}_${randomUUID().slice(0, 8)}`
 
-        const storedLog = this.store.createAutoIterationLog({
+        const storedLog = await this.store.createAutoIterationLog({
             id,
             namespace: this.namespace,
             sourceSuggestionId: suggestionId,
@@ -50,7 +50,7 @@ export class AuditLogger {
     /**
      * 更新日志状态
      */
-    updateLog(id: string, update: {
+    async updateLog(id: string, update: {
         executionStatus?: ExecutionStatus
         approvalMethod?: ApprovalMethod
         approvedBy?: string
@@ -62,8 +62,8 @@ export class AuditLogger {
         rolledBack?: boolean
         rolledBackAt?: number
         executedAt?: number
-    }): boolean {
-        const success = this.store.updateAutoIterationLog(id, update)
+    }): Promise<boolean> {
+        const success = await this.store.updateAutoIterationLog(id, update)
 
         if (success && update.executionStatus) {
             console.log(`[AutoIteration] Log ${id} status updated to ${update.executionStatus}`)
@@ -75,8 +75,8 @@ export class AuditLogger {
     /**
      * 标记为已批准
      */
-    markApproved(id: string, method: ApprovalMethod, approvedBy?: string): boolean {
-        return this.updateLog(id, {
+    async markApproved(id: string, method: ApprovalMethod, approvedBy?: string): Promise<boolean> {
+        return await this.updateLog(id, {
             executionStatus: 'approved',
             approvalMethod: method,
             approvedBy,
@@ -87,8 +87,8 @@ export class AuditLogger {
     /**
      * 标记为执行中
      */
-    markExecuting(id: string): boolean {
-        return this.updateLog(id, {
+    async markExecuting(id: string): Promise<boolean> {
+        return await this.updateLog(id, {
             executionStatus: 'executing'
         })
     }
@@ -96,8 +96,8 @@ export class AuditLogger {
     /**
      * 标记为已完成
      */
-    markCompleted(id: string, result?: unknown, rollbackData?: unknown): boolean {
-        return this.updateLog(id, {
+    async markCompleted(id: string, result?: unknown, rollbackData?: unknown): Promise<boolean> {
+        return await this.updateLog(id, {
             executionStatus: 'completed',
             resultJson: result,
             rollbackAvailable: !!rollbackData,
@@ -109,8 +109,8 @@ export class AuditLogger {
     /**
      * 标记为失败
      */
-    markFailed(id: string, errorMessage: string, rollbackData?: unknown): boolean {
-        return this.updateLog(id, {
+    async markFailed(id: string, errorMessage: string, rollbackData?: unknown): Promise<boolean> {
+        return await this.updateLog(id, {
             executionStatus: 'failed',
             errorMessage,
             rollbackAvailable: !!rollbackData,
@@ -122,8 +122,8 @@ export class AuditLogger {
     /**
      * 标记为已拒绝
      */
-    markRejected(id: string, reason?: string): boolean {
-        return this.updateLog(id, {
+    async markRejected(id: string, reason?: string): Promise<boolean> {
+        return await this.updateLog(id, {
             executionStatus: 'rejected',
             errorMessage: reason
         })
@@ -132,8 +132,8 @@ export class AuditLogger {
     /**
      * 标记为已取消
      */
-    markCancelled(id: string): boolean {
-        return this.updateLog(id, {
+    async markCancelled(id: string): Promise<boolean> {
+        return await this.updateLog(id, {
             executionStatus: 'cancelled'
         })
     }
@@ -141,8 +141,8 @@ export class AuditLogger {
     /**
      * 标记为超时
      */
-    markTimeout(id: string): boolean {
-        return this.updateLog(id, {
+    async markTimeout(id: string): Promise<boolean> {
+        return await this.updateLog(id, {
             executionStatus: 'timeout'
         })
     }
@@ -150,8 +150,8 @@ export class AuditLogger {
     /**
      * 标记为已回滚
      */
-    markRolledBack(id: string): boolean {
-        return this.updateLog(id, {
+    async markRolledBack(id: string): Promise<boolean> {
+        return await this.updateLog(id, {
             rolledBack: true,
             rolledBackAt: Date.now()
         })
@@ -160,37 +160,37 @@ export class AuditLogger {
     /**
      * 获取日志
      */
-    getLog(id: string): AutoIterationLog | null {
-        const storedLog = this.store.getAutoIterationLog(id)
+    async getLog(id: string): Promise<AutoIterationLog | null> {
+        const storedLog = await this.store.getAutoIterationLog(id)
         return storedLog ? this.toAutoIterationLog(storedLog) : null
     }
 
     /**
      * 获取日志列表
      */
-    getLogs(filters?: {
+    async getLogs(filters?: {
         status?: ExecutionStatus | ExecutionStatus[]
         actionType?: string
         projectPath?: string
         limit?: number
         offset?: number
-    }): AutoIterationLog[] {
-        const storedLogs = this.store.getAutoIterationLogs(this.namespace, filters as Parameters<Store['getAutoIterationLogs']>[1])
+    }): Promise<AutoIterationLog[]> {
+        const storedLogs = await this.store.getAutoIterationLogs(this.namespace, filters as Parameters<Store['getAutoIterationLogs']>[1])
         return storedLogs.map(log => this.toAutoIterationLog(log))
     }
 
     /**
      * 获取待处理的日志
      */
-    getPendingLogs(): AutoIterationLog[] {
-        return this.getLogs({ status: ['pending', 'approved'] })
+    async getPendingLogs(): Promise<AutoIterationLog[]> {
+        return await this.getLogs({ status: ['pending', 'approved'] })
     }
 
     /**
      * 清理旧日志
      */
-    cleanupOldLogs(keepDays: number): number {
-        const count = this.store.cleanupOldAutoIterationLogs(this.namespace, keepDays)
+    async cleanupOldLogs(keepDays: number): Promise<number> {
+        const count = await this.store.cleanupOldAutoIterationLogs(this.namespace, keepDays)
         if (count > 0) {
             console.log(`[AutoIteration] Cleaned up ${count} old logs`)
         }
@@ -200,14 +200,14 @@ export class AuditLogger {
     /**
      * 获取统计信息
      */
-    getStats(): {
+    async getStats(): Promise<{
         total: number
         pending: number
         completed: number
         failed: number
         rejected: number
-    } {
-        const allLogs = this.getLogs({ limit: 1000 })
+    }> {
+        const allLogs = await this.getLogs({ limit: 1000 })
 
         return {
             total: allLogs.length,

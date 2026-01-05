@@ -7,14 +7,14 @@ import { parseAccessToken } from '../../utils/accessToken'
 import { validateTelegramInitData } from '../telegramInitData'
 import { getOrCreateOwnerId } from '../ownerId'
 import type { WebAppEnv } from '../middleware/auth'
-import type { Store } from '../../store'
+import type { IStore } from '../../store'
 
 const bindBodySchema = z.object({
     initData: z.string(),
     accessToken: z.string()
 })
 
-export function createBindRoutes(jwtSecret: Uint8Array, store: Store): Hono<WebAppEnv> {
+export function createBindRoutes(jwtSecret: Uint8Array, store: IStore): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.post('/bind', async (c) => {

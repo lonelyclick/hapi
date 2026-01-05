@@ -9,7 +9,7 @@ import { Bot, Context, InlineKeyboard } from 'grammy'
 import { SyncEngine, SyncEvent, Session } from '../sync/syncEngine'
 import { handleCallback, CallbackContext } from './callbacks'
 import { formatSessionNotification, createNotificationKeyboard } from './sessionView'
-import type { Store } from '../store'
+import type { IStore } from '../store'
 
 export interface BotContext extends Context {
     // Extended context for future use
@@ -19,7 +19,7 @@ export interface HappyBotConfig {
     syncEngine: SyncEngine
     botToken: string
     miniAppUrl: string
-    store: Store
+    store: IStore
 }
 
 // 自主模式控制器接口（由 AdvisorService 实现）
@@ -37,7 +37,7 @@ export class HappyBot {
     private syncEngine: SyncEngine | null = null
     private isRunning = false
     private readonly miniAppUrl: string
-    private readonly store: Store
+    private readonly store: IStore
 
     // Track last known permission requests per session to detect new ones
     private lastKnownRequests: Map<string, Set<string>> = new Map()
