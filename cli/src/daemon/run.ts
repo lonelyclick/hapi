@@ -695,31 +695,72 @@ export async function startDaemon(): Promise<void> {
       logger.debug(`[DAEMON RUN] Persisted ${reAdoptedSessions.length} re-adopted sessions to state file`);
     }
 
-    // Clean up orphan session processes (processes not tracked by daemon)
+    // Re-adopt orphan session processes (processes not tracked by daemon but still running)
     // These are session processes that survived previous daemon crashes but lost their tracking
+    // Instead of killing them, we re-adopt them by parsing their command line for session ID
     try {
       const { execSync } = await import('child_process');
-      // Find all hapi session processes (claude or codex)
-      const pgrepResult = execSync('pgrep -f "hapi (claude|codex)" 2>/dev/null || true', { encoding: 'utf-8' });
-      const allSessionPids = pgrepResult.trim().split('\n').filter(Boolean).map(Number).filter(n => !isNaN(n));
+      // Find all hapi session processes with their full command line
+      const pgrepResult = execSync('pgrep -af "hapi (claude|codex)" 2>/dev/null || true', { encoding: 'utf-8' });
+      const lines = pgrepResult.trim().split('\n').filter(Boolean);
 
-      if (allSessionPids.length > 0) {
+      if (lines.length > 0) {
         const trackedPids = new Set(pidToTrackedSession.keys());
-        const orphanPids = allSessionPids.filter(pid => !trackedPids.has(pid) && pid !== process.pid);
+        let adoptedCount = 0;
 
-        if (orphanPids.length > 0) {
-          logger.debug(`[DAEMON RUN] Found ${orphanPids.length} orphan session processes: ${orphanPids.join(', ')}`);
-          for (const orphanPid of orphanPids) {
+        for (const line of lines) {
+          // Format: "PID command args..."
+          const match = line.match(/^(\d+)\s+(.+)$/);
+          if (!match) continue;
+
+          const pid = parseInt(match[1]);
+          const cmdline = match[2];
+
+          // Skip if already tracked or is daemon itself
+          if (trackedPids.has(pid) || pid === process.pid) continue;
+
+          // Parse session ID from command line: --hapi-session-id <uuid>
+          const sessionIdMatch = cmdline.match(/--hapi-session-id\s+([a-f0-9-]{36})/i);
+          if (sessionIdMatch) {
+            const sessionId = sessionIdMatch[1];
+            // Re-adopt this orphan session
+            const trackedSession: TrackedSession = {
+              startedBy: 'daemon',
+              pid,
+              happySessionId: sessionId,
+              childProcess: undefined
+            };
+            pidToTrackedSession.set(pid, trackedSession);
+            sessionStartedAtMap.set(pid, Date.now());
+            adoptedCount++;
+            logger.debug(`[DAEMON RUN] Re-adopted orphan session PID ${pid} (${sessionId}) from process scan`);
+          } else {
+            // Session without ID (e.g. --yolo mode without explicit ID) - can't re-adopt, kill it
+            logger.debug(`[DAEMON RUN] Found orphan session PID ${pid} without session ID, killing it`);
             try {
-              process.kill(orphanPid, 'SIGTERM');
-              logger.debug(`[DAEMON RUN] Killed orphan session process ${orphanPid}`);
+              process.kill(pid, 'SIGTERM');
             } catch (e) {
-              // Process may have already exited
-              logger.debug(`[DAEMON RUN] Failed to kill orphan ${orphanPid}: ${e}`);
+              logger.debug(`[DAEMON RUN] Failed to kill orphan ${pid}: ${e}`);
             }
           }
-        } else {
-          logger.debug(`[DAEMON RUN] No orphan session processes found (${allSessionPids.length} session(s) all tracked)`);
+        }
+
+        if (adoptedCount > 0) {
+          logger.debug(`[DAEMON RUN] Re-adopted ${adoptedCount} orphan session(s) from process scan`);
+          // Persist the newly adopted sessions
+          const allSessions: PersistedSessionInfo[] = [];
+          for (const [pid, session] of pidToTrackedSession.entries()) {
+            if (session.happySessionId) {
+              allSessions.push({
+                pid,
+                happySessionId: session.happySessionId,
+                cwd: session.happySessionMetadataFromLocalWebhook?.path || '',
+                startedAt: sessionStartedAtMap.get(pid) || Date.now()
+              });
+            }
+          }
+          writeDaemonState({ ...fileState, sessions: allSessions });
+          logger.debug(`[DAEMON RUN] Persisted ${allSessions.length} total sessions after orphan adoption`);
         }
       }
     } catch (error) {
