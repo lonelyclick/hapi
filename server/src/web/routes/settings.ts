@@ -541,5 +541,81 @@ export function createSettingsRoutes(
         return c.json({ ok: true })
     })
 
+    // ==================== 自主模式管理 ====================
+
+    // 获取自主模式状态
+    app.get('/autonomous/status', (c) => {
+        const advisorService = getAdvisorService?.()
+        if (!advisorService) {
+            return c.json({ error: 'AdvisorService not available' }, 503)
+        }
+
+        const status = advisorService.getAutonomousStatus()
+        if (!status) {
+            return c.json({ error: 'Autonomous manager not initialized' }, 503)
+        }
+
+        return c.json(status)
+    })
+
+    // 启用自主模式
+    app.post('/autonomous/enable', (c) => {
+        const advisorService = getAdvisorService?.()
+        if (!advisorService) {
+            return c.json({ error: 'AdvisorService not available' }, 503)
+        }
+
+        advisorService.enableAutonomousMode()
+        console.log('[API] Autonomous mode enabled by user')
+
+        return c.json({ ok: true, enabled: true })
+    })
+
+    // 禁用自主模式
+    app.post('/autonomous/disable', (c) => {
+        const advisorService = getAdvisorService?.()
+        if (!advisorService) {
+            return c.json({ error: 'AdvisorService not available' }, 503)
+        }
+
+        advisorService.disableAutonomousMode()
+        console.log('[API] Autonomous mode disabled by user')
+
+        return c.json({ ok: true, enabled: false })
+    })
+
+    // 获取发现的任务机会
+    app.get('/autonomous/opportunities', (c) => {
+        const advisorService = getAdvisorService?.()
+        if (!advisorService) {
+            return c.json({ error: 'AdvisorService not available' }, 503)
+        }
+
+        const status = advisorService.getAutonomousStatus()
+        if (!status) {
+            return c.json({ error: 'Autonomous manager not initialized' }, 503)
+        }
+
+        return c.json({ opportunities: status.opportunities })
+    })
+
+    // 获取工作队列
+    app.get('/autonomous/workqueue', (c) => {
+        const advisorService = getAdvisorService?.()
+        if (!advisorService) {
+            return c.json({ error: 'AdvisorService not available' }, 503)
+        }
+
+        const status = advisorService.getAutonomousStatus()
+        if (!status) {
+            return c.json({ error: 'Autonomous manager not initialized' }, 503)
+        }
+
+        return c.json({
+            workQueue: status.workQueue,
+            stats: status.queueStats
+        })
+    })
+
     return app
 }
