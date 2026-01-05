@@ -146,17 +146,33 @@ export class AdvisorTaskTracker {
 
     /**
      * 检测是否有类似的进行中任务
+     * 优化：降低阈值到 0.3，增加更多检测逻辑
      */
-    hasSimilarRunningTask(taskDescription: string, threshold: number = 0.5): AdvisorTask | null {
+    hasSimilarRunningTask(taskDescription: string, threshold: number = 0.3): AdvisorTask | null {
         const newKeywords = this.extractKeywords(taskDescription)
         if (newKeywords.length === 0) return null
 
         const runningTasks = this.getRunningTasks()
 
         for (const task of runningTasks) {
+            // 方法1：Jaccard 相似度
             const similarity = this.calculateSimilarity(newKeywords, task.keywords)
             if (similarity >= threshold) {
-                console.log(`[TaskTracker] Found similar running task ${task.id} (similarity: ${similarity.toFixed(2)})`)
+                console.log(`[TaskTracker] Found similar running task ${task.id} (Jaccard similarity: ${similarity.toFixed(2)})`)
+                return task
+            }
+
+            // 方法2：检查任务描述是否包含相同的核心关键词
+            const commonKeywords = newKeywords.filter(k => task.keywords.includes(k))
+            if (commonKeywords.length >= 3) {  // 至少有3个共同关键词
+                console.log(`[TaskTracker] Found similar running task ${task.id} (common keywords: ${commonKeywords.join(', ')})`)
+                return task
+            }
+
+            // 方法3：任务创建时间过近（5分钟内）且有任何共同关键词
+            const timeDiff = Date.now() - task.createdAt
+            if (timeDiff < 5 * 60 * 1000 && commonKeywords.length > 0) {
+                console.log(`[TaskTracker] Found similar running task ${task.id} (created ${Math.round(timeDiff / 1000)}s ago, common: ${commonKeywords.join(', ')})`)
                 return task
             }
         }

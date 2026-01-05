@@ -76,7 +76,7 @@ export class AdvisorScheduler {
                 return
             }
 
-            // 3. 检查是否已有运行中的 Advisor 会话
+            // 3. 检查是否已有运行中的 Advisor 会话（增强检查）
             const existingSession = this.syncEngine.getSession(this.advisorSessionId)
             if (existingSession?.active) {
                 console.log(`[AdvisorScheduler] Advisor session ${this.advisorSessionId} already running`)
@@ -87,7 +87,27 @@ export class AdvisorScheduler {
                     status: 'running',
                     lastSeen: Date.now()
                 })
+                // 确保订阅会话结束事件（可能之前没订阅）
+                this.subscribeToSessionEnd()
                 return
+            }
+
+            // 3.1 额外检查：是否有任何 advisor 类型的活跃会话（防止重复）
+            const activeSessions = this.syncEngine.getActiveSessions()
+            for (const session of activeSessions) {
+                const metadata = session.metadata as Record<string, unknown> | null
+                if (metadata?.claudeAgent === 'advisor' || metadata?.isAdvisor === true) {
+                    console.log(`[AdvisorScheduler] Found existing advisor session ${session.id}, reusing it`)
+                    this.advisorSessionId = session.id
+                    await this.store.upsertAdvisorState(this.namespace, {
+                        advisorSessionId: session.id,
+                        machineId: machine.id,
+                        status: 'running',
+                        lastSeen: Date.now()
+                    })
+                    this.subscribeToSessionEnd()
+                    return
+                }
             }
 
             // 4. 获取 advisorWorkingDir
@@ -250,18 +270,31 @@ export class AdvisorScheduler {
         }
     }
 
+    // 重启计数（用于指数退避）
+    private restartCount: number = 0
+    private readonly maxRestartDelay: number = 60_000  // 最大重启延迟 1 分钟
+
     private scheduleRestart(): void {
         if (this.restartTimer) {
             return  // 已经有计划的重启
         }
 
+        // 指数退避：每次失败后延迟翻倍，最大 1 分钟
+        const delay = Math.min(this.restartDelayMs * Math.pow(2, this.restartCount), this.maxRestartDelay)
+        this.restartCount++
+
+        console.log(`[AdvisorScheduler] Scheduling restart in ${delay / 1000}s (attempt ${this.restartCount})`)
+
         this.restartTimer = setTimeout(() => {
             this.restartTimer = null
-            this.start().catch(error => {
+            this.start().then(() => {
+                // 启动成功，重置计数
+                this.restartCount = 0
+            }).catch(error => {
                 console.error('[AdvisorScheduler] Restart failed:', error)
                 this.scheduleRestart()
             })
-        }, this.restartDelayMs)
+        }, delay)
     }
 
     // ==================== 定期审查功能 ====================

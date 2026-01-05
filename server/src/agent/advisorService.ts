@@ -734,6 +734,71 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
                 console.error('[AdvisorService] Summary generation error:', error)
             })
         }
+
+        // 自主模式：从消息内容发现任务机会
+        if (this.autonomousEnabled && this.autonomousManager) {
+            this.discoverTaskOpportunities(sessionId, content)
+        }
+    }
+
+    /**
+     * 从会话消息中发现任务机会
+     */
+    private discoverTaskOpportunities(sessionId: string, content: Record<string, unknown>): void {
+        const text = this.extractMessageText(content)
+        if (!text || text.length < 10) {
+            return
+        }
+
+        // 调用自主管理器发现任务
+        const opportunities = this.autonomousManager!.processContent(text, 'default', sessionId)
+
+        if (opportunities.length > 0) {
+            console.log(`[AdvisorService] Discovered ${opportunities.length} task opportunities from session ${sessionId}`)
+
+            // 自动评估每个机会并决策
+            for (const opp of opportunities) {
+                this.autonomousManager!.evaluateOpportunity(opp.id, 'default').then(decision => {
+                    if (decision?.type === 'accept-task') {
+                        console.log(`[AdvisorService] Task opportunity accepted: ${opp.title}`)
+                        this.triggerAutonomousTask(opp)
+                    }
+                }).catch(err => {
+                    console.error('[AdvisorService] Failed to evaluate opportunity:', err)
+                })
+            }
+        }
+    }
+
+    /**
+     * 触发自主任务执行
+     */
+    private async triggerAutonomousTask(opportunity: TaskOpportunity): Promise<void> {
+        const taskDescription = `## 自动发现的任务
+
+**类型**: ${opportunity.type}
+**标题**: ${opportunity.title}
+**描述**: ${opportunity.description}
+**紧急度**: ${opportunity.context.urgency}
+**预计工作量**: ${opportunity.estimatedEffort}
+
+请评估并处理这个任务机会。`
+
+        const advisorSessionId = this.scheduler.getAdvisorSessionId()
+        if (!advisorSessionId) {
+            console.log('[AdvisorService] No advisor session, skip autonomous task')
+            return
+        }
+
+        try {
+            await this.syncEngine.sendMessage(advisorSessionId, {
+                text: `[[AUTONOMOUS_TASK_DISCOVERED]]\n${taskDescription}`,
+                sentFrom: 'advisor'
+            })
+            console.log(`[AdvisorService] Autonomous task sent to Advisor: ${opportunity.title}`)
+        } catch (error) {
+            console.error('[AdvisorService] Failed to send autonomous task:', error)
+        }
     }
 
     /**
