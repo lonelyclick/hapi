@@ -865,11 +865,16 @@ export async function startDaemon(): Promise<void> {
       apiMachine.shutdown();
       await stopControlServer();
 
-      // Only cleanup daemon state if NOT from os-signal
-      // When restarting via systemctl/SIGTERM, we want to preserve sessions for recovery
-      if (source === 'os-signal') {
-        logger.debug('[DAEMON RUN] Keeping daemon state file for session recovery (shutdown via os-signal)');
+      // Keep daemon state file for session recovery when restarting
+      // - os-signal: systemctl restart / SIGTERM
+      // - hapi-cli: new daemon stopping old daemon via HTTP
+      // Only cleanup when:
+      // - exception: daemon crashed
+      // - hapi-app: user explicitly stopped daemon from app
+      if (source === 'os-signal' || source === 'hapi-cli') {
+        logger.debug(`[DAEMON RUN] Keeping daemon state file for session recovery (shutdown via ${source})`);
       } else {
+        logger.debug(`[DAEMON RUN] Cleaning up daemon state file (shutdown via ${source})`);
         await cleanupDaemonState();
       }
 
