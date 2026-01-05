@@ -104,16 +104,18 @@ export async function startDaemon(): Promise<void> {
   logger.debug('[DAEMON RUN] Starting daemon process...');
   logger.debugLargeJson('[DAEMON RUN] Environment', getEnvironmentInfo());
 
-  // Check if already running
-  // Check if running daemon version matches current CLI version
-  const runningDaemonVersionMatches = await isDaemonRunningCurrentlyInstalledHappyVersion();
-
-  // Read old state to get sessions for recovery
+  // Read old state FIRST to get sessions for recovery
+  // This must happen before isDaemonRunningCurrentlyInstalledHappyVersion()
+  // because that function cleans up the state file if daemon PID is dead
   const oldState = await readDaemonState();
   const previousSessions = oldState?.sessions || [];
   if (previousSessions.length > 0) {
     logger.debug(`[DAEMON RUN] Found ${previousSessions.length} sessions from previous daemon to recover`);
   }
+
+  // Check if already running
+  // Check if running daemon version matches current CLI version
+  const runningDaemonVersionMatches = await isDaemonRunningCurrentlyInstalledHappyVersion();
 
   if (!runningDaemonVersionMatches) {
     logger.debug('[DAEMON RUN] Daemon version mismatch detected, restarting daemon with current CLI version');
@@ -861,7 +863,15 @@ export async function startDaemon(): Promise<void> {
 
       apiMachine.shutdown();
       await stopControlServer();
-      await cleanupDaemonState();
+
+      // Only cleanup daemon state if NOT from os-signal
+      // When restarting via systemctl/SIGTERM, we want to preserve sessions for recovery
+      if (source === 'os-signal') {
+        logger.debug('[DAEMON RUN] Keeping daemon state file for session recovery (shutdown via os-signal)');
+      } else {
+        await cleanupDaemonState();
+      }
+
       await releaseDaemonLock(daemonLockHandle);
 
       logger.debug('[DAEMON RUN] Cleanup completed, exiting process');
