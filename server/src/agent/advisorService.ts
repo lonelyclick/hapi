@@ -4,7 +4,8 @@
 
 import { randomUUID } from 'node:crypto'
 import type { SyncEngine, SyncEvent, DecryptedMessage, Session, AdvisorAlertData, AdvisorIdleSuggestionData, SuggestionChip } from '../sync/syncEngine'
-import type { Store, StoredAgentSuggestion, SuggestionStatus } from '../store'
+import type { IStore } from '../store/interface'
+import type { StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { AdvisorScheduler } from './advisorScheduler'
 import { SuggestionEvaluator } from './suggestionEvaluator'
 import { MinimaxService } from './minimaxService'
@@ -23,6 +24,9 @@ import type {
 import { ADVISOR_OUTPUT_MARKER, extractJsonFromPosition } from './types'
 import type { AutoIterationService } from './autoIteration'
 import type { ActionRequest } from './autoIteration/types'
+import { findBestProfileForTask } from './profileMatcher'
+import { MemoryExtractor } from './memoryExtractor'
+import { getMemoryPromptFragment } from './memoryInjector'
 
 export interface AdvisorServiceConfig {
     namespace: string
@@ -34,11 +38,12 @@ export interface AdvisorServiceConfig {
 
 export class AdvisorService {
     private syncEngine: SyncEngine
-    private store: Store
+    private store: IStore
     private scheduler: AdvisorScheduler
     private evaluator: SuggestionEvaluator
     private minimaxService: MinimaxService
     private taskTracker: AdvisorTaskTracker
+    private memoryExtractor: MemoryExtractor
     private namespace: string
     private summaryThreshold: number
     private summaryIdleTimeoutMs: number
@@ -71,7 +76,7 @@ export class AdvisorService {
 
     constructor(
         syncEngine: SyncEngine,
-        store: Store,
+        store: IStore,
         scheduler: AdvisorScheduler,
         config: AdvisorServiceConfig
     ) {
@@ -86,6 +91,7 @@ export class AdvisorService {
         this.evaluator = new SuggestionEvaluator(store, syncEngine)
         this.minimaxService = new MinimaxService()
         this.taskTracker = new AdvisorTaskTracker(store)
+        this.memoryExtractor = new MemoryExtractor(store)
     }
 
     /**
@@ -235,15 +241,15 @@ export class AdvisorService {
     /**
      * 获取建议详情
      */
-    getSuggestion(suggestionId: string): StoredAgentSuggestion | null {
-        return this.store.getAgentSuggestion(suggestionId)
+    async getSuggestion(suggestionId: string): Promise<StoredAgentSuggestion | null> {
+        return await this.store.getAgentSuggestion(suggestionId)
     }
 
     /**
      * 获取所有待处理的建议
      */
-    getPendingSuggestions(): StoredAgentSuggestion[] {
-        return this.store.getAgentSuggestions(this.namespace, {
+    async getPendingSuggestions(): Promise<StoredAgentSuggestion[]> {
+        return await this.store.getAgentSuggestions(this.namespace, {
             status: 'pending'
         })
     }
@@ -1561,10 +1567,14 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     private handleAdvisorOutput(advisorSessionId: string, output: AdvisorOutput): void {
         switch (output.type) {
             case 'suggestion':
-                this.handleSuggestion(advisorSessionId, output)
+                this.handleSuggestion(advisorSessionId, output).catch(err => {
+                    console.error('[AdvisorService] Failed to handle suggestion:', err)
+                })
                 break
             case 'memory':
-                this.handleMemory(output)
+                this.handleMemory(output).catch(err => {
+                    console.error('[AdvisorService] Failed to handle memory:', err)
+                })
                 break
             case 'action_request':
                 this.handleActionRequest(advisorSessionId, output as AdvisorActionRequestOutput)
@@ -1588,7 +1598,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     private async handleSuggestion(advisorSessionId: string, output: AdvisorSuggestionOutput): Promise<void> {
         const suggestionId = output.id || `adv_${Date.now()}_${randomUUID().slice(0, 8)}`
 
-        const suggestion = this.store.createAgentSuggestion({
+        const suggestion = await this.store.createAgentSuggestion({
             id: suggestionId,
             namespace: this.namespace,
             sessionId: advisorSessionId,
@@ -1609,7 +1619,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
             await this.autoAcceptSuggestion(suggestion)
 
             // 广播给相关会话（只推送 Telegram）
-            this.broadcastSuggestion(suggestion)
+            await this.broadcastSuggestion(suggestion)
         }
     }
 
@@ -1618,10 +1628,10 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
      */
     private async autoAcceptSuggestion(suggestion: StoredAgentSuggestion): Promise<void> {
         // 更新状态为 accepted
-        this.store.updateAgentSuggestionStatus(suggestion.id, 'accepted')
+        await this.store.updateAgentSuggestionStatus(suggestion.id, 'accepted')
 
         // 记录自动接受的反馈
-        this.store.createAgentFeedback({
+        await this.store.createAgentFeedback({
             suggestionId: suggestion.id,
             source: 'auto',
             action: 'accept',
@@ -1634,12 +1644,12 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     /**
      * 处理记忆
      */
-    private handleMemory(output: AdvisorMemoryOutput): void {
+    private async handleMemory(output: AdvisorMemoryOutput): Promise<void> {
         const expiresAt = output.expiresInDays
             ? Date.now() + output.expiresInDays * 24 * 60 * 60 * 1000
             : undefined
 
-        const memory = this.store.createAgentMemory({
+        const memory = await this.store.createAgentMemory({
             namespace: this.namespace,
             type: output.memoryType,
             contentJson: { content: output.content },
@@ -1756,7 +1766,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
                 console.log(`[AdvisorService] Session spawned successfully: ${result.sessionId}`)
 
                 // 6. 设置会话的 advisorTaskId（用于 UI 显示）
-                this.store.setSessionAdvisorTaskId(result.sessionId, taskId, this.namespace)
+                await this.store.setSessionAdvisorTaskId(result.sessionId, taskId, this.namespace)
 
                 // 7. 创建任务追踪记录
                 this.taskTracker.createTask({
@@ -1927,7 +1937,7 @@ ${output.message}
      * 广播状态变化 - 只推送 Telegram 通知，不再广播到所有 session
      */
     async broadcastStatusChange(suggestionId: string, newStatus: SuggestionStatus): Promise<void> {
-        const suggestion = this.store.getAgentSuggestion(suggestionId)
+        const suggestion = await this.store.getAgentSuggestion(suggestionId)
         if (!suggestion) {
             return
         }
@@ -1961,7 +1971,7 @@ ${output.message}
 
         // 直接写入数据库，不通过 sendMessage（避免触发 user 消息处理）
         try {
-            this.store.addMessage(sessionId, message)
+            await this.store.addMessage(sessionId, message)
             console.log(`[AdvisorService] Event message sent to ${sessionId}: ${data.type}`)
         } catch (error) {
             console.error(`[AdvisorService] Failed to send event message to ${sessionId}:`, error)

@@ -2,7 +2,8 @@
  * SuggestionEvaluator - 自动判断建议是否被采纳
  */
 
-import type { Store, StoredAgentSuggestion, SuggestionStatus } from '../store'
+import type { IStore } from '../store/interface'
+import type { StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { SyncEngine } from '../sync/syncEngine'
 import type { Evidence } from './types'
 
@@ -30,7 +31,7 @@ const NEGATIVE_PATTERNS: Array<{ pattern: RegExp; weight: number; name: Evidence
 
 export class SuggestionEvaluator {
     constructor(
-        private store: Store,
+        private store: IStore,
         private syncEngine: SyncEngine
     ) {}
 

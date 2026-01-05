@@ -5,7 +5,7 @@
  * 记忆类型：context（项目上下文）、preference（用户偏好）、knowledge（技术知识）、experience（解决问题的经验）
  */
 
-import type { IStore, AIProfileMemoryType, StoredAIProfileMemory } from '../store'
+import type { IStore, AIProfileMemoryType, StoredAIProfileMemory } from '../store/interface'
 import type { SessionSummary } from './types'
 
 /**

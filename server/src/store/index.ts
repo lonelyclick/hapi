@@ -21,6 +21,9 @@ export type StoredSession = {
     seq: number
     advisorTaskId: string | null  // Advisor 创建的会话的任务 ID
     creatorChatId: string | null  // 创建者的 Telegram chatId（用于通知）
+    advisorMode: boolean  // 是否开启 Advisor 模式
+    advisorPromptInjected: boolean  // 是否已注入 Advisor 提示
+    rolePromptSent: boolean  // 是否已发送 Role 提示
 }
 
 export type StoredMachine = {
@@ -265,6 +268,9 @@ type DbSessionRow = {
     seq: number
     advisor_task_id: string | null
     creator_chat_id: string | null
+    advisor_mode: number | null
+    advisor_prompt_injected: number | null
+    role_prompt_sent: number | null
 }
 
 type DbMachineRow = {
@@ -456,7 +462,10 @@ function toStoredSession(row: DbSessionRow): StoredSession {
         activeAt: row.active_at,
         seq: row.seq,
         advisorTaskId: row.advisor_task_id,
-        creatorChatId: row.creator_chat_id
+        creatorChatId: row.creator_chat_id,
+        advisorMode: row.advisor_mode === 1,
+        advisorPromptInjected: row.advisor_prompt_injected === 1,
+        rolePromptSent: row.role_prompt_sent === 1
     }
 }
 
@@ -812,6 +821,15 @@ export class Store {
         }
         if (!sessionColumnNames.has('creator_chat_id')) {
             this.db.exec('ALTER TABLE sessions ADD COLUMN creator_chat_id TEXT')
+        }
+        if (!sessionColumnNames.has('advisor_mode')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN advisor_mode INTEGER DEFAULT 0')
+        }
+        if (!sessionColumnNames.has('advisor_prompt_injected')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN advisor_prompt_injected INTEGER DEFAULT 0')
+        }
+        if (!sessionColumnNames.has('role_prompt_sent')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN role_prompt_sent INTEGER DEFAULT 0')
         }
 
         const machineColumns = this.db.prepare('PRAGMA table_info(machines)').all() as Array<{ name: string }>
@@ -1215,6 +1233,87 @@ export class Store {
                     seq = seq + 1
                 WHERE id = @id AND namespace = @namespace
             `).run({ id, advisor_task_id: advisorTaskId, updated_at: now, namespace })
+
+            return result.changes === 1
+        } catch {
+            return false
+        }
+    }
+
+    /**
+     * 设置会话的 Advisor 模式
+     */
+    setSessionAdvisorMode(id: string, advisorMode: boolean, namespace: string): boolean {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                UPDATE sessions
+                SET advisor_mode = @advisor_mode,
+                    updated_at = @updated_at,
+                    seq = seq + 1
+                WHERE id = @id AND namespace = @namespace
+            `).run({ id, advisor_mode: advisorMode ? 1 : 0, updated_at: now, namespace })
+
+            return result.changes === 1
+        } catch {
+            return false
+        }
+    }
+
+    /**
+     * 标记会话已注入 Advisor 提示
+     */
+    setSessionAdvisorPromptInjected(id: string, namespace: string): boolean {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                UPDATE sessions
+                SET advisor_prompt_injected = 1,
+                    updated_at = @updated_at,
+                    seq = seq + 1
+                WHERE id = @id AND namespace = @namespace
+            `).run({ id, updated_at: now, namespace })
+
+            return result.changes === 1
+        } catch {
+            return false
+        }
+    }
+
+    /**
+     * 检查是否应该注入 Advisor 提示（开启了 advisor_mode 但尚未注入）
+     */
+    shouldInjectAdvisorPrompt(id: string): boolean {
+        const row = this.db.prepare(
+            'SELECT advisor_mode, advisor_prompt_injected FROM sessions WHERE id = ?'
+        ).get(id) as { advisor_mode: number | null; advisor_prompt_injected: number | null } | undefined
+        if (!row) return false
+        return row.advisor_mode === 1 && row.advisor_prompt_injected !== 1
+    }
+
+    /**
+     * 检查 Role 提示是否已发送
+     */
+    isRolePromptSent(id: string): boolean {
+        const row = this.db.prepare(
+            'SELECT role_prompt_sent FROM sessions WHERE id = ?'
+        ).get(id) as { role_prompt_sent: number | null } | undefined
+        return row?.role_prompt_sent === 1
+    }
+
+    /**
+     * 标记 Role 提示已发送
+     */
+    setSessionRolePromptSent(id: string, namespace: string): boolean {
+        try {
+            const now = Date.now()
+            const result = this.db.prepare(`
+                UPDATE sessions
+                SET role_prompt_sent = 1,
+                    updated_at = @updated_at,
+                    seq = seq + 1
+                WHERE id = @id AND namespace = @namespace
+            `).run({ id, updated_at: now, namespace })
 
             return result.changes === 1
         } catch {
