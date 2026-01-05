@@ -763,7 +763,12 @@ export async function startDaemon(): Promise<void> {
     const shutdownRequest = await resolvesWhenShutdownRequested;
     await cleanupAndShutdown(shutdownRequest.source, shutdownRequest.errorMessage);
   } catch (error) {
-    logger.debug('[DAEMON RUN][FATAL] Failed somewhere unexpectedly - exiting with code 1', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    logger.debug(`[DAEMON RUN][FATAL] Failed somewhere unexpectedly - exiting with code 1. Error: ${errorMessage}`);
+    if (errorStack) {
+      logger.debug(`[DAEMON RUN][FATAL] Stack trace: ${errorStack}`);
+    }
     process.exit(1);
   }
 }
