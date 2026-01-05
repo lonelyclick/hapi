@@ -64,6 +64,7 @@ export async function runAgentSession(opts: {
 }): Promise<void> {
     const sessionTag = randomUUID();
     const api = await ApiClient.create();
+    const sessionSource = process.env.HAPI_SESSION_SOURCE?.trim();
 
     const settings = await readSettings();
     const machineId = settings?.machineId;
@@ -88,6 +89,7 @@ export async function runAgentSession(opts: {
         version: packageJson.version,
         os: os.platform(),
         machineId,
+        source: sessionSource || undefined,
         homeDir: os.homedir(),
         happyHomeDir: configuration.happyHomeDir,
         happyLibDir: runtimePath(),

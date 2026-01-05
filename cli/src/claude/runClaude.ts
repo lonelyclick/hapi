@@ -68,6 +68,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     const sessionTag = randomUUID();
     const startedBy = options.startedBy ?? 'terminal';
     const runtimeAgent = extractClaudeAgent(options.claudeArgs);
+    const sessionSource = process.env.HAPI_SESSION_SOURCE?.trim();
 
     // Log environment info at startup
     logger.debugLargeJson('[START] HAPI process started', getEnvironmentInfo());
@@ -109,6 +110,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         version: packageJson.version,
         os: os.platform(),
         machineId: machineId,
+        source: sessionSource || undefined,
         homeDir: os.homedir(),
         happyHomeDir: configuration.happyHomeDir,
         happyLibDir: runtimePath(),

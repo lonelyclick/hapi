@@ -372,6 +372,10 @@ export async function startDaemon(): Promise<void> {
         if (options.modelReasoningEffort) {
           extraEnv = { ...extraEnv, HAPI_MODEL_REASONING_EFFORT: options.modelReasoningEffort };
         }
+        const sessionSource = typeof options.source === 'string' ? options.source.trim() : '';
+        if (sessionSource) {
+          extraEnv = { ...extraEnv, HAPI_SESSION_SOURCE: sessionSource };
+        }
 
         addLog('env', `Environment prepared successfully`, 'success');
 

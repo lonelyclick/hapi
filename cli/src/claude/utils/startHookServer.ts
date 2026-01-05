@@ -19,6 +19,7 @@ export interface SessionHookData {
     cwd?: string;
     hook_event_name?: string;
     source?: string;
+    hapi_source?: string;
     [key: string]: unknown;
 }
 

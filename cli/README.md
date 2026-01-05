@@ -75,6 +75,11 @@ See `src/configuration.ts` for all options.
 - `HAPI_EXPERIMENTAL` - Enable experimental features (true/1/yes).
 - `HAPI_CLAUDE_PATH` - Path to a specific `claude` executable.
 - `HAPI_HTTP_MCP_URL` - Default MCP target for `hapi mcp`.
+- `HAPI_LANGFUSE_PUBLIC_KEY`/`LANGFUSE_PUBLIC_KEY` - Langfuse public key (enables OTLP tracing from Claude hooks).
+- `HAPI_LANGFUSE_SECRET_KEY`/`LANGFUSE_SECRET_KEY` - Langfuse secret key.
+- `HAPI_LANGFUSE_BASE_URL`/`LANGFUSE_BASE_URL` - Langfuse base URL (default: https://cloud.langfuse.com).
+- `HAPI_LANGFUSE_HOST`/`LANGFUSE_HOST` - Alias for base URL.
+- `HAPI_LANGFUSE_OTEL_ENDPOINT`/`LANGFUSE_OTEL_ENDPOINT` - Override OTLP endpoint (default: /api/public/otel/v1/traces).
 
 ### Daemon
 

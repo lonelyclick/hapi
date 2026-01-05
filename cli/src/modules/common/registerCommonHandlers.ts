@@ -145,6 +145,7 @@ export interface SpawnSessionOptions {
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo';
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2';
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+    source?: string;
 }
 
 export interface SpawnLogEntry {

@@ -22,6 +22,7 @@ export const MetadataSchema = z.object({
     host: z.string(),
     version: z.string().optional(),
     name: z.string().optional(),
+    source: z.string().optional(),
     os: z.string().optional(),
     summary: z.object({
         text: z.string(),
@@ -1251,6 +1252,7 @@ export class SyncEngine {
             permissionMode?: Session['permissionMode']
             modelMode?: Session['modelMode']
             modelReasoningEffort?: Session['modelReasoningEffort']
+            source?: string
         }
     ): Promise<{ type: 'success'; sessionId: string; logs?: unknown[] } | { type: 'error'; message: string; logs?: unknown[] }> {
         try {
@@ -1271,7 +1273,8 @@ export class SyncEngine {
                     openrouterModel: options?.openrouterModel,
                     permissionMode: options?.permissionMode,
                     modelMode: options?.modelMode,
-                    modelReasoningEffort: options?.modelReasoningEffort
+                    modelReasoningEffort: options?.modelReasoningEffort,
+                    source: options?.source
                 }
             )
             if (result && typeof result === 'object') {

@@ -11,6 +11,7 @@ type SessionSummaryMetadata = {
     name?: string
     path: string
     machineId?: string
+    source?: string
     summary?: { text: string }
     flavor?: string | null
     runtimeAgent?: string
@@ -52,6 +53,7 @@ function toSessionSummary(session: Session): SessionSummary {
         name: session.metadata.name,
         path: session.metadata.path,
         machineId: session.metadata.machineId ?? undefined,
+        source: session.metadata.source,
         summary: session.metadata.summary ? { text: session.metadata.summary.text } : undefined,
         flavor: session.metadata.flavor ?? null,
         runtimeAgent: session.metadata.runtimeAgent,
@@ -103,7 +105,8 @@ const createSessionSchema = z.object({
     openrouterModel: z.string().min(1).optional(),
     permissionMode: z.enum(permissionModeValues).optional(),
     modelMode: z.enum(modelModeValues).optional(),
-    modelReasoningEffort: z.enum(reasoningEffortValues).optional()
+    modelReasoningEffort: z.enum(reasoningEffortValues).optional(),
+    source: z.string().min(1).max(100).optional()
 })
 
 const RESUME_TIMEOUT_MS = 60_000
@@ -374,6 +377,9 @@ export function createSessionsRoutes(
             return machine
         }
 
+        const rawSource = parsed.data.source?.trim()
+        const source = rawSource ? rawSource : 'external-api'
+
         const result = await engine.spawnSession(
             parsed.data.machineId,
             parsed.data.directory,
@@ -386,7 +392,8 @@ export function createSessionsRoutes(
                 openrouterModel: parsed.data.openrouterModel,
                 permissionMode: parsed.data.permissionMode,
                 modelMode: parsed.data.modelMode,
-                modelReasoningEffort: parsed.data.modelReasoningEffort
+                modelReasoningEffort: parsed.data.modelReasoningEffort,
+                source
             }
         )
 
