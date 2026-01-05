@@ -10,6 +10,7 @@
 
 import { createConfiguration, type ConfigSource } from './configuration'
 import { Store } from './store'
+import { SqliteStore } from './store/sqlite'
 import { SyncEngine, type SyncEvent } from './sync/syncEngine'
 import { HappyBot } from './telegram/bot'
 import { startWebServer } from './web/server'
@@ -86,6 +87,7 @@ async function main() {
     }
 
     const store = new Store(config.dbPath)
+    const asyncStore = new SqliteStore(config.dbPath)  // For async IStore interface
 
     // Initialize Web Push service
     const webPushConfig = config.webPushVapidPublicKey && config.webPushVapidPrivateKey && config.webPushVapidSubject
@@ -156,11 +158,11 @@ async function main() {
     if (advisorEnabled && syncEngine) {
         console.log(`[Server] Advisor Agent: initializing for namespace '${advisorNamespace}'...`)
 
-        advisorScheduler = new AdvisorScheduler(syncEngine, store, {
+        advisorScheduler = new AdvisorScheduler(syncEngine, asyncStore, {
             namespace: advisorNamespace
         })
 
-        advisorService = new AdvisorService(syncEngine, store, advisorScheduler, {
+        advisorService = new AdvisorService(syncEngine, asyncStore, advisorScheduler, {
             namespace: advisorNamespace
         })
 

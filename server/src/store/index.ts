@@ -149,28 +149,19 @@ export type StoredAIProfile = {
     id: string
     namespace: string
     name: string
-    displayName: string
-    description: string | null
     role: AIProfileRole
-    skills: string[]
-    personality: {
-        style: string
-        strengths: string[]
-        weaknesses?: string[]
-    } | null
-    config: {
-        maxConcurrentTasks: number
-        preferredWorkHours?: string[]
-        autoAcceptTasks: boolean
-    } | null
+    specialties: string[]
+    personality: string | null
+    greetingTemplate: string | null
+    preferredProjects: string[]
+    workStyle: string | null
+    avatarEmoji: string
     status: AIProfileStatus
-    currentTaskId: string | null
     stats: {
         tasksCompleted: number
-        averageRating: number
         activeMinutes: number
-    } | null
-    lastActiveAt: number | null
+        lastActiveAt: number | null
+    }
     createdAt: number
     updatedAt: number
 }
@@ -179,15 +170,15 @@ export type StoredAIProfileMemory = {
     id: string
     namespace: string
     profileId: string
-    type: AIProfileMemoryType
+    memoryType: AIProfileMemoryType
     content: string
-    metadata: unknown | null
     importance: number
     accessCount: number
     lastAccessedAt: number | null
     expiresAt: number | null
     createdAt: number
     updatedAt: number
+    metadata: unknown | null
 }
 
 // AI Team 相关类型
@@ -203,14 +194,14 @@ export type StoredAITeam = {
     status: AITeamStatus
     config: {
         maxMembers: number
-        autoAssignTasks: boolean
-        requireApproval: boolean
-    } | null
+        autoAssign: boolean
+        sharedKnowledge: boolean
+    }
     stats: {
         tasksCompleted: number
-        activeProjects: number
-        knowledgeItems: number
-    } | null
+        activeHours: number
+        collaborationScore: number
+    }
     createdAt: number
     updatedAt: number
 }
@@ -219,9 +210,9 @@ export type StoredAITeamMember = {
     teamId: string
     profileId: string
     role: AITeamMemberRole
-    specialization: string | null
-    contribution: number
     joinedAt: number
+    contribution: number
+    specialization: string | null
 }
 
 export type StoredAITeamKnowledge = {
@@ -230,16 +221,16 @@ export type StoredAITeamKnowledge = {
     namespace: string
     title: string
     content: string
-    category: 'decision' | 'pattern' | 'lesson' | 'reference'
+    category: 'best-practice' | 'lesson-learned' | 'decision' | 'convention'
     contributorProfileId: string
     importance: number
     accessCount: number
-    lastAccessedAt: number | null
     createdAt: number
     updatedAt: number
 }
 
 export type StoredAgentGroupWithLastMessage = StoredAgentGroup & {
+    memberCount: number
     lastMessage: {
         content: string
         senderType: GroupSenderType
@@ -3202,5 +3193,252 @@ export class Store {
      */
     getSessionNotificationRecipientClientIds(sessionId: string): string[] {
         return this.getSessionNotificationSubscriberClientIds(sessionId)
+    }
+
+    // === 通过 clientId 获取订阅的 session ===
+    getSubscribedSessionsForClient(clientId: string): string[] {
+        const rows = this.db.prepare(
+            'SELECT session_id FROM session_notification_subscriptions WHERE client_id = ?'
+        ).all(clientId) as Array<{ session_id: string }>
+        return rows.map(r => r.session_id)
+    }
+
+    // === Agent Group 扩展方法 ===
+    getAgentGroupsWithLastMessage(namespace: string): StoredAgentGroupWithLastMessage[] {
+        const groups = this.getAgentGroups(namespace)
+        return groups.map(group => {
+            const lastMsg = this.db.prepare(
+                'SELECT content, sender_type, created_at FROM agent_group_messages WHERE group_id = ? ORDER BY created_at DESC LIMIT 1'
+            ).get(group.id) as { content: string; sender_type: string; created_at: number } | undefined
+            const memberCount = (this.db.prepare(
+                'SELECT COUNT(*) as count FROM agent_group_members WHERE group_id = ?'
+            ).get(group.id) as { count: number })?.count || 0
+            return {
+                ...group,
+                memberCount,
+                lastMessage: lastMsg ? {
+                    content: lastMsg.content,
+                    senderType: lastMsg.sender_type as GroupSenderType,
+                    createdAt: lastMsg.created_at
+                } : null
+            }
+        })
+    }
+
+    // === AI Profile 方法 (TODO: 完整实现) ===
+    getAIProfiles(_namespace: string): StoredAIProfile[] {
+        // TODO: 需要创建 ai_profiles 表并实现
+        return []
+    }
+
+    getAIProfile(_id: string): StoredAIProfile | null {
+        return null
+    }
+
+    getAIProfileByName(_namespace: string, _name: string): StoredAIProfile | null {
+        return null
+    }
+
+    createAIProfile(_data: {
+        namespace: string
+        name: string
+        role: AIProfileRole
+        specialties?: string[]
+        personality?: string | null
+        greetingTemplate?: string | null
+        preferredProjects?: string[]
+        workStyle?: string | null
+        avatarEmoji?: string
+    }): StoredAIProfile | null {
+        return null
+    }
+
+    updateAIProfile(_id: string, _data: {
+        name?: string
+        role?: AIProfileRole
+        specialties?: string[]
+        personality?: string | null
+        greetingTemplate?: string | null
+        preferredProjects?: string[]
+        workStyle?: string | null
+        avatarEmoji?: string
+    }): StoredAIProfile | null {
+        return null
+    }
+
+    deleteAIProfile(_id: string): boolean {
+        return false
+    }
+
+    updateAIProfileStatus(_id: string, _status: AIProfileStatus): void {
+        // TODO
+    }
+
+    updateAIProfileStats(_id: string, _stats: { tasksCompleted?: number; activeMinutes?: number; lastActiveAt?: number | null }): void {
+        // TODO
+    }
+
+    // === AI Profile Memory 方法 ===
+    getProfileMemories(_options: {
+        namespace: string
+        profileId?: string
+        type?: AIProfileMemoryType
+        minImportance?: number
+        limit?: number
+    }): StoredAIProfileMemory[] {
+        return []
+    }
+
+    getProfileMemory(_id: string): StoredAIProfileMemory | null {
+        return null
+    }
+
+    createProfileMemory(_data: {
+        namespace: string
+        profileId: string
+        memoryType: AIProfileMemoryType
+        content: string
+        importance?: number
+        expiresAt?: number | null
+        metadata?: unknown | null
+    }): StoredAIProfileMemory | null {
+        return null
+    }
+
+    updateMemoryAccess(_namespace: string, _memoryId: string): void {
+        // TODO
+    }
+
+    updateProfileMemory(_id: string, _data: {
+        content?: string
+        importance?: number
+        expiresAt?: number | null
+        metadata?: unknown | null
+    }): StoredAIProfileMemory | null {
+        return null
+    }
+
+    deleteExpiredMemories(_namespace: string): number {
+        return 0
+    }
+
+    deleteProfileMemories(_namespace: string, _profileId: string): number {
+        return 0
+    }
+
+    deleteProfileMemory(_id: string): boolean {
+        return false
+    }
+
+    // === AI Team 方法 ===
+    createAITeam(_data: {
+        namespace: string
+        name: string
+        description?: string | null
+        focus?: string | null
+        config?: Partial<StoredAITeam['config']>
+    }): StoredAITeam | null {
+        return null
+    }
+
+    getAITeam(_id: string): StoredAITeam | null {
+        return null
+    }
+
+    getAITeams(_namespace: string): StoredAITeam[] {
+        return []
+    }
+
+    getActiveAITeams(_namespace: string): StoredAITeam[] {
+        return []
+    }
+
+    updateAITeam(_id: string, _data: {
+        name?: string
+        description?: string | null
+        focus?: string | null
+        status?: AITeamStatus
+        config?: Partial<StoredAITeam['config']>
+    }): StoredAITeam | null {
+        return null
+    }
+
+    updateAITeamStats(_id: string, _stats: Partial<StoredAITeam['stats']>): void {
+        // TODO
+    }
+
+    deleteAITeam(_id: string): boolean {
+        return false
+    }
+
+    // === AI Team Member 方法 ===
+    addAITeamMember(_data: {
+        teamId: string
+        profileId: string
+        role?: AITeamMemberRole
+        specialization?: string | null
+    }): StoredAITeamMember | null {
+        return null
+    }
+
+    getAITeamMember(_teamId: string, _profileId: string): StoredAITeamMember | null {
+        return null
+    }
+
+    getAITeamMembers(_teamId: string): StoredAITeamMember[] {
+        return []
+    }
+
+    getTeamsForProfile(_profileId: string): StoredAITeam[] {
+        return []
+    }
+
+    updateTeamMemberContribution(_teamId: string, _profileId: string, _contribution: number): void {
+        // TODO
+    }
+
+    updateTeamMemberRole(_teamId: string, _profileId: string, _role: AITeamMemberRole): void {
+        // TODO
+    }
+
+    removeAITeamMember(_teamId: string, _profileId: string): boolean {
+        return false
+    }
+
+    // === AI Team Knowledge 方法 ===
+    addAITeamKnowledge(_data: {
+        teamId: string
+        namespace: string
+        title: string
+        content: string
+        category: 'best-practice' | 'lesson-learned' | 'decision' | 'convention'
+        contributorProfileId: string
+        importance?: number
+    }): StoredAITeamKnowledge | null {
+        return null
+    }
+
+    getAITeamKnowledge(_id: string): StoredAITeamKnowledge | null {
+        return null
+    }
+
+    getAITeamKnowledgeList(_teamId: string, _options?: {
+        category?: StoredAITeamKnowledge['category']
+        minImportance?: number
+        limit?: number
+    }): StoredAITeamKnowledge[] {
+        return []
+    }
+
+    updateTeamKnowledgeAccess(_id: string): void {
+        // TODO
+    }
+
+    deleteAITeamKnowledge(_id: string): boolean {
+        return false
+    }
+
+    getAITeamWithMembers(_teamId: string): { team: StoredAITeam; members: Array<StoredAITeamMember & { profile: StoredAIProfile | null }> } | null {
+        return null
     }
 }

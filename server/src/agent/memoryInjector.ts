@@ -8,7 +8,7 @@
  * 4. 更新记忆的 accessCount 和 lastAccessedAt
  */
 
-import type { Store, StoredAIProfileMemory, AIProfileMemoryType } from '../store'
+import type { IStore, StoredAIProfileMemory, AIProfileMemoryType } from '../store/interface'
 
 /**
  * 记忆注入配置
@@ -58,10 +58,10 @@ export interface MemoryInjectionResult {
  * 记忆注入器类
  */
 export class MemoryInjector {
-    private store: Store
+    private store: IStore
     private config: MemoryInjectorConfig
 
-    constructor(store: Store, config?: Partial<MemoryInjectorConfig>) {
+    constructor(store: IStore, config?: Partial<MemoryInjectorConfig>) {
         this.store = store
         this.config = { ...DEFAULT_CONFIG, ...config }
     }
@@ -72,9 +72,11 @@ export class MemoryInjector {
      * @param profileId AI Profile ID
      * @returns 注入结果，包含格式化的 prompt 和记忆列表
      */
-    injectMemories(namespace: string, profileId: string): MemoryInjectionResult {
+    async injectMemories(namespace: string, profileId: string): Promise<MemoryInjectionResult> {
         // 1. 从 store 获取记忆（已按重要性和访问时间排序）
-        const memories = this.store.getProfileMemories(namespace, profileId, {
+        const memories = await this.store.getProfileMemories({
+            namespace,
+            profileId,
             minImportance: this.config.minImportance,
             limit: this.config.maxMemories
         })
@@ -88,7 +90,7 @@ export class MemoryInjector {
         }
 
         // 2. 更新访问记录
-        this.updateAccessRecords(namespace, memories)
+        await this.updateAccessRecords(namespace, memories)
 
         // 3. 格式化为 prompt 片段
         const promptFragment = this.formatMemoriesAsPrompt(memories)
@@ -109,10 +111,10 @@ export class MemoryInjector {
     /**
      * 更新记忆的访问记录
      */
-    private updateAccessRecords(namespace: string, memories: StoredAIProfileMemory[]): void {
+    private async updateAccessRecords(namespace: string, memories: StoredAIProfileMemory[]): Promise<void> {
         for (const memory of memories) {
             try {
-                this.store.updateMemoryAccess(namespace, memory.id)
+                await this.store.updateMemoryAccess(namespace, memory.id)
             } catch (error) {
                 console.warn(`[MemoryInjector] Failed to update access record for memory ${memory.id}:`, error)
             }
@@ -235,7 +237,7 @@ export class MemoryInjector {
  * 创建记忆注入器实例
  */
 export function createMemoryInjector(
-    store: Store,
+    store: IStore,
     config?: Partial<MemoryInjectorConfig>
 ): MemoryInjector {
     return new MemoryInjector(store, config)
@@ -245,14 +247,14 @@ export function createMemoryInjector(
  * 便捷函数：直接获取格式化的记忆 prompt 片段
  * 适用于简单场景，无需创建 MemoryInjector 实例
  */
-export function getMemoryPromptFragment(
-    store: Store,
+export async function getMemoryPromptFragment(
+    store: IStore,
     namespace: string,
     profileId: string,
     config?: Partial<MemoryInjectorConfig>
-): string {
+): Promise<string> {
     const injector = new MemoryInjector(store, config)
-    const result = injector.injectMemories(namespace, profileId)
+    const result = await injector.injectMemories(namespace, profileId)
     return result.promptFragment
 }
 
@@ -263,19 +265,21 @@ export function getMemoryPromptFragment(
  * @deprecated 请使用 MemoryInjector 类的 injectMemories 方法
  */
 export async function getMemoriesForInjection(
-    store: Store,
+    store: IStore,
     namespace: string,
     profileId: string,
     limit: number = 10
 ): Promise<{ type: string; content: string; importance: number }[]> {
-    const memories = store.getProfileMemories(namespace, profileId, {
+    const memories = await store.getProfileMemories({
+        namespace,
+        profileId,
         limit,
         minImportance: 0.3
     })
 
     // 更新访问记录
     for (const mem of memories) {
-        store.updateMemoryAccess(namespace, mem.id)
+        await store.updateMemoryAccess(namespace, mem.id)
     }
 
     return memories.map(m => ({

@@ -252,10 +252,11 @@ export function createGroupRoutes(
             const senderSession = parsed.data.sourceSessionId
                 ? syncEngine?.getSession(parsed.data.sourceSessionId)
                 : null
+            const senderMeta = senderSession?.metadata as Record<string, unknown> | null
             broadcastGroupMessage(groupId, {
                 ...message,
-                senderName: senderSession?.metadata?.name || undefined,
-                agentType: senderSession?.metadata?.agent || undefined
+                senderName: senderMeta?.name as string | undefined,
+                agentType: senderMeta?.agent as string | undefined
             })
 
             return c.json({ ok: true, message })
@@ -303,8 +304,8 @@ export function createGroupRoutes(
             : null
         broadcastGroupMessage(groupId, {
             ...message,
-            senderName: senderSession?.metadata?.name || undefined,
-            agentType: senderSession?.metadata?.agent || undefined
+            senderName: (senderSession?.metadata as Record<string, unknown> | null)?.name as string | undefined,
+            agentType: (senderSession?.metadata as Record<string, unknown> | null)?.agent as string | undefined
         })
 
         // Get all members and broadcast
@@ -321,7 +322,9 @@ export function createGroupRoutes(
             // 如果有 @提及，只发送给被提及的成员
             // mentions 包含 agentType 如 ['claude', 'gemini'] 或 ['all']
             if (mentions && mentions.length > 0 && !mentions.includes('all')) {
-                const memberAgentType = member.agentType || syncEngine.getSession(member.sessionId)?.metadata?.agent || 'unknown'
+                const memberSession = syncEngine.getSession(member.sessionId)
+                const memberMeta = memberSession?.metadata as Record<string, unknown> | null
+                const memberAgentType = member.agentType || (memberMeta?.agent as string) || 'unknown'
                 if (!mentions.some(m => memberAgentType.toLowerCase().includes(m.toLowerCase()))) {
                     results.push({ sessionId: member.sessionId, success: true, skipped: true, error: 'Not mentioned' })
                     continue
@@ -336,9 +339,11 @@ export function createGroupRoutes(
 
             try {
                 // Get sender name for metadata
-                const senderName = parsed.data.sourceSessionId
-                    ? syncEngine.getSession(parsed.data.sourceSessionId)?.metadata?.name ?? parsed.data.sourceSessionId
-                    : 'System'
+                const senderSessionForName = parsed.data.sourceSessionId
+                    ? syncEngine.getSession(parsed.data.sourceSessionId)
+                    : null
+                const senderMetaForName = senderSessionForName?.metadata as Record<string, unknown> | null
+                const senderName = (senderMetaForName?.name as string) ?? parsed.data.sourceSessionId ?? 'System'
 
                 await syncEngine.sendMessage(member.sessionId, {
                     text: parsed.data.content,

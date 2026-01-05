@@ -8,7 +8,7 @@
  * 4. Task Handoff - 任务交接协议
  */
 
-import type { Store, StoredAIProfile, StoredAITeam, StoredAITeamKnowledge } from '../store'
+import type { IStore, StoredAIProfile, StoredAITeam, StoredAITeamKnowledge } from '../store/interface'
 import type { CollaborationTask, TaskParticipant, ParticipantRole } from './collaborationTask'
 
 // 协作协议类型
@@ -83,12 +83,12 @@ export interface ProtocolRule {
  * 协作协议基类
  */
 export abstract class CollaborationProtocol {
-    protected store: Store
+    protected store: IStore
     protected config: ProtocolConfig
     protected context: ProtocolContext | null = null
     protected rules: ProtocolRule[] = []
 
-    constructor(store: Store, config?: Partial<ProtocolConfig>) {
+    constructor(store: IStore, config?: Partial<ProtocolConfig>) {
         this.store = store
         this.config = {
             maxRounds: config?.maxRounds ?? 10,
@@ -168,7 +168,7 @@ export abstract class CollaborationProtocol {
     /**
      * 生成协议 Prompt
      */
-    abstract generatePrompt(forProfileId: string): string
+    abstract generatePrompt(forProfileId: string): Promise<string>
 
     /**
      * 检查协议是否超时
@@ -202,7 +202,7 @@ export class PairProgrammingProtocol extends CollaborationProtocol {
         return '结对编程：Driver 负责编码，Navigator 负责审查和指导'
     }
 
-    constructor(store: Store, config?: Partial<ProtocolConfig>) {
+    constructor(store: IStore, config?: Partial<ProtocolConfig>) {
         super(store, {
             maxRounds: 20,
             timeoutMinutes: 120,
@@ -262,15 +262,15 @@ export class PairProgrammingProtocol extends CollaborationProtocol {
         this.navigatorProfileId = temp
     }
 
-    generatePrompt(forProfileId: string): string {
+    async generatePrompt(forProfileId: string): Promise<string> {
         if (!this.context) return ''
 
         const isDriver = forProfileId === this.driverProfileId
         const role = isDriver ? 'Driver' : 'Navigator'
         const partnerRole = isDriver ? 'Navigator' : 'Driver'
 
-        const driverProfile = this.driverProfileId ? this.store.getAIProfile(this.driverProfileId) : null
-        const navigatorProfile = this.navigatorProfileId ? this.store.getAIProfile(this.navigatorProfileId) : null
+        const driverProfile = this.driverProfileId ? await this.store.getAIProfile(this.driverProfileId) : null
+        const navigatorProfile = this.navigatorProfileId ? await this.store.getAIProfile(this.navigatorProfileId) : null
 
         return `
 ## 结对编程协议
@@ -321,7 +321,7 @@ export class CodeReviewProtocol extends CollaborationProtocol {
         return '代码审查：Author 提交代码，Reviewers 进行审查和反馈'
     }
 
-    constructor(store: Store, config?: Partial<ProtocolConfig>) {
+    constructor(store: IStore, config?: Partial<ProtocolConfig>) {
         super(store, {
             maxRounds: 10,
             timeoutMinutes: 60,
@@ -382,18 +382,26 @@ export class CodeReviewProtocol extends CollaborationProtocol {
         return this.reviewerProfileIds.every(id => approvedReviewers.has(id))
     }
 
-    generatePrompt(forProfileId: string): string {
+    async generatePrompt(forProfileId: string): Promise<string> {
         if (!this.context) return ''
 
         const isAuthor = forProfileId === this.authorProfileId
-        const authorProfile = this.authorProfileId ? this.store.getAIProfile(this.authorProfileId) : null
+        const authorProfile = this.authorProfileId ? await this.store.getAIProfile(this.authorProfileId) : null
+
+        // Pre-fetch reviewer profiles
+        const reviewerProfiles = await Promise.all(
+            this.reviewerProfileIds.map(id => this.store.getAIProfile(id))
+        )
+        const reviewerNames = reviewerProfiles.map((p, i) => p?.name ?? this.reviewerProfileIds[i]).join(', ')
 
         if (isAuthor) {
+            const reviewStatus = await this.getReviewStatus()
+            const recentHistory = await this.getRecentHistory()
             return `
 ## 代码审查协议 - Author 视角
 
 **当前阶段**: ${this.context.currentPhase}
-**审查者**: ${this.reviewerProfileIds.map(id => this.store.getAIProfile(id)?.name ?? id).join(', ')}
+**审查者**: ${reviewerNames}
 
 **你的职责**:
 1. 提交需要审查的代码
@@ -402,11 +410,12 @@ export class CodeReviewProtocol extends CollaborationProtocol {
 4. 解释设计决策
 
 **审查状态**:
-${this.getReviewStatus()}
+${reviewStatus}
 
-${this.getRecentHistory()}
+${recentHistory}
 `.trim()
         } else {
+            const recentHistory = await this.getRecentHistory()
             return `
 ## 代码审查协议 - Reviewer 视角
 
@@ -428,38 +437,44 @@ ${this.getRecentHistory()}
 - [ ] 性能可接受
 - [ ] 有适当的注释
 
-${this.getRecentHistory()}
+${recentHistory}
 `.trim()
         }
     }
 
-    private getReviewStatus(): string {
+    private async getReviewStatus(): Promise<string> {
         if (!this.context) return ''
 
         const approvals = this.context.history.filter(m => m.messageType === 'approval')
         const rejections = this.context.history.filter(m => m.messageType === 'rejection')
 
-        return this.reviewerProfileIds.map(id => {
-            const profile = this.store.getAIProfile(id)
+        const statusLines: string[] = []
+        for (const id of this.reviewerProfileIds) {
+            const profile = await this.store.getAIProfile(id)
             const name = profile?.name ?? id
             const approved = approvals.some(m => m.senderProfileId === id)
             const rejected = rejections.some(m => m.senderProfileId === id)
 
-            if (approved) return `✅ ${name}: 已批准`
-            if (rejected) return `❌ ${name}: 需要修改`
-            return `⏳ ${name}: 待审查`
-        }).join('\n')
+            if (approved) statusLines.push(`✅ ${name}: 已批准`)
+            else if (rejected) statusLines.push(`❌ ${name}: 需要修改`)
+            else statusLines.push(`⏳ ${name}: 待审查`)
+        }
+        return statusLines.join('\n')
     }
 
-    private getRecentHistory(): string {
+    private async getRecentHistory(): Promise<string> {
         if (!this.context || this.context.history.length === 0) return ''
+
+        const lines: string[] = []
+        for (const m of this.context.history.slice(-5)) {
+            const profile = await this.store.getAIProfile(m.senderProfileId)
+            const sender = profile?.name ?? 'Unknown'
+            lines.push(`- [${sender}/${m.messageType}] ${m.content.substring(0, 80)}...`)
+        }
 
         return `
 **最近消息**:
-${this.context.history.slice(-5).map(m => {
-    const sender = this.store.getAIProfile(m.senderProfileId)?.name ?? 'Unknown'
-    return `- [${sender}/${m.messageType}] ${m.content.substring(0, 80)}...`
-}).join('\n')}`
+${lines.join('\n')}`
     }
 }
 
@@ -477,7 +492,7 @@ export class KnowledgeSharingProtocol extends CollaborationProtocol {
         return '知识共享：团队成员分享和学习知识'
     }
 
-    constructor(store: Store, config?: Partial<ProtocolConfig>) {
+    constructor(store: IStore, config?: Partial<ProtocolConfig>) {
         super(store, {
             maxRounds: 50,
             timeoutMinutes: 180,
@@ -505,17 +520,23 @@ export class KnowledgeSharingProtocol extends CollaborationProtocol {
     /**
      * 提取知识并保存到团队知识库
      */
-    extractAndSaveKnowledge(
+    async extractAndSaveKnowledge(
         message: ProtocolMessage,
         category: StoredAITeamKnowledge['category'],
         importance: number = 0.5
-    ): StoredAITeamKnowledge | null {
+    ): Promise<StoredAITeamKnowledge | null> {
         if (!this.teamId || !this.context) return null
 
         // 生成知识标题
         const title = this.generateKnowledgeTitle(message.content)
 
-        return this.store.addAITeamKnowledge(this.teamId, this.context.taskId, {
+        // Get team to retrieve namespace
+        const team = await this.store.getAITeam(this.teamId)
+        if (!team) return null
+
+        return await this.store.addAITeamKnowledge({
+            teamId: this.teamId,
+            namespace: team.namespace,
             title,
             content: message.content,
             category,
@@ -531,16 +552,26 @@ export class KnowledgeSharingProtocol extends CollaborationProtocol {
         return cleaned.substring(0, 47) + '...'
     }
 
-    generatePrompt(forProfileId: string): string {
+    async generatePrompt(forProfileId: string): Promise<string> {
         if (!this.context) return ''
 
-        const profile = this.store.getAIProfile(forProfileId)
-        const team = this.teamId ? this.store.getAITeam(this.teamId) : null
+        const profile = await this.store.getAIProfile(forProfileId)
+        const team = this.teamId ? await this.store.getAITeam(this.teamId) : null
 
         // 获取团队知识
         const teamKnowledge = this.teamId
-            ? this.store.getAITeamKnowledgeList(this.teamId, { limit: 10 })
+            ? await this.store.getAITeamKnowledgeList(this.teamId, { limit: 10 })
             : []
+
+        // Pre-fetch sender profiles for history
+        const historyLines: string[] = []
+        if (this.context.history.length > 0) {
+            for (const m of this.context.history.slice(-10)) {
+                const senderProfile = await this.store.getAIProfile(m.senderProfileId)
+                const sender = senderProfile?.name ?? 'Unknown'
+                historyLines.push(`- [${sender}] ${m.content.substring(0, 100)}...`)
+            }
+        }
 
         return `
 ## 知识共享协议
@@ -563,12 +594,9 @@ ${teamKnowledge.map(k => `- [${k.category}] ${k.title}`).join('\n') || '暂无�
 - decision: 架构决策
 - convention: 团队约定
 
-${this.context.history.length > 0 ? `
+${historyLines.length > 0 ? `
 **讨论历史**:
-${this.context.history.slice(-10).map(m => {
-    const sender = this.store.getAIProfile(m.senderProfileId)?.name ?? 'Unknown'
-    return `- [${sender}] ${m.content.substring(0, 100)}...`
-}).join('\n')}
+${historyLines.join('\n')}
 ` : ''}
 `.trim()
     }
@@ -579,7 +607,7 @@ ${this.context.history.slice(-10).map(m => {
  */
 export function createProtocol(
     type: CollaborationProtocolType,
-    store: Store,
+    store: IStore,
     config?: Partial<ProtocolConfig>
 ): CollaborationProtocol {
     switch (type) {
@@ -598,10 +626,10 @@ export function createProtocol(
  * 协议管理器
  */
 export class ProtocolManager {
-    private store: Store
+    private store: IStore
     private activeProtocols: Map<string, CollaborationProtocol> = new Map()
 
-    constructor(store: Store) {
+    constructor(store: IStore) {
         this.store = store
     }
 

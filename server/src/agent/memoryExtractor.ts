@@ -189,11 +189,11 @@ export class MemoryExtractor {
 
         for (const memory of memories) {
             // 检查是否存在相似记忆
-            const existingMemory = this.findSimilarMemory(memory, profileId, namespace)
+            const existingMemory = await this.findSimilarMemory(memory, profileId, namespace)
 
             if (existingMemory) {
                 // 更新已存在的记忆
-                const updated = this.store.updateProfileMemory(existingMemory.id, {
+                const updated = await this.store.updateProfileMemory(existingMemory.id, {
                     content: memory.content,
                     importance: Math.max(existingMemory.importance, memory.importance),
                     expiresAt: memory.expiresInDays
@@ -207,7 +207,9 @@ export class MemoryExtractor {
                 }
             } else {
                 // 创建新记忆
-                const created = this.store.createProfileMemory(namespace, profileId, {
+                const created = await this.store.createProfileMemory({
+                    namespace,
+                    profileId,
                     memoryType: memory.type,
                     content: memory.content,
                     importance: memory.importance,
@@ -216,8 +218,10 @@ export class MemoryExtractor {
                         : null,
                     metadata: memory.metadata
                 })
-                savedMemories.push(created)
-                console.log(`[MemoryExtractor] Created new memory: ${created.id} (${memory.type})`)
+                if (created) {
+                    savedMemories.push(created)
+                    console.log(`[MemoryExtractor] Created new memory: ${created.id} (${memory.type})`)
+                }
             }
         }
 
@@ -484,13 +488,15 @@ export class MemoryExtractor {
     /**
      * 查找是否存在相似记忆
      */
-    private findSimilarMemory(
+    private async findSimilarMemory(
         memory: ExtractedMemory,
         profileId: string,
         namespace: string
-    ): StoredAIProfileMemory | null {
-        const existingMemories = this.store.getProfileMemories(namespace, profileId, {
-            type: memory.type,
+    ): Promise<StoredAIProfileMemory | null> {
+        const existingMemories = await this.store.getProfileMemories({
+            namespace,
+            profileId,
+            memoryType: memory.type,
             limit: 50
         })
 
@@ -522,7 +528,7 @@ export class MemoryExtractor {
  * 创建记忆提取器实例
  */
 export function createMemoryExtractor(
-    store: Store,
+    store: IStore,
     config?: Partial<MemoryExtractorConfig>
 ): MemoryExtractor {
     return new MemoryExtractor(store, config)

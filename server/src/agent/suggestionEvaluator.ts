@@ -39,7 +39,7 @@ export class SuggestionEvaluator {
      * 评估建议状态
      */
     async evaluate(suggestionId: string): Promise<EvaluationResult | null> {
-        const suggestion = this.store.getAgentSuggestion(suggestionId)
+        const suggestion = await this.store.getAgentSuggestion(suggestionId)
         if (!suggestion) {
             return null
         }
@@ -88,15 +88,15 @@ export class SuggestionEvaluator {
             return null
         }
 
-        const suggestion = this.store.getAgentSuggestion(suggestionId)
+        const suggestion = await this.store.getAgentSuggestion(suggestionId)
         if (!suggestion) {
             return null
         }
 
         // 如果状态变化，更新并记录反馈
         if (result.status !== suggestion.status && result.status !== 'pending') {
-            this.store.updateAgentSuggestionStatus(suggestionId, result.status)
-            this.store.createAgentFeedback({
+            await this.store.updateAgentSuggestionStatus(suggestionId, result.status)
+            await this.store.createAgentFeedback({
                 suggestionId,
                 source: 'auto',
                 action: result.status === 'accepted' ? 'accept' : 'reject',
@@ -116,7 +116,7 @@ export class SuggestionEvaluator {
      * 批量评估 namespace 下所有 pending 建议
      */
     async evaluatePendingSuggestions(namespace: string): Promise<Map<string, SuggestionStatus>> {
-        const suggestions = this.store.getAgentSuggestions(namespace, { status: 'pending' })
+        const suggestions = await this.store.getAgentSuggestions(namespace, { status: 'pending' })
         const results = new Map<string, SuggestionStatus>()
 
         for (const suggestion of suggestions) {
@@ -166,7 +166,7 @@ export class SuggestionEvaluator {
         }
 
         // 3. 检查摘要中的信息
-        const sessionStates = this.store.getAgentSessionStatesByNamespace(suggestion.namespace)
+        const sessionStates = await this.store.getAgentSessionStatesByNamespace(suggestion.namespace)
         for (const state of sessionStates) {
             if (state.summary && state.updatedAt > suggestion.createdAt) {
                 evidence.push(...this.extractSignals(state.summary, 'summary'))

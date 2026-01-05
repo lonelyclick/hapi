@@ -989,7 +989,7 @@ export class SyncEngine {
         }
     }
 
-    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'advisor' }): Promise<void> {
+    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'advisor'; meta?: Record<string, unknown> }): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
 
         // 自动上下文压缩：对于 advisor/CTO 会话，消息数超过阈值时自动发送 /compact

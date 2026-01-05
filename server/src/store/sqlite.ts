@@ -1354,7 +1354,8 @@ export class SqliteStore implements IStore {
         workStyle?: string | null
         avatarEmoji?: string
     }): Promise<StoredAIProfile | null> {
-        return this.store.createAIProfile(data.namespace, {
+        return this.store.createAIProfile({
+            namespace: data.namespace,
             name: data.name,
             role: data.role,
             specialties: data.specialties ?? [],
@@ -1363,8 +1364,6 @@ export class SqliteStore implements IStore {
             preferredProjects: data.preferredProjects ?? [],
             workStyle: data.workStyle ?? null,
             avatarEmoji: data.avatarEmoji ?? '🤖',
-            status: 'idle',
-            stats: { tasksCompleted: 0, activeMinutes: 0, lastActiveAt: null }
         })
     }
 
@@ -1394,7 +1393,9 @@ export class SqliteStore implements IStore {
         expiresAt?: number | null
         metadata?: unknown | null
     }): Promise<StoredAIProfileMemory | null> {
-        return this.store.createProfileMemory(data.namespace, data.profileId, {
+        return this.store.createProfileMemory({
+            namespace: data.namespace,
+            profileId: data.profileId,
             memoryType: data.memoryType,
             content: data.content,
             importance: data.importance,
@@ -1411,11 +1412,9 @@ export class SqliteStore implements IStore {
         limit?: number
         includeExpired?: boolean
     }): Promise<StoredAIProfileMemory[]> {
-        // 原始方法需要 profileId 作为必填参数
-        if (!options.profileId) {
-            return []
-        }
-        return this.store.getProfileMemories(options.namespace, options.profileId, {
+        return this.store.getProfileMemories({
+            namespace: options.namespace,
+            profileId: options.profileId,
             type: options.memoryType,
             limit: options.limit,
             minImportance: options.minImportance
@@ -1459,7 +1458,8 @@ export class SqliteStore implements IStore {
         focus?: string | null
         config?: Partial<StoredAITeam['config']>
     }): Promise<StoredAITeam | null> {
-        return this.store.createAITeam(data.namespace, {
+        return this.store.createAITeam({
+            namespace: data.namespace,
             name: data.name,
             description: data.description,
             focus: data.focus,
@@ -1504,12 +1504,12 @@ export class SqliteStore implements IStore {
         role?: AITeamMemberRole
         specialization?: string | null
     }): Promise<StoredAITeamMember | null> {
-        return this.store.addAITeamMember(
-            data.teamId,
-            data.profileId,
-            data.role ?? 'member',
-            data.specialization ?? undefined
-        )
+        return this.store.addAITeamMember({
+            teamId: data.teamId,
+            profileId: data.profileId,
+            role: data.role ?? 'member',
+            specialization: data.specialization ?? undefined
+        })
     }
 
     async getAITeamMember(teamId: string, profileId: string): Promise<StoredAITeamMember | null> {
@@ -1546,7 +1546,9 @@ export class SqliteStore implements IStore {
         contributorProfileId: string
         importance?: number
     }): Promise<StoredAITeamKnowledge | null> {
-        return this.store.addAITeamKnowledge(data.teamId, data.namespace, {
+        return this.store.addAITeamKnowledge({
+            teamId: data.teamId,
+            namespace: data.namespace,
             title: data.title,
             content: data.content,
             category: data.category,

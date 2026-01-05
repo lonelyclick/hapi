@@ -8,7 +8,8 @@
  * 4. 自我监控 - 进度追踪和异常处理
  */
 
-import type { Store, StoredAIProfile, StoredAIProfileMemory } from '../store'
+import type { IStore } from '../store/interface'
+import type { StoredAIProfile, StoredAIProfileMemory } from '../store'
 
 // 任务机会类型
 export type TaskOpportunityType =
@@ -113,10 +114,10 @@ export interface WorkItem {
  * 任务机会发现器
  */
 export class TaskOpportunityDiscoverer {
-    private store: Store
+    private store: IStore
     private patterns: Map<TaskOpportunityType, RegExp[]> = new Map()
 
-    constructor(store: Store) {
+    constructor(store: IStore) {
         this.store = store
         this.initializePatterns()
     }
@@ -326,11 +327,11 @@ export class TaskOpportunityDiscoverer {
  * 自主决策引擎
  */
 export class AutonomousDecisionEngine {
-    private store: Store
+    private store: IStore
     private rules: DecisionRule[] = []
     private decisionHistory: Decision[] = []
 
-    constructor(store: Store) {
+    constructor(store: IStore) {
         this.store = store
         this.initializeDefaultRules()
     }
@@ -550,10 +551,10 @@ export class AutonomousDecisionEngine {
  * 工作优先级调度器
  */
 export class WorkPriorityScheduler {
-    private store: Store
+    private store: IStore
     private workQueue: WorkItem[] = []
 
-    constructor(store: Store) {
+    constructor(store: IStore) {
         this.store = store
     }
 
@@ -716,13 +717,13 @@ export class WorkPriorityScheduler {
  * 整合任务发现、决策引擎和调度器
  */
 export class AutonomousAgentManager {
-    private store: Store
+    private store: IStore
     private discoverer: TaskOpportunityDiscoverer
     private decisionEngine: AutonomousDecisionEngine
     private scheduler: WorkPriorityScheduler
     private opportunities: Map<string, TaskOpportunity> = new Map()
 
-    constructor(store: Store) {
+    constructor(store: IStore) {
         this.store = store
         this.discoverer = new TaskOpportunityDiscoverer(store)
         this.decisionEngine = new AutonomousDecisionEngine(store)
@@ -746,19 +747,19 @@ export class AutonomousAgentManager {
     /**
      * 评估机会并做出决策
      */
-    evaluateOpportunity(
+    async evaluateOpportunity(
         opportunityId: string,
         profileId: string,
         teamContext?: DecisionContext['teamContext']
-    ): Decision | null {
+    ): Promise<Decision | null> {
         const opportunity = this.opportunities.get(opportunityId)
         if (!opportunity) return null
 
-        const profile = this.store.getAIProfile(profileId)
+        const profile = await this.store.getAIProfile(profileId)
         if (!profile) return null
 
         const workload = this.scheduler.calculateWorkload(profileId)
-        const memories = this.store.getProfileMemories(profile.namespace, profileId, { limit: 20 })
+        const memories = await this.store.getProfileMemories({ namespace: profile.namespace, profileId, limit: 20 })
         const recentDecisions = this.decisionEngine.getDecisionHistory(10)
 
         const context: DecisionContext = {
@@ -817,8 +818,8 @@ export class AutonomousAgentManager {
     /**
      * 生成自主工作 Prompt
      */
-    generateAutonomousPrompt(profileId: string): string {
-        const profile = this.store.getAIProfile(profileId)
+    async generateAutonomousPrompt(profileId: string): Promise<string> {
+        const profile = await this.store.getAIProfile(profileId)
         if (!profile) return ''
 
         const summary = this.getWorkSummary(profileId)

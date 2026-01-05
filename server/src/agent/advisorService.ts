@@ -179,16 +179,16 @@ export class AdvisorService {
         error?: string
         actionTriggered?: boolean
     }> {
-        const suggestion = this.store.getAgentSuggestion(suggestionId)
+        const suggestion = await this.store.getAgentSuggestion(suggestionId)
         if (!suggestion) {
             return { success: false, error: 'Suggestion not found' }
         }
 
         // 更新状态
-        this.store.updateAgentSuggestionStatus(suggestionId, 'accepted')
+        await this.store.updateAgentSuggestionStatus(suggestionId, 'accepted')
 
         // 记录反馈
-        this.store.createAgentFeedback({
+        await this.store.createAgentFeedback({
             suggestionId,
             source: 'user',
             userId,
@@ -213,16 +213,16 @@ export class AdvisorService {
         success: boolean
         error?: string
     }> {
-        const suggestion = this.store.getAgentSuggestion(suggestionId)
+        const suggestion = await this.store.getAgentSuggestion(suggestionId)
         if (!suggestion) {
             return { success: false, error: 'Suggestion not found' }
         }
 
         // 更新状态
-        this.store.updateAgentSuggestionStatus(suggestionId, 'rejected')
+        await this.store.updateAgentSuggestionStatus(suggestionId, 'rejected')
 
         // 记录反馈
-        this.store.createAgentFeedback({
+        await this.store.createAgentFeedback({
             suggestionId,
             source: 'user',
             userId,
@@ -1599,7 +1599,6 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         const suggestionId = output.id || `adv_${Date.now()}_${randomUUID().slice(0, 8)}`
 
         const suggestion = await this.store.createAgentSuggestion({
-            id: suggestionId,
             namespace: this.namespace,
             sessionId: advisorSessionId,
             sourceSessionId: output.sourceSessionId,
@@ -1609,7 +1608,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
             severity: output.severity,
             confidence: output.confidence,
             scope: output.scope,
-            targets: output.targets
+            targets: output.targets ? JSON.stringify(output.targets) : undefined
         })
 
         if (suggestion) {
