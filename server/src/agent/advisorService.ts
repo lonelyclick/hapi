@@ -178,16 +178,16 @@ export class AdvisorService {
         error?: string
         actionTriggered?: boolean
     }> {
-        const suggestion = this.store.getAgentSuggestion(suggestionId)
+        const suggestion = await this.store.getAgentSuggestion(suggestionId)
         if (!suggestion) {
             return { success: false, error: 'Suggestion not found' }
         }
 
         // 更新状态
-        this.store.updateAgentSuggestionStatus(suggestionId, 'accepted')
+        await this.store.updateAgentSuggestionStatus(suggestionId, 'accepted')
 
         // 记录反馈
-        this.store.createAgentFeedback({
+        await this.store.createAgentFeedback({
             suggestionId,
             source: 'user',
             userId,
@@ -212,16 +212,16 @@ export class AdvisorService {
         success: boolean
         error?: string
     }> {
-        const suggestion = this.store.getAgentSuggestion(suggestionId)
+        const suggestion = await this.store.getAgentSuggestion(suggestionId)
         if (!suggestion) {
             return { success: false, error: 'Suggestion not found' }
         }
 
         // 更新状态
-        this.store.updateAgentSuggestionStatus(suggestionId, 'rejected')
+        await this.store.updateAgentSuggestionStatus(suggestionId, 'rejected')
 
         // 记录反馈
-        this.store.createAgentFeedback({
+        await this.store.createAgentFeedback({
             suggestionId,
             source: 'user',
             userId,
@@ -240,14 +240,14 @@ export class AdvisorService {
     /**
      * 获取建议详情
      */
-    getSuggestion(suggestionId: string): StoredAgentSuggestion | null {
+    async getSuggestion(suggestionId: string): Promise<StoredAgentSuggestion | null> {
         return this.store.getAgentSuggestion(suggestionId)
     }
 
     /**
      * 获取所有待处理的建议
      */
-    getPendingSuggestions(): StoredAgentSuggestion[] {
+    async getPendingSuggestions(): Promise<StoredAgentSuggestion[]> {
         return this.store.getAgentSuggestions(this.namespace, {
             status: 'pending'
         })
