@@ -992,6 +992,47 @@ export class SyncEngine {
     async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'advisor' }): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
 
+        // 自动上下文压缩：对于 advisor/CTO 会话，消息数超过阈值时自动发送 /compact
+        const AUTO_COMPACT_THRESHOLD = 50  // 消息数阈值
+        const session = this.sessions.get(sessionId)
+        const metadata = session?.metadata as Record<string, unknown> | null
+        const isAdvisorSession = metadata?.claudeAgent === 'advisor' || metadata?.claudeAgent === 'cto' ||
+            metadata?.isAdvisor === true || metadata?.isCTO === true ||
+            session?.metadata?.name?.toLowerCase().includes('advisor') ||
+            session?.metadata?.name?.toLowerCase().includes('cto')
+
+        if (isAdvisorSession && !payload.text.startsWith('/compact') && !payload.text.startsWith('/clear')) {
+            const messageCount = this.store.getMessageCount(sessionId)
+            if (messageCount >= AUTO_COMPACT_THRESHOLD) {
+                console.log(`[SyncEngine] Advisor session ${sessionId} has ${messageCount} messages, auto-compacting...`)
+                // 先发送 /compact 命令
+                const compactContent = {
+                    role: 'user',
+                    content: { type: 'text', text: '/compact' },
+                    meta: { sentFrom: 'advisor' as const }
+                }
+                const compactMsg = this.store.addMessage(sessionId, compactContent)
+                const compactUpdate = {
+                    id: compactMsg.id,
+                    seq: Date.now(),
+                    createdAt: compactMsg.createdAt,
+                    body: {
+                        t: 'new-message' as const,
+                        sid: sessionId,
+                        message: {
+                            id: compactMsg.id,
+                            seq: compactMsg.seq,
+                            createdAt: compactMsg.createdAt,
+                            localId: compactMsg.localId,
+                            content: compactMsg.content
+                        }
+                    }
+                }
+                this.io.of('/cli').to(`session:${sessionId}`).emit('update', compactUpdate)
+                console.log(`[SyncEngine] Sent /compact command to advisor session ${sessionId}`)
+            }
+        }
+
         const content = {
             role: 'user',
             content: {

@@ -140,6 +140,113 @@ export type GroupMemberRole = 'owner' | 'moderator' | 'member'
 export type GroupSenderType = 'agent' | 'user' | 'system'
 export type GroupMessageType = 'chat' | 'task' | 'feedback' | 'decision'
 
+// AI Profile 相关类型
+export type AIProfileRole = 'developer' | 'architect' | 'reviewer' | 'pm' | 'tester' | 'devops'
+export type AIProfileStatus = 'idle' | 'working' | 'resting'
+export type AIProfileMemoryType = 'context' | 'preference' | 'knowledge' | 'experience'
+
+export type StoredAIProfile = {
+    id: string
+    namespace: string
+    name: string
+    displayName: string
+    description: string | null
+    role: AIProfileRole
+    skills: string[]
+    personality: {
+        style: string
+        strengths: string[]
+        weaknesses?: string[]
+    } | null
+    config: {
+        maxConcurrentTasks: number
+        preferredWorkHours?: string[]
+        autoAcceptTasks: boolean
+    } | null
+    status: AIProfileStatus
+    currentTaskId: string | null
+    stats: {
+        tasksCompleted: number
+        averageRating: number
+        activeMinutes: number
+    } | null
+    lastActiveAt: number | null
+    createdAt: number
+    updatedAt: number
+}
+
+export type StoredAIProfileMemory = {
+    id: string
+    namespace: string
+    profileId: string
+    type: AIProfileMemoryType
+    content: string
+    metadata: unknown | null
+    importance: number
+    accessCount: number
+    lastAccessedAt: number | null
+    expiresAt: number | null
+    createdAt: number
+    updatedAt: number
+}
+
+// AI Team 相关类型
+export type AITeamStatus = 'active' | 'paused' | 'archived'
+export type AITeamMemberRole = 'lead' | 'member' | 'advisor'
+
+export type StoredAITeam = {
+    id: string
+    namespace: string
+    name: string
+    description: string | null
+    focus: string | null
+    status: AITeamStatus
+    config: {
+        maxMembers: number
+        autoAssignTasks: boolean
+        requireApproval: boolean
+    } | null
+    stats: {
+        tasksCompleted: number
+        activeProjects: number
+        knowledgeItems: number
+    } | null
+    createdAt: number
+    updatedAt: number
+}
+
+export type StoredAITeamMember = {
+    teamId: string
+    profileId: string
+    role: AITeamMemberRole
+    specialization: string | null
+    contribution: number
+    joinedAt: number
+}
+
+export type StoredAITeamKnowledge = {
+    id: string
+    teamId: string
+    namespace: string
+    title: string
+    content: string
+    category: 'decision' | 'pattern' | 'lesson' | 'reference'
+    contributorProfileId: string
+    importance: number
+    accessCount: number
+    lastAccessedAt: number | null
+    createdAt: number
+    updatedAt: number
+}
+
+export type StoredAgentGroupWithLastMessage = StoredAgentGroup & {
+    lastMessage: {
+        content: string
+        senderType: GroupSenderType
+        createdAt: number
+    } | null
+}
+
 export type StoredAgentGroup = {
     id: string
     namespace: string
