@@ -1119,25 +1119,48 @@ export class SyncEngine {
         const sentFrom = payload.sentFrom ?? 'webapp'
 
         // 检查是否需要注入 CTO 指令
-        // 对于 CTO 会话，每条消息都注入（因为 Claude 可能会清空上下文）
         let messageText = payload.text
         const session = this.sessions.get(sessionId)
 
-        if (isCTOSession(session)) {
-            // CTO 会话：每条消息都注入
-            const workingDir = session?.metadata?.path || session?.metadata?.worktree?.basePath || undefined
-            const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
-            messageText = ctoPrompt + '\n\n' + payload.text
-            console.log(`[SyncEngine] Injected CTO prompt for CTO session ${sessionId}`)
-        } else if (this.store.shouldInjectAdvisorPrompt(sessionId)) {
-            // 使用 advisor_mode 标志的会话：仅首条消息注入
-            const workingDir = session?.metadata?.path || session?.metadata?.worktree?.basePath || undefined
-            const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
-            messageText = ctoPrompt + '\n\n' + payload.text
-            // 标记已注入，防止重复
-            const namespace = session?.namespace || 'default'
-            this.store.setSessionAdvisorPromptInjected(sessionId, namespace)
-            console.log(`[SyncEngine] Injected CTO prompt for advisor_mode session ${sessionId}`)
+        // 判断是否为系统消息（不需要注入 prompt 的消息类型）
+        // 系统消息如 TASK_FEEDBACK、STATUS 检测等不应触发 CTO prompt 注入
+        const isSystemMessage = payload.text.startsWith('[[TASK_FEEDBACK]]') ||
+            payload.text.startsWith('[[STATUS]]') ||
+            payload.text.startsWith('[[SUMMARY]]')
+
+        if (!isSystemMessage) {
+            // 检查是否需要注入 CTO prompt
+            // 1. advisor_mode 会话：使用数据库标记（shouldInjectAdvisorPrompt）
+            // 2. CTO 会话（通过名称/metadata 判断）：检查是否是首条用户消息
+            const shouldInjectFromDB = this.store.shouldInjectAdvisorPrompt(sessionId)
+            const isCTO = isCTOSession(session)
+
+            if (shouldInjectFromDB) {
+                // advisor_mode 会话：仅首条消息注入
+                const workingDir = session?.metadata?.path || session?.metadata?.worktree?.basePath || undefined
+                const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
+                messageText = ctoPrompt + '\n\n' + payload.text
+                // 标记已注入，防止重复
+                const namespace = session?.namespace || 'default'
+                this.store.setSessionAdvisorPromptInjected(sessionId, namespace)
+                console.log(`[SyncEngine] Injected CTO prompt for advisor_mode session ${sessionId}`)
+            } else if (isCTO) {
+                // CTO 会话（非 advisor_mode）：检查是否是首条用户消息
+                // 通过检查历史消息中是否有用户消息来判断
+                const messages = this.store.getMessages(sessionId, 10)
+                const hasUserMessage = messages.some(m => {
+                    const content = m.content as Record<string, unknown> | null
+                    return content?.role === 'user'
+                })
+
+                if (!hasUserMessage) {
+                    // 首条用户消息，注入 CTO prompt
+                    const workingDir = session?.metadata?.path || session?.metadata?.worktree?.basePath || undefined
+                    const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
+                    messageText = ctoPrompt + '\n\n' + payload.text
+                    console.log(`[SyncEngine] Injected CTO prompt for CTO session ${sessionId} (first user message)`)
+                }
+            }
         }
 
         const content = {

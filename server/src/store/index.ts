@@ -4343,3 +4343,35 @@ export class Store {
         return { team, members }
     }
 }
+
+// Re-export types and interface from separate files
+export type { IStore } from './interface'
+export type { StoreConfig, PostgresConfig } from './types'
+export { SqliteStore } from './sqlite'
+export { PostgresStore } from './postgres'
+
+import type { IStore } from './interface'
+import type { StoreConfig } from './types'
+
+/**
+ * Create a store instance based on configuration.
+ * Returns an IStore implementation (SQLite or PostgreSQL).
+ *
+ * Note: Uses dynamic imports to avoid circular dependency issues.
+ */
+export async function createStore(config: StoreConfig): Promise<IStore> {
+    if (config.type === 'postgres') {
+        if (!config.postgres) {
+            throw new Error('PostgreSQL configuration required when STORE_TYPE=postgres')
+        }
+        console.log(`[Store] Initializing PostgreSQL store: ${config.postgres.host}/${config.postgres.database}`)
+        const { PostgresStore } = await import('./postgres')
+        return PostgresStore.create(config.postgres)
+    }
+
+    // Default: SQLite
+    const dbPath = config.sqlitePath || `${process.env.HOME}/.hapi/hapi.db`
+    console.log(`[Store] Initializing SQLite store: ${dbPath}`)
+    const { SqliteStore } = await import('./sqlite')
+    return new SqliteStore(dbPath)
+}
