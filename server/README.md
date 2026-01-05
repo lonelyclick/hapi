@@ -73,6 +73,7 @@ See `src/web/routes/` for all endpoints.
 
 - `GET /api/sessions` - List all sessions.
 - `GET /api/sessions/:id` - Get session details.
+- `POST /api/sessions` - Spawn a new session on a machine.
 - `POST /api/sessions/:id/abort` - Abort session.
 - `POST /api/sessions/:id/switch` - Switch session mode (remote/local).
 - `POST /api/sessions/:id/permission-mode` - Set permission mode.
@@ -139,6 +140,12 @@ Namespace: `/cli`
 - `rpc-request` - Incoming RPC call.
 
 See `src/socket/rpcRegistry.ts` for RPC routing.
+
+Namespace: `/events`
+
+### Server events (server to clients)
+
+- `event` - Broadcast SyncEvent updates for the authenticated namespace.
 
 ## Telegram Bot
 

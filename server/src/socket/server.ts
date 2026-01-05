@@ -78,6 +78,7 @@ export function createSocketServer(deps: SocketServerDeps): {
     const maxTerminalsPerSession = maxTerminals
     const cliNs = io.of('/cli')
     const terminalNs = io.of('/terminal')
+    const eventsNs = io.of('/events')
     const terminalRegistry = new TerminalRegistry({
         idleTimeoutMs,
         onIdle: (entry) => {
@@ -143,6 +144,35 @@ export function createSocketServer(deps: SocketServerDeps): {
         maxTerminalsPerSocket,
         maxTerminalsPerSession
     }))
+
+    eventsNs.use(async (socket, next) => {
+        const auth = socket.handshake.auth as Record<string, unknown> | undefined
+        const token = typeof auth?.token === 'string' ? auth.token : null
+        if (!token) {
+            return next(new Error('Missing token'))
+        }
+
+        try {
+            const verified = await jwtVerify(token, deps.jwtSecret, { algorithms: ['HS256'] })
+            const parsed = jwtPayloadSchema.safeParse(verified.payload)
+            if (!parsed.success) {
+                return next(new Error('Invalid token payload'))
+            }
+            socket.data.userId = parsed.data.uid
+            socket.data.namespace = parsed.data.ns
+            next()
+            return
+        } catch {
+            return next(new Error('Invalid token'))
+        }
+    })
+
+    eventsNs.on('connection', (socket) => {
+        const namespace = socket.data.namespace
+        if (namespace) {
+            socket.join(`namespace:${namespace}`)
+        }
+    })
 
     return { io, engine, rpcRegistry }
 }

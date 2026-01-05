@@ -348,6 +348,26 @@ export class SyncEngine {
                 sessionId: event.sessionId,
                 idleSuggestion: event.idleSuggestion
             }
+            : event.type === 'typing-changed'
+            ? {
+                type: event.type,
+                namespace,
+                sessionId: event.sessionId,
+                typing: event.typing
+            }
+            : event.type === 'online-users-changed'
+            ? {
+                type: event.type,
+                namespace,
+                users: event.users
+            }
+            : event.type === 'group-message'
+            ? {
+                type: event.type,
+                namespace,
+                groupId: event.groupId,
+                groupMessage: event.groupMessage
+            }
             : {
                 type: event.type,
                 namespace,
@@ -358,6 +378,19 @@ export class SyncEngine {
             }
 
         this.sseManager.broadcast(webappEvent)
+        this.broadcastWebSocketEvent(webappEvent)
+    }
+
+    private broadcastWebSocketEvent(event: SyncEvent): void {
+        const eventsNamespace = this.io.of('/events')
+        if (event.type === 'connection-changed' && !event.namespace) {
+            eventsNamespace.emit('event', event)
+            return
+        }
+        if (!event.namespace) {
+            return
+        }
+        eventsNamespace.to(`namespace:${event.namespace}`).emit('event', event)
     }
 
     private resolveNamespace(event: SyncEvent): string | undefined {

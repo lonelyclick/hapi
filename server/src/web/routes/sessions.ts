@@ -4,7 +4,7 @@ import type { DecryptedMessage, Session, SyncEngine } from '../../sync/syncEngin
 import type { SSEManager } from '../../sse/sseManager'
 import type { IStore, UserRole } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireSessionFromParam, requireSyncEngine } from './guards'
+import { requireMachine, requireSessionFromParam, requireSyncEngine } from './guards'
 import { buildInitPrompt } from '../prompts/initPrompt'
 
 type SessionSummaryMetadata = {
@@ -79,21 +79,31 @@ function toSessionSummary(session: Session): SessionSummary {
     }
 }
 
+const permissionModeValues = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'read-only', 'safe-yolo', 'yolo'] as const
+const modelModeValues = ['default', 'sonnet', 'opus', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'] as const
+const reasoningEffortValues = ['low', 'medium', 'high', 'xhigh'] as const
+
 const permissionModeSchema = z.object({
-    mode: z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'read-only', 'safe-yolo', 'yolo'])
+    mode: z.enum(permissionModeValues)
 })
 
 const modelModeSchema = z.object({
-    model: z.enum([
-        'default',
-        'sonnet',
-        'opus',
-        'gpt-5.2-codex',
-        'gpt-5.1-codex-max',
-        'gpt-5.1-codex-mini',
-        'gpt-5.2'
-    ]),
-    reasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional()
+    model: z.enum(modelModeValues),
+    reasoningEffort: z.enum(reasoningEffortValues).optional()
+})
+
+const createSessionSchema = z.object({
+    machineId: z.string().min(1),
+    directory: z.string().min(1),
+    agent: z.enum(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok', 'openrouter', 'aider-cli']).optional(),
+    yolo: z.boolean().optional(),
+    sessionType: z.enum(['simple', 'worktree']).optional(),
+    worktreeName: z.string().optional(),
+    claudeAgent: z.string().min(1).optional(),
+    openrouterModel: z.string().min(1).optional(),
+    permissionMode: z.enum(permissionModeValues).optional(),
+    modelMode: z.enum(modelModeValues).optional(),
+    modelReasoningEffort: z.enum(reasoningEffortValues).optional()
 })
 
 const RESUME_TIMEOUT_MS = 60_000
@@ -165,6 +175,14 @@ async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserR
     } catch {
         // Ignore failures.
     }
+}
+
+async function sendInitPromptAfterOnline(engine: SyncEngine, sessionId: string, role: UserRole): Promise<void> {
+    const isOnline = await waitForSessionOnline(engine, sessionId, 60_000)
+    if (!isOnline) {
+        return
+    }
+    await sendInitPrompt(engine, sessionId, role)
 }
 
 async function resolveSpawnTarget(
@@ -338,6 +356,47 @@ export function createSessionsRoutes(
     store: IStore
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
+
+    app.post('/sessions', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const body = await c.req.json().catch(() => null)
+        const parsed = createSessionSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid body', details: parsed.error.issues }, 400)
+        }
+
+        const machine = requireMachine(c, engine, parsed.data.machineId)
+        if (machine instanceof Response) {
+            return machine
+        }
+
+        const result = await engine.spawnSession(
+            parsed.data.machineId,
+            parsed.data.directory,
+            parsed.data.agent,
+            parsed.data.yolo,
+            parsed.data.sessionType,
+            parsed.data.worktreeName,
+            {
+                claudeAgent: parsed.data.claudeAgent,
+                openrouterModel: parsed.data.openrouterModel,
+                permissionMode: parsed.data.permissionMode,
+                modelMode: parsed.data.modelMode,
+                modelReasoningEffort: parsed.data.modelReasoningEffort
+            }
+        )
+
+        if (result.type === 'success' && parsed.data.claudeAgent !== 'advisor') {
+            const role = resolveUserRole(store, c.get('email'))
+            void sendInitPromptAfterOnline(engine, result.sessionId, role)
+        }
+
+        return c.json(result)
+    })
 
     app.get('/sessions', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
@@ -707,11 +766,6 @@ export function createSessionsRoutes(
 
     // 广播用户输入状态
     app.post('/sessions/:id/typing', async (c) => {
-        const sseManager = getSseManager()
-        if (!sseManager) {
-            return c.json({ error: 'SSE not available' }, 503)
-        }
-
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) {
             return engine
@@ -732,7 +786,7 @@ export function createSessionsRoutes(
         const namespace = c.get('namespace')
 
         // 广播 typing 事件给同一 session 的其他用户
-        sseManager.broadcast({
+        engine.emit({
             type: 'typing-changed',
             namespace,
             sessionId: sessionResult.sessionId,
