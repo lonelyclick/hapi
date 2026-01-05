@@ -117,6 +117,7 @@ function createWebApp(options: {
     app.route('/api', createPushRoutes())
     app.route('/api', createUsageRoutes(options.getSyncEngine))
     app.route('/api', createGroupRoutes(options.store, options.getSyncEngine(), options.getSseManager()))
+    app.route('/api', createAutonomousRoutes(options.getAdvisorService))
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap
