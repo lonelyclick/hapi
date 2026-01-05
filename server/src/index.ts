@@ -9,10 +9,10 @@
  */
 
 import { createConfiguration, type ConfigSource } from './configuration'
-import { Store } from './store'
-import { SqliteStore } from './store/sqlite'
 import { PostgresStore } from './store/postgres'
+import { SqliteStore } from './store/sqlite'
 import type { IStore } from './store/interface'
+import { Store } from './store'
 import { SyncEngine, type SyncEvent } from './sync/syncEngine'
 import { HappyBot } from './telegram/bot'
 import { startWebServer } from './web/server'
@@ -21,6 +21,7 @@ import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
 import { AdvisorScheduler, AdvisorService, createAdvisorTelegramNotifier, AutoIterationService } from './agent'
+import { AutonomousAgentManager } from './agent/autonomousAgent'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -45,6 +46,7 @@ let sseManager: SSEManager | null = null
 let advisorScheduler: AdvisorScheduler | null = null
 let advisorService: AdvisorService | null = null
 let autoIterationService: AutoIterationService | null = null
+let autonomousManager: AutonomousAgentManager | null = null
 
 async function main() {
     console.log('HAPI Server starting...')
@@ -181,6 +183,10 @@ async function main() {
     if (advisorEnabled && syncEngine) {
         console.log(`[Server] Advisor Agent: initializing for namespace '${advisorNamespace}'...`)
 
+        // Initialize AutonomousAgentManager
+        autonomousManager = new AutonomousAgentManager(asyncStore)
+        console.log(`[Server] Autonomous Agent Manager: initialized`)
+
         advisorScheduler = new AdvisorScheduler(syncEngine, asyncStore, {
             namespace: advisorNamespace
         })
@@ -188,6 +194,9 @@ async function main() {
         advisorService = new AdvisorService(syncEngine, asyncStore, advisorScheduler, {
             namespace: advisorNamespace
         })
+
+        // Connect AutonomousAgentManager to AdvisorService
+        advisorService.setAutonomousManager(autonomousManager)
 
         // Set up Telegram notifier if bot is available
         if (happyBot) {
@@ -237,6 +246,7 @@ async function main() {
         advisorService?.stop()
         advisorScheduler?.stop()
         autoIterationService?.shutdown()
+        autonomousManager?.cleanup()
         await happyBot?.stop()
         syncEngine?.stop()
         sseManager?.stop()

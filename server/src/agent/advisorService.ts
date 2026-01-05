@@ -226,6 +226,13 @@ export class AdvisorService implements AutonomousController {
         }
         this.idleCheckTimers.clear()
 
+        // 清理 MiniMax 审查队列
+        this.minimaxReviewQueue = []
+        this.minimaxReviewingSet.clear()
+
+        // 清理防抖记录
+        this.lastIdleCheckTime.clear()
+
         console.log('[AdvisorService] Stopped')
     }
 
@@ -537,13 +544,27 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         }, 5000)  // 延迟 5 秒，避免与 Layer 1 同时执行
     }
 
+    // 全局 MiniMax 审查并发限制
+    private readonly maxConcurrentMinimaxReviews = 2  // 最多同时审查 2 个会话
+    private minimaxReviewQueue: string[] = []         // 等待审查的会话队列
+
     /**
      * 执行 MiniMax 审查（Layer 2）
+     * 优化：增加全局并发限制，避免同时启动太多审查
      */
     private async performMinimaxReview(sessionId: string): Promise<void> {
         // 并发控制：同一 session 同时只能有一个审查
         if (this.minimaxReviewingSet.has(sessionId)) {
             console.log(`[AdvisorService] MiniMax review already in progress for ${sessionId}`)
+            return
+        }
+
+        // 全局并发限制：如果已达上限，加入队列等待
+        if (this.minimaxReviewingSet.size >= this.maxConcurrentMinimaxReviews) {
+            if (!this.minimaxReviewQueue.includes(sessionId)) {
+                this.minimaxReviewQueue.push(sessionId)
+                console.log(`[AdvisorService] MiniMax review queued for ${sessionId} (queue size: ${this.minimaxReviewQueue.length})`)
+            }
             return
         }
 
@@ -575,6 +596,17 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
             }
         } finally {
             this.minimaxReviewingSet.delete(sessionId)
+
+            // 处理队列中的下一个会话
+            if (this.minimaxReviewQueue.length > 0) {
+                const nextSessionId = this.minimaxReviewQueue.shift()!
+                // 使用 setImmediate 避免递归调用栈过深
+                setImmediate(() => {
+                    this.performMinimaxReview(nextSessionId).catch(error => {
+                        console.error('[AdvisorService] Queued MiniMax review error:', error)
+                    })
+                })
+            }
         }
     }
 
