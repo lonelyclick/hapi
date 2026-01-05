@@ -262,7 +262,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         })
     })
 
-    socket.on('update-metadata', (data: unknown, cb: (answer: unknown) => void) => {
+    socket.on('update-metadata', async (data: unknown, cb: (answer: unknown) => void) => {
         const parsed = updateMetadataSchema.safeParse(data)
         if (!parsed.success) {
             cb({ result: 'error' })
@@ -270,13 +270,13 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
 
         const { sid, metadata, expectedVersion } = parsed.data
-        const sessionAccess = resolveSessionAccess(sid)
+        const sessionAccess = await resolveSessionAccess(sid)
         if (!sessionAccess.ok) {
             cb({ result: 'error', reason: sessionAccess.reason })
             return
         }
 
-        const result = store.updateSessionMetadata(sid, metadata, expectedVersion, sessionAccess.value.namespace)
+        const result = await store.updateSessionMetadata(sid, metadata, expectedVersion, sessionAccess.value.namespace)
         if (result.result === 'success') {
             cb({ result: 'success', version: result.version, metadata: result.value })
         } else if (result.result === 'version-mismatch') {
@@ -302,7 +302,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
     })
 
-    socket.on('update-state', (data: unknown, cb: (answer: unknown) => void) => {
+    socket.on('update-state', async (data: unknown, cb: (answer: unknown) => void) => {
         const parsed = updateStateSchema.safeParse(data)
         if (!parsed.success) {
             cb({ result: 'error' })
@@ -310,13 +310,13 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
 
         const { sid, agentState, expectedVersion } = parsed.data
-        const sessionAccess = resolveSessionAccess(sid)
+        const sessionAccess = await resolveSessionAccess(sid)
         if (!sessionAccess.ok) {
             cb({ result: 'error', reason: sessionAccess.reason })
             return
         }
 
-        const result = store.updateSessionAgentState(sid, agentState, expectedVersion, sessionAccess.value.namespace)
+        const result = await store.updateSessionAgentState(sid, agentState, expectedVersion, sessionAccess.value.namespace)
         if (result.result === 'success') {
             cb({ result: 'success', version: result.version, agentState: result.value })
         } else if (result.result === 'version-mismatch') {
@@ -342,11 +342,11 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
     })
 
-    socket.on('session-alive', (data: SessionAlivePayload) => {
+    socket.on('session-alive', async (data: SessionAlivePayload) => {
         if (!data || typeof data.sid !== 'string' || typeof data.time !== 'number') {
             return
         }
-        const sessionAccess = resolveSessionAccess(data.sid)
+        const sessionAccess = await resolveSessionAccess(data.sid)
         if (!sessionAccess.ok) {
             emitAccessError('session', data.sid, sessionAccess.reason)
             return
@@ -354,11 +354,11 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         onSessionAlive?.(data)
     })
 
-    socket.on('session-end', (data: SessionEndPayload) => {
+    socket.on('session-end', async (data: SessionEndPayload) => {
         if (!data || typeof data.sid !== 'string' || typeof data.time !== 'number') {
             return
         }
-        const sessionAccess = resolveSessionAccess(data.sid)
+        const sessionAccess = await resolveSessionAccess(data.sid)
         if (!sessionAccess.ok) {
             emitAccessError('session', data.sid, sessionAccess.reason)
             return
@@ -366,11 +366,11 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         onSessionEnd?.(data)
     })
 
-    socket.on('machine-alive', (data: MachineAlivePayload) => {
+    socket.on('machine-alive', async (data: MachineAlivePayload) => {
         if (!data || typeof data.machineId !== 'string' || typeof data.time !== 'number') {
             return
         }
-        const machineAccess = resolveMachineAccess(data.machineId)
+        const machineAccess = await resolveMachineAccess(data.machineId)
         if (!machineAccess.ok) {
             emitAccessError('machine', data.machineId, machineAccess.reason)
             return
@@ -378,7 +378,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         onMachineAlive?.(data)
     })
 
-    const handleMachineMetadataUpdate = (data: unknown, cb: (answer: unknown) => void) => {
+    const handleMachineMetadataUpdate = async (data: unknown, cb: (answer: unknown) => void) => {
         const parsed = machineUpdateMetadataSchema.safeParse(data)
         if (!parsed.success) {
             cb({ result: 'error' })
@@ -386,13 +386,13 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
 
         const { machineId: id, metadata, expectedVersion } = parsed.data
-        const machineAccess = resolveMachineAccess(id)
+        const machineAccess = await resolveMachineAccess(id)
         if (!machineAccess.ok) {
             cb({ result: 'error', reason: machineAccess.reason })
             return
         }
 
-        const result = store.updateMachineMetadata(id, metadata, expectedVersion, machineAccess.value.namespace)
+        const result = await store.updateMachineMetadata(id, metadata, expectedVersion, machineAccess.value.namespace)
         if (result.result === 'success') {
             cb({ result: 'success', version: result.version, metadata: result.value })
         } else if (result.result === 'version-mismatch') {
@@ -418,7 +418,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
     }
 
-    const handleMachineStateUpdate = (data: unknown, cb: (answer: unknown) => void) => {
+    const handleMachineStateUpdate = async (data: unknown, cb: (answer: unknown) => void) => {
         const parsed = machineUpdateStateSchema.safeParse(data)
         if (!parsed.success) {
             cb({ result: 'error' })
@@ -426,13 +426,13 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
 
         const { machineId: id, daemonState, expectedVersion } = parsed.data
-        const machineAccess = resolveMachineAccess(id)
+        const machineAccess = await resolveMachineAccess(id)
         if (!machineAccess.ok) {
             cb({ result: 'error', reason: machineAccess.reason })
             return
         }
 
-        const result = store.updateMachineDaemonState(id, daemonState, expectedVersion, machineAccess.value.namespace)
+        const result = await store.updateMachineDaemonState(id, daemonState, expectedVersion, machineAccess.value.namespace)
         if (result.result === 'success') {
             cb({ result: 'success', version: result.version, daemonState: result.value })
         } else if (result.result === 'version-mismatch') {
