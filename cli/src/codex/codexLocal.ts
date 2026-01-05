@@ -45,6 +45,9 @@ export async function codexLocal(opts: {
         args.push('--sandbox', opts.sandbox);
     }
 
+    // 始终启用网络搜索
+    args.push('--search');
+
     if (opts.codexArgs) {
         const safeArgs = filterResumeSubcommand(opts.codexArgs);
         args.push(...safeArgs);
