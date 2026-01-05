@@ -5,7 +5,7 @@
  * 记忆类型：context（项目上下文）、preference（用户偏好）、knowledge（技术知识）、experience（解决问题的经验）
  */
 
-import type { Store, AIProfileMemoryType, StoredAIProfileMemory } from '../store'
+import type { IStore, AIProfileMemoryType, StoredAIProfileMemory } from '../store'
 import type { SessionSummary } from './types'
 
 /**
@@ -96,10 +96,10 @@ const MEMORY_PATTERNS: MemoryPattern[] = [
  * 记忆提取器类
  */
 export class MemoryExtractor {
-    private store: Store
+    private store: IStore
     private config: MemoryExtractorConfig
 
-    constructor(store: Store, config?: Partial<MemoryExtractorConfig>) {
+    constructor(store: IStore, config?: Partial<MemoryExtractorConfig>) {
         this.store = store
         this.config = { ...DEFAULT_CONFIG, ...config }
     }

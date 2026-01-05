@@ -65,7 +65,7 @@ export class AdvisorScheduler {
 
         try {
             // 1. 从 agent_state 读取或生成 advisor_session_id
-            const state = this.store.getAdvisorState(this.namespace)
+            const state = await this.store.getAdvisorState(this.namespace)
             this.advisorSessionId = state?.advisorSessionId || `advisor-${randomUUID().slice(0, 8)}`
 
             // 2. 选择在线机器
@@ -81,7 +81,7 @@ export class AdvisorScheduler {
             if (existingSession?.active) {
                 console.log(`[AdvisorScheduler] Advisor session ${this.advisorSessionId} already running`)
                 // 更新状态
-                this.store.upsertAdvisorState(this.namespace, {
+                await this.store.upsertAdvisorState(this.namespace, {
                     advisorSessionId: this.advisorSessionId,
                     machineId: machine.id,
                     status: 'running',
@@ -113,7 +113,7 @@ export class AdvisorScheduler {
 
             if (spawnResult.type !== 'success') {
                 console.error('[AdvisorScheduler] Failed to spawn advisor session:', spawnResult.message)
-                this.store.upsertAdvisorState(this.namespace, {
+                await this.store.upsertAdvisorState(this.namespace, {
                     advisorSessionId: this.advisorSessionId,
                     machineId: machine.id,
                     status: 'error'
@@ -135,7 +135,7 @@ export class AdvisorScheduler {
             }
 
             // 7. 更新 agent_state
-            this.store.upsertAdvisorState(this.namespace, {
+            await this.store.upsertAdvisorState(this.namespace, {
                 advisorSessionId: this.advisorSessionId,
                 machineId: machine.id,
                 status: 'running',
@@ -239,10 +239,10 @@ export class AdvisorScheduler {
         })
     }
 
-    onSessionEnd(sessionId: string): void {
+    async onSessionEnd(sessionId: string): Promise<void> {
         if (sessionId === this.advisorSessionId) {
             console.log(`[AdvisorScheduler] Advisor session ${sessionId} ended, scheduling restart`)
-            this.store.upsertAdvisorState(this.namespace, {
+            await this.store.upsertAdvisorState(this.namespace, {
                 status: 'idle',
                 lastSeen: Date.now()
             })

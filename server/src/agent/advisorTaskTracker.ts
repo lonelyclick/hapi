@@ -7,7 +7,7 @@
  * 3. 提供任务查询接口供 Advisor 使用
  */
 
-import type { Store } from '../store'
+import type { IStore } from '../store'
 
 export interface AdvisorTask {
     id: string                        // 任务 ID
@@ -29,9 +29,9 @@ export interface AdvisorTask {
 export class AdvisorTaskTracker {
     private tasks: Map<string, AdvisorTask> = new Map()
     private sessionToTask: Map<string, string> = new Map()  // sessionId -> taskId
-    private store: Store
+    private store: IStore
 
-    constructor(store: Store) {
+    constructor(store: IStore) {
         this.store = store
         this.loadFromStore()
     }

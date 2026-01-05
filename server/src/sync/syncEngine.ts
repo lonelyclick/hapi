@@ -435,7 +435,13 @@ export class SyncEngine {
 
             for (const group of groups) {
                 // 存储消息到群组
-                const message = await this.store.addGroupMessage(group.id, sessionId, content, 'agent', 'chat')
+                const message = await this.store.addGroupMessage({
+                    groupId: group.id,
+                    sourceSessionId: sessionId,
+                    content,
+                    senderType: 'agent',
+                    messageType: 'chat'
+                })
 
                 // 广播 SSE 事件给群组订阅者（仅 UI，不转发给其他 AI）
                 const groupMessageData: GroupMessageData = {
