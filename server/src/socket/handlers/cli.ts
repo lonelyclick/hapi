@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
-import type { Store, StoredMachine, StoredSession } from '../../store'
+import type { IStore, StoredMachine, StoredSession } from '../../store'
 import { RpcRegistry } from '../rpcRegistry'
 import type { SyncEvent } from '../../sync/syncEngine'
 import { extractTodoWriteTodosFromMessageContent } from '../../sync/todos'
@@ -91,7 +91,7 @@ const terminalErrorSchema = z.object({
 
 export type CliHandlersDeps = {
     io: SocketServer
-    store: Store
+    store: IStore
     rpcRegistry: RpcRegistry
     terminalRegistry: TerminalRegistry
     onSessionAlive?: (payload: SessionAlivePayload) => void
@@ -110,29 +110,29 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
     const terminalNamespace = io.of('/terminal')
     const namespace = typeof socket.data.namespace === 'string' ? socket.data.namespace : null
 
-    const resolveSessionAccess = (sessionId: string): AccessResult<StoredSession> => {
+    const resolveSessionAccess = async (sessionId: string): Promise<AccessResult<StoredSession>> => {
         if (!namespace) {
             return { ok: false, reason: 'namespace-missing' }
         }
-        const session = store.getSessionByNamespace(sessionId, namespace)
+        const session = await store.getSessionByNamespace(sessionId, namespace)
         if (session) {
             return { ok: true, value: session }
         }
-        if (store.getSession(sessionId)) {
+        if (await store.getSession(sessionId)) {
             return { ok: false, reason: 'access-denied' }
         }
         return { ok: false, reason: 'not-found' }
     }
 
-    const resolveMachineAccess = (machineId: string): AccessResult<StoredMachine> => {
+    const resolveMachineAccess = async (machineId: string): Promise<AccessResult<StoredMachine>> => {
         if (!namespace) {
             return { ok: false, reason: 'namespace-missing' }
         }
-        const machine = store.getMachineByNamespace(machineId, namespace)
+        const machine = await store.getMachineByNamespace(machineId, namespace)
         if (machine) {
             return { ok: true, value: machine }
         }
-        if (store.getMachine(machineId)) {
+        if (await store.getMachine(machineId)) {
             return { ok: false, reason: 'access-denied' }
         }
         return { ok: false, reason: 'not-found' }
@@ -140,13 +140,17 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
 
     const auth = socket.handshake.auth as Record<string, unknown> | undefined
     const sessionId = typeof auth?.sessionId === 'string' ? auth.sessionId : null
-    if (sessionId && resolveSessionAccess(sessionId).ok) {
-        socket.join(`session:${sessionId}`)
+    if (sessionId) {
+        resolveSessionAccess(sessionId).then(result => {
+            if (result.ok) socket.join(`session:${sessionId}`)
+        })
     }
 
     const machineId = typeof auth?.machineId === 'string' ? auth.machineId : null
-    if (machineId && resolveMachineAccess(machineId).ok) {
-        socket.join(`machine:${machineId}`)
+    if (machineId) {
+        resolveMachineAccess(machineId).then(result => {
+            if (result.ok) socket.join(`machine:${machineId}`)
+        })
     }
 
     const emitAccessError = (scope: 'session' | 'machine', id: string, reason: AccessErrorReason) => {
@@ -186,7 +190,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
     })
 
-    socket.on('message', (data: unknown) => {
+    socket.on('message', async (data: unknown) => {
         const parsed = messageSchema.safeParse(data)
         if (!parsed.success) {
             return
@@ -205,18 +209,18 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
             })()
             : raw
 
-        const sessionAccess = resolveSessionAccess(sid)
+        const sessionAccess = await resolveSessionAccess(sid)
         if (!sessionAccess.ok) {
             emitAccessError('session', sid, sessionAccess.reason)
             return
         }
         const session = sessionAccess.value
 
-        const msg = store.addMessage(sid, content, localId)
+        const msg = await store.addMessage(sid, content, localId)
 
         const todos = extractTodoWriteTodosFromMessageContent(content)
         if (todos) {
-            const updated = store.setSessionTodos(sid, todos, msg.createdAt, session.namespace)
+            const updated = await store.setSessionTodos(sid, todos, msg.createdAt, session.namespace)
             if (updated) {
                 onWebappEvent?.({ type: 'session-updated', sessionId: sid, data: { sid } })
             }
@@ -254,7 +258,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         })
     })
 
-    socket.on('update-metadata', (data: unknown, cb: (answer: unknown) => void) => {
+    socket.on('update-metadata', async (data: unknown, cb: (answer: unknown) => void) => {
         const parsed = updateMetadataSchema.safeParse(data)
         if (!parsed.success) {
             cb({ result: 'error' })
@@ -262,13 +266,13 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
 
         const { sid, metadata, expectedVersion } = parsed.data
-        const sessionAccess = resolveSessionAccess(sid)
+        const sessionAccess = await resolveSessionAccess(sid)
         if (!sessionAccess.ok) {
             cb({ result: 'error', reason: sessionAccess.reason })
             return
         }
 
-        const result = store.updateSessionMetadata(sid, metadata, expectedVersion, sessionAccess.value.namespace)
+        const result = await store.updateSessionMetadata(sid, metadata, expectedVersion, sessionAccess.value.namespace)
         if (result.result === 'success') {
             cb({ result: 'success', version: result.version, metadata: result.value })
         } else if (result.result === 'version-mismatch') {
@@ -294,7 +298,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
     })
 
-    socket.on('update-state', (data: unknown, cb: (answer: unknown) => void) => {
+    socket.on('update-state', async (data: unknown, cb: (answer: unknown) => void) => {
         const parsed = updateStateSchema.safeParse(data)
         if (!parsed.success) {
             cb({ result: 'error' })
@@ -302,13 +306,13 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
 
         const { sid, agentState, expectedVersion } = parsed.data
-        const sessionAccess = resolveSessionAccess(sid)
+        const sessionAccess = await resolveSessionAccess(sid)
         if (!sessionAccess.ok) {
             cb({ result: 'error', reason: sessionAccess.reason })
             return
         }
 
-        const result = store.updateSessionAgentState(sid, agentState, expectedVersion, sessionAccess.value.namespace)
+        const result = await store.updateSessionAgentState(sid, agentState, expectedVersion, sessionAccess.value.namespace)
         if (result.result === 'success') {
             cb({ result: 'success', version: result.version, agentState: result.value })
         } else if (result.result === 'version-mismatch') {
@@ -334,11 +338,11 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
     })
 
-    socket.on('session-alive', (data: SessionAlivePayload) => {
+    socket.on('session-alive', async (data: SessionAlivePayload) => {
         if (!data || typeof data.sid !== 'string' || typeof data.time !== 'number') {
             return
         }
-        const sessionAccess = resolveSessionAccess(data.sid)
+        const sessionAccess = await resolveSessionAccess(data.sid)
         if (!sessionAccess.ok) {
             emitAccessError('session', data.sid, sessionAccess.reason)
             return
@@ -346,11 +350,11 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         onSessionAlive?.(data)
     })
 
-    socket.on('session-end', (data: SessionEndPayload) => {
+    socket.on('session-end', async (data: SessionEndPayload) => {
         if (!data || typeof data.sid !== 'string' || typeof data.time !== 'number') {
             return
         }
-        const sessionAccess = resolveSessionAccess(data.sid)
+        const sessionAccess = await resolveSessionAccess(data.sid)
         if (!sessionAccess.ok) {
             emitAccessError('session', data.sid, sessionAccess.reason)
             return
@@ -358,11 +362,11 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         onSessionEnd?.(data)
     })
 
-    socket.on('machine-alive', (data: MachineAlivePayload) => {
+    socket.on('machine-alive', async (data: MachineAlivePayload) => {
         if (!data || typeof data.machineId !== 'string' || typeof data.time !== 'number') {
             return
         }
-        const machineAccess = resolveMachineAccess(data.machineId)
+        const machineAccess = await resolveMachineAccess(data.machineId)
         if (!machineAccess.ok) {
             emitAccessError('machine', data.machineId, machineAccess.reason)
             return
@@ -370,7 +374,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         onMachineAlive?.(data)
     })
 
-    const handleMachineMetadataUpdate = (data: unknown, cb: (answer: unknown) => void) => {
+    const handleMachineMetadataUpdate = async (data: unknown, cb: (answer: unknown) => void) => {
         const parsed = machineUpdateMetadataSchema.safeParse(data)
         if (!parsed.success) {
             cb({ result: 'error' })
@@ -378,13 +382,13 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
 
         const { machineId: id, metadata, expectedVersion } = parsed.data
-        const machineAccess = resolveMachineAccess(id)
+        const machineAccess = await resolveMachineAccess(id)
         if (!machineAccess.ok) {
             cb({ result: 'error', reason: machineAccess.reason })
             return
         }
 
-        const result = store.updateMachineMetadata(id, metadata, expectedVersion, machineAccess.value.namespace)
+        const result = await store.updateMachineMetadata(id, metadata, expectedVersion, machineAccess.value.namespace)
         if (result.result === 'success') {
             cb({ result: 'success', version: result.version, metadata: result.value })
         } else if (result.result === 'version-mismatch') {
@@ -410,7 +414,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
     }
 
-    const handleMachineStateUpdate = (data: unknown, cb: (answer: unknown) => void) => {
+    const handleMachineStateUpdate = async (data: unknown, cb: (answer: unknown) => void) => {
         const parsed = machineUpdateStateSchema.safeParse(data)
         if (!parsed.success) {
             cb({ result: 'error' })
@@ -418,13 +422,13 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         }
 
         const { machineId: id, daemonState, expectedVersion } = parsed.data
-        const machineAccess = resolveMachineAccess(id)
+        const machineAccess = await resolveMachineAccess(id)
         if (!machineAccess.ok) {
             cb({ result: 'error', reason: machineAccess.reason })
             return
         }
 
-        const result = store.updateMachineDaemonState(id, daemonState, expectedVersion, machineAccess.value.namespace)
+        const result = await store.updateMachineDaemonState(id, daemonState, expectedVersion, machineAccess.value.namespace)
         if (result.result === 'success') {
             cb({ result: 'success', version: result.version, daemonState: result.value })
         } else if (result.result === 'version-mismatch') {
@@ -460,7 +464,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         callback()
     })
 
-    const forwardTerminalEvent = (event: string, payload: { sessionId: string; terminalId: string } & Record<string, unknown>) => {
+    const forwardTerminalEvent = async (event: string, payload: { sessionId: string; terminalId: string } & Record<string, unknown>) => {
         const entry = terminalRegistry.get(payload.terminalId)
         if (!entry) {
             return
@@ -471,7 +475,7 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         if (payload.sessionId !== entry.sessionId) {
             return
         }
-        const sessionAccess = resolveSessionAccess(payload.sessionId)
+        const sessionAccess = await resolveSessionAccess(payload.sessionId)
         if (!sessionAccess.ok) {
             emitAccessError('session', payload.sessionId, sessionAccess.reason)
             return

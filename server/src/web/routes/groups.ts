@@ -268,7 +268,7 @@ export function createGroupRoutes(
             broadcastGroupMessage(groupId, {
                 ...message,
                 senderName: senderSession?.metadata?.name || undefined,
-                agentType: senderSession?.metadata?.agent || undefined
+                agentType: (senderSession?.metadata as Record<string, unknown>)?.agent as string | undefined
             })
 
             return c.json({ ok: true, message })
@@ -317,7 +317,7 @@ export function createGroupRoutes(
         broadcastGroupMessage(groupId, {
             ...message,
             senderName: senderSession?.metadata?.name || undefined,
-            agentType: senderSession?.metadata?.agent || undefined
+            agentType: (senderSession?.metadata as Record<string, unknown>)?.agent as string | undefined
         })
 
         // Get all members and broadcast
@@ -334,7 +334,7 @@ export function createGroupRoutes(
             // 如果有 @提及，只发送给被提及的成员
             // mentions 包含 agentType 如 ['claude', 'gemini'] 或 ['all']
             if (mentions && mentions.length > 0 && !mentions.includes('all')) {
-                const memberAgentType = member.agentType || syncEngine.getSession(member.sessionId)?.metadata?.agent || 'unknown'
+                const memberAgentType = member.agentType || (syncEngine.getSession(member.sessionId)?.metadata as Record<string, unknown>)?.agent as string || 'unknown'
                 if (!mentions.some(m => memberAgentType.toLowerCase().includes(m.toLowerCase()))) {
                     results.push({ sessionId: member.sessionId, success: true, skipped: true, error: 'Not mentioned' })
                     continue

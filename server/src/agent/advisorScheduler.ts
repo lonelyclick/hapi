@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { SyncEngine, Machine, Session } from '../sync/syncEngine'
-import type { Store } from '../store'
+import type { IStore } from '../store'
 import { buildAdvisorInitPrompt } from './advisorPrompt'
 
 export interface AdvisorSchedulerConfig {
@@ -18,7 +18,7 @@ export interface AdvisorSchedulerConfig {
 
 export class AdvisorScheduler {
     private syncEngine: SyncEngine
-    private store: Store
+    private store: IStore
     private namespace: string
     private advisorSessionId: string | null = null
     private restartTimer: NodeJS.Timeout | null = null
@@ -42,7 +42,7 @@ export class AdvisorScheduler {
 
     constructor(
         syncEngine: SyncEngine,
-        store: Store,
+        store: IStore,
         config: AdvisorSchedulerConfig
     ) {
         this.syncEngine = syncEngine

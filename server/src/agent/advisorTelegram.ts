@@ -7,7 +7,7 @@ import type { StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { AdvisorTelegramNotifier } from './advisorService'
 
 interface TelegramBotLike {
-    getBoundChatIds(namespace: string): number[]
+    getBoundChatIds(namespace: string): Promise<number[]> | number[]
     sendMessage(chatId: number, text: string, options?: { parse_mode?: string; reply_markup?: unknown }): Promise<void>
     buildMiniAppDeepLink(startParam: string): string
     isEnabled(): boolean
@@ -72,7 +72,7 @@ export class AdvisorTelegramNotifierImpl implements AdvisorTelegramNotifier {
             return
         }
 
-        const chatIds = this.bot.getBoundChatIds(suggestion.namespace)
+        const chatIds = await this.bot.getBoundChatIds(suggestion.namespace)
         if (chatIds.length === 0) {
             return
         }
@@ -95,7 +95,7 @@ export class AdvisorTelegramNotifierImpl implements AdvisorTelegramNotifier {
             return
         }
 
-        const chatIds = this.bot.getBoundChatIds(suggestion.namespace)
+        const chatIds = await this.bot.getBoundChatIds(suggestion.namespace)
         if (chatIds.length === 0) {
             return
         }

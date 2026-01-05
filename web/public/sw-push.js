@@ -9,7 +9,7 @@
  */
 
 // Build version for cache busting (injected at build time)
-const SW_VERSION = 'v2026.01.05.1428'
+const SW_VERSION = '__SW_BUILD_VERSION__'
 console.log('[sw-push] version:', SW_VERSION)
 
 // Handle incoming push notifications

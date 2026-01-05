@@ -547,7 +547,7 @@ export function createSessionsRoutes(
         await sendInitPrompt(engine, newSessionId, role)
 
         if (!resumeSessionId) {
-            const page = engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
+            const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
             const contextMessage = buildResumeContextMessage(session, page.messages)
             if (contextMessage) {
                 await engine.sendMessage(newSessionId, { text: contextMessage, sentFrom: 'webapp' })

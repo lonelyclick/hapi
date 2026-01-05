@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { SyncEngine, SyncEvent, DecryptedMessage, Session, AdvisorAlertData, AdvisorIdleSuggestionData, SuggestionChip } from '../sync/syncEngine'
-import type { Store, StoredAgentSuggestion, SuggestionStatus } from '../store'
+import type { IStore, StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { AdvisorScheduler } from './advisorScheduler'
 import { SuggestionEvaluator } from './suggestionEvaluator'
 import { MinimaxService } from './minimaxService'
@@ -37,7 +37,7 @@ export interface AdvisorServiceConfig {
 
 export class AdvisorService {
     private syncEngine: SyncEngine
-    private store: Store
+    private store: IStore
     private scheduler: AdvisorScheduler
     private evaluator: SuggestionEvaluator
     private minimaxService: MinimaxService
@@ -75,7 +75,7 @@ export class AdvisorService {
 
     constructor(
         syncEngine: SyncEngine,
-        store: Store,
+        store: IStore,
         scheduler: AdvisorScheduler,
         config: AdvisorServiceConfig
     ) {
@@ -284,12 +284,12 @@ export class AdvisorService {
     /**
      * Advisor 创建的会话结束时的处理
      */
-    private onAdvisorSpawnedSessionEnded(sessionId: string): void {
+    private async onAdvisorSpawnedSessionEnded(sessionId: string): Promise<void> {
         const task = this.taskTracker.getTaskBySessionId(sessionId)
         if (!task) return
 
         // 获取会话的最后几条消息，判断任务状态
-        const messages = this.syncEngine.getMessagesAfter(sessionId, {
+        const messages = await this.syncEngine.getMessagesAfter(sessionId, {
             afterSeq: Math.max(0, (this.syncEngine.getSession(sessionId)?.seq ?? 0) - 10),
             limit: 10
         })
@@ -353,7 +353,7 @@ export class AdvisorService {
     /**
      * 提取并保存会话记忆
      */
-    private extractAndSaveSessionMemories(sessionId: string, aiProfileId: string, taskDescription: string): void {
+    private async extractAndSaveSessionMemories(sessionId: string, aiProfileId: string, taskDescription: string): Promise<void> {
         const session = this.syncEngine.getSession(sessionId)
         if (!session) {
             console.log(`[AdvisorService] Session ${sessionId} not found, skip memory extraction`)
@@ -361,7 +361,7 @@ export class AdvisorService {
         }
 
         // 构建会话摘要
-        const summary = this.buildSummaryForMinimax(session)
+        const summary = await this.buildSummaryForMinimax(session)
 
         // 使用记忆提取器提取并保存记忆
         this.memoryExtractor.extractAndSaveMemories(summary, aiProfileId, this.namespace)
@@ -378,12 +378,12 @@ export class AdvisorService {
     /**
      * 检测 Advisor 创建的会话是否在等待用户输入
      */
-    private checkAdvisorSpawnedSessionWaitingForInput(sessionId: string): void {
+    private async checkAdvisorSpawnedSessionWaitingForInput(sessionId: string): Promise<void> {
         const task = this.taskTracker.getTaskBySessionId(sessionId)
         if (!task || task.status !== 'running') return
 
         // 获取最后几条消息
-        const messages = this.syncEngine.getMessagesAfter(sessionId, {
+        const messages = await this.syncEngine.getMessagesAfter(sessionId, {
             afterSeq: Math.max(0, (this.syncEngine.getSession(sessionId)?.seq ?? 0) - 5),
             limit: 5
         })
@@ -541,7 +541,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
             this.broadcastMinimaxStart(sessionId)
 
             // 2. 构建摘要
-            const summary = this.buildSummaryForMinimax(session)
+            const summary = await this.buildSummaryForMinimax(session)
 
             // 3. 调用 MiniMax
             const result = await this.minimaxService.reviewSession({ sessionId, summary })
@@ -563,13 +563,13 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     /**
      * 为 MiniMax 构建摘要
      */
-    private buildSummaryForMinimax(session: Session): SessionSummary {
+    private async buildSummaryForMinimax(session: Session): Promise<SessionSummary> {
         const metadata = session.metadata
         const workDir = metadata?.path || 'unknown'
         const project = workDir.split('/').pop() || 'unknown'
 
         // 获取最近消息
-        const recentMessages = this.syncEngine.getMessagesAfter(session.id, {
+        const recentMessages = await this.syncEngine.getMessagesAfter(session.id, {
             afterSeq: Math.max(0, session.seq - 50),
             limit: 50
         })
@@ -769,7 +769,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         }
 
         // 本地快速检查
-        const issues = this.quickLocalCheck(session)
+        const issues = await this.quickLocalCheck(session)
 
         if (issues.length === 0) {
             console.log(`[AdvisorService] Idle check passed for ${sessionId}`)
@@ -783,7 +783,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     /**
      * 本地快速检查（无需 AI）
      */
-    private quickLocalCheck(session: Session): Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }> {
+    private async quickLocalCheck(session: Session): Promise<Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }>> {
         const issues: Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }> = []
 
         // 1. 检查 Todos 完成情况 - 包括 in_progress 和 pending
@@ -816,7 +816,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         }
 
         // 2. 检查最近消息中的错误和警告
-        const recentMessages = this.syncEngine.getMessagesAfter(session.id, {
+        const recentMessages = await this.syncEngine.getMessagesAfter(session.id, {
             afterSeq: Math.max(0, session.seq - 30),
             limit: 30
         })
@@ -1262,7 +1262,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         const lastSeq = sessionState?.lastSeq ?? 0
 
         // 获取增量消息
-        const incrementalMessages = this.syncEngine.getMessagesAfter(sessionId, { afterSeq: lastSeq, limit: 200 })
+        const incrementalMessages = await this.syncEngine.getMessagesAfter(sessionId, { afterSeq: lastSeq, limit: 200 })
         if (incrementalMessages.length === 0) {
             return
         }

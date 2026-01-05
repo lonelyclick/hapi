@@ -6,7 +6,7 @@
  */
 
 import webPush from 'web-push'
-import type { Store, StoredPushSubscription } from '../store'
+import type { IStore, StoredPushSubscription } from '../store'
 
 export interface WebPushConfig {
     vapidPublicKey: string
@@ -35,11 +35,11 @@ export interface SendResult {
 }
 
 export class WebPushService {
-    private store: Store
+    private store: IStore
     private config: WebPushConfig | null = null
     private initialized = false
 
-    constructor(store: Store) {
+    constructor(store: IStore) {
         this.store = store
     }
 
@@ -83,7 +83,7 @@ export class WebPushService {
             return { success: 0, failed: 0, removed: 0 }
         }
 
-        const subscriptions = this.store.getPushSubscriptions(namespace)
+        const subscriptions = await this.store.getPushSubscriptions(namespace)
         if (subscriptions.length === 0) {
             console.log('[webpush] no subscriptions for namespace:', namespace)
             return { success: 0, failed: 0, removed: 0 }
@@ -108,7 +108,7 @@ export class WebPushService {
                     success++
                 } else if (result.value.shouldRemove) {
                     // Subscription is no longer valid, remove it
-                    this.store.removePushSubscriptionById(sub.id)
+                    await this.store.removePushSubscriptionById(sub.id)
                     removed++
                 } else {
                     failed++
@@ -137,7 +137,7 @@ export class WebPushService {
             return { success: 0, failed: 0, removed: 0 }
         }
 
-        const subscriptions = this.store.getPushSubscriptionsByClientId(namespace, clientId)
+        const subscriptions = await this.store.getPushSubscriptionsByClientId(namespace, clientId)
         console.log('[webpush] found subscriptions for client:', clientId, subscriptions.map(s => ({
             id: s.id,
             endpoint: s.endpoint.slice(0, 60) + '...',
@@ -166,7 +166,7 @@ export class WebPushService {
                 if (result.value.success) {
                     success++
                 } else if (result.value.shouldRemove) {
-                    this.store.removePushSubscriptionById(sub.id)
+                    await this.store.removePushSubscriptionById(sub.id)
                     removed++
                 } else {
                     failed++
@@ -248,21 +248,28 @@ export class WebPushService {
     /**
      * Subscribe a client to push notifications
      */
-    subscribe(
+    async subscribe(
         namespace: string,
         endpoint: string,
         keys: { p256dh: string; auth: string },
         userAgent?: string,
         clientId?: string,
         chatId?: string
-    ): StoredPushSubscription | null {
-        return this.store.addOrUpdatePushSubscription(namespace, endpoint, keys, userAgent, clientId, chatId)
+    ): Promise<StoredPushSubscription | null> {
+        return this.store.addOrUpdatePushSubscription({
+            namespace,
+            endpoint,
+            keys,
+            userAgent,
+            clientId,
+            chatId
+        })
     }
 
     /**
      * Get subscriptions for a specific client
      */
-    getSubscriptionsByClientId(namespace: string, clientId: string): StoredPushSubscription[] {
+    async getSubscriptionsByClientId(namespace: string, clientId: string): Promise<StoredPushSubscription[]> {
         return this.store.getPushSubscriptionsByClientId(namespace, clientId)
     }
 
@@ -291,7 +298,7 @@ export class WebPushService {
         const seenEndpoints = new Set<string>()
 
         for (const chatId of chatIds) {
-            const subs = this.store.getPushSubscriptionsByChatId(namespace, chatId)
+            const subs = await this.store.getPushSubscriptionsByChatId(namespace, chatId)
             console.log('[webpush] subscriptions for chatId:', chatId, subs.length)
             for (const sub of subs) {
                 if (!seenEndpoints.has(sub.endpoint)) {
@@ -324,7 +331,7 @@ export class WebPushService {
                 if (result.value.success) {
                     success++
                 } else if (result.value.shouldRemove) {
-                    this.store.removePushSubscriptionById(sub.id)
+                    await this.store.removePushSubscriptionById(sub.id)
                     removed++
                 } else {
                     failed++
@@ -342,14 +349,14 @@ export class WebPushService {
     /**
      * Unsubscribe a client from push notifications
      */
-    unsubscribe(endpoint: string): boolean {
+    async unsubscribe(endpoint: string): Promise<boolean> {
         return this.store.removePushSubscription(endpoint)
     }
 
     /**
      * Get all subscriptions for a namespace
      */
-    getSubscriptions(namespace: string): StoredPushSubscription[] {
+    async getSubscriptions(namespace: string): Promise<StoredPushSubscription[]> {
         return this.store.getPushSubscriptions(namespace)
     }
 }
@@ -361,7 +368,7 @@ export function getWebPushService(): WebPushService | null {
     return instance
 }
 
-export function initWebPushService(store: Store, config: WebPushConfig | null): WebPushService {
+export function initWebPushService(store: IStore, config: WebPushConfig | null): WebPushService {
     instance = new WebPushService(store)
     if (config) {
         instance.initialize(config)
