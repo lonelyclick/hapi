@@ -117,6 +117,102 @@ function runtimeAssetsReady(runtimeRoot: string): boolean {
     return areToolsUnpacked(join(runtimeRoot, 'tools', 'unpacked'));
 }
 
+/**
+ * 解析版本号中的日期和时间
+ * 版本格式: v2026.01.05.1156 -> { date: "2026.01.05", time: "1156", timestamp: Date }
+ */
+function parseVersionDate(version: string): { date: string; time: string; timestamp: Date } | null {
+    const match = version.match(/^v(\d{4})\.(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (!match) return null;
+
+    const [, year, month, day, time] = match;
+    const hours = time.slice(0, 2);
+    const minutes = time.slice(2, 4);
+    const date = `${year}.${month}.${day}`;
+    const timestamp = new Date(`${year}-${month}-${day}T${hours}:${minutes}:00+08:00`); // 东八区
+
+    return { date, time, timestamp };
+}
+
+/**
+ * 清理旧的 runtime 版本
+ * 规则：
+ * - 当前版本始终保留
+ * - 今天的版本：保留最新 5 个
+ * - 7 天内的版本：每天保留最晚一个
+ * - 7 天外的版本：全部删除
+ */
+function cleanupOldRuntimes(runtimeRoot: string, currentVersion: string): void {
+    const runtimeParent = dirname(runtimeRoot);
+    if (!existsSync(runtimeParent)) return;
+
+    const versions = readdirSync(runtimeParent)
+        .filter(name => name.startsWith('v') && existsSync(join(runtimeParent, name, RUNTIME_MARKER)));
+
+    if (versions.length <= 1) return;
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`;
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // 按日期分组
+    const byDate = new Map<string, { version: string; parsed: ReturnType<typeof parseVersionDate> }[]>();
+    const todayVersions: { version: string; parsed: ReturnType<typeof parseVersionDate> }[] = [];
+
+    for (const version of versions) {
+        if (version === currentVersion) continue; // 跳过当前版本
+
+        const parsed = parseVersionDate(version);
+        if (!parsed) continue;
+
+        if (parsed.date === todayStr) {
+            todayVersions.push({ version, parsed });
+        } else {
+            const existing = byDate.get(parsed.date) || [];
+            existing.push({ version, parsed });
+            byDate.set(parsed.date, existing);
+        }
+    }
+
+    const toDelete: string[] = [];
+
+    // 处理今天的版本：保留最新 5 个
+    todayVersions.sort((a, b) => b.parsed!.time.localeCompare(a.parsed!.time));
+    for (let i = 5; i < todayVersions.length; i++) {
+        toDelete.push(todayVersions[i].version);
+    }
+
+    // 处理其他日期的版本
+    for (const [date, dayVersions] of byDate) {
+        // 解析日期判断是否在 7 天内
+        const [year, month, day] = date.split('.').map(Number);
+        const versionDate = new Date(year, month - 1, day);
+
+        if (versionDate < sevenDaysAgo) {
+            // 7 天外：全部删除
+            for (const v of dayVersions) {
+                toDelete.push(v.version);
+            }
+        } else {
+            // 7 天内：只保留最晚一个
+            dayVersions.sort((a, b) => b.parsed!.time.localeCompare(a.parsed!.time));
+            for (let i = 1; i < dayVersions.length; i++) {
+                toDelete.push(dayVersions[i].version);
+            }
+        }
+    }
+
+    // 执行删除
+    for (const version of toDelete) {
+        const versionPath = join(runtimeParent, version);
+        try {
+            rmSync(versionPath, { recursive: true, force: true });
+        } catch {
+            // 忽略删除失败
+        }
+    }
+}
+
 export async function ensureRuntimeAssets(): Promise<void> {
     if (!isBunCompiled()) {
         return;
@@ -143,4 +239,7 @@ export async function ensureRuntimeAssets(): Promise<void> {
 
     unpackTools(runtimeRoot);
     writeFileSync(markerPath, packageJson.version, 'utf-8');
+
+    // 清理旧版本
+    cleanupOldRuntimes(runtimeRoot, packageJson.version);
 }
