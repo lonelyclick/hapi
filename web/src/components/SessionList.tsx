@@ -18,6 +18,7 @@ function getSessionPath(session: SessionSummary): string | null {
 function matchSessionToProject(session: SessionSummary, projects: Project[]): Project | null {
     const sessionPath = getSessionPath(session)
     if (!sessionPath) return null
+    if (!Array.isArray(projects)) return null
 
     // Exact match first
     for (const project of projects) {
@@ -38,6 +39,7 @@ function matchSessionToProject(session: SessionSummary, projects: Project[]): Pr
 
 function groupSessionsByProject(sessions: SessionSummary[], projects: Project[]): SessionGroup[] {
     const groups = new Map<string, { project: Project | null; sessions: SessionSummary[] }>()
+    if (!Array.isArray(sessions)) return []
 
     sessions.forEach(session => {
         const project = matchSessionToProject(session, projects)
@@ -369,7 +371,8 @@ export function SessionList(props: {
     const { advisorSessions, regularSessions } = useMemo(() => {
         const advisor: SessionSummary[] = []
         const regular: SessionSummary[] = []
-        for (const session of props.sessions) {
+        const sessions = Array.isArray(props.sessions) ? props.sessions : []
+        for (const session of sessions) {
             if (isAdvisorSession(session)) {
                 advisor.push(session)
             } else {
