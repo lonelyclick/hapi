@@ -96,20 +96,37 @@ fuser -k 3006/tcp 2>/dev/null || true
 fuser -k 3000/tcp 2>/dev/null || true
 
 echo "=== Restarting services..."
-if [[ "$BUILD_DAEMON" == "true" ]]; then
-    echo "    (with daemon restart)"
-    echo "guang" | sudo -S systemctl restart hapi-daemon.service
-fi
+
+# 先重启 server，daemon 依赖 server
 echo "guang" | sudo -S systemctl restart hapi-server.service
 
-# 等待服务启动
-sleep 2
+# 等待 server 启动并监听端口
+echo "    Waiting for server to be ready..."
+for i in {1..30}; do
+    if curl -s http://127.0.0.1:3006/health > /dev/null 2>&1; then
+        echo "    Server is ready (${i}s)"
+        break
+    fi
+    if [[ $i -eq 30 ]]; then
+        echo "ERROR: Server failed to start within 30 seconds"
+        echo "guang" | sudo -S journalctl -u hapi-server.service -n 20 --no-pager
+        exit 1
+    fi
+    sleep 1
+done
 
 # 验证服务运行
 if ! systemctl is-active --quiet hapi-server.service; then
     echo "ERROR: hapi-server.service failed to start"
     echo "guang" | sudo -S journalctl -u hapi-server.service -n 20 --no-pager
     exit 1
+fi
+
+# 再重启 daemon（如果需要）
+if [[ "$BUILD_DAEMON" == "true" ]]; then
+    echo "    Restarting daemon..."
+    echo "guang" | sudo -S systemctl restart hapi-daemon.service
+    sleep 2
 fi
 
 echo "=== Done! Services restarted successfully."

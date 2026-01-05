@@ -599,6 +599,7 @@ export async function startDaemon(): Promise<void> {
     const startedWithCliMtimeMs = getInstalledCliMtimeMs();
 
     // Write initial daemon state (no lock needed for state file)
+    // Include previousSessions so they survive if daemon fails to connect
     const fileState: DaemonLocallyPersistedState = {
       pid: process.pid,
       httpPort: controlPort,
@@ -606,7 +607,7 @@ export async function startDaemon(): Promise<void> {
       startedWithCliVersion: packageJson.version,
       startedWithCliMtimeMs,
       daemonLogPath: logger.logFilePath,
-      sessions: []
+      sessions: previousSessions
     };
     writeDaemonState(fileState);
     logger.debug('[DAEMON RUN] Daemon state written');
