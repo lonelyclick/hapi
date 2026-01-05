@@ -1199,11 +1199,11 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         }
 
         // 获取或创建 session state
-        const sessionState = this.store.getAgentSessionState(sessionId)
+        const sessionState = await this.store.getAgentSessionState(sessionId)
         const lastSeq = sessionState?.lastSeq ?? 0
 
         // 获取增量消息
-        const incrementalMessages = this.syncEngine.getMessagesAfter(sessionId, { afterSeq: lastSeq, limit: 200 })
+        const incrementalMessages = await this.syncEngine.getMessagesAfter(sessionId, { afterSeq: lastSeq, limit: 200 })
         if (incrementalMessages.length === 0) {
             return
         }
@@ -1218,7 +1218,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         if (!summary.recentActivity && codeChangesCount === 0 && errorCount === 0) {
             // 但仍然更新 lastSeq 避免重复处理相同消息
             const newSeq = incrementalMessages[incrementalMessages.length - 1]?.seq ?? lastSeq
-            this.store.upsertAgentSessionState(sessionId, session.namespace, {
+            await this.store.upsertAgentSessionState(sessionId, session.namespace, {
                 lastSeq: newSeq,
                 summary: sessionState?.summary  // 保留之前的摘要
             })
@@ -1228,7 +1228,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
 
         // 更新 session state
         const newSeq = incrementalMessages[incrementalMessages.length - 1]?.seq ?? lastSeq
-        this.store.upsertAgentSessionState(sessionId, session.namespace, {
+        await this.store.upsertAgentSessionState(sessionId, session.namespace, {
             lastSeq: newSeq,
             summary: JSON.stringify(summary)
         })

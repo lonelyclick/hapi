@@ -26,7 +26,7 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         },
         initialPageParam: null,
         getNextPageParam: (lastPage) =>
-            lastPage.page.hasMore ? lastPage.page.nextBeforeSeq : undefined,
+            lastPage?.page?.hasMore ? lastPage.page.nextBeforeSeq : undefined,
         retry: (failureCount, error) => {
             if (error instanceof ApiError && error.status === 404) {
                 return false
@@ -40,7 +40,7 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         const pages = query.data?.pages ?? []
         let merged: DecryptedMessage[] = []
         for (const page of pages) {
-            merged = mergeMessages(merged, page.messages)
+            merged = mergeMessages(merged, page?.messages ?? [])
         }
         return merged
     }, [query.data?.pages])
