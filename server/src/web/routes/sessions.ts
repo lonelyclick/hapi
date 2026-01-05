@@ -547,7 +547,7 @@ export function createSessionsRoutes(
         await sendInitPrompt(engine, newSessionId, role)
 
         if (!resumeSessionId) {
-            const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
+            const page = engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
             const contextMessage = buildResumeContextMessage(session, page.messages)
             if (contextMessage) {
                 await engine.sendMessage(newSessionId, { text: contextMessage, sentFrom: 'webapp' })
@@ -798,7 +798,7 @@ export function createSessionsRoutes(
      * Body: { chatId?: string, clientId?: string }
      * 至少需要提供 chatId 或 clientId 其中之一
      */
-    app.post('/sessions/:id/subscribe', async (c) => {
+    app.post('/:id/subscribe', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
@@ -833,7 +833,7 @@ export function createSessionsRoutes(
      * DELETE /sessions/:id/subscribe
      * Body: { chatId?: string, clientId?: string }
      */
-    app.delete('/sessions/:id/subscribe', async (c) => {
+    app.delete('/:id/subscribe', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
@@ -870,7 +870,7 @@ export function createSessionsRoutes(
      * 获取 session 的所有订阅者
      * GET /sessions/:id/subscribers
      */
-    app.get('/sessions/:id/subscribers', async (c) => {
+    app.get('/:id/subscribers', async (c) => {
         const sessionId = c.req.param('id')
         const chatIdSubscribers = store.getSessionNotificationSubscribers(sessionId)
         const clientIdSubscribers = store.getSessionNotificationSubscriberClientIds(sessionId)
@@ -886,34 +886,11 @@ export function createSessionsRoutes(
     })
 
     /**
-     * 获取当前用户订阅的所有 session ID
-     * GET /my-subscriptions
-     * Query: chatId 或 clientId
-     */
-    app.get('/my-subscriptions', async (c) => {
-        const chatId = c.req.query('chatId')
-        const clientId = c.req.query('clientId')
-
-        if (!chatId && !clientId) {
-            return c.json({ error: 'Either chatId or clientId is required' }, 400)
-        }
-
-        let sessionIds: string[] = []
-        if (chatId) {
-            sessionIds = store.getSubscribedSessionsForChat(chatId)
-        } else if (clientId) {
-            sessionIds = store.getSubscribedSessionsForClient(clientId)
-        }
-
-        return c.json({ sessionIds })
-    })
-
-    /**
      * 设置 session 的创建者 chatId
      * POST /sessions/:id/creator
      * Body: { chatId: string }
      */
-    app.post('/sessions/:id/creator', async (c) => {
+    app.post('/:id/creator', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
@@ -932,7 +909,7 @@ export function createSessionsRoutes(
      * subscriberId 可以是 chatId 或 clientId
      * Query: type=chatId|clientId （可选，默认为 chatId）
      */
-    app.delete('/sessions/:id/subscribers/:subscriberId', async (c) => {
+    app.delete('/:id/subscribers/:subscriberId', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const subscriberId = c.req.param('subscriberId')
@@ -959,7 +936,7 @@ export function createSessionsRoutes(
      * DELETE /sessions/:id/subscribers
      * 清除所有订阅者，包括 creator
      */
-    app.delete('/sessions/:id/subscribers', async (c) => {
+    app.delete('/:id/subscribers', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
 

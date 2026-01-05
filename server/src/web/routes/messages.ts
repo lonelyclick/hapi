@@ -1,21 +1,8 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
-import type { Store, UserRole } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
-import { isCTOSession } from '../../sync/syncEngine'
-
-/**
- * 解析用户角色
- */
-function resolveUserRole(store: Store, email?: string): UserRole {
-    if (!email) return 'developer'
-    const users = store.getAllowedUsers()
-    if (users.length === 0) return 'developer'
-    const match = users.find(u => u.email.toLowerCase() === email.toLowerCase())
-    return match?.role ?? 'developer'
-}
 
 const querySchema = z.object({
     limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -32,7 +19,7 @@ const clearMessagesBodySchema = z.object({
     compact: z.boolean().optional()
 })
 
-export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, store?: Store): Hono<WebAppEnv> {
+export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/sessions/:id/messages', async (c) => {
@@ -71,28 +58,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
             return c.json({ error: 'Invalid body' }, 400)
         }
 
-        let messageText = parsed.data.text
-        const namespace = c.get('namespace')
-
-        // 获取会话信息
-        const session = engine.getSession(sessionId)
-
-        // 检查是否需要注入 Role Prompt（仅对首条用户消息生效，且非 CTO 会话）
-        // CTO 指令的注入已经在 syncEngine.sendMessage() 中统一处理
-        if (store && !isCTOSession(session) && !store.isRolePromptSent(sessionId)) {
-            const email = c.get('email')
-            const role = resolveUserRole(store, email)
-            const rolePrompt = store.getRolePrompt(role)
-
-            if (rolePrompt?.trim()) {
-                // 将 Role Prompt 作为前缀注入
-                messageText = `${rolePrompt.trim()}\n\n---\n\n${messageText}`
-                // 标记已发送 Role Prompt
-                store.setSessionRolePromptSent(sessionId, namespace)
-            }
-        }
-
-        await engine.sendMessage(sessionId, { text: messageText, localId: parsed.data.localId, sentFrom: 'webapp' })
+        await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: 'webapp' })
         return c.json({ ok: true })
     })
 

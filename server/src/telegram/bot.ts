@@ -9,7 +9,7 @@ import { Bot, Context, InlineKeyboard } from 'grammy'
 import { SyncEngine, SyncEvent, Session } from '../sync/syncEngine'
 import { handleCallback, CallbackContext } from './callbacks'
 import { formatSessionNotification, createNotificationKeyboard } from './sessionView'
-import type { IStore } from '../store'
+import type { Store } from '../store'
 
 export interface BotContext extends Context {
     // Extended context for future use
@@ -19,7 +19,7 @@ export interface HappyBotConfig {
     syncEngine: SyncEngine
     botToken: string
     miniAppUrl: string
-    store: IStore
+    store: Store
 }
 
 /**
@@ -30,7 +30,7 @@ export class HappyBot {
     private syncEngine: SyncEngine | null = null
     private isRunning = false
     private readonly miniAppUrl: string
-    private readonly store: IStore
+    private readonly store: Store
 
     // Track last known permission requests per session to detect new ones
     private lastKnownRequests: Map<string, Set<string>> = new Map()
@@ -167,7 +167,7 @@ export class HappyBot {
                 return
             }
 
-            const namespace = await this.getNamespaceForChatId(ctx.from?.id ?? null)
+            const namespace = this.getNamespaceForChatId(ctx.from?.id ?? null)
             if (!namespace) {
                 await ctx.answerCallbackQuery('Telegram account is not bound')
                 return
@@ -224,11 +224,11 @@ export class HappyBot {
         return session
     }
 
-    private async getNamespaceForChatId(chatId: number | null | undefined): Promise<string | null> {
+    private getNamespaceForChatId(chatId: number | null | undefined): string | null {
         if (!chatId) {
             return null
         }
-        const stored = await this.store.getUser('telegram', String(chatId))
+        const stored = this.store.getUser('telegram', String(chatId))
         return stored?.namespace ?? null
     }
 
@@ -269,7 +269,7 @@ export class HappyBot {
             .webApp('Open Session', url)
 
         // 只通知 owner 和订阅者，不再广播给所有人
-        const recipientChatIds = await this.store.getSessionNotificationRecipients(sessionId)
+        const recipientChatIds = this.store.getSessionNotificationRecipients(sessionId)
         if (recipientChatIds.length === 0) {
             return
         }
@@ -377,7 +377,7 @@ export class HappyBot {
         }
 
         // 发送 Telegram 通知（告知已自动批准）
-        const recipientChatIds = await this.store.getSessionNotificationRecipients(sessionId)
+        const recipientChatIds = this.store.getSessionNotificationRecipients(sessionId)
         if (recipientChatIds.length === 0) return
 
         const toolNames = requestIds.map(id => requests[id]?.tool).filter(Boolean).join(', ')
@@ -409,15 +409,15 @@ export class HappyBot {
     /**
      * Get bound chat IDs for a namespace
      */
-    async getBoundChatIds(namespace: string): Promise<number[]> {
+    getBoundChatIds(namespace: string): number[] {
         return this.getBoundChatIdsInternal(namespace)
     }
 
     /**
      * Get internal bound chat IDs
      */
-    private async getBoundChatIdsInternal(namespace: string): Promise<number[]> {
-        const users = await this.store.getUsersByPlatformAndNamespace('telegram', namespace)
+    private getBoundChatIdsInternal(namespace: string): number[] {
+        const users = this.store.getUsersByPlatformAndNamespace('telegram', namespace)
         const ids = new Set<number>()
         for (const user of users) {
             const chatId = Number(user.platformUserId)
@@ -464,7 +464,7 @@ export class HappyBot {
         const keyboard = createNotificationKeyboard(session, this.miniAppUrl)
 
         // 只通知 owner 和订阅者
-        const recipientChatIds = await this.store.getSessionNotificationRecipients(sessionId)
+        const recipientChatIds = this.store.getSessionNotificationRecipients(sessionId)
         if (recipientChatIds.length === 0) {
             return
         }

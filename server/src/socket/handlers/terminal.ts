@@ -26,7 +26,7 @@ const terminalCloseSchema = z.object({
 
 export type TerminalHandlersDeps = {
     io: SocketServer
-    getSession: (sessionId: string) => Promise<{ active: boolean; namespace: string } | null> | { active: boolean; namespace: string } | null
+    getSession: (sessionId: string) => { active: boolean; namespace: string } | null
     terminalRegistry: TerminalRegistry
     maxTerminalsPerSocket: number
     maxTerminalsPerSession: number
@@ -86,14 +86,14 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         return null
     }
 
-    socket.on('terminal:create', async (data: unknown) => {
+    socket.on('terminal:create', (data: unknown) => {
         const parsed = terminalCreateSchema.safeParse(data)
         if (!parsed.success) {
             return
         }
 
         const { sessionId, terminalId, cols, rows } = parsed.data
-        const session = await getSession(sessionId)
+        const session = getSession(sessionId)
         if (!namespace || !session || session.namespace !== namespace || !session.active) {
             emitTerminalError(terminalId, 'Session is inactive or unavailable.')
             return

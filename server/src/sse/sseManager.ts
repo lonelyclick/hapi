@@ -86,19 +86,9 @@ export class SSEManager {
     }
 
     broadcast(event: SyncEvent): void {
-        // Debug: log minimax events
-        if (event.type.startsWith('advisor-minimax')) {
-            console.log(`[SSE] Broadcasting ${event.type} for session ${event.sessionId}, connections: ${this.connections.size}`)
-        }
-
         for (const connection of this.connections.values()) {
             if (!this.shouldSend(connection, event)) {
                 continue
-            }
-
-            // Debug: log minimax events being sent
-            if (event.type.startsWith('advisor-minimax')) {
-                console.log(`[SSE] Sending ${event.type} to connection ${connection.id}, sessionId: ${connection.sessionId}, all: ${connection.all}`)
             }
 
             void Promise.resolve(connection.send(event)).catch(() => {

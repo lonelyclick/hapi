@@ -2,7 +2,7 @@ import { Server as Engine } from '@socket.io/bun-engine'
 import { Server, type DefaultEventsMap } from 'socket.io'
 import { jwtVerify } from 'jose'
 import { z } from 'zod'
-import type { IStore } from '../store'
+import type { Store } from '../store'
 import { configuration } from '../configuration'
 import { safeCompareStrings } from '../utils/crypto'
 import { parseAccessToken } from '../utils/accessToken'
@@ -31,7 +31,7 @@ function resolveEnvNumber(name: string, fallback: number): number {
 }
 
 export type SocketServerDeps = {
-    store: IStore
+    store: Store
     jwtSecret: Uint8Array
     getSession?: (sessionId: string) => { active: boolean; namespace: string } | null
     onWebappEvent?: (event: SyncEvent) => void
@@ -39,8 +39,6 @@ export type SocketServerDeps = {
     onSessionEnd?: (payload: { sid: string; time: number }) => void
     onMachineAlive?: (payload: { machineId: string; time: number }) => void
 }
-
-type SessionInfo = { active: boolean; namespace: string } | null
 
 export function createSocketServer(deps: SocketServerDeps): {
     io: SocketServer
@@ -140,13 +138,7 @@ export function createSocketServer(deps: SocketServerDeps): {
     })
     terminalNs.on('connection', (socket) => registerTerminalHandlers(socket, {
         io,
-        getSession: async (sessionId): Promise<SessionInfo> => {
-            const cached = deps.getSession?.(sessionId)
-            if (cached) return cached
-            const stored = await deps.store.getSession(sessionId)
-            if (!stored) return null
-            return { active: stored.active, namespace: stored.namespace }
-        },
+        getSession: (sessionId) => deps.getSession?.(sessionId) ?? deps.store.getSession(sessionId),
         terminalRegistry,
         maxTerminalsPerSocket,
         maxTerminalsPerSession

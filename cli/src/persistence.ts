@@ -24,16 +24,6 @@ interface Settings {
 const defaultSettings: Settings = {}
 
 /**
- * Persisted session info for orphan detection
- */
-export interface PersistedSessionInfo {
-  pid: number;
-  happySessionId: string;
-  cwd: string;
-  startedAt: number;
-}
-
-/**
  * Daemon state persisted locally (different from API DaemonState)
  * This is written to disk by the daemon to track its local process state
  */
@@ -45,8 +35,6 @@ export interface DaemonLocallyPersistedState {
   startedWithCliMtimeMs?: number;
   lastHeartbeat?: string;
   daemonLogPath?: string;
-  /** Active sessions spawned by this daemon */
-  sessions?: PersistedSessionInfo[];
 }
 
 export async function readSettings(): Promise<Settings> {

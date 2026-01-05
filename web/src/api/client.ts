@@ -4,8 +4,6 @@ import type {
     AddProjectResponse,
     AddUserResponse,
     AgentGroupType,
-    AIProfileResponse,
-    AIProfilesResponse,
     AuthResponse,
     AutoIterationConfigUpdateRequest,
     AutoIterationData,
@@ -13,7 +11,6 @@ import type {
     AutoIterationNotificationLevel,
     BroadcastResponse,
     ClearMessagesResponse,
-    CreateAIProfileRequest,
     CreateGroupResponse,
     DeleteGroupResponse,
     DeleteSessionResponse,
@@ -45,12 +42,9 @@ import type {
     SlashCommandsResponse,
     SpeechToTextStreamRequest,
     SpeechToTextStreamResponse,
-    SpawnAgentType,
-    SpawnMemberResponse,
     SpawnResponse,
     SessionResponse,
     SessionsResponse,
-    UpdateAIProfileRequest,
     UpdateGroupResponse,
     UpdateInputPresetResponse,
     UpdateProjectResponse,
@@ -412,12 +406,11 @@ export class ApiClient {
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
         claudeAgent?: string,
-        openrouterModel?: string,
-        advisorMode?: boolean
+        openrouterModel?: string
     ): Promise<SpawnResponse> {
         return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn`, {
             method: 'POST',
-            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeAgent, openrouterModel, advisorMode })
+            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeAgent, openrouterModel })
         })
     }
 
@@ -564,13 +557,6 @@ export class ApiClient {
         return await this.request<{ ok: boolean; removed: boolean }>('/api/push/unsubscribe', {
             method: 'POST',
             body: JSON.stringify({ endpoint })
-        })
-    }
-
-    async testPush(): Promise<{ ok: boolean; sent: number; failed: number; removed: number }> {
-        return await this.request<{ ok: boolean; sent: number; failed: number; removed: number }>('/api/push/test', {
-            method: 'POST',
-            body: JSON.stringify({})
         })
     }
 
@@ -886,62 +872,5 @@ export class ApiClient {
                 body: JSON.stringify({ content, sourceSessionId, senderType, messageType, mentions })
             }
         )
-    }
-
-    async spawnGroupMember(
-        groupId: string,
-        machineId: string,
-        directory: string,
-        agentType: SpawnAgentType,
-        options?: {
-            role?: GroupMemberRole
-            claudeAgent?: string
-            openrouterModel?: string
-            permissionMode?: string
-            modelMode?: string
-        }
-    ): Promise<SpawnMemberResponse> {
-        return await this.request<SpawnMemberResponse>(
-            `/api/groups/${encodeURIComponent(groupId)}/spawn-member`,
-            {
-                method: 'POST',
-                body: JSON.stringify({
-                    machineId,
-                    directory,
-                    agentType,
-                    ...options
-                })
-            }
-        )
-    }
-
-    // ==================== AI 员工档案 ====================
-
-    async getAIProfiles(): Promise<AIProfilesResponse> {
-        return await this.request<AIProfilesResponse>('/api/settings/ai-profiles')
-    }
-
-    async getAIProfile(id: string): Promise<AIProfileResponse> {
-        return await this.request<AIProfileResponse>(`/api/settings/ai-profiles/${encodeURIComponent(id)}`)
-    }
-
-    async createAIProfile(data: CreateAIProfileRequest): Promise<AIProfileResponse> {
-        return await this.request<AIProfileResponse>('/api/settings/ai-profiles', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        })
-    }
-
-    async updateAIProfile(id: string, data: UpdateAIProfileRequest): Promise<AIProfileResponse> {
-        return await this.request<AIProfileResponse>(`/api/settings/ai-profiles/${encodeURIComponent(id)}`, {
-            method: 'PATCH',
-            body: JSON.stringify(data)
-        })
-    }
-
-    async deleteAIProfile(id: string): Promise<{ ok: true }> {
-        return await this.request<{ ok: true }>(`/api/settings/ai-profiles/${encodeURIComponent(id)}`, {
-            method: 'DELETE'
-        })
     }
 }

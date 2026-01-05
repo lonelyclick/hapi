@@ -11,7 +11,6 @@ import { clearAllIdleSuggestions } from '@/hooks/useIdleSuggestion'
 import type { InputPreset, Project, UserRole } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { AutoIterationSettings } from '@/components/AutoIterationSettings'
-import { AIProfileSettings } from '@/components/AIProfileSettings'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -702,61 +701,6 @@ export default function SettingsPage() {
                                         />
                                     </button>
                                 </div>
-                                {/* Test notification buttons - only show when enabled */}
-                                {notificationPermission === 'granted' && notificationEnabled && (
-                                    <>
-                                        <div className="px-3 py-2.5 flex items-center justify-between gap-3">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-sm">Test Local Notification</div>
-                                                <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                                    Direct SW notification (no server)
-                                                </div>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={async () => {
-                                                    try {
-                                                        const reg = await navigator.serviceWorker.ready
-                                                        await reg.showNotification('Local Test', {
-                                                            body: 'Direct SW notification - ' + new Date().toLocaleTimeString(),
-                                                            icon: '/pwa-192x192.png',
-                                                            badge: '/pwa-64x64.png',
-                                                            tag: 'local-test-' + Date.now()
-                                                        })
-                                                        alert('Local notification sent!')
-                                                    } catch (err) {
-                                                        alert('Error: ' + (err instanceof Error ? err.message : String(err)))
-                                                    }
-                                                }}
-                                                className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                                            >
-                                                Test
-                                            </button>
-                                        </div>
-                                        <div className="px-3 py-2.5 flex items-center justify-between gap-3">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-sm">Test Server Push</div>
-                                                <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                                    Real Web Push from server via APNs
-                                                </div>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={async () => {
-                                                    try {
-                                                        const res = await api.testPush()
-                                                        alert(`Server push sent!\nSuccess: ${res.sent}, Failed: ${res.failed}`)
-                                                    } catch (err) {
-                                                        alert('Error: ' + (err instanceof Error ? err.message : String(err)))
-                                                    }
-                                                }}
-                                                className="px-3 py-1.5 text-xs bg-green-500 text-white rounded-md hover:bg-green-600"
-                                            >
-                                                Test
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
                             </div>
                         </div>
                     )}
@@ -1032,9 +976,6 @@ export default function SettingsPage() {
                             </div>
                         )}
                     </div>
-
-                    {/* AI Employees Section */}
-                    <AIProfileSettings />
 
                     {/* Auto-Iteration Section */}
                     <AutoIterationSettings />

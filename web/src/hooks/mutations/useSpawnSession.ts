@@ -12,7 +12,6 @@ type SpawnInput = {
     worktreeName?: string
     claudeAgent?: string
     openrouterModel?: string
-    advisorMode?: boolean
 }
 
 export function useSpawnSession(api: ApiClient | null): {
@@ -35,8 +34,7 @@ export function useSpawnSession(api: ApiClient | null): {
                 input.sessionType,
                 input.worktreeName,
                 input.claudeAgent,
-                input.openrouterModel,
-                input.advisorMode
+                input.openrouterModel
             )
         },
         onSuccess: () => {

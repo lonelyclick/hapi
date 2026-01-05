@@ -243,7 +243,7 @@ function AdvisorSessionItem(props: {
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
-                        CTO
+                        Team Advisor
                     </span>
                     <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400">
                         AI

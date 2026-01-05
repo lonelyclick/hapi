@@ -26,7 +26,7 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         },
         initialPageParam: null,
         getNextPageParam: (lastPage) =>
-            lastPage?.page?.hasMore ? lastPage.page.nextBeforeSeq : undefined,
+            lastPage.page.hasMore ? lastPage.page.nextBeforeSeq : undefined,
         retry: (failureCount, error) => {
             if (error instanceof ApiError && error.status === 404) {
                 return false

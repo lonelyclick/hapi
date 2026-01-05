@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { SyncEngine, Machine, Session } from '../sync/syncEngine'
-import type { IStore } from '../store'
+import type { Store } from '../store'
 import { buildAdvisorInitPrompt } from './advisorPrompt'
 
 export interface AdvisorSchedulerConfig {
@@ -18,7 +18,7 @@ export interface AdvisorSchedulerConfig {
 
 export class AdvisorScheduler {
     private syncEngine: SyncEngine
-    private store: IStore
+    private store: Store
     private namespace: string
     private advisorSessionId: string | null = null
     private restartTimer: NodeJS.Timeout | null = null
@@ -42,7 +42,7 @@ export class AdvisorScheduler {
 
     constructor(
         syncEngine: SyncEngine,
-        store: IStore,
+        store: Store,
         config: AdvisorSchedulerConfig
     ) {
         this.syncEngine = syncEngine
@@ -65,7 +65,7 @@ export class AdvisorScheduler {
 
         try {
             // 1. 从 agent_state 读取或生成 advisor_session_id
-            const state = await this.store.getAdvisorState(this.namespace)
+            const state = this.store.getAdvisorState(this.namespace)
             this.advisorSessionId = state?.advisorSessionId || `advisor-${randomUUID().slice(0, 8)}`
 
             // 2. 选择在线机器
@@ -81,7 +81,7 @@ export class AdvisorScheduler {
             if (existingSession?.active) {
                 console.log(`[AdvisorScheduler] Advisor session ${this.advisorSessionId} already running`)
                 // 更新状态
-                await this.store.upsertAdvisorState(this.namespace, {
+                this.store.upsertAdvisorState(this.namespace, {
                     advisorSessionId: this.advisorSessionId,
                     machineId: machine.id,
                     status: 'running',
@@ -113,7 +113,7 @@ export class AdvisorScheduler {
 
             if (spawnResult.type !== 'success') {
                 console.error('[AdvisorScheduler] Failed to spawn advisor session:', spawnResult.message)
-                await this.store.upsertAdvisorState(this.namespace, {
+                this.store.upsertAdvisorState(this.namespace, {
                     advisorSessionId: this.advisorSessionId,
                     machineId: machine.id,
                     status: 'error'
@@ -135,7 +135,7 @@ export class AdvisorScheduler {
             }
 
             // 7. 更新 agent_state
-            await this.store.upsertAdvisorState(this.namespace, {
+            this.store.upsertAdvisorState(this.namespace, {
                 advisorSessionId: this.advisorSessionId,
                 machineId: machine.id,
                 status: 'running',
@@ -239,10 +239,10 @@ export class AdvisorScheduler {
         })
     }
 
-    async onSessionEnd(sessionId: string): Promise<void> {
+    onSessionEnd(sessionId: string): void {
         if (sessionId === this.advisorSessionId) {
             console.log(`[AdvisorScheduler] Advisor session ${sessionId} ended, scheduling restart`)
-            await this.store.upsertAdvisorState(this.namespace, {
+            this.store.upsertAdvisorState(this.namespace, {
                 status: 'idle',
                 lastSeen: Date.now()
             })

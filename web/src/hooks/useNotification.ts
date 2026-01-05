@@ -452,12 +452,6 @@ export function useWebPushSubscription(apiClient: ApiClient | null) {
             // 获取 Telegram chatId（如果有的话）
             const tg = getTelegramWebApp()
             const chatId = tg?.initDataUnsafe?.user?.id?.toString()
-            console.log('[webpush] subscribing with:', {
-                clientId: getClientId(),
-                chatId,
-                hasTg: !!tg,
-                tgUser: tg?.initDataUnsafe?.user
-            })
 
             const result = await apiClient.subscribePush({
                 endpoint: subscription.endpoint,

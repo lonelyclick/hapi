@@ -7,7 +7,7 @@
  * 3. 提供任务查询接口供 Advisor 使用
  */
 
-import type { IStore } from '../store'
+import type { Store } from '../store'
 
 export interface AdvisorTask {
     id: string                        // 任务 ID
@@ -23,15 +23,14 @@ export interface AdvisorTask {
     completedAt?: number
     result?: string                   // 完成结果或失败原因
     keywords: string[]                // 关键词，用于检测重复
-    aiProfileId?: string              // 关联的 AI Profile ID
 }
 
 export class AdvisorTaskTracker {
     private tasks: Map<string, AdvisorTask> = new Map()
     private sessionToTask: Map<string, string> = new Map()  // sessionId -> taskId
-    private store: IStore
+    private store: Store
 
-    constructor(store: IStore) {
+    constructor(store: Store) {
         this.store = store
         this.loadFromStore()
     }
@@ -55,7 +54,6 @@ export class AdvisorTaskTracker {
         reason: string
         expectedOutcome?: string
         workingDir: string
-        aiProfileId?: string
     }): AdvisorTask {
         const now = Date.now()
         const keywords = this.extractKeywords(params.taskDescription)
@@ -71,7 +69,7 @@ export class AdvisorTaskTracker {
         this.tasks.set(task.id, task)
         this.sessionToTask.set(params.sessionId, task.id)
 
-        console.log(`[TaskTracker] Created task ${task.id} for session ${params.sessionId}${params.aiProfileId ? `, aiProfileId=${params.aiProfileId}` : ''}`)
+        console.log(`[TaskTracker] Created task ${task.id} for session ${params.sessionId}`)
         return task
     }
 

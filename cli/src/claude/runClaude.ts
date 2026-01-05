@@ -26,9 +26,6 @@ import { resolve } from 'node:path';
 import type { Session } from './session';
 import { readWorktreeEnv } from '@/utils/worktreeEnv';
 import { readModeEnv } from '@/utils/modeEnv';
-import { isCTOSession, buildCTOPrompt } from './ctoPrompt';
-import { buildAIProfilePrompt, shouldInjectAIProfile } from './aiProfilePrompt';
-import type { AIProfile } from '@/api/types';
 
 const INIT_PROMPT_PREFIX = '#InitPrompt-';
 
@@ -270,27 +267,6 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         sessionInstance.setModelMode(currentModelMode);
         logger.debug(`[loop] Synced session modes for keepalive: permissionMode=${currentPermissionMode}, modelMode=${currentModelMode}`);
     };
-
-    // Check if this is a CTO session based on metadata
-    const sessionIsCTO = isCTOSession(response.metadata);
-    if (sessionIsCTO) {
-        logger.debug('[loop] Detected CTO session, will inject CTO prompt to all messages');
-    }
-
-    // Fetch AI Profile for personality injection
-    let aiProfile: AIProfile | null = null;
-    if (!sessionIsCTO) {
-        try {
-            aiProfile = await api.getDefaultAIProfile();
-            if (aiProfile) {
-                logger.debug(`[loop] Loaded AI profile: ${aiProfile.name} (${aiProfile.role})`);
-            }
-        } catch (err) {
-            logger.debug('[loop] Failed to load AI profile, continuing without personality injection');
-        }
-    }
-    const shouldInjectProfile = shouldInjectAIProfile(aiProfile, response.metadata?.name, runtimeAgent ?? undefined);
-
     session.onUserMessage((message) => {
         const sessionPermissionMode = currentSessionRef.current?.getPermissionMode();
         if (
@@ -390,20 +366,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             return;
         }
 
-        // Inject CTO prompt for CTO sessions
-        let finalMessageText = message.content.text;
-        if (sessionIsCTO) {
-            const ctoPrompt = buildCTOPrompt(workingDirectory);
-            finalMessageText = `${ctoPrompt}\n${message.content.text}`;
-            logger.debug('[loop] Injected CTO prompt to message');
-        } else if (shouldInjectProfile && aiProfile) {
-            // Inject AI Profile prompt for personality
-            const profilePrompt = buildAIProfilePrompt(aiProfile);
-            finalMessageText = `${profilePrompt}\n${message.content.text}`;
-            logger.debug(`[loop] Injected AI profile prompt: ${aiProfile.name}`);
-        }
-
-        messageQueue.push(finalMessageText, enhancedMode);
+        messageQueue.push(message.content.text, enhancedMode);
         logger.debugLargeJson('User message pushed to queue:', message)
     });
 

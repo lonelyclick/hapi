@@ -4,7 +4,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { SyncEngine, SyncEvent, DecryptedMessage, Session, AdvisorAlertData, AdvisorIdleSuggestionData, SuggestionChip } from '../sync/syncEngine'
-import type { IStore, StoredAgentSuggestion, SuggestionStatus } from '../store'
+import type { Store, StoredAgentSuggestion, SuggestionStatus } from '../store'
 import type { AdvisorScheduler } from './advisorScheduler'
 import { SuggestionEvaluator } from './suggestionEvaluator'
 import { MinimaxService } from './minimaxService'
@@ -23,9 +23,6 @@ import type {
 import { ADVISOR_OUTPUT_MARKER, extractJsonFromPosition } from './types'
 import type { AutoIterationService } from './autoIteration'
 import type { ActionRequest } from './autoIteration/types'
-import { findBestProfileForTask } from './profileMatcher'
-import { MemoryExtractor } from './memoryExtractor'
-import { getMemoryPromptFragment } from './memoryInjector'
 
 export interface AdvisorServiceConfig {
     namespace: string
@@ -37,12 +34,11 @@ export interface AdvisorServiceConfig {
 
 export class AdvisorService {
     private syncEngine: SyncEngine
-    private store: IStore
+    private store: Store
     private scheduler: AdvisorScheduler
     private evaluator: SuggestionEvaluator
     private minimaxService: MinimaxService
     private taskTracker: AdvisorTaskTracker
-    private memoryExtractor: MemoryExtractor
     private namespace: string
     private summaryThreshold: number
     private summaryIdleTimeoutMs: number
@@ -75,7 +71,7 @@ export class AdvisorService {
 
     constructor(
         syncEngine: SyncEngine,
-        store: IStore,
+        store: Store,
         scheduler: AdvisorScheduler,
         config: AdvisorServiceConfig
     ) {
@@ -90,7 +86,6 @@ export class AdvisorService {
         this.evaluator = new SuggestionEvaluator(store, syncEngine)
         this.minimaxService = new MinimaxService()
         this.taskTracker = new AdvisorTaskTracker(store)
-        this.memoryExtractor = new MemoryExtractor(store)
     }
 
     /**
@@ -178,16 +173,16 @@ export class AdvisorService {
         error?: string
         actionTriggered?: boolean
     }> {
-        const suggestion = await this.store.getAgentSuggestion(suggestionId)
+        const suggestion = this.store.getAgentSuggestion(suggestionId)
         if (!suggestion) {
             return { success: false, error: 'Suggestion not found' }
         }
 
         // 更新状态
-        await this.store.updateAgentSuggestionStatus(suggestionId, 'accepted')
+        this.store.updateAgentSuggestionStatus(suggestionId, 'accepted')
 
         // 记录反馈
-        await this.store.createAgentFeedback({
+        this.store.createAgentFeedback({
             suggestionId,
             source: 'user',
             userId,
@@ -212,16 +207,16 @@ export class AdvisorService {
         success: boolean
         error?: string
     }> {
-        const suggestion = await this.store.getAgentSuggestion(suggestionId)
+        const suggestion = this.store.getAgentSuggestion(suggestionId)
         if (!suggestion) {
             return { success: false, error: 'Suggestion not found' }
         }
 
         // 更新状态
-        await this.store.updateAgentSuggestionStatus(suggestionId, 'rejected')
+        this.store.updateAgentSuggestionStatus(suggestionId, 'rejected')
 
         // 记录反馈
-        await this.store.createAgentFeedback({
+        this.store.createAgentFeedback({
             suggestionId,
             source: 'user',
             userId,
@@ -240,14 +235,14 @@ export class AdvisorService {
     /**
      * 获取建议详情
      */
-    async getSuggestion(suggestionId: string): Promise<StoredAgentSuggestion | null> {
+    getSuggestion(suggestionId: string): StoredAgentSuggestion | null {
         return this.store.getAgentSuggestion(suggestionId)
     }
 
     /**
      * 获取所有待处理的建议
      */
-    async getPendingSuggestions(): Promise<StoredAgentSuggestion[]> {
+    getPendingSuggestions(): StoredAgentSuggestion[] {
         return this.store.getAgentSuggestions(this.namespace, {
             status: 'pending'
         })
@@ -284,12 +279,12 @@ export class AdvisorService {
     /**
      * Advisor 创建的会话结束时的处理
      */
-    private async onAdvisorSpawnedSessionEnded(sessionId: string): Promise<void> {
+    private onAdvisorSpawnedSessionEnded(sessionId: string): void {
         const task = this.taskTracker.getTaskBySessionId(sessionId)
         if (!task) return
 
         // 获取会话的最后几条消息，判断任务状态
-        const messages = await this.syncEngine.getMessagesAfter(sessionId, {
+        const messages = this.syncEngine.getMessagesAfter(sessionId, {
             afterSeq: Math.max(0, (this.syncEngine.getSession(sessionId)?.seq ?? 0) - 10),
             limit: 10
         })
@@ -315,16 +310,6 @@ export class AdvisorService {
         } else {
             this.taskTracker.markSessionCompleted(sessionId, lastMessage.slice(0, 200))
             console.log(`[AdvisorService] Advisor-spawned session ${sessionId} completed successfully`)
-
-            // 更新 AI Profile 统计数据
-            if (task.aiProfileId) {
-                this.updateAIProfileStatsOnTaskComplete(task.aiProfileId)
-            }
-        }
-
-        // 提取并保存会话记忆（如果有关联的 AI Profile）
-        if (task.aiProfileId) {
-            this.extractAndSaveSessionMemories(sessionId, task.aiProfileId, task.taskDescription || '')
         }
 
         // 向 Advisor 反馈任务完成状态
@@ -332,58 +317,14 @@ export class AdvisorService {
     }
 
     /**
-     * 任务完成时更新 AI Profile 统计
-     */
-    private updateAIProfileStatsOnTaskComplete(aiProfileId: string): void {
-        const profile = this.store.getAIProfile(aiProfileId)
-        if (!profile) {
-            console.log(`[AdvisorService] AI Profile ${aiProfileId} not found, skip stats update`)
-            return
-        }
-
-        const newTasksCompleted = (profile.stats?.tasksCompleted ?? 0) + 1
-        this.store.updateAIProfileStats(aiProfileId, {
-            tasksCompleted: newTasksCompleted,
-            lastActiveAt: Date.now()
-        })
-
-        console.log(`[AdvisorService] AI Profile ${aiProfileId} stats updated: tasksCompleted=${newTasksCompleted}`)
-    }
-
-    /**
-     * 提取并保存会话记忆
-     */
-    private async extractAndSaveSessionMemories(sessionId: string, aiProfileId: string, taskDescription: string): Promise<void> {
-        const session = this.syncEngine.getSession(sessionId)
-        if (!session) {
-            console.log(`[AdvisorService] Session ${sessionId} not found, skip memory extraction`)
-            return
-        }
-
-        // 构建会话摘要
-        const summary = await this.buildSummaryForMinimax(session)
-
-        // 使用记忆提取器提取并保存记忆
-        this.memoryExtractor.extractAndSaveMemories(summary, aiProfileId, this.namespace)
-            .then(savedMemories => {
-                if (savedMemories.length > 0) {
-                    console.log(`[AdvisorService] Extracted and saved ${savedMemories.length} memories for profile ${aiProfileId}`)
-                }
-            })
-            .catch(error => {
-                console.error(`[AdvisorService] Failed to extract memories for session ${sessionId}:`, error)
-            })
-    }
-
-    /**
      * 检测 Advisor 创建的会话是否在等待用户输入
      */
-    private async checkAdvisorSpawnedSessionWaitingForInput(sessionId: string): Promise<void> {
+    private checkAdvisorSpawnedSessionWaitingForInput(sessionId: string): void {
         const task = this.taskTracker.getTaskBySessionId(sessionId)
         if (!task || task.status !== 'running') return
 
         // 获取最后几条消息
-        const messages = await this.syncEngine.getMessagesAfter(sessionId, {
+        const messages = this.syncEngine.getMessagesAfter(sessionId, {
             afterSeq: Math.max(0, (this.syncEngine.getSession(sessionId)?.seq ?? 0) - 5),
             limit: 5
         })
@@ -541,7 +482,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
             this.broadcastMinimaxStart(sessionId)
 
             // 2. 构建摘要
-            const summary = await this.buildSummaryForMinimax(session)
+            const summary = this.buildSummaryForMinimax(session)
 
             // 3. 调用 MiniMax
             const result = await this.minimaxService.reviewSession({ sessionId, summary })
@@ -563,13 +504,13 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     /**
      * 为 MiniMax 构建摘要
      */
-    private async buildSummaryForMinimax(session: Session): Promise<SessionSummary> {
+    private buildSummaryForMinimax(session: Session): SessionSummary {
         const metadata = session.metadata
         const workDir = metadata?.path || 'unknown'
         const project = workDir.split('/').pop() || 'unknown'
 
         // 获取最近消息
-        const recentMessages = await this.syncEngine.getMessagesAfter(session.id, {
+        const recentMessages = this.syncEngine.getMessagesAfter(session.id, {
             afterSeq: Math.max(0, session.seq - 50),
             limit: 50
         })
@@ -769,7 +710,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         }
 
         // 本地快速检查
-        const issues = await this.quickLocalCheck(session)
+        const issues = this.quickLocalCheck(session)
 
         if (issues.length === 0) {
             console.log(`[AdvisorService] Idle check passed for ${sessionId}`)
@@ -783,7 +724,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     /**
      * 本地快速检查（无需 AI）
      */
-    private async quickLocalCheck(session: Session): Promise<Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }>> {
+    private quickLocalCheck(session: Session): Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }> {
         const issues: Array<{ type: string; description: string; severity: 'low' | 'medium' | 'high'; data?: unknown }> = []
 
         // 1. 检查 Todos 完成情况 - 包括 in_progress 和 pending
@@ -816,7 +757,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         }
 
         // 2. 检查最近消息中的错误和警告
-        const recentMessages = await this.syncEngine.getMessagesAfter(session.id, {
+        const recentMessages = this.syncEngine.getMessagesAfter(session.id, {
             afterSeq: Math.max(0, session.seq - 30),
             limit: 30
         })
@@ -1262,7 +1203,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         const lastSeq = sessionState?.lastSeq ?? 0
 
         // 获取增量消息
-        const incrementalMessages = await this.syncEngine.getMessagesAfter(sessionId, { afterSeq: lastSeq, limit: 200 })
+        const incrementalMessages = this.syncEngine.getMessagesAfter(sessionId, { afterSeq: lastSeq, limit: 200 })
         if (incrementalMessages.length === 0) {
             return
         }
@@ -1797,15 +1738,6 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
         const taskId = output.id || `task-${Date.now().toString(36)}`
         const sessionId = `advisor-spawn-${taskId}`
 
-        // 4.5 如果没有指定 aiProfileId，使用智能匹配算法推荐
-        let aiProfileId = output.aiProfileId
-        if (!aiProfileId) {
-            aiProfileId = findBestProfileForTask(this.store, this.namespace, output.taskDescription) ?? undefined
-            if (aiProfileId) {
-                console.log(`[AdvisorService] Auto-matched AI Profile: ${aiProfileId}`)
-            }
-        }
-
         console.log(`[AdvisorService] Spawning session ${sessionId} on machine ${targetMachine.id}, dir: ${workingDir}`)
 
         // 5. 创建会话
@@ -1834,12 +1766,11 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
                     taskDescription: output.taskDescription,
                     reason: output.reason,
                     expectedOutcome: output.expectedOutcome,
-                    workingDir,
-                    aiProfileId
+                    workingDir
                 })
 
-                // 8. 等待会话就绪后发送任务消息（包含记忆注入）
-                await this.waitAndSendTask(result.sessionId, output.taskDescription, advisorSessionId, aiProfileId)
+                // 8. 等待会话就绪后发送任务消息
+                await this.waitAndSendTask(result.sessionId, output.taskDescription, advisorSessionId)
 
                 // 9. 标记任务开始运行
                 this.taskTracker.markSessionRunning(result.sessionId)
@@ -1854,32 +1785,19 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     /**
      * 等待会话就绪并发送任务消息
      */
-    private async waitAndSendTask(sessionId: string, taskDescription: string, parentSessionId: string, aiProfileId?: string): Promise<void> {
+    private async waitAndSendTask(sessionId: string, taskDescription: string, parentSessionId: string): Promise<void> {
         const maxWaitMs = 15000
         const startTime = Date.now()
 
         while (Date.now() - startTime < maxWaitMs) {
             const session = this.syncEngine.getSession(sessionId)
             if (session?.active) {
-                // 获取 AI Profile 的记忆注入
-                let memoryFragment = ''
-                if (aiProfileId) {
-                    try {
-                        memoryFragment = getMemoryPromptFragment(this.store, this.namespace, aiProfileId)
-                        if (memoryFragment) {
-                            console.log(`[AdvisorService] Injected memories for profile ${aiProfileId} into session ${sessionId}`)
-                        }
-                    } catch (error) {
-                        console.warn(`[AdvisorService] Failed to inject memories for profile ${aiProfileId}:`, error)
-                    }
-                }
-
                 // 会话已就绪，发送任务
                 const taskMessage = `[由 Advisor 自动创建的任务会话]
 
 父会话: ${parentSessionId.slice(0, 8)}
 创建时间: ${new Date().toISOString()}
-${memoryFragment ? `\n${memoryFragment}` : ''}
+
 ## 任务描述
 
 ${taskDescription}

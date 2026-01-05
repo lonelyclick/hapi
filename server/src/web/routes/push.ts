@@ -55,7 +55,7 @@ export function createPushRoutes(): Hono<WebAppEnv> {
         const clientId = parsed.data.clientId
         const chatId = parsed.data.chatId
 
-        const subscription = await webPush.subscribe(
+        const subscription = webPush.subscribe(
             namespace,
             parsed.data.endpoint,
             parsed.data.keys,
@@ -70,11 +70,7 @@ export function createPushRoutes(): Hono<WebAppEnv> {
 
         console.log('[push] new subscription:', {
             namespace,
-            endpoint: parsed.data.endpoint.slice(0, 60) + '...',
-            clientId,
-            chatId,
-            subscriptionId: subscription.id,
-            userAgent: userAgent?.slice(0, 50)
+            endpoint: parsed.data.endpoint.slice(0, 60) + '...'
         })
 
         // 订阅成功后立即发送测试通知
@@ -110,7 +106,7 @@ export function createPushRoutes(): Hono<WebAppEnv> {
             return c.json({ error: 'Invalid endpoint' }, 400)
         }
 
-        const success = await webPush.unsubscribe(parsed.data.endpoint)
+        const success = webPush.unsubscribe(parsed.data.endpoint)
 
         console.log('[push] unsubscribe:', {
             endpoint: parsed.data.endpoint.slice(0, 60) + '...',
@@ -121,14 +117,14 @@ export function createPushRoutes(): Hono<WebAppEnv> {
     })
 
     // Get subscription count (for debugging/admin)
-    app.get('/push/subscriptions', async (c) => {
+    app.get('/push/subscriptions', (c) => {
         const webPush = getWebPushService()
         if (!webPush) {
             return c.json({ error: 'Push notifications not configured' }, 503)
         }
 
         const namespace = c.get('namespace') || 'default'
-        const subscriptions = await webPush.getSubscriptions(namespace)
+        const subscriptions = webPush.getSubscriptions(namespace)
 
         return c.json({
             count: subscriptions.length,

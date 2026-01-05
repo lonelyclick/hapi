@@ -9,7 +9,7 @@
  */
 
 import { createConfiguration, type ConfigSource } from './configuration'
-import { createStore, type IStore } from './store'
+import { Store } from './store'
 import { SyncEngine, type SyncEvent } from './sync/syncEngine'
 import { HappyBot } from './telegram/bot'
 import { startWebServer } from './web/server'
@@ -85,9 +85,7 @@ async function main() {
         console.log(`[Server] Feishu STT: enabled (${appIdSource}/${appSecretSource})`)
     }
 
-    // Initialize store (SQLite or PostgreSQL based on config)
-    const store = await createStore(config.getStoreConfig())
-    console.log(`[Server] Store: ${config.storeType} mode`)
+    const store = new Store(config.dbPath)
 
     // Initialize Web Push service
     const webPushConfig = config.webPushVapidPublicKey && config.webPushVapidPrivateKey && config.webPushVapidSubject
@@ -110,7 +108,7 @@ async function main() {
     const socketServer = createSocketServer({
         store,
         jwtSecret,
-        getSession: (sessionId) => syncEngine?.getSession(sessionId),
+        getSession: (sessionId) => syncEngine?.getSession(sessionId) ?? store.getSession(sessionId),
         onWebappEvent: (event: SyncEvent) => syncEngine?.handleRealtimeEvent(event),
         onSessionAlive: (payload) => syncEngine?.handleSessionAlive(payload),
         onSessionEnd: (payload) => syncEngine?.handleSessionEnd(payload),

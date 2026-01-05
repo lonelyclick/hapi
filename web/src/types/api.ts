@@ -451,12 +451,7 @@ export type AgentGroup = {
     createdAt: number
     updatedAt: number
     status: AgentGroupStatus
-    memberCount: number
-    lastMessage: {
-        content: string
-        senderType: GroupSenderType
-        createdAt: number
-    } | null
+    memberCount?: number
 }
 
 export type AgentGroupMember = {
@@ -499,64 +494,3 @@ export type BroadcastResponse = {
         results: Array<{ sessionId: string; success: boolean; error?: string }>
     }
 }
-
-export type SpawnAgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli'
-
-export type SpawnMemberRequest = {
-    machineId: string
-    directory: string
-    agentType: SpawnAgentType
-    role?: GroupMemberRole
-    claudeAgent?: string
-    openrouterModel?: string
-    permissionMode?: string
-    modelMode?: string
-}
-
-export type SpawnMemberResponse = {
-    ok: true
-    sessionId: string
-    members: AgentGroupMember[]
-}
-
-// ==================== AI 员工档案 ====================
-
-export type AIProfileRole = 'developer' | 'architect' | 'reviewer' | 'pm' | 'tester' | 'devops'
-export type AIProfileStatus = 'idle' | 'working' | 'resting'
-
-export type AIProfile = {
-    id: string
-    namespace: string
-    name: string
-    role: AIProfileRole
-    specialties: string[]
-    personality: string | null
-    greetingTemplate: string | null
-    preferredProjects: string[]
-    workStyle: string | null
-    avatarEmoji: string
-    status: AIProfileStatus
-    stats: {
-        tasksCompleted: number
-        activeMinutes: number
-        lastActiveAt: number | null
-    }
-    createdAt: number
-    updatedAt: number
-}
-
-export type AIProfilesResponse = { profiles: AIProfile[] }
-export type AIProfileResponse = { profile: AIProfile }
-
-export type CreateAIProfileRequest = {
-    name: string
-    role: AIProfileRole
-    specialties?: string[]
-    personality?: string | null
-    greetingTemplate?: string | null
-    preferredProjects?: string[]
-    workStyle?: string | null
-    avatarEmoji?: string
-}
-
-export type UpdateAIProfileRequest = Partial<Omit<AIProfile, 'id' | 'namespace' | 'createdAt' | 'updatedAt' | 'stats'>>

@@ -511,7 +511,7 @@ export class CodexMcpClient {
 
         this.transport = new StdioClientTransport({
             command: 'codex',
-            args: [mcpCommand, '--enable', 'web_search_request'],
+            args: [mcpCommand],
             env: Object.keys(process.env).reduce((acc, key) => {
                 const value = process.env[key];
                 if (typeof value === 'string') acc[key] = value;

@@ -8,7 +8,7 @@
 import chalk from 'chalk'
 import { appendFileSync } from 'fs'
 import { configuration } from '@/configuration'
-import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { readDaemonState } from '@/persistence'
 
@@ -44,34 +44,6 @@ function getSessionLogPath(): string {
   return join(configuration.logsDir, filename)
 }
 
-/**
- * 清理 7 天前的日志文件
- * 规则：删除修改时间超过 7 天的所有日志文件
- */
-function cleanupOldLogs(): void {
-  try {
-    const logsDir = configuration.logsDir
-    if (!existsSync(logsDir)) return
-
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-    const files = readdirSync(logsDir).filter(f => f.endsWith('.log'))
-
-    for (const file of files) {
-      try {
-        const filePath = join(logsDir, file)
-        const stats = statSync(filePath)
-        if (stats.mtimeMs < sevenDaysAgo) {
-          unlinkSync(filePath)
-        }
-      } catch {
-        // 忽略单个文件删除失败
-      }
-    }
-  } catch {
-    // 忽略清理失败，不影响正常日志功能
-  }
-}
-
 class Logger {
   private dangerouslyUnencryptedServerLoggingUrl: string | undefined
 
@@ -84,9 +56,6 @@ class Logger {
       this.dangerouslyUnencryptedServerLoggingUrl = process.env.HAPI_SERVER_URL
       console.log(chalk.yellow('[REMOTE LOGGING] Sending logs to server for AI debugging'))
     }
-
-    // 清理 7 天前的旧日志
-    cleanupOldLogs()
   }
 
   // Use local timezone for simplicity of locating the logs,

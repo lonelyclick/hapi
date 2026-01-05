@@ -16,13 +16,6 @@
  * - FEISHU_BASE_URL: Feishu/Lark OpenAPI base URL (default: https://open.feishu.cn)
  * - HAPI_HOME: Data directory (default: ~/.hapi)
  * - DB_PATH: SQLite database path (default: {HAPI_HOME}/hapi.db)
- * - STORE_TYPE: Database backend type: 'sqlite' | 'postgres' (default: sqlite)
- * - PG_HOST: PostgreSQL host
- * - PG_PORT: PostgreSQL port (default: 5432)
- * - PG_USER: PostgreSQL user
- * - PG_PASSWORD: PostgreSQL password
- * - PG_DATABASE: PostgreSQL database name
- * - PG_SSL: PostgreSQL SSL mode (default: false)
  */
 
 import { existsSync, mkdirSync } from 'node:fs'
@@ -30,10 +23,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { loadServerSettings, type ServerSettings, type ServerSettingsResult } from './serverSettings'
 import { getOrCreateCliApiToken } from './web/cliApiToken'
-import type { StoreConfig, PostgresConfig } from './store/types'
 
 export type ConfigSource = 'env' | 'file' | 'default'
-export type StoreType = 'sqlite' | 'postgres'
 
 export interface ConfigSources {
     telegramBotToken: ConfigSource
@@ -105,12 +96,6 @@ class Configuration {
     /** Web Push VAPID subject (mailto: or https: URL) */
     public readonly webPushVapidSubject: string | null
 
-    /** Store type: 'sqlite' or 'postgres' */
-    public readonly storeType: StoreType
-
-    /** PostgreSQL configuration (when storeType is 'postgres') */
-    public readonly postgresConfig: PostgresConfig | null
-
     /** Sources of each configuration value */
     public readonly sources: ConfigSources
 
@@ -119,9 +104,7 @@ class Configuration {
         dataDir: string,
         dbPath: string,
         serverSettings: ServerSettings,
-        sources: ServerSettingsResult['sources'],
-        storeType: StoreType,
-        postgresConfig: PostgresConfig | null
+        sources: ServerSettingsResult['sources']
     ) {
         this.dataDir = dataDir
         this.dbPath = dbPath
@@ -140,10 +123,6 @@ class Configuration {
         this.webPushVapidPublicKey = serverSettings.webPushVapidPublicKey
         this.webPushVapidPrivateKey = serverSettings.webPushVapidPrivateKey
         this.webPushVapidSubject = serverSettings.webPushVapidSubject
-
-        // Store configuration
-        this.storeType = storeType
-        this.postgresConfig = postgresConfig
 
         // CLI API token - will be set by _setCliApiToken() before create() returns
         this.cliApiToken = ''
@@ -185,60 +164,19 @@ class Configuration {
             console.log(`[Server] Configuration saved to ${join(dataDir, 'settings.json')}`)
         }
 
-        // 4. Determine store type and PostgreSQL config
-        const storeTypeEnv = process.env.STORE_TYPE?.toLowerCase()
-        const storeType: StoreType = storeTypeEnv === 'postgres' || storeTypeEnv === 'postgresql'
-            ? 'postgres'
-            : 'sqlite'
-
-        let postgresConfig: PostgresConfig | null = null
-        if (storeType === 'postgres') {
-            const pgHost = process.env.PG_HOST
-            const pgUser = process.env.PG_USER
-            const pgPassword = process.env.PG_PASSWORD
-            const pgDatabase = process.env.PG_DATABASE
-
-            if (!pgHost || !pgUser || !pgPassword || !pgDatabase) {
-                throw new Error(
-                    'PostgreSQL configuration incomplete. Required environment variables: ' +
-                    'PG_HOST, PG_USER, PG_PASSWORD, PG_DATABASE'
-                )
-            }
-
-            postgresConfig = {
-                host: pgHost,
-                port: parseInt(process.env.PG_PORT || '5432', 10),
-                user: pgUser,
-                password: pgPassword,
-                database: pgDatabase,
-                ssl: process.env.PG_SSL === 'true' || process.env.PG_SSL === '1'
-            }
-        }
-
-        // 5. Create configuration instance
+        // 4. Create configuration instance
         const config = new Configuration(
             dataDir,
             dbPath,
             settingsResult.settings,
-            settingsResult.sources,
-            storeType,
-            postgresConfig
+            settingsResult.sources
         )
 
-        // 6. Load CLI API token
+        // 5. Load CLI API token
         const tokenResult = await getOrCreateCliApiToken(dataDir)
         config._setCliApiToken(tokenResult.token, tokenResult.source, tokenResult.isNew)
 
         return config
-    }
-
-    /** Get StoreConfig for store initialization */
-    getStoreConfig(): StoreConfig {
-        return {
-            type: this.storeType,
-            sqlitePath: this.dbPath,
-            postgres: this.postgresConfig ?? undefined
-        }
     }
 
     /** Set CLI API token (called during async initialization) */

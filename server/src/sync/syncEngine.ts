@@ -9,12 +9,11 @@
 
 import { z } from 'zod'
 import type { Server } from 'socket.io'
-import type { IStore } from '../store'
+import type { Store } from '../store'
 import type { RpcRegistry } from '../socket/rpcRegistry'
 import type { SSEManager } from '../sse/sseManager'
 import { extractTodoWriteTodosFromMessageContent, TodosSchema, type TodoItem } from './todos'
 import { getWebPushService } from '../services/webPush'
-import { buildManualAdvisorPrompt } from '../agent/advisorPrompt'
 
 export type ConnectionStatus = 'disconnected' | 'connected'
 
@@ -94,27 +93,6 @@ export interface Session {
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     advisorTaskId?: string | null  // Advisor 创建的会话的任务 ID
-}
-
-/**
- * 检查是否为 CTO/Advisor 会话
- * 这个函数用于判断是否需要注入 CTO 指令
- */
-export function isCTOSession(session: Session | null | undefined): boolean {
-    if (!session) return false
-    const metadata = session.metadata as Record<string, unknown> | null
-    // 检查 claudeAgent 是否为 advisor 或 cto
-    const agent = metadata?.claudeAgent as string | undefined
-    if (agent === 'advisor' || agent === 'cto') return true
-    // 检查 isAdvisor 或 isCTO 标记
-    if (metadata?.isAdvisor === true || metadata?.isCTO === true) return true
-    // 检查 runtimeAgent 是否为 advisor 或 cto
-    const runtimeAgent = metadata?.runtimeAgent as string | undefined
-    if (runtimeAgent === 'advisor' || runtimeAgent === 'cto') return true
-    // 检查会话名称是否包含 CTO 或 Advisor
-    const name = session.metadata?.name?.toLowerCase() || ''
-    if (name.includes('cto') || name.includes('advisor')) return true
-    return false
 }
 
 export interface Machine {
@@ -303,17 +281,13 @@ export class SyncEngine {
     private readonly PUSH_NOTIFICATION_MIN_INTERVAL_MS = 30_000
 
     constructor(
-        private readonly store: IStore,
+        private readonly store: Store,
         private readonly io: Server,
         private readonly rpcRegistry: RpcRegistry,
         private readonly sseManager: SSEManager
     ) {
-        this.initAsync()
+        this.reloadAll()
         this.inactivityTimer = setInterval(() => this.expireInactive(), 5_000)
-    }
-
-    private async initAsync(): Promise<void> {
-        await this.reloadAll()
     }
 
     stop(): void {
@@ -346,36 +320,17 @@ export class SyncEngine {
 
         // 同步 agent 消息到群组
         if (event.type === 'message-received' && event.sessionId && event.message) {
-            console.log('[SyncEngine] ========== GROUP SYNC DEBUG START ==========')
-            console.log('[SyncEngine] message-received event:', {
-                sessionId: event.sessionId,
-                messageId: event.message.id,
-                messageSeq: event.message.seq
-            })
             const msgContent = event.message.content as Record<string, unknown> | null
-            console.log('[SyncEngine] msgContent keys:', msgContent ? Object.keys(msgContent) : 'null')
-            console.log('[SyncEngine] Full msgContent:', JSON.stringify(msgContent, null, 2).slice(0, 2000))
             if (msgContent) {
                 const role = msgContent.role as string
-                console.log(`[SyncEngine] Checking role: "${role}"`)
                 // 只同步 agent 的回复，不同步 user 消息
                 if (role === 'agent' || role === 'assistant') {
-                    console.log('[SyncEngine] Role matches agent/assistant, extracting text...')
                     const text = this.extractTextFromMessageContent(msgContent)
-                    console.log(`[SyncEngine] Extracted text (first 300 chars): "${text?.slice(0, 300) || 'NULL'}"`)
                     if (text) {
-                        console.log('[SyncEngine] Text extracted successfully, calling syncAgentMessageToGroups')
                         this.syncAgentMessageToGroups(event.sessionId, text)
-                    } else {
-                        console.log('[SyncEngine] WARNING: No text extracted from message content!')
                     }
-                } else {
-                    console.log(`[SyncEngine] Skipping group sync - role "${role}" is not agent/assistant`)
                 }
-            } else {
-                console.log('[SyncEngine] Skipping group sync - msgContent is null')
             }
-            console.log('[SyncEngine] ========== GROUP SYNC DEBUG END ==========')
         }
 
         const webappEvent: SyncEvent = event.type === 'message-received'
@@ -421,29 +376,18 @@ export class SyncEngine {
     /**
      * 同步 agent 消息到群组
      * 当 AI 回复消息时，如果该 session 属于某个活跃群组，自动将回复同步到群组消息表
-     * 同时广播 SSE 事件给群组订阅者（UI）
-     *
-     * 注意：AI 消息不会自动转发给其他 AI 成员，以避免无限循环对话
-     * 如需 AI 间通信，用户应通过 /broadcast 端点并使用 @mention 功能
+     * 同时广播 SSE 事件给群组订阅者
      */
-    private async syncAgentMessageToGroups(sessionId: string, content: string): Promise<void> {
-        console.log(`[SyncEngine] syncAgentMessageToGroups called for session ${sessionId}, content length: ${content.length}`)
+    private syncAgentMessageToGroups(sessionId: string, content: string): void {
         try {
-            const groups = await this.store.getGroupsForSession(sessionId)
+            const groups = this.store.getGroupsForSession(sessionId)
             const session = this.sessions.get(sessionId)
-            console.log(`[SyncEngine] Found ${groups.length} groups for session ${sessionId}:`, groups.map(g => ({ id: g.id, name: g.name, status: g.status })))
 
             for (const group of groups) {
                 // 存储消息到群组
-                const message = await this.store.addGroupMessage({
-                    groupId: group.id,
-                    sourceSessionId: sessionId,
-                    content,
-                    senderType: 'agent',
-                    messageType: 'chat'
-                })
+                const message = this.store.addGroupMessage(group.id, sessionId, content, 'agent', 'chat')
 
-                // 广播 SSE 事件给群组订阅者（仅 UI，不转发给其他 AI）
+                // 广播 SSE 事件给群组订阅者
                 const groupMessageData: GroupMessageData = {
                     id: message.id,
                     groupId: message.groupId,
@@ -461,11 +405,6 @@ export class SyncEngine {
                     groupId: group.id,
                     groupMessage: groupMessageData
                 })
-
-                // 注意：不再自动转发 AI 消息给其他 AI 成员
-                // 这样做是为了防止 AI 之间的无限循环对话
-                // 用户可以通过 @mention 机制明确指定要通知的 AI
-                console.log(`[SyncEngine] AI message synced to group ${group.id} (UI only, no AI-to-AI forwarding)`)
             }
 
             if (groups.length > 0) {
@@ -481,91 +420,24 @@ export class SyncEngine {
      * 从消息内容中提取文本
      */
     private extractTextFromMessageContent(content: unknown): string | null {
-        console.log(`[SyncEngine] extractTextFromMessageContent input:`, JSON.stringify(content, null, 2))
-        if (!content || typeof content !== 'object') {
-            console.log(`[SyncEngine] extractTextFromMessageContent: content is null or not object`)
-            return null
-        }
+        if (!content || typeof content !== 'object') return null
         const record = content as Record<string, unknown>
 
         const innerContent = record.content as Record<string, unknown> | string | null
-        console.log(`[SyncEngine] extractTextFromMessageContent innerContent type:`, typeof innerContent, innerContent ? JSON.stringify(innerContent).substring(0, 200) : 'null')
         if (typeof innerContent === 'string') {
-            console.log(`[SyncEngine] extractTextFromMessageContent: innerContent is string, length: ${innerContent.length}`)
             return innerContent
         }
         if (innerContent && typeof innerContent === 'object') {
             const contentType = (innerContent as Record<string, unknown>).type as string
-            console.log(`[SyncEngine] extractTextFromMessageContent: innerContent.type = "${contentType}"`)
             if (contentType === 'codex') {
                 const data = (innerContent as Record<string, unknown>).data as Record<string, unknown>
                 if (data?.type === 'message' && typeof data.message === 'string') {
-                    console.log(`[SyncEngine] extractTextFromMessageContent: found codex message`)
                     return data.message
                 }
             } else if (contentType === 'text') {
-                const text = ((innerContent as Record<string, unknown>).text as string) || null
-                console.log(`[SyncEngine] extractTextFromMessageContent: found text type, text length: ${text?.length || 0}`)
-                return text
-            } else if (contentType === 'output') {
-                // 处理 output 类型消息
-                const data = (innerContent as Record<string, unknown>).data as Record<string, unknown>
-                if (data) {
-                    const dataType = data.type as string
-                    // 只处理 assistant 类型的消息，不处理 user 类型
-                    if (dataType === 'assistant' || dataType === 'message') {
-                        const message = data.message as Record<string, unknown>
-                        if (message) {
-                            const messageContent = message.content
-                            if (Array.isArray(messageContent)) {
-                                const textParts: string[] = []
-                                for (const item of messageContent) {
-                                    if (item && typeof item === 'object') {
-                                        const itemRecord = item as Record<string, unknown>
-                                        if (itemRecord.type === 'text' && typeof itemRecord.text === 'string') {
-                                            textParts.push(itemRecord.text)
-                                        }
-                                    }
-                                }
-                                if (textParts.length > 0) {
-                                    console.log('[SyncEngine] extractTextFromMessageContent: found output message with text')
-                                    return textParts.join('\n')
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // 尝试处理数组格式的 content（Claude 消息格式）
-            if (Array.isArray(innerContent)) {
-                console.log(`[SyncEngine] extractTextFromMessageContent: innerContent is array with ${innerContent.length} items`)
-                const textParts: string[] = []
-                for (const item of innerContent) {
-                    if (item && typeof item === 'object' && (item as Record<string, unknown>).type === 'text') {
-                        const text = (item as Record<string, unknown>).text as string
-                        if (text) textParts.push(text)
-                    }
-                }
-                if (textParts.length > 0) {
-                    return textParts.join('\n')
-                }
+                return ((innerContent as Record<string, unknown>).text as string) || null
             }
         }
-        // 尝试直接检查 record 中的 content 是否为数组（某些消息格式）
-        if (Array.isArray(record.content)) {
-            console.log(`[SyncEngine] extractTextFromMessageContent: record.content is array with ${record.content.length} items`)
-            const textParts: string[] = []
-            for (const item of record.content) {
-                if (item && typeof item === 'object' && (item as Record<string, unknown>).type === 'text') {
-                    const text = (item as Record<string, unknown>).text as string
-                    if (text) textParts.push(text)
-                }
-            }
-            if (textParts.length > 0) {
-                return textParts.join('\n')
-            }
-        }
-        console.log(`[SyncEngine] extractTextFromMessageContent: no text found, returning null`)
         return null
     }
 
@@ -605,7 +477,7 @@ export class SyncEngine {
             throw error
         }
 
-        const deleted = await this.store.deleteSession(sessionId)
+        const deleted = this.store.deleteSession(sessionId)
         if (!deleted && !options?.force) {
             this.deletingSessions.delete(sessionId)
             return false
@@ -673,7 +545,7 @@ export class SyncEngine {
         return this.sessionMessages.get(sessionId) || []
     }
 
-    async getMessagesPage(sessionId: string, options: { limit: number; beforeSeq: number | null }): Promise<{
+    getMessagesPage(sessionId: string, options: { limit: number; beforeSeq: number | null }): {
         messages: DecryptedMessage[]
         page: {
             limit: number
@@ -681,8 +553,8 @@ export class SyncEngine {
             nextBeforeSeq: number | null
             hasMore: boolean
         }
-    }> {
-        const stored = await this.store.getMessages(sessionId, options.limit, options.beforeSeq ?? undefined)
+    } {
+        const stored = this.store.getMessages(sessionId, options.limit, options.beforeSeq ?? undefined)
         const messages: DecryptedMessage[] = stored.map((m) => ({
             id: m.id,
             seq: m.seq,
@@ -700,8 +572,7 @@ export class SyncEngine {
         }
 
         const nextBeforeSeq = oldestSeq
-        const hasMoreMessages = nextBeforeSeq !== null ? await this.store.getMessages(sessionId, 1, nextBeforeSeq) : []
-        const hasMore = hasMoreMessages.length > 0
+        const hasMore = nextBeforeSeq !== null && this.store.getMessages(sessionId, 1, nextBeforeSeq).length > 0
 
         return {
             messages,
@@ -714,8 +585,8 @@ export class SyncEngine {
         }
     }
 
-    async getMessagesAfter(sessionId: string, options: { afterSeq: number; limit: number }): Promise<DecryptedMessage[]> {
-        const stored = await this.store.getMessagesAfter(sessionId, options.afterSeq, options.limit)
+    getMessagesAfter(sessionId: string, options: { afterSeq: number; limit: number }): DecryptedMessage[] {
+        const stored = this.store.getMessagesAfter(sessionId, options.afterSeq, options.limit)
         return stored.map((m) => ({
             id: m.id,
             seq: m.seq,
@@ -725,12 +596,12 @@ export class SyncEngine {
         }))
     }
 
-    async getMessageCount(sessionId: string): Promise<number> {
+    getMessageCount(sessionId: string): number {
         return this.store.getMessageCount(sessionId)
     }
 
-    async clearSessionMessages(sessionId: string, keepCount: number = 30): Promise<{ deleted: number; remaining: number }> {
-        const result = await this.store.clearMessages(sessionId, keepCount)
+    clearSessionMessages(sessionId: string, keepCount: number = 30): { deleted: number; remaining: number } {
+        const result = this.store.clearMessages(sessionId, keepCount)
 
         // Clear the in-memory cache for this session
         this.sessionMessages.delete(sessionId)
@@ -743,18 +614,18 @@ export class SyncEngine {
 
     handleRealtimeEvent(event: SyncEvent): void {
         if (event.type === 'session-updated' && event.sessionId) {
-            this.refreshSession(event.sessionId).catch(err => console.error('[SyncEngine] refreshSession error:', err))
+            this.refreshSession(event.sessionId)
             return
         }
 
         if (event.type === 'machine-updated' && event.machineId) {
-            this.refreshMachine(event.machineId).catch(err => console.error('[SyncEngine] refreshMachine error:', err))
+            this.refreshMachine(event.machineId)
             return
         }
 
         if (event.type === 'message-received' && event.sessionId) {
             if (!this.sessions.has(event.sessionId)) {
-                this.refreshSession(event.sessionId).catch(err => console.error('[SyncEngine] refreshSession error:', err))
+                this.refreshSession(event.sessionId)
             }
         }
 
@@ -776,12 +647,8 @@ export class SyncEngine {
         const t = clampAliveTime(payload.time)
         if (!t) return
 
-        // 如果 session 不在缓存中，异步刷新（下次 alive 会处理）
-        const session = this.sessions.get(payload.sid)
-        if (!session) {
-            this.refreshSession(payload.sid).catch(err => console.error('[SyncEngine] refreshSession error:', err))
-            return
-        }
+        const session = this.sessions.get(payload.sid) ?? this.refreshSession(payload.sid)
+        if (!session) return
 
         const wasActive = session.active
         const wasThinking = session.thinking
@@ -844,11 +711,9 @@ export class SyncEngine {
      * 1. 通过 chatId（Telegram 用户）
      * 2. 通过 clientId（非 Telegram 用户）
      */
-    private async sendTaskCompletePushNotification(session: Session): Promise<void> {
-        console.log('[webpush] sendTaskCompletePushNotification called for session:', session.id)
+    private sendTaskCompletePushNotification(session: Session): void {
         const webPush = getWebPushService()
         if (!webPush || !webPush.isConfigured()) {
-            console.log('[webpush] service not configured, skipping')
             return
         }
 
@@ -866,15 +731,9 @@ export class SyncEngine {
         const projectName = session.metadata?.path?.split('/').pop() || 'Session'
 
         // 获取应该接收通知的 chatIds（Telegram 用户）
-        const recipientChatIds = await this.store.getSessionNotificationRecipients(session.id)
+        const recipientChatIds = this.store.getSessionNotificationRecipients(session.id)
         // 获取应该接收通知的 clientIds（非 Telegram 用户）
-        const recipientClientIds = await this.store.getSessionNotificationRecipientClientIds(session.id)
-
-        console.log('[webpush] recipients for session:', session.id, {
-            chatIds: recipientChatIds,
-            clientIds: recipientClientIds,
-            namespace: session.namespace
-        })
+        const recipientClientIds = this.store.getSessionNotificationRecipientClientIds(session.id)
 
         if (recipientChatIds.length === 0 && recipientClientIds.length === 0) {
             console.log('[webpush] no recipients for session:', session.id)
@@ -919,12 +778,8 @@ export class SyncEngine {
         }
         const t = clampAliveTime(payload.time) ?? Date.now()
 
-        // 如果 session 不在缓存中，异步刷新
-        const session = this.sessions.get(payload.sid)
-        if (!session) {
-            this.refreshSession(payload.sid).catch(err => console.error('[SyncEngine] refreshSession error:', err))
-            return
-        }
+        const session = this.sessions.get(payload.sid) ?? this.refreshSession(payload.sid)
+        if (!session) return
 
         if (!session.active && !session.thinking) {
             return
@@ -942,12 +797,8 @@ export class SyncEngine {
         const t = clampAliveTime(payload.time)
         if (!t) return
 
-        // 如果 machine 不在缓存中，异步刷新
-        const machine = this.machines.get(payload.machineId)
-        if (!machine) {
-            this.refreshMachine(payload.machineId).catch(err => console.error('[SyncEngine] refreshMachine error:', err))
-            return
-        }
+        const machine = this.machines.get(payload.machineId) ?? this.refreshMachine(payload.machineId)
+        if (!machine) return
 
         const wasActive = machine.active
         machine.active = true
@@ -983,8 +834,8 @@ export class SyncEngine {
         }
     }
 
-    private async refreshSession(sessionId: string): Promise<Session | null> {
-        let stored = await this.store.getSession(sessionId)
+    private refreshSession(sessionId: string): Session | null {
+        let stored = this.store.getSession(sessionId)
         if (!stored) {
             const existed = this.sessions.delete(sessionId)
             if (existed) {
@@ -997,14 +848,14 @@ export class SyncEngine {
 
         if (stored.todos === null && !this.todoBackfillAttemptedSessionIds.has(sessionId)) {
             this.todoBackfillAttemptedSessionIds.add(sessionId)
-            const messages = await this.store.getMessages(sessionId, 200)
+            const messages = this.store.getMessages(sessionId, 200)
             for (let i = messages.length - 1; i >= 0; i -= 1) {
                 const message = messages[i]
                 const todos = extractTodoWriteTodosFromMessageContent(message.content)
                 if (todos) {
-                    const updated = await this.store.setSessionTodos(sessionId, todos, message.createdAt, stored.namespace)
+                    const updated = this.store.setSessionTodos(sessionId, todos, message.createdAt, stored.namespace)
                     if (updated) {
-                        stored = await this.store.getSession(sessionId) ?? stored
+                        stored = this.store.getSession(sessionId) ?? stored
                     }
                     break
                 }
@@ -1053,8 +904,8 @@ export class SyncEngine {
         return session
     }
 
-    private async refreshMachine(machineId: string): Promise<Machine | null> {
-        const stored = await this.store.getMachine(machineId)
+    private refreshMachine(machineId: string): Machine | null {
+        const stored = this.store.getMachine(machineId)
         if (!stored) {
             const existed = this.machines.delete(machineId)
             if (existed) {
@@ -1099,31 +950,31 @@ export class SyncEngine {
         return machine
     }
 
-    private async reloadAll(): Promise<void> {
-        const sessions = await this.store.getSessions()
+    private reloadAll(): void {
+        const sessions = this.store.getSessions()
         for (const s of sessions) {
-            await this.refreshSession(s.id)
+            this.refreshSession(s.id)
         }
 
-        const machines = await this.store.getMachines()
+        const machines = this.store.getMachines()
         for (const m of machines) {
-            await this.refreshMachine(m.id)
+            this.refreshMachine(m.id)
         }
     }
 
-    async getOrCreateSession(tag: string, metadata: unknown, agentState: unknown, namespace: string): Promise<Session> {
-        const stored = await this.store.getOrCreateSession(tag, metadata, agentState, namespace)
-        return await this.refreshSession(stored.id) ?? (() => { throw new Error('Failed to load session') })()
+    getOrCreateSession(tag: string, metadata: unknown, agentState: unknown, namespace: string): Session {
+        const stored = this.store.getOrCreateSession(tag, metadata, agentState, namespace)
+        return this.refreshSession(stored.id) ?? (() => { throw new Error('Failed to load session') })()
     }
 
-    async getOrCreateMachine(id: string, metadata: unknown, daemonState: unknown, namespace: string): Promise<Machine> {
-        const stored = await this.store.getOrCreateMachine(id, metadata, daemonState, namespace)
-        return await this.refreshMachine(stored.id) ?? (() => { throw new Error('Failed to load machine') })()
+    getOrCreateMachine(id: string, metadata: unknown, daemonState: unknown, namespace: string): Machine {
+        const stored = this.store.getOrCreateMachine(id, metadata, daemonState, namespace)
+        return this.refreshMachine(stored.id) ?? (() => { throw new Error('Failed to load machine') })()
     }
 
     async fetchMessages(sessionId: string): Promise<FetchMessagesResult> {
         try {
-            const stored = await this.store.getMessages(sessionId, 200)
+            const stored = this.store.getMessages(sessionId, 200)
             const messages: DecryptedMessage[] = stored.map((m) => ({
                 id: m.id,
                 seq: m.seq,
@@ -1138,72 +989,21 @@ export class SyncEngine {
         }
     }
 
-    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'advisor'; meta?: Record<string, unknown> }): Promise<void> {
+    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'advisor' }): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
-
-        // 检查是否需要注入 CTO 指令
-        let messageText = payload.text
-        const session = this.sessions.get(sessionId)
-
-        // 判断是否为系统消息（不需要注入 prompt 的消息类型）
-        // 系统消息如 TASK_FEEDBACK、STATUS 检测等不应触发 CTO prompt 注入
-        const isSystemMessage = payload.text.startsWith('[[TASK_FEEDBACK]]') ||
-            payload.text.startsWith('[[STATUS]]') ||
-            payload.text.startsWith('[[SUMMARY]]')
-
-        // 检查用户消息是否已包含 init prompt（以 #InitPrompt 开头）
-        // 如果用户已提供自定义的 init prompt，则不再注入 CTO prompt，避免消息过长
-        const hasUserInitPrompt = payload.text.includes('#InitPrompt')
-
-        if (!isSystemMessage && !hasUserInitPrompt) {
-            // 检查是否需要注入 CTO prompt
-            // 1. advisor_mode 会话：使用数据库标记（shouldInjectAdvisorPrompt）
-            // 2. CTO 会话（通过名称/metadata 判断）：检查是否是首条用户消息
-            const shouldInjectFromDB = await this.store.shouldInjectAdvisorPrompt(sessionId)
-            const isCTO = isCTOSession(session)
-
-            if (shouldInjectFromDB) {
-                // advisor_mode 会话：仅首条消息注入
-                const workingDir = session?.metadata?.path || session?.metadata?.worktree?.basePath || undefined
-                const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
-                messageText = ctoPrompt + '\n\n' + payload.text
-                // 标记已注入，防止重复
-                const namespace = session?.namespace || 'default'
-                await this.store.setSessionAdvisorPromptInjected(sessionId, namespace)
-                console.log(`[SyncEngine] Injected CTO prompt for advisor_mode session ${sessionId}`)
-            } else if (isCTO) {
-                // CTO 会话（非 advisor_mode）：检查是否是首条用户消息
-                // 通过检查历史消息中是否有用户消息来判断
-                const messages = await this.store.getMessages(sessionId, 10)
-                const hasUserMessage = messages.some(m => {
-                    const content = m.content as Record<string, unknown> | null
-                    return content?.role === 'user'
-                })
-
-                if (!hasUserMessage) {
-                    // 首条用户消息，注入 CTO prompt
-                    const workingDir = session?.metadata?.path || session?.metadata?.worktree?.basePath || undefined
-                    const ctoPrompt = buildManualAdvisorPrompt({ workingDir })
-                    messageText = ctoPrompt + '\n\n' + payload.text
-                    console.log(`[SyncEngine] Injected CTO prompt for CTO session ${sessionId} (first user message)`)
-                }
-            }
-        } else if (hasUserInitPrompt) {
-            console.log(`[SyncEngine] User provided custom init prompt, skipping CTO prompt injection for session ${sessionId}`)
-        }
 
         const content = {
             role: 'user',
             content: {
                 type: 'text',
-                text: messageText
+                text: payload.text
             },
             meta: {
                 sentFrom
             }
         }
 
-        const msg = await this.store.addMessage(sessionId, content, payload.localId ?? undefined)
+        const msg = this.store.addMessage(sessionId, content, payload.localId ?? undefined)
 
         const update = {
             id: msg.id,
@@ -1327,7 +1127,7 @@ export class SyncEngine {
             throw new Error('Missing applied session config')
         }
 
-        const session = this.sessions.get(sessionId) ?? await this.refreshSession(sessionId)
+        const session = this.sessions.get(sessionId) ?? this.refreshSession(sessionId)
         if (session) {
             if (applied.permissionMode !== undefined) {
                 session.permissionMode = applied.permissionMode
