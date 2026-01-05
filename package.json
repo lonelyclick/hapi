@@ -19,7 +19,7 @@
         "test": "bun run test:cli && bun run test:server",
         "test:cli": "cd cli && bun run test",
         "test:server": "cd server && bun run test",
-        "clean-session": "bun run server/scripts/cleanup-sessions.ts",
+        "clean-session": "node server/scripts/cleanup-offline-sessions.js --delete --force --yes",
         "release-all": "cd cli && bun run release-all"
     },
     "devDependencies": {

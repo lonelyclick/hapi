@@ -11,7 +11,7 @@ import { configuration } from '@/configuration';
 import packageJson from '../../package.json';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
-import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, acquireDaemonLock, releaseDaemonLock } from '@/persistence';
+import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, acquireDaemonLock, releaseDaemonLock, PersistedSessionInfo } from '@/persistence';
 import { isProcessAlive, isWindows, killProcess, killProcessByChildProcess } from '@/utils/process';
 
 import { cleanupDaemonState, getInstalledCliMtimeMs, isDaemonRunningCurrentlyInstalledHappyVersion, stopDaemon } from './controlClient';
@@ -107,9 +107,18 @@ export async function startDaemon(): Promise<void> {
   // Check if already running
   // Check if running daemon version matches current CLI version
   const runningDaemonVersionMatches = await isDaemonRunningCurrentlyInstalledHappyVersion();
+
+  // Read old state to get sessions for recovery
+  const oldState = await readDaemonState();
+  const previousSessions = oldState?.sessions || [];
+  if (previousSessions.length > 0) {
+    logger.debug(`[DAEMON RUN] Found ${previousSessions.length} sessions from previous daemon to recover`);
+  }
+
   if (!runningDaemonVersionMatches) {
     logger.debug('[DAEMON RUN] Daemon version mismatch detected, restarting daemon with current CLI version');
     await stopDaemon();
+    // Don't kill sessions - we'll try to re-adopt them after startup
   } else {
     logger.debug('[DAEMON RUN] Daemon version matches, keeping existing daemon');
     console.log('Daemon already running with matching version');
@@ -594,7 +603,8 @@ export async function startDaemon(): Promise<void> {
       startTime: new Date().toLocaleString(),
       startedWithCliVersion: packageJson.version,
       startedWithCliMtimeMs,
-      daemonLogPath: logger.logFilePath
+      daemonLogPath: logger.logFilePath,
+      sessions: []
     };
     writeDaemonState(fileState);
     logger.debug('[DAEMON RUN] Daemon state written');
@@ -631,6 +641,57 @@ export async function startDaemon(): Promise<void> {
     // Connect to server
     apiMachine.connect();
 
+    // Re-adopt sessions from previous daemon (if any)
+    // Build a map of previous session info to preserve cwd and startedAt
+    const previousSessionMap = new Map(previousSessions.map(s => [s.pid, s]));
+    // Track startedAt for new sessions (not from previous daemon)
+    const sessionStartedAtMap = new Map<number, number>();
+
+    if (previousSessions.length > 0) {
+      logger.debug(`[DAEMON RUN] Attempting to re-adopt ${previousSessions.length} sessions from previous daemon`);
+      for (const session of previousSessions) {
+        if (isProcessAlive(session.pid)) {
+          // Session process is still running - re-adopt it
+          const trackedSession: TrackedSession = {
+            startedBy: 'daemon',
+            pid: session.pid,
+            happySessionId: session.happySessionId,
+            // No childProcess handle since we didn't spawn it
+            childProcess: undefined
+          };
+          pidToTrackedSession.set(session.pid, trackedSession);
+          logger.debug(`[DAEMON RUN] Re-adopted session PID ${session.pid} (${session.happySessionId}) cwd=${session.cwd}`);
+        } else {
+          logger.debug(`[DAEMON RUN] Session PID ${session.pid} is no longer running, skipping`);
+        }
+      }
+      logger.debug(`[DAEMON RUN] Re-adoption complete. ${pidToTrackedSession.size} sessions now tracked`);
+
+      // Immediately persist re-adopted sessions to state file
+      // This ensures we don't lose them if daemon restarts again before next heartbeat
+      const reAdoptedSessions: PersistedSessionInfo[] = [];
+      for (const [pid, session] of pidToTrackedSession.entries()) {
+        if (session.happySessionId) {
+          // Preserve cwd and startedAt from previous session
+          const prevSession = previousSessionMap.get(pid);
+          const startedAt = prevSession?.startedAt || Date.now();
+          sessionStartedAtMap.set(pid, startedAt); // Remember for future heartbeats
+          reAdoptedSessions.push({
+            pid,
+            happySessionId: session.happySessionId,
+            cwd: session.happySessionMetadataFromLocalWebhook?.path || prevSession?.cwd || '',
+            startedAt
+          });
+        }
+      }
+      const updatedFileState: DaemonLocallyPersistedState = {
+        ...fileState,
+        sessions: reAdoptedSessions
+      };
+      writeDaemonState(updatedFileState);
+      logger.debug(`[DAEMON RUN] Persisted ${reAdoptedSessions.length} re-adopted sessions to state file`);
+    }
+
     // Every 60 seconds:
     // 1. Prune stale sessions
     // 2. Check if daemon needs update
@@ -653,6 +714,7 @@ export async function startDaemon(): Promise<void> {
         if (!isProcessAlive(pid)) {
           logger.debug(`[DAEMON RUN] Removing stale session with PID ${pid} (process no longer exists)`);
           pidToTrackedSession.delete(pid);
+          sessionStartedAtMap.delete(pid); // Clean up associated data
         }
       }
 
@@ -662,6 +724,35 @@ export async function startDaemon(): Promise<void> {
           typeof startedWithCliMtimeMs === 'number' &&
           installedCliMtimeMs !== startedWithCliMtimeMs) {
         logger.debug('[DAEMON RUN] Daemon is outdated, triggering self-restart with latest version, clearing heartbeat interval');
+
+        // Persist current sessions before restart so new daemon can re-adopt them
+        const sessionsBeforeRestart: PersistedSessionInfo[] = [];
+        for (const [pid, session] of pidToTrackedSession.entries()) {
+          if (session.happySessionId) {
+            const prevSession = previousSessionMap.get(pid);
+            if (!sessionStartedAtMap.has(pid)) {
+              sessionStartedAtMap.set(pid, prevSession?.startedAt || Date.now());
+            }
+            sessionsBeforeRestart.push({
+              pid,
+              happySessionId: session.happySessionId,
+              cwd: session.happySessionMetadataFromLocalWebhook?.path || prevSession?.cwd || '',
+              startedAt: sessionStartedAtMap.get(pid)!
+            });
+          }
+        }
+        const stateBeforeRestart: DaemonLocallyPersistedState = {
+          pid: process.pid,
+          httpPort: controlPort,
+          startTime: fileState.startTime,
+          startedWithCliVersion: packageJson.version,
+          startedWithCliMtimeMs,
+          lastHeartbeat: new Date().toLocaleString(),
+          daemonLogPath: fileState.daemonLogPath,
+          sessions: sessionsBeforeRestart
+        };
+        writeDaemonState(stateBeforeRestart);
+        logger.debug(`[DAEMON RUN] Persisted ${sessionsBeforeRestart.length} sessions before mtime restart`);
 
         clearInterval(restartOnStaleVersionAndHeartbeat);
 
@@ -705,8 +796,27 @@ export async function startDaemon(): Promise<void> {
         requestShutdown('exception', 'A different daemon was started without killing us. We should kill ourselves.')
       }
 
-      // Heartbeat
+      // Heartbeat + persist sessions for orphan detection
       try {
+        // Collect current active sessions
+        const sessions: PersistedSessionInfo[] = [];
+        for (const [pid, session] of pidToTrackedSession.entries()) {
+          if (session.happySessionId) {
+            // Preserve cwd from previous session if we don't have metadata yet (re-adopted sessions)
+            const prevSession = previousSessionMap.get(pid);
+            // Track startedAt: use previous value, or remembered value for new sessions
+            if (!sessionStartedAtMap.has(pid)) {
+              sessionStartedAtMap.set(pid, prevSession?.startedAt || Date.now());
+            }
+            sessions.push({
+              pid,
+              happySessionId: session.happySessionId,
+              cwd: session.happySessionMetadataFromLocalWebhook?.path || prevSession?.cwd || '',
+              startedAt: sessionStartedAtMap.get(pid)!
+            });
+          }
+        }
+
         const updatedState: DaemonLocallyPersistedState = {
           pid: process.pid,
           httpPort: controlPort,
@@ -714,11 +824,12 @@ export async function startDaemon(): Promise<void> {
           startedWithCliVersion: packageJson.version,
           startedWithCliMtimeMs,
           lastHeartbeat: new Date().toLocaleString(),
-          daemonLogPath: fileState.daemonLogPath
+          daemonLogPath: fileState.daemonLogPath,
+          sessions
         };
         writeDaemonState(updatedState);
         if (process.env.DEBUG) {
-          logger.debug(`[DAEMON RUN] Health check completed at ${updatedState.lastHeartbeat}`);
+          logger.debug(`[DAEMON RUN] Health check completed at ${updatedState.lastHeartbeat}, ${sessions.length} sessions tracked`);
         }
       } catch (error) {
         logger.debug('[DAEMON RUN] Failed to write heartbeat', error);
