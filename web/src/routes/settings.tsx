@@ -492,8 +492,8 @@ export default function SettingsPage() {
         window.location.href = '/'
     }, [])
 
-    const projects = projectsData?.projects ?? []
-    const users = usersData?.users ?? []
+    const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
+    const users = Array.isArray(usersData?.users) ? usersData.users : []
 
     // 判断当前用户是否为 Developer（有权限管理用户）
     // 如果用户列表为空，默认所有人都有权限；否则根据邮箱查找角色

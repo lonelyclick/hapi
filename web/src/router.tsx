@@ -128,7 +128,7 @@ function SessionsPage() {
         queryKey: ['projects'],
         queryFn: async () => api.getProjects()
     })
-    const projects = projectsData?.projects ?? []
+    const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
 
     const handleRefresh = useCallback(() => {
         void refetch()
