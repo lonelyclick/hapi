@@ -179,6 +179,16 @@ export class AutoIterationService extends EventEmitter {
      * 获取配置
      */
     getConfig(): AutoIterationConfig {
+        if (!this.initialized || !this.config) {
+            return {
+                namespace: this.namespace,
+                enabled: false,
+                policy: {},
+                allowedProjects: [],
+                notificationLevel: 'all',
+                keepLogsDays: 30
+            }
+        }
         return this.config
     }
 
@@ -308,6 +318,9 @@ export class AutoIterationService extends EventEmitter {
      * 获取策略概览
      */
     getPolicySummary(): Record<ActionType, { policy: ExecutionPolicy; isCustom: boolean }> {
+        if (!this.initialized || !this.policyEngine) {
+            return {} as Record<ActionType, { policy: ExecutionPolicy; isCustom: boolean }>
+        }
         return this.policyEngine.getPolicySummary()
     }
 
@@ -332,6 +345,9 @@ export class AutoIterationService extends EventEmitter {
         failed: number
         rejected: number
     } {
+        if (!this.initialized || !this.auditLogger) {
+            return { total: 0, pending: 0, completed: 0, failed: 0, rejected: 0 }
+        }
         return this.auditLogger.getStats()
     }
 
