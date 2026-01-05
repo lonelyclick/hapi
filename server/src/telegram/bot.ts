@@ -22,6 +22,13 @@ export interface HappyBotConfig {
     store: Store
 }
 
+// 自主模式控制器接口（由 AdvisorService 实现）
+export interface AutonomousController {
+    enableAutonomousMode(): void
+    disableAutonomousMode(): void
+    isAutonomousModeEnabled(): boolean
+}
+
 /**
  * HAPI Telegram Bot - Notification-only mode
  */
@@ -43,6 +50,9 @@ export class HappyBot {
 
     // Unsubscribe function for sync events
     private unsubscribeSyncEvents: (() => void) | null = null
+
+    // 自主模式控制器
+    private autonomousController: AutonomousController | null = null
 
     constructor(config: HappyBotConfig) {
         this.syncEngine = config.syncEngine
@@ -155,6 +165,55 @@ export class HappyBot {
                 { reply_markup: keyboard }
             )
         })
+
+        // /autonomous - 自主模式控制
+        this.bot.command('autonomous', async (ctx) => {
+            const namespace = this.getNamespaceForChatId(ctx.from?.id ?? null)
+            if (!namespace) {
+                await ctx.reply('❌ Telegram account is not bound to any namespace')
+                return
+            }
+
+            if (!this.autonomousController) {
+                await ctx.reply('❌ Autonomous mode is not available')
+                return
+            }
+
+            const args = ctx.message?.text?.split(' ').slice(1) ?? []
+            const subcommand = args[0]?.toLowerCase()
+
+            switch (subcommand) {
+                case 'on':
+                    this.autonomousController.enableAutonomousMode()
+                    await ctx.reply('✅ Autonomous mode enabled\n\nAI will now proactively discover and execute tasks.')
+                    break
+                case 'off':
+                    this.autonomousController.disableAutonomousMode()
+                    await ctx.reply('⏹️ Autonomous mode disabled\n\nAI will only respond to direct requests.')
+                    break
+                case 'status':
+                default:
+                    const enabled = this.autonomousController.isAutonomousModeEnabled()
+                    await ctx.reply(
+                        `🤖 <b>Autonomous Mode</b>\n\n` +
+                        `Status: ${enabled ? '✅ Enabled' : '⏹️ Disabled'}\n\n` +
+                        `Commands:\n` +
+                        `/autonomous on - Enable autonomous mode\n` +
+                        `/autonomous off - Disable autonomous mode\n` +
+                        `/autonomous status - Show current status`,
+                        { parse_mode: 'HTML' }
+                    )
+                    break
+            }
+        })
+    }
+
+    /**
+     * 设置自主模式控制器
+     */
+    setAutonomousController(controller: AutonomousController): void {
+        this.autonomousController = controller
+        console.log('[HAPIBot] Autonomous controller connected')
     }
 
     /**

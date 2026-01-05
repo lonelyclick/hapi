@@ -208,6 +208,11 @@ async function main() {
             advisorService.setAutoIterationService(autoIterationService)
         }
 
+        // Connect autonomous controller to Telegram bot
+        if (happyBot) {
+            happyBot.setAutonomousController(advisorService)
+        }
+
         // Start the service
         advisorService.start()
 

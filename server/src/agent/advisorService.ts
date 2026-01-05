@@ -27,6 +27,8 @@ import type { ActionRequest } from './autoIteration/types'
 import { findBestProfileForTask } from './profileMatcher'
 import { MemoryExtractor } from './memoryExtractor'
 import { getMemoryPromptFragment } from './memoryInjector'
+import type { AutonomousAgentManager, TaskOpportunity, WorkItem } from './autonomousAgent'
+import type { AutonomousController } from '../telegram/bot'
 
 export interface AdvisorServiceConfig {
     namespace: string
@@ -36,7 +38,7 @@ export interface AdvisorServiceConfig {
     summaryDeliveryEnabled?: boolean  // 是否启用 Summary 推送给 Advisor（默认 false）
 }
 
-export class AdvisorService {
+export class AdvisorService implements AutonomousController {
     private syncEngine: SyncEngine
     private store: IStore
     private scheduler: AdvisorScheduler
@@ -57,10 +59,16 @@ export class AdvisorService {
     private evaluationTimer: NodeJS.Timeout | null = null
     private telegramNotifier: AdvisorTelegramNotifier | null = null
     private autoIterationService: AutoIterationService | null = null
+    private autonomousManager: AutonomousAgentManager | null = null
+    private autonomousEnabled: boolean = false                     // 自主模式开关（默认关闭）
     private summaryDeliveryEnabled: boolean = false                // Summary 推送开关（默认关闭）
 
     // 空闲检查配置
-    private readonly idleCheckTimeoutMs = 30_000  // 30秒静默后触发检查
+    private readonly idleCheckTimeoutMs = 60_000  // 60秒静默后触发检查（从30秒增加到60秒，减少CPU占用）
+
+    // 防抖控制：避免同一会话短时间内重复触发检查
+    private lastIdleCheckTime: Map<string, number> = new Map()  // sessionId -> 上次检查时间
+    private readonly idleCheckMinIntervalMs = 30_000            // 同一会话最小检查间隔 30 秒
 
     // SESSION_SUMMARY 推送频率控制
     private lastSummaryHash: Map<string, string> = new Map()       // sessionId -> 上次摘要的内容哈希
@@ -107,6 +115,58 @@ export class AdvisorService {
     setAutoIterationService(service: AutoIterationService): void {
         this.autoIterationService = service
         console.log('[AdvisorService] AutoIterationService connected')
+    }
+
+    /**
+     * 设置自主代理管理器
+     */
+    setAutonomousManager(manager: AutonomousAgentManager): void {
+        this.autonomousManager = manager
+        console.log('[AdvisorService] AutonomousManager connected')
+    }
+
+    /**
+     * 启用自主模式
+     */
+    enableAutonomousMode(): void {
+        this.autonomousEnabled = true
+        console.log('[AdvisorService] Autonomous mode ENABLED')
+    }
+
+    /**
+     * 禁用自主模式
+     */
+    disableAutonomousMode(): void {
+        this.autonomousEnabled = false
+        console.log('[AdvisorService] Autonomous mode DISABLED')
+    }
+
+    /**
+     * 检查自主模式是否启用
+     */
+    isAutonomousModeEnabled(): boolean {
+        return this.autonomousEnabled
+    }
+
+    /**
+     * 获取自主工作状态
+     */
+    getAutonomousStatus(): {
+        enabled: boolean
+        opportunities: TaskOpportunity[]
+        workQueue: WorkItem[]
+        queueStats: { total: number; pending: number; inProgress: number; completed: number; blocked: number }
+    } | null {
+        if (!this.autonomousManager) {
+            return null
+        }
+        const summary = this.autonomousManager.getWorkSummary('default')
+        return {
+            enabled: this.autonomousEnabled,
+            opportunities: summary.opportunities,
+            workQueue: summary.workQueue,
+            queueStats: summary.queueStats
+        }
     }
 
     /**
@@ -441,6 +501,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
 
     /**
      * AI 回复完成时触发双层建议
+     * 优化：添加节流控制，避免频繁触发导致 CPU 占用过高
      */
     private onThinkingComplete(sessionId: string): void {
         const session = this.syncEngine.getSession(sessionId)
@@ -453,6 +514,14 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
             return
         }
 
+        // 节流：检查是否刚刚执行过（防止短时间内重复触发）
+        const now = Date.now()
+        const lastCheck = this.lastIdleCheckTime.get(sessionId) ?? 0
+        if (now - lastCheck < 10_000) {  // 10 秒内不重复触发
+            console.log(`[AdvisorService] Throttle thinking complete for ${sessionId}: too soon`)
+            return
+        }
+
         console.log(`[AdvisorService] Thinking complete for session ${sessionId}, triggering dual-layer suggestions`)
 
         // Layer 1: 立即执行本地检查（同步）
@@ -460,10 +529,12 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
             console.error('[AdvisorService] Layer 1 idle check error:', error)
         })
 
-        // Layer 2: 异步启动 MiniMax 审查（不阻塞）
-        this.performMinimaxReview(sessionId).catch(error => {
-            console.error('[AdvisorService] Layer 2 MiniMax review error:', error)
-        })
+        // Layer 2: 延迟启动 MiniMax 审查（减少并发压力）
+        setTimeout(() => {
+            this.performMinimaxReview(sessionId).catch(error => {
+                console.error('[AdvisorService] Layer 2 MiniMax review error:', error)
+            })
+        }, 5000)  // 延迟 5 秒，避免与 Layer 1 同时执行
     }
 
     /**
@@ -688,7 +759,7 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     }
 
     /**
-     * 重置空闲检查计时器（30秒静默后触发建议检查）
+     * 重置空闲检查计时器（60秒静默后触发建议检查）
      */
     private resetIdleCheckTimer(sessionId: string): void {
         const existingTimer = this.idleCheckTimers.get(sessionId)
@@ -707,9 +778,18 @@ ${needAttention ? '\n⚠️ 有任务运行时间较长，请检查是否需要�
     }
 
     /**
-     * 执行空闲检查
+     * 执行空闲检查（带防抖）
      */
     private async performIdleCheck(sessionId: string): Promise<void> {
+        // 防抖：检查距离上次检查是否足够长
+        const now = Date.now()
+        const lastCheck = this.lastIdleCheckTime.get(sessionId) ?? 0
+        if (now - lastCheck < this.idleCheckMinIntervalMs) {
+            console.log(`[AdvisorService] Skip idle check for ${sessionId}: too soon (${Math.round((now - lastCheck) / 1000)}s < ${this.idleCheckMinIntervalMs / 1000}s)`)
+            return
+        }
+        this.lastIdleCheckTime.set(sessionId, now)
+
         const session = this.syncEngine.getSession(sessionId)
         if (!session || !session.active) {
             return
