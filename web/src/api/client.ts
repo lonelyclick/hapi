@@ -5,10 +5,6 @@ import type {
     AddUserResponse,
     AgentGroupType,
     AuthResponse,
-    AutoIterationConfigUpdateRequest,
-    AutoIterationData,
-    AutoIterationLogsResponse,
-    AutoIterationNotificationLevel,
     BroadcastResponse,
     ClearMessagesResponse,
     CreateGroupResponse,
@@ -603,65 +599,6 @@ export class ApiClient {
         return await this.request('/api/usage')
     }
 
-    // Auto-Iteration 方法
-    async getAutoIterationConfig(): Promise<AutoIterationData> {
-        return await this.request('/api/settings/auto-iteration')
-    }
-
-    async updateAutoIterationConfig(update: AutoIterationConfigUpdateRequest): Promise<{ ok: boolean; config: AutoIterationData['config'] }> {
-        return await this.request('/api/settings/auto-iteration', {
-            method: 'PUT',
-            body: JSON.stringify(update)
-        })
-    }
-
-    async enableAutoIteration(): Promise<{ ok: boolean; enabled: boolean }> {
-        return await this.request('/api/settings/auto-iteration/enable', {
-            method: 'POST'
-        })
-    }
-
-    async disableAutoIteration(): Promise<{ ok: boolean; enabled: boolean }> {
-        return await this.request('/api/settings/auto-iteration/disable', {
-            method: 'POST'
-        })
-    }
-
-    async getAutoIterationLogs(limit?: number): Promise<AutoIterationLogsResponse> {
-        const params = limit ? `?limit=${limit}` : ''
-        return await this.request(`/api/settings/auto-iteration/logs${params}`)
-    }
-
-    async updateAutoIterationNotificationLevel(level: AutoIterationNotificationLevel): Promise<{ ok: boolean }> {
-        return await this.request('/api/settings/auto-iteration', {
-            method: 'PUT',
-            body: JSON.stringify({ notificationLevel: level })
-        })
-    }
-
-    async getSessionAutoIteration(sessionId: string): Promise<{
-        sessionId: string
-        autoIterEnabled: boolean
-    }> {
-        return await this.request(
-            `/api/sessions/${encodeURIComponent(sessionId)}/auto-iteration`
-        )
-    }
-
-    async setSessionAutoIteration(sessionId: string, enabled: boolean): Promise<{
-        ok: boolean
-        sessionId: string
-        autoIterEnabled: boolean
-    }> {
-        return await this.request(
-            `/api/sessions/${encodeURIComponent(sessionId)}/auto-iteration`,
-            {
-                method: 'PUT',
-                body: JSON.stringify({ enabled })
-            }
-        )
-    }
-
     // ==================== Session Notification Subscriptions ====================
 
     async getSessionSubscribers(sessionId: string): Promise<{
@@ -873,4 +810,105 @@ export class ApiClient {
             }
         )
     }
+
+    // ==================== Claude Accounts ====================
+
+    async getClaudeAccountsConfig(): Promise<ClaudeAccountsConfig> {
+        return await this.request<ClaudeAccountsConfig>('/api/claude-accounts')
+    }
+
+    async getActiveClaudeAccount(): Promise<{ account: ClaudeAccount | null }> {
+        return await this.request<{ account: ClaudeAccount | null }>('/api/claude-accounts/active')
+    }
+
+    async addClaudeAccount(data: {
+        name: string
+        configDir?: string
+        autoRotate?: boolean
+        usageThreshold?: number
+    }): Promise<{ ok: boolean; account: ClaudeAccount; config: ClaudeAccountsConfig }> {
+        return await this.request('/api/claude-accounts', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        })
+    }
+
+    async updateClaudeAccount(
+        id: string,
+        data: { name?: string; autoRotate?: boolean; usageThreshold?: number }
+    ): Promise<{ ok: boolean; account: ClaudeAccount; config: ClaudeAccountsConfig }> {
+        return await this.request(`/api/claude-accounts/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        })
+    }
+
+    async removeClaudeAccount(id: string): Promise<{ ok: boolean; config: ClaudeAccountsConfig }> {
+        return await this.request(`/api/claude-accounts/${encodeURIComponent(id)}`, {
+            method: 'DELETE'
+        })
+    }
+
+    async activateClaudeAccount(id: string): Promise<{ ok: boolean; config: ClaudeAccountsConfig }> {
+        return await this.request(`/api/claude-accounts/${encodeURIComponent(id)}/activate`, {
+            method: 'POST'
+        })
+    }
+
+    async updateClaudeAccountsGlobalConfig(data: {
+        autoRotateEnabled?: boolean
+        defaultThreshold?: number
+    }): Promise<{ ok: boolean; config: ClaudeAccountsConfig }> {
+        return await this.request('/api/claude-accounts/config', {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        })
+    }
+
+    async getClaudeAccountSetupGuide(id?: string): Promise<{
+        steps: Array<{ step: number; title: string; command?: string; description: string }>
+        configDir: string
+        suggestedId: string
+    }> {
+        const params = id ? `?id=${encodeURIComponent(id)}` : ''
+        return await this.request(`/api/claude-accounts/setup-guide${params}`)
+    }
+
+    async migrateDefaultClaudeAccount(): Promise<{
+        ok: boolean
+        account?: ClaudeAccount
+        config?: ClaudeAccountsConfig
+        message?: string
+    }> {
+        return await this.request('/api/claude-accounts/migrate', {
+            method: 'POST'
+        })
+    }
+}
+
+// Types for Claude Accounts
+export interface ClaudeAccountUsage {
+    usedTokens: number
+    totalTokens: number
+    percentage: number
+    updatedAt: number
+}
+
+export interface ClaudeAccount {
+    id: string
+    name: string
+    configDir: string
+    isActive: boolean
+    autoRotate: boolean
+    usageThreshold: number
+    lastUsage?: ClaudeAccountUsage
+    createdAt: number
+    lastActiveAt?: number
+}
+
+export interface ClaudeAccountsConfig {
+    accounts: ClaudeAccount[]
+    activeAccountId: string
+    autoRotateEnabled: boolean
+    defaultThreshold: number
 }

@@ -59,6 +59,8 @@ export type Metadata = {
         worktreePath?: string
         createdAt?: number
     }
+    claudeAccountId?: string
+    claudeAccountName?: string
 }
 
 export const MetadataSchema = z.object({
@@ -338,6 +340,63 @@ export const MessageContentSchema = z.union([UserMessageSchema, AgentMessageSche
 export type MessageContent = z.infer<typeof MessageContentSchema>
 
 export type SocketErrorReason = 'namespace-missing' | 'access-denied' | 'not-found'
+
+/**
+ * Claude 账号管理相关类型
+ */
+export interface ClaudeAccountUsage {
+    usedTokens: number
+    totalTokens: number
+    percentage: number
+    updatedAt: number
+}
+
+export interface ClaudeAccount {
+    id: string
+    name: string
+    configDir: string
+    isActive: boolean
+    autoRotate: boolean
+    usageThreshold: number
+    lastUsage?: ClaudeAccountUsage
+    createdAt: number
+    lastActiveAt?: number
+}
+
+export interface ClaudeAccountsConfig {
+    accounts: ClaudeAccount[]
+    activeAccountId: string
+    autoRotateEnabled: boolean
+    defaultThreshold: number
+}
+
+export const ClaudeAccountSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    configDir: z.string(),
+    isActive: z.boolean(),
+    autoRotate: z.boolean(),
+    usageThreshold: z.number(),
+    lastUsage: z.object({
+        usedTokens: z.number(),
+        totalTokens: z.number(),
+        percentage: z.number(),
+        updatedAt: z.number()
+    }).optional(),
+    createdAt: z.number(),
+    lastActiveAt: z.number().optional()
+})
+
+export const ClaudeAccountsConfigSchema = z.object({
+    accounts: z.array(ClaudeAccountSchema),
+    activeAccountId: z.string(),
+    autoRotateEnabled: z.boolean(),
+    defaultThreshold: z.number()
+})
+
+export const ActiveAccountResponseSchema = z.object({
+    account: ClaudeAccountSchema.nullable()
+})
 
 export interface ServerToClientEvents {
     update: (data: Update) => void

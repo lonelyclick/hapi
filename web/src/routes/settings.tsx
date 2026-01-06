@@ -7,8 +7,8 @@ import { Spinner } from '@/components/Spinner'
 import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
 import { useNotificationPermission, useWebPushSubscription } from '@/hooks/useNotification'
 import type { InputPreset, Project, UserRole } from '@/types/api'
+import type { ClaudeAccount, ClaudeAccountsConfig } from '@/api/client'
 import { queryKeys } from '@/lib/query-keys'
-import { AutoIterationSettings } from '@/components/AutoIterationSettings'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -466,6 +466,129 @@ export default function SettingsPage() {
 
     const presets = Array.isArray(presetsData?.presets) ? presetsData.presets : []
 
+    // Claude Accounts
+    const [accountError, setAccountError] = useState<string | null>(null)
+    const [showAddAccount, setShowAddAccount] = useState(false)
+    const [newAccountName, setNewAccountName] = useState('')
+    const [newAccountConfigDir, setNewAccountConfigDir] = useState('')
+    const [showSetupGuide, setShowSetupGuide] = useState(false)
+
+    const { data: accountsData, isLoading: accountsLoading, refetch: refetchAccounts } = useQuery({
+        queryKey: ['claude-accounts'],
+        queryFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.getClaudeAccountsConfig()
+        },
+        enabled: Boolean(api)
+    })
+
+    const { data: setupGuideData } = useQuery({
+        queryKey: ['claude-accounts-setup-guide'],
+        queryFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.getClaudeAccountSetupGuide()
+        },
+        enabled: Boolean(api) && showSetupGuide
+    })
+
+    const addAccountMutation = useMutation({
+        mutationFn: async (data: { name: string; configDir?: string }) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.addClaudeAccount(data)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['claude-accounts'], result.config)
+            setShowAddAccount(false)
+            setShowSetupGuide(false)
+            setNewAccountName('')
+            setNewAccountConfigDir('')
+            setAccountError(null)
+        },
+        onError: (err) => {
+            setAccountError(err instanceof Error ? err.message : 'Failed to add account')
+        }
+    })
+
+    const activateAccountMutation = useMutation({
+        mutationFn: async (id: string) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.activateClaudeAccount(id)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['claude-accounts'], result.config)
+        },
+        onError: (err) => {
+            setAccountError(err instanceof Error ? err.message : 'Failed to switch account')
+        }
+    })
+
+    const removeAccountMutation = useMutation({
+        mutationFn: async (id: string) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.removeClaudeAccount(id)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['claude-accounts'], result.config)
+        },
+        onError: (err) => {
+            setAccountError(err instanceof Error ? err.message : 'Failed to remove account')
+        }
+    })
+
+    const updateAccountConfigMutation = useMutation({
+        mutationFn: async (data: { autoRotateEnabled?: boolean; defaultThreshold?: number }) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.updateClaudeAccountsGlobalConfig(data)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['claude-accounts'], result.config)
+        },
+        onError: (err) => {
+            setAccountError(err instanceof Error ? err.message : 'Failed to update config')
+        }
+    })
+
+    const migrateAccountMutation = useMutation({
+        mutationFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.migrateDefaultClaudeAccount()
+        },
+        onSuccess: (result) => {
+            if (result.config) {
+                queryClient.setQueryData(['claude-accounts'], result.config)
+            }
+        },
+        onError: (err) => {
+            setAccountError(err instanceof Error ? err.message : 'Failed to migrate account')
+        }
+    })
+
+    const handleAddAccount = useCallback((e: React.FormEvent) => {
+        e.preventDefault()
+        const trimmedName = newAccountName.trim()
+        if (!trimmedName) return
+        addAccountMutation.mutate({
+            name: trimmedName,
+            configDir: newAccountConfigDir.trim() || undefined
+        })
+    }, [newAccountName, newAccountConfigDir, addAccountMutation])
+
+    const handleActivateAccount = useCallback((id: string) => {
+        activateAccountMutation.mutate(id)
+    }, [activateAccountMutation])
+
+    const handleRemoveAccount = useCallback((id: string) => {
+        removeAccountMutation.mutate(id)
+    }, [removeAccountMutation])
+
+    const handleToggleAutoRotate = useCallback((enabled: boolean) => {
+        updateAccountConfigMutation.mutate({ autoRotateEnabled: enabled })
+    }, [updateAccountConfigMutation])
+
+    const accounts = accountsData?.accounts ?? []
+    const activeAccountId = accountsData?.activeAccountId ?? ''
+    const autoRotateEnabled = accountsData?.autoRotateEnabled ?? true
+
     const handleLogout = useCallback(async () => {
         // 清除 localStorage
         localStorage.clear()
@@ -641,6 +764,218 @@ export default function SettingsPage() {
                                 </svg>
                             </button>
                         </div>
+                    </div>
+
+                    {/* Claude Accounts Section */}
+                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                        <div className="px-3 py-2 border-b border-[var(--app-divider)] flex items-center justify-between">
+                            <div>
+                                <h2 className="text-sm font-medium">Claude Accounts</h2>
+                                <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                    Manage multiple Claude Pro/Max subscriptions.
+                                </p>
+                            </div>
+                            {!showAddAccount && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowAddAccount(true)
+                                        setShowSetupGuide(true)
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] hover:opacity-90 transition-opacity"
+                                >
+                                    <PlusIcon className="w-3 h-3" />
+                                    Add
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Add Account Form with Setup Guide */}
+                        {showAddAccount && (
+                            <div className="px-3 py-2 border-b border-[var(--app-divider)] space-y-3">
+                                {showSetupGuide && setupGuideData && (
+                                    <div className="bg-[var(--app-bg)] rounded p-2 space-y-2">
+                                        <div className="text-xs font-medium text-[var(--app-fg)]">Setup Guide</div>
+                                        {setupGuideData.steps.map((step) => (
+                                            <div key={step.step} className="text-xs">
+                                                <div className="font-medium text-[var(--app-fg)]">
+                                                    {step.step}. {step.title}
+                                                </div>
+                                                {step.command && (
+                                                    <code className="block mt-1 p-1.5 bg-[var(--app-secondary-bg)] rounded text-[10px] font-mono text-[var(--app-hint)] break-all select-all">
+                                                        {step.command}
+                                                    </code>
+                                                )}
+                                                <div className="text-[var(--app-hint)] mt-0.5">{step.description}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <form onSubmit={handleAddAccount} className="space-y-2">
+                                    <input
+                                        type="text"
+                                        value={newAccountName}
+                                        onChange={(e) => setNewAccountName(e.target.value)}
+                                        placeholder="Account name (e.g. Pro Account 2)"
+                                        className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                                        disabled={addAccountMutation.isPending}
+                                    />
+                                    <input
+                                        type="text"
+                                        value={newAccountConfigDir}
+                                        onChange={(e) => setNewAccountConfigDir(e.target.value)}
+                                        placeholder={setupGuideData?.configDir || 'Config directory (optional)'}
+                                        className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] font-mono text-xs"
+                                        disabled={addAccountMutation.isPending}
+                                    />
+                                    <div className="flex justify-end gap-2 pt-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setShowAddAccount(false)
+                                                setShowSetupGuide(false)
+                                                setNewAccountName('')
+                                                setNewAccountConfigDir('')
+                                                setAccountError(null)
+                                            }}
+                                            disabled={addAccountMutation.isPending}
+                                            className="px-3 py-1.5 text-sm rounded border border-[var(--app-border)] text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={addAccountMutation.isPending || !newAccountName.trim()}
+                                            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] disabled:opacity-50 hover:opacity-90 transition-opacity"
+                                        >
+                                            {addAccountMutation.isPending && <Spinner size="sm" label={null} />}
+                                            Add Account
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        )}
+
+                        {accountError && (
+                            <div className="px-3 py-2 text-sm text-red-500 border-b border-[var(--app-divider)]">
+                                {accountError}
+                            </div>
+                        )}
+
+                        {/* Auto Rotate Toggle */}
+                        {accounts.length > 1 && (
+                            <div className="px-3 py-2.5 flex items-center justify-between gap-3 border-b border-[var(--app-divider)]">
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-sm">Auto Rotate</div>
+                                    <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                        Automatically switch when usage exceeds threshold.
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleToggleAutoRotate(!autoRotateEnabled)}
+                                    disabled={updateAccountConfigMutation.isPending}
+                                    className={`
+                                        relative w-11 h-6 rounded-full transition-colors duration-200
+                                        ${autoRotateEnabled ? 'bg-emerald-500' : 'bg-[var(--app-border)]'}
+                                        ${updateAccountConfigMutation.isPending ? 'opacity-50' : ''}
+                                    `}
+                                >
+                                    <span
+                                        className={`
+                                            absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200
+                                            ${autoRotateEnabled ? 'translate-x-5' : 'translate-x-0'}
+                                        `}
+                                    />
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Account List */}
+                        {accountsLoading ? (
+                            <div className="px-3 py-4 flex justify-center">
+                                <Spinner size="sm" label="Loading..." />
+                            </div>
+                        ) : accounts.length === 0 && !showAddAccount ? (
+                            <div className="px-3 py-4 text-center space-y-2">
+                                <div className="text-sm text-[var(--app-hint)]">
+                                    No accounts configured.
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => migrateAccountMutation.mutate()}
+                                    disabled={migrateAccountMutation.isPending}
+                                    className="text-xs text-[var(--app-button)] hover:underline disabled:opacity-50"
+                                >
+                                    {migrateAccountMutation.isPending ? 'Migrating...' : 'Migrate existing Claude login'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-[var(--app-divider)]">
+                                {accounts.map((account) => (
+                                    <div
+                                        key={account.id}
+                                        className={`px-3 py-2 ${account.isActive ? 'bg-emerald-500/5' : ''}`}
+                                    >
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium truncate">{account.name}</span>
+                                                    {account.isActive && (
+                                                        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-emerald-500/20 text-emerald-600">
+                                                            Active
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-[var(--app-hint)] font-mono truncate mt-0.5">
+                                                    {account.configDir}
+                                                </div>
+                                                {account.lastUsage && (
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <div className="flex-1 h-1.5 bg-[var(--app-border)] rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`h-full rounded-full transition-all ${
+                                                                    account.lastUsage.percentage >= 80
+                                                                        ? 'bg-red-500'
+                                                                        : account.lastUsage.percentage >= 50
+                                                                        ? 'bg-yellow-500'
+                                                                        : 'bg-emerald-500'
+                                                                }`}
+                                                                style={{ width: `${Math.min(100, account.lastUsage.percentage)}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-[10px] text-[var(--app-hint)] tabular-nums">
+                                                            {account.lastUsage.percentage.toFixed(0)}%
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                {!account.isActive && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleActivateAccount(account.id)}
+                                                        disabled={activateAccountMutation.isPending}
+                                                        className="px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] hover:opacity-90 transition-opacity disabled:opacity-50"
+                                                    >
+                                                        Use
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveAccount(account.id)}
+                                                    disabled={removeAccountMutation.isPending || accounts.length === 1}
+                                                    className="flex h-7 w-7 items-center justify-center rounded text-[var(--app-hint)] hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                                    title="Remove account"
+                                                >
+                                                    <TrashIcon />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Notifications Section */}
@@ -926,9 +1261,6 @@ export default function SettingsPage() {
                             </div>
                         )}
                     </div>
-
-                    {/* Auto-Iteration Section */}
-                    <AutoIterationSettings />
 
                     {/* Input Presets Section */}
                     <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">

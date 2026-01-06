@@ -103,29 +103,6 @@ function EraserIcon(props: { className?: string }) {
     )
 }
 
-function RobotIcon(props: { className?: string; enabled?: boolean }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={props.className}
-        >
-            <rect x="3" y="11" width="18" height="10" rx="2" />
-            <circle cx="12" cy="5" r="2" />
-            <path d="M12 7v4" />
-            <line x1="8" y1="16" x2="8" y2="16" />
-            <line x1="16" y1="16" x2="16" y2="16" />
-        </svg>
-    )
-}
-
 function BellIcon(props: { className?: string; subscribed?: boolean }) {
     return (
         <svg
@@ -242,27 +219,6 @@ export function SessionHeader(props: {
     )
     const hasAgentTip = agentMeta !== agentLabel
     const agentTipId = `session-agent-tip-${props.session.id}`
-
-    // Auto-iteration config for this session
-    const autoIterQueryKey = ['session-auto-iter', props.session.id]
-    const { data: autoIterConfig } = useQuery({
-        queryKey: autoIterQueryKey,
-        queryFn: async () => {
-            return await api.getSessionAutoIteration(props.session.id)
-        },
-        staleTime: 30000
-    })
-
-    const toggleAutoIterMutation = useMutation({
-        mutationFn: async (enabled: boolean) => {
-            return await api.setSessionAutoIteration(props.session.id, enabled)
-        },
-        onSuccess: (data) => {
-            queryClient.setQueryData(autoIterQueryKey, data)
-        }
-    })
-
-    const autoIterEnabled = autoIterConfig?.autoIterEnabled ?? true
 
     // Subscription state - supports both Telegram chatId and Web clientId
     const tg = getTelegramWebApp()
@@ -545,20 +501,6 @@ export function SessionHeader(props: {
                             </div>
                         )}
                     </div>
-                    {/* Auto-iteration toggle */}
-                    <button
-                        type="button"
-                        onClick={() => toggleAutoIterMutation.mutate(!autoIterEnabled)}
-                        disabled={toggleAutoIterMutation.isPending}
-                        className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-                            autoIterEnabled
-                                ? 'bg-green-500/10 text-green-600 hover:bg-green-500/20'
-                                : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
-                        } disabled:opacity-50`}
-                        title={autoIterEnabled ? '自动迭代已启用 (点击禁用)' : '自动迭代已禁用 (点击启用)'}
-                    >
-                        <RobotIcon />
-                    </button>
                     {props.onViewFiles ? (
                         <button
                             type="button"

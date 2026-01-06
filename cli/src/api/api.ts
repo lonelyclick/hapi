@@ -1,6 +1,6 @@
 import axios from 'axios'
-import type { AgentState, CliMessagesResponse, CreateMachineResponse, CreateSessionResponse, DaemonState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
-import { AgentStateSchema, CliMessagesResponseSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, DaemonStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
+import type { AgentState, ClaudeAccount, CliMessagesResponse, CreateMachineResponse, CreateSessionResponse, DaemonState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
+import { ActiveAccountResponseSchema, AgentStateSchema, CliMessagesResponseSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, DaemonStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
 import { configuration } from '@/configuration'
 import { getAuthToken } from '@/api/auth'
 import { ApiMachineClient } from './apiMachine'
@@ -215,5 +215,34 @@ export class ApiClient {
             localId: m.localId,
             content: m.content
         }))
+    }
+
+    /**
+     * 获取当前活跃的 Claude 账号
+     * 如果没有配置多账号，返回 null
+     */
+    async getActiveClaudeAccount(): Promise<ClaudeAccount | null> {
+        try {
+            const response = await axios.get(
+                `${configuration.serverUrl}/api/claude-accounts/active`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 10_000
+                }
+            )
+
+            const parsed = ActiveAccountResponseSchema.safeParse(response.data)
+            if (!parsed.success) {
+                return null
+            }
+
+            return parsed.data.account
+        } catch (error) {
+            // 如果 API 不存在或出错，返回 null（使用默认配置）
+            return null
+        }
     }
 }

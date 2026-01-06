@@ -334,61 +334,6 @@ export type SyncEvent =
 
 export type OnlineUsersResponse = { users: OnlineUser[] }
 
-// Auto-Iteration 相关类型
-export type AutoIterationExecutionPolicy = 'auto_execute' | 'notify_then_execute' | 'require_confirm' | 'always_manual' | 'disabled'
-export type AutoIterationNotificationLevel = 'all' | 'errors_only' | 'none'
-export type AutoIterationExecutionStatus = 'pending' | 'approved' | 'executing' | 'completed' | 'failed' | 'rejected' | 'cancelled' | 'timeout'
-
-export type AutoIterationConfig = {
-    namespace: string
-    enabled: boolean
-    policy: Partial<Record<string, AutoIterationExecutionPolicy>>
-    allowedProjects: string[]
-    notificationLevel: AutoIterationNotificationLevel
-    keepLogsDays: number
-    createdAt: number
-    updatedAt: number
-    updatedBy?: string
-}
-
-export type AutoIterationLog = {
-    id: string
-    actionType: string
-    reason?: string
-    executionStatus: AutoIterationExecutionStatus
-    createdAt: number
-    projectPath?: string
-}
-
-export type AutoIterationPolicyInfo = {
-    policy: AutoIterationExecutionPolicy
-    isCustom: boolean
-}
-
-export type AutoIterationData = {
-    config: AutoIterationConfig
-    policySummary: Record<string, AutoIterationPolicyInfo>
-    stats: {
-        total: number
-        pending: number
-        completed: number
-        failed: number
-        rejected: number
-    }
-}
-
-export type AutoIterationLogsResponse = {
-    logs: AutoIterationLog[]
-}
-
-export type AutoIterationConfigUpdateRequest = {
-    enabled?: boolean
-    policy?: Partial<Record<string, AutoIterationExecutionPolicy>>
-    allowedProjects?: string[]
-    notificationLevel?: AutoIterationNotificationLevel
-    keepLogsDays?: number
-}
-
 // Agent Group 相关类型
 export type AgentGroupType = 'collaboration' | 'debate' | 'review'
 export type AgentGroupStatus = 'active' | 'paused' | 'completed'

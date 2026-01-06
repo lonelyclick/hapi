@@ -85,6 +85,18 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     // Create session service
     const api = await ApiClient.create();
 
+    // Fetch active Claude account and set CLAUDE_CONFIG_DIR if available
+    const activeAccount = await api.getActiveClaudeAccount();
+    if (activeAccount) {
+        logger.debug(`[START] Using Claude account: ${activeAccount.name} (${activeAccount.id}), configDir: ${activeAccount.configDir}`);
+        options.claudeEnvVars = {
+            ...options.claudeEnvVars,
+            CLAUDE_CONFIG_DIR: activeAccount.configDir
+        };
+    } else {
+        logger.debug('[START] No active Claude account configured, using default');
+    }
+
     // Create a new session
     let state: AgentState = {};
 
@@ -123,7 +135,10 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         lifecycleStateSince: Date.now(),
         flavor: 'claude',
         runtimeAgent: runtimeAgent ?? undefined,
-        worktree: worktreeInfo ?? undefined
+        worktree: worktreeInfo ?? undefined,
+        // Claude account info
+        claudeAccountId: activeAccount?.id,
+        claudeAccountName: activeAccount?.name
     };
     let response: Awaited<ReturnType<typeof api.getOrCreateSession>> | null = null;
     const hapiSessionId = options.hapiSessionId?.trim() || null;

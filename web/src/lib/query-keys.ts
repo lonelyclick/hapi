@@ -16,6 +16,4 @@ export const queryKeys = {
     slashCommands: (sessionId: string) => ['slash-commands', sessionId] as const,
     typing: (sessionId: string) => ['typing', sessionId] as const,
     inputPresets: () => ['input-presets'] as const,
-    autoIterationConfig: ['auto-iteration-config'] as const,
-    autoIterationLogs: ['auto-iteration-logs'] as const,
 }

@@ -23,6 +23,7 @@ import { createSettingsRoutes } from './routes/settings'
 import { createPushRoutes } from './routes/push'
 import { createUsageRoutes } from './routes/usage'
 import { createGroupRoutes } from './routes/groups'
+import { createClaudeAccountsRoutes } from './routes/claude-accounts'
 import type { SSEManager } from '../sse/sseManager'
 import type { Server as BunServer } from 'bun'
 import type { Server as SocketEngine } from '@socket.io/bun-engine'
@@ -30,7 +31,6 @@ import type { WebSocketData } from '@socket.io/bun-engine'
 import { loadEmbeddedAssetMap, type EmbeddedWebAsset } from './embeddedAssets'
 import { isBunCompiled } from '../utils/bunCompiled'
 import type { IStore } from '../store'
-import type { AutoIterationService } from '../agent/autoIteration'
 
 function findWebappDistDir(): { distDir: string; indexHtmlPath: string } {
     const candidates = [
@@ -77,7 +77,6 @@ function createWebApp(options: {
     jwtSecret: Uint8Array
     store: IStore
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
-    autoIterationService: AutoIterationService | null
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -108,10 +107,11 @@ function createWebApp(options: {
     app.route('/api', createSpeechRoutes())
     app.route('/api', createOptimizeRoutes())
     app.route('/api', createVersionRoutes(options.embeddedAssetMap))
-    app.route('/api', createSettingsRoutes(options.store, options.autoIterationService ?? undefined))
+    app.route('/api', createSettingsRoutes(options.store))
     app.route('/api', createPushRoutes())
     app.route('/api', createUsageRoutes(options.getSyncEngine))
     app.route('/api', createGroupRoutes(options.store, options.getSyncEngine(), options.getSseManager()))
+    app.route('/api', createClaudeAccountsRoutes())
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap
@@ -236,7 +236,6 @@ export async function startWebServer(options: {
     jwtSecret: Uint8Array
     store: IStore
     socketEngine: SocketEngine
-    autoIterationService: AutoIterationService | null
 }): Promise<BunServer<WebSocketData>> {
     const isCompiled = isBunCompiled()
     const embeddedAssetMap = isCompiled ? await loadEmbeddedAssetMap() : null
@@ -245,8 +244,7 @@ export async function startWebServer(options: {
         getSseManager: options.getSseManager,
         jwtSecret: options.jwtSecret,
         store: options.store,
-        embeddedAssetMap,
-        autoIterationService: options.autoIterationService
+        embeddedAssetMap
     })
 
     const socketHandler = options.socketEngine.handler()
