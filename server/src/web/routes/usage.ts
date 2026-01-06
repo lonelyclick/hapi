@@ -68,9 +68,10 @@ interface UsageResponse {
 /**
  * Get Claude Code access token from credentials file
  */
-async function getClaudeAccessToken(): Promise<string | null> {
+async function getClaudeAccessToken(configDir?: string): Promise<string | null> {
     try {
-        const credPath = join(homedir(), '.claude', '.credentials.json')
+        const baseDir = configDir || join(homedir(), '.claude')
+        const credPath = join(baseDir, '.credentials.json')
         const content = await readFile(credPath, 'utf-8')
         const creds = JSON.parse(content)
         // Try claudeAiOauth.accessToken first (newer format), then accessToken (older format)
@@ -83,9 +84,9 @@ async function getClaudeAccessToken(): Promise<string | null> {
 /**
  * Fetch Claude Code usage from Anthropic API
  */
-async function getClaudeUsage(): Promise<ClaudeUsageData> {
+export async function getClaudeUsage(configDir?: string): Promise<ClaudeUsageData> {
     try {
-        const accessToken = await getClaudeAccessToken()
+        const accessToken = await getClaudeAccessToken(configDir)
 
         if (!accessToken) {
             return {

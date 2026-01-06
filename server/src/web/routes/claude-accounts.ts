@@ -20,6 +20,7 @@ import {
     migrateDefaultAccount,
     getAccountConfigDir,
 } from '../../claude-accounts/accountsService'
+import { getClaudeUsage } from './usage'
 import type { ClaudeAccountUsage } from '../../claude-accounts/types'
 
 const addAccountSchema = z.object({
@@ -253,6 +254,35 @@ export function createClaudeAccountsRoutes(): Hono<WebAppEnv> {
         } catch (error: any) {
             console.error('[ClaudeAccounts API] Failed to migrate:', error)
             return c.json({ error: error.message || 'Failed to migrate' }, 400)
+        }
+    })
+
+    // 获取所有账号的 usage 数据
+    app.get('/claude-accounts/usage', async (c) => {
+        try {
+            const accounts = await getAccounts()
+            const usageResults = await Promise.all(
+                accounts.map(async (account) => {
+                    const usage = await getClaudeUsage(account.configDir)
+                    return {
+                        accountId: account.id,
+                        accountName: account.name,
+                        configDir: account.configDir,
+                        isActive: account.isActive,
+                        fiveHour: usage.fiveHour,
+                        sevenDay: usage.sevenDay,
+                        error: usage.error,
+                    }
+                })
+            )
+
+            return c.json({
+                accounts: usageResults,
+                timestamp: Date.now(),
+            })
+        } catch (error: any) {
+            console.error('[ClaudeAccounts API] Failed to get usage:', error)
+            return c.json({ error: error.message || 'Failed to get usage' }, 500)
         }
     })
 
