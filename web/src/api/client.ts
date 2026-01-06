@@ -884,6 +884,21 @@ export class ApiClient {
             method: 'POST'
         })
     }
+
+    async getClaudeAccountsUsage(): Promise<{
+        accounts: Array<{
+            accountId: string
+            accountName: string
+            configDir: string
+            isActive: boolean
+            fiveHour: { utilization: number; resetsAt: string } | null
+            sevenDay: { utilization: number; resetsAt: string } | null
+            error?: string
+        }>
+        timestamp: number
+    }> {
+        return await this.request('/api/claude-accounts/usage')
+    }
 }
 
 // Types for Claude Accounts

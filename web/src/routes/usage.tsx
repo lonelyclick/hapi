@@ -156,6 +156,19 @@ export default function UsagePage() {
         refetchInterval: 60000 // Refresh every minute
     })
 
+    // 多账号 usage 数据
+    const { data: accountsUsage, isLoading: accountsLoading } = useQuery({
+        queryKey: ['claude-accounts-usage'],
+        queryFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.getClaudeAccountsUsage()
+        },
+        enabled: Boolean(api),
+        refetchInterval: 60000
+    })
+
+    const hasMultipleAccounts = (accountsUsage?.accounts?.length ?? 0) > 1
+
     return (
         <div className="flex h-full flex-col">
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
@@ -193,42 +206,87 @@ export default function UsagePage() {
                     ) : (
                         <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
                             <div className="divide-y divide-[var(--app-divider)]">
-                                {/* Claude Code Usage */}
-                                <div className="px-3 py-3">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="w-6 h-6 rounded bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
-                                            <span className="text-white text-xs font-bold">C</span>
+                                {/* Claude Code Usage - 多账号模式 */}
+                                {hasMultipleAccounts ? (
+                                    <div className="px-3 py-3">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="w-6 h-6 rounded bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                                                <span className="text-white text-xs font-bold">C</span>
+                                            </div>
+                                            <span className="text-sm font-medium">Claude Accounts</span>
                                         </div>
-                                        <span className="text-sm font-medium">Claude Code</span>
-                                    </div>
 
-                                    {data?.claude?.error ? (
-                                        <div className="text-xs text-[var(--app-hint)]">
-                                            {data.claude.error}
+                                        <div className="space-y-4">
+                                            {accountsUsage?.accounts.map((account) => (
+                                                <div key={account.accountId} className={`p-2 rounded ${account.isActive ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-[var(--app-bg)]'}`}>
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-xs font-medium truncate">{account.accountName}</span>
+                                                        {account.isActive && (
+                                                            <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-emerald-500/20 text-emerald-600">Active</span>
+                                                        )}
+                                                    </div>
+                                                    {account.error ? (
+                                                        <div className="text-[10px] text-[var(--app-hint)]">{account.error}</div>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            {account.fiveHour && (
+                                                                <UsageBar
+                                                                    utilization={account.fiveHour.utilization}
+                                                                    label="5-Hour"
+                                                                    resetsAt={account.fiveHour.resetsAt}
+                                                                />
+                                                            )}
+                                                            {account.sevenDay && (
+                                                                <UsageBar
+                                                                    utilization={account.sevenDay.utilization}
+                                                                    label="7-Day"
+                                                                    resetsAt={account.sevenDay.resetsAt}
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>
-                                    ) : data?.claude?.fiveHour || data?.claude?.sevenDay ? (
-                                        <div className="space-y-3">
-                                            {data.claude.fiveHour && (
-                                                <UsageBar
-                                                    utilization={data.claude.fiveHour.utilization}
-                                                    label="5-Hour Limit"
-                                                    resetsAt={data.claude.fiveHour.resetsAt}
-                                                />
-                                            )}
-                                            {data.claude.sevenDay && (
-                                                <UsageBar
-                                                    utilization={data.claude.sevenDay.utilization}
-                                                    label="7-Day Limit"
-                                                    resetsAt={data.claude.sevenDay.resetsAt}
-                                                />
-                                            )}
+                                    </div>
+                                ) : (
+                                    /* 单账号模式 */
+                                    <div className="px-3 py-3">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="w-6 h-6 rounded bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                                                <span className="text-white text-xs font-bold">C</span>
+                                            </div>
+                                            <span className="text-sm font-medium">Claude Code</span>
                                         </div>
-                                    ) : (
-                                        <div className="text-xs text-[var(--app-hint)]">
-                                            No usage data available
-                                        </div>
-                                    )}
-                                </div>
+
+                                        {data?.claude?.error ? (
+                                            <div className="text-xs text-[var(--app-hint)]">
+                                                {data.claude.error}
+                                            </div>
+                                        ) : data?.claude?.fiveHour || data?.claude?.sevenDay ? (
+                                            <div className="space-y-3">
+                                                {data.claude.fiveHour && (
+                                                    <UsageBar
+                                                        utilization={data.claude.fiveHour.utilization}
+                                                        label="5-Hour Limit"
+                                                        resetsAt={data.claude.fiveHour.resetsAt}
+                                                    />
+                                                )}
+                                                {data.claude.sevenDay && (
+                                                    <UsageBar
+                                                        utilization={data.claude.sevenDay.utilization}
+                                                        label="7-Day Limit"
+                                                        resetsAt={data.claude.sevenDay.resetsAt}
+                                                    />
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="text-xs text-[var(--app-hint)]">
+                                                No usage data available
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Local Token Statistics */}
                                 {data?.local && !data.local.error && (
