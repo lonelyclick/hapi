@@ -85,7 +85,7 @@ export class ExecutionEngine {
         try {
             await this.syncEngine.sendMessage(sessionId, {
                 text: message,
-                sentFrom: 'advisor'
+                sentFrom: 'webapp'
             })
 
             console.log(`[AutoIteration] Action sent to session ${sessionId}`)
@@ -127,8 +127,8 @@ export class ExecutionEngine {
         if (request.targetProject) {
             for (const machine of machines) {
                 const metadata = machine.metadata as Record<string, unknown> | undefined
-                const advisorWorkingDir = metadata?.advisorWorkingDir as string | undefined
-                if (advisorWorkingDir && this.pathMatches(advisorWorkingDir, request.targetProject)) {
+                const workingDir = metadata?.workingDir as string | undefined
+                if (workingDir && this.pathMatches(workingDir, request.targetProject)) {
                     targetMachine = machine
                     break
                 }
@@ -137,7 +137,7 @@ export class ExecutionEngine {
 
         // 2. 确定工作目录
         const workingDir = request.targetProject ||
-            ((targetMachine.metadata as Record<string, unknown> | undefined)?.advisorWorkingDir as string) ||
+            ((targetMachine.metadata as Record<string, unknown> | undefined)?.workingDir as string) ||
             '/home/guang/softwares/hapi'
 
         // 3. 生成会话 ID（包含 action 标识）
@@ -332,7 +332,7 @@ export class ExecutionEngine {
         try {
             await this.syncEngine.sendMessage(rollbackData.sessionId, {
                 text: message,
-                sentFrom: 'advisor'
+                sentFrom: 'webapp'
             })
 
             console.log('[AutoIteration] Rollback request sent')
@@ -366,7 +366,7 @@ export class ExecutionEngine {
         try {
             await this.syncEngine.sendMessage(sessionId, {
                 text: message,
-                sentFrom: 'advisor'
+                sentFrom: 'webapp'
             })
             return { success: true }
         } catch (error) {

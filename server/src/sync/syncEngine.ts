@@ -93,7 +93,6 @@ export interface Session {
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
-    advisorTaskId?: string | null  // Advisor 创建的会话的任务 ID
 }
 
 export interface Machine {
@@ -162,11 +161,6 @@ export type SyncEventType =
     | 'connection-changed'
     | 'online-users-changed'
     | 'typing-changed'
-    | 'advisor-alert'
-    | 'advisor-idle-suggestion'
-    | 'advisor-minimax-start'
-    | 'advisor-minimax-complete'
-    | 'advisor-minimax-error'
     | 'group-message'
 
 export type OnlineUser = {
@@ -181,46 +175,6 @@ export type TypingUser = {
     clientId: string
     text: string
     updatedAt: number
-}
-
-export type AdvisorAlertData = {
-    suggestionId: string
-    title: string
-    detail?: string
-    category?: string
-    severity: 'critical' | 'high' | 'medium' | 'low'
-    sourceSessionId?: string
-}
-
-export type SuggestionChip = {
-    id: string
-    label: string           // 简短标签（如 "继续任务"）
-    text: string            // 点击后填入输入框的完整文本
-    category: 'todo_check' | 'error_analysis' | 'code_review' | 'general'
-    icon?: string           // 可选图标（emoji）
-}
-
-export type AdvisorIdleSuggestionData = {
-    suggestionId: string
-    sessionId: string
-    chips: SuggestionChip[]  // 多个建议芯片
-    reason: string           // 触发原因
-    createdAt: number
-}
-
-// MiniMax 审查相关数据
-export type AdvisorMinimaxStartData = {
-    sessionId: string
-}
-
-export type AdvisorMinimaxCompleteData = {
-    sessionId: string
-    chips: SuggestionChip[]
-}
-
-export type AdvisorMinimaxErrorData = {
-    sessionId: string
-    error: string
 }
 
 export type GroupMessageData = {
@@ -246,11 +200,6 @@ export interface SyncEvent {
     message?: DecryptedMessage
     users?: OnlineUser[]
     typing?: TypingUser
-    alert?: AdvisorAlertData
-    idleSuggestion?: AdvisorIdleSuggestionData
-    minimaxStart?: AdvisorMinimaxStartData
-    minimaxComplete?: AdvisorMinimaxCompleteData
-    minimaxError?: AdvisorMinimaxErrorData
     groupMessage?: GroupMessageData
 }
 
@@ -342,13 +291,6 @@ export class SyncEngine {
                 machineId: event.machineId,
                 message: event.message
             }
-            : event.type === 'advisor-idle-suggestion'
-            ? {
-                type: event.type,
-                namespace,
-                sessionId: event.sessionId,
-                idleSuggestion: event.idleSuggestion
-            }
             : event.type === 'typing-changed'
             ? {
                 type: event.type,
@@ -374,8 +316,7 @@ export class SyncEngine {
                 namespace,
                 sessionId: event.sessionId,
                 machineId: event.machineId,
-                data: event.data,
-                alert: event.alert
+                data: event.data
             }
 
         this.sseManager.broadcast(webappEvent)
@@ -936,8 +877,7 @@ export class SyncEngine {
             todos,
             permissionMode: existing?.permissionMode,
             modelMode: existing?.modelMode,
-            modelReasoningEffort: existing?.modelReasoningEffort,
-            advisorTaskId: stored.advisorTaskId
+            modelReasoningEffort: existing?.modelReasoningEffort
         }
 
         this.sessions.set(sessionId, session)
@@ -1030,49 +970,8 @@ export class SyncEngine {
         }
     }
 
-    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'advisor'; meta?: Record<string, unknown> }): Promise<void> {
+    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp'; meta?: Record<string, unknown> }): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
-
-        // 自动上下文压缩：对于 advisor/CTO 会话，消息数超过阈值时自动发送 /compact
-        const AUTO_COMPACT_THRESHOLD = 50  // 消息数阈值
-        const session = this.sessions.get(sessionId)
-        const metadata = session?.metadata as Record<string, unknown> | null
-        const isAdvisorSession = metadata?.claudeAgent === 'advisor' || metadata?.claudeAgent === 'cto' ||
-            metadata?.isAdvisor === true || metadata?.isCTO === true ||
-            session?.metadata?.name?.toLowerCase().includes('advisor') ||
-            session?.metadata?.name?.toLowerCase().includes('cto')
-
-        if (isAdvisorSession && !payload.text.startsWith('/compact') && !payload.text.startsWith('/clear')) {
-            const messageCount = await this.store.getMessageCount(sessionId)
-            if (messageCount >= AUTO_COMPACT_THRESHOLD) {
-                console.log(`[SyncEngine] Advisor session ${sessionId} has ${messageCount} messages, auto-compacting...`)
-                // 先发送 /compact 命令
-                const compactContent = {
-                    role: 'user',
-                    content: { type: 'text', text: '/compact' },
-                    meta: { sentFrom: 'advisor' as const }
-                }
-                const compactMsg = await this.store.addMessage(sessionId, compactContent)
-                const compactUpdate = {
-                    id: compactMsg.id,
-                    seq: Date.now(),
-                    createdAt: compactMsg.createdAt,
-                    body: {
-                        t: 'new-message' as const,
-                        sid: sessionId,
-                        message: {
-                            id: compactMsg.id,
-                            seq: compactMsg.seq,
-                            createdAt: compactMsg.createdAt,
-                            localId: compactMsg.localId,
-                            content: compactMsg.content
-                        }
-                    }
-                }
-                this.io.of('/cli').to(`session:${sessionId}`).emit('update', compactUpdate)
-                console.log(`[SyncEngine] Sent /compact command to advisor session ${sessionId}`)
-            }
-        }
 
         const content = {
             role: 'user',

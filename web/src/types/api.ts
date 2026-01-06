@@ -167,7 +167,6 @@ export type SessionSummary = {
     modelMode?: ModelMode
     modelReasoningEffort?: ModelReasoningEffort
     viewers?: SessionViewer[]
-    advisorTaskId?: string | null
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'failed'
@@ -322,46 +321,6 @@ export type TypingUser = {
     updatedAt: number
 }
 
-export type AdvisorAlertData = {
-    suggestionId: string
-    title: string
-    detail?: string
-    category?: string
-    severity: 'critical' | 'high'
-    sourceSessionId?: string
-}
-
-export type SuggestionChip = {
-    id: string
-    label: string           // 简短标签（如 "继续任务"）
-    text: string            // 点击后填入输入框的完整文本
-    category: 'todo_check' | 'error_analysis' | 'code_review' | 'general'
-    icon?: string           // 可选图标（emoji）
-}
-
-export type AdvisorIdleSuggestionData = {
-    suggestionId: string
-    sessionId: string
-    chips: SuggestionChip[]  // 多个建议芯片
-    reason: string           // 触发原因
-    createdAt: number
-}
-
-// Grok 审查相关数据 (Layer 2)
-export type AdvisorMinimaxStartData = {
-    sessionId: string
-}
-
-export type AdvisorMinimaxCompleteData = {
-    sessionId: string
-    chips: SuggestionChip[]
-}
-
-export type AdvisorMinimaxErrorData = {
-    sessionId: string
-    error: string
-}
-
 export type SyncEvent =
     | { type: 'session-added'; sessionId: string; data?: unknown; namespace?: string }
     | { type: 'session-updated'; sessionId: string; data?: unknown; namespace?: string }
@@ -372,11 +331,6 @@ export type SyncEvent =
     | { type: 'connection-changed'; data?: { status: string }; namespace?: string }
     | { type: 'online-users-changed'; users: OnlineUser[]; namespace?: string }
     | { type: 'typing-changed'; sessionId: string; typing: TypingUser; namespace?: string }
-    | { type: 'advisor-alert'; alert: AdvisorAlertData; namespace?: string }
-    | { type: 'advisor-idle-suggestion'; sessionId: string; idleSuggestion: AdvisorIdleSuggestionData; namespace?: string }
-    | { type: 'advisor-minimax-start'; sessionId: string; minimaxStart?: AdvisorMinimaxStartData; namespace?: string }
-    | { type: 'advisor-minimax-complete'; sessionId: string; minimaxComplete: AdvisorMinimaxCompleteData; namespace?: string }
-    | { type: 'advisor-minimax-error'; sessionId: string; minimaxError: AdvisorMinimaxErrorData; namespace?: string }
 
 export type OnlineUsersResponse = { users: OnlineUser[] }
 

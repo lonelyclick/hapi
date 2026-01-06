@@ -23,7 +23,6 @@ import { createSettingsRoutes } from './routes/settings'
 import { createPushRoutes } from './routes/push'
 import { createUsageRoutes } from './routes/usage'
 import { createGroupRoutes } from './routes/groups'
-import { createAutonomousRoutes } from './routes/autonomous'
 import type { SSEManager } from '../sse/sseManager'
 import type { Server as BunServer } from 'bun'
 import type { Server as SocketEngine } from '@socket.io/bun-engine'
@@ -32,8 +31,6 @@ import { loadEmbeddedAssetMap, type EmbeddedWebAsset } from './embeddedAssets'
 import { isBunCompiled } from '../utils/bunCompiled'
 import type { IStore } from '../store'
 import type { AutoIterationService } from '../agent/autoIteration'
-import type { AdvisorScheduler } from '../agent/advisorScheduler'
-import type { AdvisorService } from '../agent/advisorService'
 
 function findWebappDistDir(): { distDir: string; indexHtmlPath: string } {
     const candidates = [
@@ -81,8 +78,6 @@ function createWebApp(options: {
     store: IStore
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
     autoIterationService: AutoIterationService | null
-    getAdvisorScheduler: () => AdvisorScheduler | null
-    getAdvisorService: () => AdvisorService | null
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -113,11 +108,10 @@ function createWebApp(options: {
     app.route('/api', createSpeechRoutes())
     app.route('/api', createOptimizeRoutes())
     app.route('/api', createVersionRoutes(options.embeddedAssetMap))
-    app.route('/api', createSettingsRoutes(options.store, options.autoIterationService ?? undefined, options.getAdvisorScheduler, options.getAdvisorService))
+    app.route('/api', createSettingsRoutes(options.store, options.autoIterationService ?? undefined))
     app.route('/api', createPushRoutes())
     app.route('/api', createUsageRoutes(options.getSyncEngine))
     app.route('/api', createGroupRoutes(options.store, options.getSyncEngine(), options.getSseManager()))
-    app.route('/api', createAutonomousRoutes(options.getAdvisorService))
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap
@@ -243,8 +237,6 @@ export async function startWebServer(options: {
     store: IStore
     socketEngine: SocketEngine
     autoIterationService: AutoIterationService | null
-    getAdvisorScheduler?: () => AdvisorScheduler | null
-    getAdvisorService?: () => AdvisorService | null
 }): Promise<BunServer<WebSocketData>> {
     const isCompiled = isBunCompiled()
     const embeddedAssetMap = isCompiled ? await loadEmbeddedAssetMap() : null
@@ -254,9 +246,7 @@ export async function startWebServer(options: {
         jwtSecret: options.jwtSecret,
         store: options.store,
         embeddedAssetMap,
-        autoIterationService: options.autoIterationService,
-        getAdvisorScheduler: options.getAdvisorScheduler ?? (() => null),
-        getAdvisorService: options.getAdvisorService ?? (() => null)
+        autoIterationService: options.autoIterationService
     })
 
     const socketHandler = options.socketEngine.handler()

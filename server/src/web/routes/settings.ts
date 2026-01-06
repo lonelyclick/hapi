@@ -3,8 +3,6 @@ import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
 import type { IStore, UserRole, AutoIterExecutionStatus, AutoIterActionType } from '../../store'
 import type { AutoIterationService } from '../../agent/autoIteration'
-import type { AdvisorScheduler } from '../../agent/advisorScheduler'
-import type { AdvisorService } from '../../agent/advisorService'
 
 const userRoleSchema = z.enum(['developer', 'operator'])
 
@@ -85,9 +83,7 @@ const autoIterationLogsQuerySchema = z.object({
 
 export function createSettingsRoutes(
     store: IStore,
-    autoIterationService?: AutoIterationService,
-    getAdvisorScheduler?: () => AdvisorScheduler | null,
-    getAdvisorService?: () => AdvisorService | null
+    autoIterationService?: AutoIterationService
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -472,149 +468,6 @@ export function createSettingsRoutes(
         const pending = autoIterationService.getPendingApprovals()
 
         return c.json({ pending })
-    })
-
-    // ==================== Advisor 审查 ====================
-
-    // 手动触发审查
-    app.post('/settings/advisor/trigger-review', async (c) => {
-        const advisorScheduler = getAdvisorScheduler?.()
-        if (!advisorScheduler) {
-            return c.json({ error: 'AdvisorScheduler not available' }, 503)
-        }
-
-        const json = await c.req.json().catch(() => ({})) as { type?: string }
-        const reviewType = json.type === 'daily' ? 'daily' : 'proactive'
-
-        await advisorScheduler.manualTriggerReview(reviewType)
-
-        return c.json({ ok: true, type: reviewType })
-    })
-
-    // 获取待处理的建议
-    app.get('/settings/advisor/suggestions', (c) => {
-        const advisorService = getAdvisorService?.()
-        if (!advisorService) {
-            return c.json({ error: 'AdvisorService not available' }, 503)
-        }
-
-        const suggestions = advisorService.getPendingSuggestions()
-        return c.json({ suggestions })
-    })
-
-    // 接受建议
-    app.post('/settings/advisor/suggestions/:id/accept', async (c) => {
-        const advisorService = getAdvisorService?.()
-        if (!advisorService) {
-            return c.json({ error: 'AdvisorService not available' }, 503)
-        }
-
-        const id = c.req.param('id')
-        const userId = c.get('userId')
-
-        const result = await advisorService.acceptSuggestion(id, String(userId))
-
-        if (!result.success) {
-            return c.json({ error: result.error }, 404)
-        }
-
-        return c.json({ ok: true, actionTriggered: result.actionTriggered })
-    })
-
-    // 拒绝建议
-    app.post('/settings/advisor/suggestions/:id/reject', async (c) => {
-        const advisorService = getAdvisorService?.()
-        if (!advisorService) {
-            return c.json({ error: 'AdvisorService not available' }, 503)
-        }
-
-        const id = c.req.param('id')
-        const userId = c.get('userId')
-        const json = await c.req.json().catch(() => ({})) as { reason?: string }
-
-        const result = await advisorService.rejectSuggestion(id, String(userId), json.reason)
-
-        if (!result.success) {
-            return c.json({ error: result.error }, 404)
-        }
-
-        return c.json({ ok: true })
-    })
-
-    // ==================== 自主模式管理 ====================
-
-    // 获取自主模式状态
-    app.get('/autonomous/status', (c) => {
-        const advisorService = getAdvisorService?.()
-        if (!advisorService) {
-            return c.json({ error: 'AdvisorService not available' }, 503)
-        }
-
-        const status = advisorService.getAutonomousStatus()
-        if (!status) {
-            return c.json({ error: 'Autonomous manager not initialized' }, 503)
-        }
-
-        return c.json(status)
-    })
-
-    // 启用自主模式
-    app.post('/autonomous/enable', (c) => {
-        const advisorService = getAdvisorService?.()
-        if (!advisorService) {
-            return c.json({ error: 'AdvisorService not available' }, 503)
-        }
-
-        advisorService.enableAutonomousMode()
-        console.log('[API] Autonomous mode enabled by user')
-
-        return c.json({ ok: true, enabled: true })
-    })
-
-    // 禁用自主模式
-    app.post('/autonomous/disable', (c) => {
-        const advisorService = getAdvisorService?.()
-        if (!advisorService) {
-            return c.json({ error: 'AdvisorService not available' }, 503)
-        }
-
-        advisorService.disableAutonomousMode()
-        console.log('[API] Autonomous mode disabled by user')
-
-        return c.json({ ok: true, enabled: false })
-    })
-
-    // 获取发现的任务机会
-    app.get('/autonomous/opportunities', (c) => {
-        const advisorService = getAdvisorService?.()
-        if (!advisorService) {
-            return c.json({ error: 'AdvisorService not available' }, 503)
-        }
-
-        const status = advisorService.getAutonomousStatus()
-        if (!status) {
-            return c.json({ error: 'Autonomous manager not initialized' }, 503)
-        }
-
-        return c.json({ opportunities: status.opportunities })
-    })
-
-    // 获取工作队列
-    app.get('/autonomous/workqueue', (c) => {
-        const advisorService = getAdvisorService?.()
-        if (!advisorService) {
-            return c.json({ error: 'AdvisorService not available' }, 503)
-        }
-
-        const status = advisorService.getAutonomousStatus()
-        if (!status) {
-            return c.json({ error: 'Autonomous manager not initialized' }, 503)
-        }
-
-        return c.json({
-            workQueue: status.workQueue,
-            stats: status.queueStats
-        })
     })
 
     return app

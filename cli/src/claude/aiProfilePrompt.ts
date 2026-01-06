@@ -69,8 +69,8 @@ export function shouldInjectAIProfile(
     // 没有 profile 就不注入
     if (!profile) return false
 
-    // 如果 claudeAgent 是特殊角色（cto, advisor），不注入普通 profile
-    const specialAgents = ['cto', 'advisor']
+    // 如果 claudeAgent 是特殊角色，不注入普通 profile
+    const specialAgents = ['cto']
     if (claudeAgent && specialAgents.includes(claudeAgent.toLowerCase())) {
         return false
     }

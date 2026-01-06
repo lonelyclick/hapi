@@ -293,13 +293,6 @@ export function SessionChat(props: {
         void resumeSession(text)
     }, [props.session.active, props.onSend, resumeSession])
 
-    // Handle chip selection from HappyThread
-    const handleApplyChip = useCallback((text: string) => {
-        if (composerSetTextRef.current) {
-            composerSetTextRef.current(text)
-        }
-    }, [])
-
     const runtime = useHappyRuntime({
         session: props.session,
         blocks: reconciled.blocks,
@@ -459,7 +452,6 @@ export function SessionChat(props: {
                         rawMessagesCount={props.messages.length}
                         normalizedMessagesCount={normalizedMessages.length}
                         renderedMessagesCount={reconciled.blocks.length}
-                        onApplyChip={handleApplyChip}
                     />
 
                     <HappyComposer

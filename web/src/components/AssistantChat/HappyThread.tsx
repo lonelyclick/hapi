@@ -8,9 +8,6 @@ import { HappyUserMessage } from '@/components/AssistantChat/messages/UserMessag
 import { HappySystemMessage } from '@/components/AssistantChat/messages/SystemMessage'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/Spinner'
-import { useIdleSuggestion } from '@/hooks/useIdleSuggestion'
-import { useAiSuggestionSetting } from '@/hooks/useAiSuggestionSetting'
-import type { SuggestionChip, MinimaxStatus } from '@/hooks/useIdleSuggestion'
 
 function NewMessagesIndicator(props: { count: number; onClick: () => void }) {
     if (props.count === 0) {
@@ -24,142 +21,6 @@ function NewMessagesIndicator(props: { count: number; onClick: () => void }) {
         >
             {props.count} new message{props.count > 1 ? 's' : ''} &#8595;
         </button>
-    )
-}
-
-const chipCategoryStyles: Record<string, string> = {
-    todo_check: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30',
-    error_analysis: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/30',
-    code_review: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/30',
-    general: 'bg-gray-50 dark:bg-gray-800/30 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/50'
-}
-
-function InlineSuggestionChips(props: {
-    chips: SuggestionChip[]
-    reason?: string
-    onSelect: (chipId: string) => void
-    onDismiss: () => void
-    // Grok Layer 2
-    minimaxStatus?: MinimaxStatus
-    minimaxChips?: SuggestionChip[]
-    minimaxError?: string
-}) {
-    const hasLayer1Chips = props.chips.length > 0
-    const hasLayer2Chips = props.minimaxChips && props.minimaxChips.length > 0
-    const isMinimaxReviewing = props.minimaxStatus === 'reviewing'
-    const hasMinimaxError = props.minimaxStatus === 'error'
-
-    // 如果两层都没内容且不在审查中，不显示
-    if (!hasLayer1Chips && !hasLayer2Chips && !isMinimaxReviewing && !hasMinimaxError) {
-        return null
-    }
-
-    return (
-        <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-2xl bg-[var(--app-subtle-bg)] px-4 py-3">
-                {/* AI 标识和原因 */}
-                <div className="flex items-center gap-2 mb-2 text-xs text-[var(--app-hint)]">
-                    <span className="flex items-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 8V4H8" />
-                            <rect width="16" height="12" x="4" y="8" rx="2" />
-                            <path d="M2 14h2" />
-                            <path d="M20 14h2" />
-                            <path d="M15 13v2" />
-                            <path d="M9 13v2" />
-                        </svg>
-                        <span className="font-medium">AI 建议</span>
-                    </span>
-                    {props.reason && (
-                        <>
-                            <span className="opacity-40">·</span>
-                            <span className="opacity-60">{props.reason}</span>
-                        </>
-                    )}
-                    <button
-                        type="button"
-                        onClick={props.onDismiss}
-                        className="ml-auto p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                        aria-label="关闭建议"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M18 6 6 18" />
-                            <path d="m6 6 12 12" />
-                        </svg>
-                    </button>
-                </div>
-
-                {/* Layer 1 芯片列表 */}
-                {hasLayer1Chips && (
-                    <div className="flex flex-wrap gap-1.5">
-                        {props.chips.map((chip) => (
-                            <button
-                                key={chip.id}
-                                type="button"
-                                onClick={() => props.onSelect(chip.id)}
-                                className={`
-                                    inline-flex items-center gap-1 px-2.5 py-1
-                                    rounded-full border text-xs font-medium
-                                    transition-all duration-150 ease-out
-                                    active:scale-[0.97]
-                                    ${chipCategoryStyles[chip.category] || chipCategoryStyles.general}
-                                `}
-                                title={chip.text}
-                            >
-                                {chip.icon && <span>{chip.icon}</span>}
-                                <span className="whitespace-nowrap">{chip.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                )}
-
-                {/* Layer 2: Grok 审查状态 */}
-                {isMinimaxReviewing && (
-                    <div className={`flex items-center gap-2 text-xs text-[var(--app-hint)] ${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
-                        <Spinner className="w-3 h-3" />
-                        <span>Grok 正在审查...</span>
-                    </div>
-                )}
-
-                {/* Layer 2: Grok 芯片 */}
-                {hasLayer2Chips && (
-                    <div className={`${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
-                        <div className="flex items-center gap-1 mb-2 text-xs text-[var(--app-hint)]">
-                            <span>✨</span>
-                            <span>Grok 建议</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                            {props.minimaxChips!.map((chip) => (
-                                <button
-                                    key={chip.id}
-                                    type="button"
-                                    onClick={() => props.onSelect(chip.id)}
-                                    className={`
-                                        inline-flex items-center gap-1 px-2.5 py-1
-                                        rounded-full border text-xs font-medium
-                                        transition-all duration-150 ease-out
-                                        active:scale-[0.97]
-                                        ${chipCategoryStyles[chip.category] || chipCategoryStyles.general}
-                                    `}
-                                    title={chip.text}
-                                >
-                                    {chip.icon && <span>{chip.icon}</span>}
-                                    <span className="whitespace-nowrap">{chip.label}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Layer 2: Grok 错误 */}
-                {hasMinimaxError && (
-                    <div className={`flex items-center gap-2 text-xs text-orange-600 dark:text-orange-400 ${hasLayer1Chips ? 'mt-3 pt-3 border-t border-[var(--app-border)]' : ''}`}>
-                        <span>⚠️</span>
-                        <span>Grok 审查失败{props.minimaxError ? `：${props.minimaxError}` : ''}</span>
-                    </div>
-                )}
-            </div>
-        </div>
     )
 }
 
@@ -206,7 +67,6 @@ export function HappyThread(props: {
     rawMessagesCount: number
     normalizedMessagesCount: number
     renderedMessagesCount: number
-    onApplyChip?: (text: string) => void
 }) {
     const viewportRef = useRef<HTMLDivElement | null>(null)
     const topSentinelRef = useRef<HTMLDivElement | null>(null)
@@ -309,50 +169,6 @@ export function HappyThread(props: {
         prevRenderedCountRef.current = 0
         hasBootstrappedRef.current = false
     }, [props.sessionId])
-
-    const { enabled: aiSuggestionsEnabled } = useAiSuggestionSetting()
-
-    // Idle suggestion chips (Layer 1 + Layer 2)
-    const {
-        suggestion: idleSuggestion,
-        chips: idleChips,
-        hasChips: hasIdleChips,
-        applyChip: applyIdleChip,
-        dismiss: dismissIdleSuggestion,
-        markViewed: markIdleSuggestionViewed,
-        // Grok Layer 2
-        minimaxStatus,
-        minimaxChips,
-        minimaxError,
-        hasMinimaxChips,
-        applyMinimaxChip
-    } = useIdleSuggestion(props.sessionId)
-
-    // Mark suggestion as viewed when displayed
-    useEffect(() => {
-        if (!aiSuggestionsEnabled) {
-            return
-        }
-        if (hasIdleChips || minimaxStatus !== 'idle') {
-            markIdleSuggestionViewed()
-        }
-    }, [aiSuggestionsEnabled, hasIdleChips, minimaxStatus, markIdleSuggestionViewed])
-
-    const handleChipSelect = useCallback((chipId: string) => {
-        // 先尝试 Layer 1 芯片
-        let text = applyIdleChip(chipId)
-        // 如果不是 Layer 1 芯片，尝试 Layer 2
-        if (!text) {
-            text = applyMinimaxChip(chipId)
-        }
-        if (text && props.onApplyChip) {
-            props.onApplyChip(text)
-        }
-    }, [applyIdleChip, applyMinimaxChip, props.onApplyChip])
-
-    // 是否显示建议区域（Layer 1 有芯片 或 Layer 2 正在审查/有芯片/有错误）
-    const showSuggestionArea = aiSuggestionsEnabled
-        && (hasIdleChips || minimaxStatus === 'reviewing' || hasMinimaxChips || minimaxStatus === 'error')
 
     const handleLoadMore = useCallback(() => {
         if (props.isLoadingMessages || !props.hasMoreMessages || props.isLoadingMoreMessages || loadLockRef.current) {
@@ -500,18 +316,6 @@ export function HappyThread(props: {
                             )}
                             <div className="flex flex-col gap-3">
                                 <ThreadPrimitive.Messages components={THREAD_MESSAGE_COMPONENTS} />
-                                {/* AI 建议芯片 - 融入对话流 (Layer 1 + Layer 2) */}
-                                {showSuggestionArea && (
-                                    <InlineSuggestionChips
-                                        chips={idleChips}
-                                        reason={idleSuggestion?.reason}
-                                        onSelect={handleChipSelect}
-                                        onDismiss={dismissIdleSuggestion}
-                                        minimaxStatus={minimaxStatus}
-                                        minimaxChips={minimaxChips}
-                                        minimaxError={minimaxError}
-                                    />
-                                )}
                             </div>
                         </div>
                     </div>

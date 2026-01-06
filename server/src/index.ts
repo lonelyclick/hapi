@@ -18,8 +18,7 @@ import { getOrCreateJwtSecret } from './web/jwtSecret'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
-import { AdvisorScheduler, AdvisorService, createAdvisorTelegramNotifier, AutoIterationService } from './agent'
-import { AutonomousAgentManager } from './agent/autonomousAgent'
+import { AutoIterationService } from './agent'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -41,10 +40,7 @@ let syncEngine: SyncEngine | null = null
 let happyBot: HappyBot | null = null
 let webServer: BunServer<WebSocketData> | null = null
 let sseManager: SSEManager | null = null
-let advisorScheduler: AdvisorScheduler | null = null
-let advisorService: AdvisorService | null = null
 let autoIterationService: AutoIterationService | null = null
-let autonomousManager: AutonomousAgentManager | null = null
 
 async function main() {
     console.log('HAPI Server starting...')
@@ -152,9 +148,7 @@ async function main() {
         jwtSecret,
         store,
         socketEngine: socketServer.engine,
-        autoIterationService,
-        getAdvisorScheduler: () => advisorScheduler,
-        getAdvisorService: () => advisorService
+        autoIterationService
     })
 
     // Start the bot if configured
@@ -162,77 +156,12 @@ async function main() {
         await happyBot.start()
     }
 
-    // Initialize Advisor Agent (default namespace)
-    const advisorNamespace = process.env.HAPI_ADVISOR_NAMESPACE || 'default'
-    const advisorEnabled = process.env.HAPI_ADVISOR_ENABLED !== 'false'
-
-    if (advisorEnabled && syncEngine) {
-        console.log(`[Server] Advisor Agent: initializing for namespace '${advisorNamespace}'...`)
-
-        // Initialize AutonomousAgentManager
-        autonomousManager = new AutonomousAgentManager(store)
-        console.log(`[Server] Autonomous Agent Manager: initialized`)
-
-        advisorScheduler = new AdvisorScheduler(syncEngine, store, {
-            namespace: advisorNamespace
-        })
-
-        advisorService = new AdvisorService(syncEngine, store, advisorScheduler, {
-            namespace: advisorNamespace
-        })
-
-        // Connect AutonomousAgentManager to AdvisorService
-        advisorService.setAutonomousManager(autonomousManager)
-
-        // Set up Telegram notifier if bot is available
-        if (happyBot) {
-            const telegramNotifier = createAdvisorTelegramNotifier()
-            telegramNotifier.setBotInterface({
-                getBoundChatIds: (ns) => happyBot!.getBoundChatIds(ns),
-                sendMessage: async (chatId, text, options) => {
-                    await happyBot!.sendMessageToChat(chatId, text, options)
-                },
-                buildMiniAppDeepLink: (startParam) => happyBot!.buildMiniAppDeepLink(startParam),
-                isEnabled: () => happyBot!.isEnabled()
-            })
-            advisorService.setTelegramNotifier(telegramNotifier)
-        }
-
-        // Connect AutoIterationService
-        if (autoIterationService) {
-            advisorService.setAutoIterationService(autoIterationService)
-        }
-
-        // Connect autonomous controller to Telegram bot
-        if (happyBot) {
-            happyBot.setAutonomousController(advisorService)
-        }
-
-        // Start the service
-        advisorService.start()
-
-        // Start the scheduler (will spawn advisor session when machine is online)
-        // Delay startup to allow machines to connect first
-        setTimeout(() => {
-            advisorScheduler?.start().catch(error => {
-                console.error('[Server] Failed to start Advisor Scheduler:', error)
-            })
-        }, 5000)
-
-        console.log(`[Server] Advisor Agent: enabled for namespace '${advisorNamespace}'`)
-    } else {
-        console.log('[Server] Advisor Agent: disabled')
-    }
-
     console.log('\nHAPI Server is ready!')
 
     // Handle shutdown
     const shutdown = async () => {
         console.log('\nShutting down...')
-        advisorService?.stop()
-        advisorScheduler?.stop()
         autoIterationService?.shutdown()
-        autonomousManager?.cleanup()
         await happyBot?.stop()
         syncEngine?.stop()
         sseManager?.stop()

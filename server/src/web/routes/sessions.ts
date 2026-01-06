@@ -43,7 +43,6 @@ type SessionSummary = {
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     viewers?: SessionViewer[]
-    advisorTaskId?: string | null
 }
 
 function toSessionSummary(session: Session): SessionSummary {
@@ -76,8 +75,7 @@ function toSessionSummary(session: Session): SessionSummary {
         todoProgress,
         pendingRequestsCount,
         modelMode: session.modelMode,
-        modelReasoningEffort: session.modelReasoningEffort,
-        advisorTaskId: session.advisorTaskId
+        modelReasoningEffort: session.modelReasoningEffort
     }
 }
 
@@ -397,7 +395,7 @@ export function createSessionsRoutes(
             }
         )
 
-        if (result.type === 'success' && parsed.data.claudeAgent !== 'advisor') {
+        if (result.type === 'success') {
             const role = resolveUserRole(store, c.get('email'))
             void sendInitPromptAfterOnline(engine, result.sessionId, role)
         }

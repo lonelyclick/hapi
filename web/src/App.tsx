@@ -21,17 +21,12 @@ import { LoadingState } from '@/components/LoadingState'
 import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
 import { notifyTaskComplete, getPendingNotification, clearPendingNotification, useWebPushSubscription } from '@/hooks/useNotification'
-import { addAlert } from '@/hooks/useAdvisorAlert'
-import { addIdleSuggestion, setMinimaxStart, setMinimaxComplete, setMinimaxError } from '@/hooks/useIdleSuggestion'
-import { AdvisorAlertBanner } from '@/components/AdvisorAlertBanner'
-import { useAiSuggestionSetting } from '@/hooks/useAiSuggestionSetting'
 
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
     const { authSource, isLoading: isAuthSourceLoading, setAccessToken } = useAuthSource(baseUrl)
     const { token, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
     const { hasUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
-    const { enabled: aiSuggestionsEnabled } = useAiSuggestionSetting()
 
     // Subscribe to Web Push notifications when authenticated
     // This enables true background push on iOS 16.4+ and other platforms
@@ -261,37 +256,6 @@ export function App() {
             return
         }
 
-        // 处理 Advisor 警告（critical/high 级别建议）
-        if (event.type === 'advisor-alert' && event.alert) {
-            console.log('[advisor] alert received', event.alert)
-            addAlert(event.alert)
-            return
-        }
-
-        // 处理空闲建议事件（芯片格式）- Layer 1
-        if (aiSuggestionsEnabled && event.type === 'advisor-idle-suggestion' && event.idleSuggestion) {
-            console.log('[advisor] idle suggestion received', event.idleSuggestion)
-            addIdleSuggestion(event.idleSuggestion)
-            return
-        }
-
-        // 处理 Grok 审查事件 - Layer 2
-        if (aiSuggestionsEnabled && event.type === 'advisor-minimax-start' && event.sessionId) {
-            console.log('[advisor] minimax review started', event.sessionId)
-            setMinimaxStart(event.sessionId)
-            return
-        }
-        if (aiSuggestionsEnabled && event.type === 'advisor-minimax-complete' && event.minimaxComplete) {
-            console.log('[advisor] minimax review completed', event.minimaxComplete)
-            setMinimaxComplete(event.minimaxComplete.sessionId, event.minimaxComplete.chips)
-            return
-        }
-        if (aiSuggestionsEnabled && event.type === 'advisor-minimax-error' && event.minimaxError) {
-            console.log('[advisor] minimax review error', event.minimaxError)
-            setMinimaxError(event.minimaxError.sessionId, event.minimaxError.error)
-            return
-        }
-
         // 检测任务完成 (thinking: true -> false)
         if (event.type === 'session-updated') {
             const data = ('data' in event ? event.data : null) as { active?: boolean; thinking?: boolean; wasThinking?: boolean } | null
@@ -310,12 +274,6 @@ export function App() {
                 // 获取 session 标题和项目
                 const sessionsData = queryClient.getQueryData<{ sessions: SessionSummary[] }>(queryKeys.sessions)
                 const session = sessionsData?.sessions.find(s => s.id === event.sessionId)
-
-                // Skip notifications for Advisor sessions
-                if (session?.metadata?.runtimeAgent === 'advisor') {
-                    console.log('[notification] skipping - advisor session')
-                    return
-                }
 
                 const title = session?.metadata?.summary?.text || session?.metadata?.name || 'Task completed'
 
@@ -350,7 +308,7 @@ export function App() {
             return
         }
         navigate({ to: '/sessions', replace: true })
-    }, [aiSuggestionsEnabled, navigate, selectedSessionId, queryClient])
+    }, [navigate, selectedSessionId, queryClient])
 
     const eventSubscription = useMemo(() => {
         // Exclude "new" which is a route, not a real session ID
@@ -490,7 +448,6 @@ export function App() {
 
     return (
         <AppContextProvider value={{ api, token }}>
-            <AdvisorAlertBanner />
             {hasUpdate && <UpdateBanner onRefresh={refreshApp} onDismiss={dismissUpdate} />}
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />

@@ -130,8 +130,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
         )
 
         // 如果 spawn 成功，等 session online 后发送初始化 prompt（动态生成）
-        // 注意：advisor agent 有自己的 init prompt，由 AdvisorScheduler 发送
-        if (result.type === 'success' && parsed.data.claudeAgent !== 'advisor') {
+        if (result.type === 'success') {
             const email = c.get('email')
             // 获取用户角色
             let role: UserRole = 'developer'

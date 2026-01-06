@@ -6,8 +6,6 @@ import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
 import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
 import { useNotificationPermission, useWebPushSubscription } from '@/hooks/useNotification'
-import { useAiSuggestionSetting } from '@/hooks/useAiSuggestionSetting'
-import { clearAllIdleSuggestions } from '@/hooks/useIdleSuggestion'
 import type { InputPreset, Project, UserRole } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { AutoIterationSettings } from '@/components/AutoIterationSettings'
@@ -515,11 +513,6 @@ export default function SettingsPage() {
         isSupported: isNotificationSupported
     } = useNotificationPermission()
 
-    const {
-        enabled: aiSuggestionsEnabled,
-        setEnabled: setAiSuggestionsEnabled
-    } = useAiSuggestionSetting()
-
     // Web Push subscription
     const { subscribe: subscribePush, unsubscribe: unsubscribePush } = useWebPushSubscription(api)
 
@@ -542,14 +535,6 @@ export default function SettingsPage() {
             }
         }
     }, [notificationPermission, notificationEnabled, requestPermission, setNotificationEnabled, subscribePush, unsubscribePush])
-
-    const handleAiSuggestionsToggle = useCallback(() => {
-        const nextEnabled = !aiSuggestionsEnabled
-        setAiSuggestionsEnabled(nextEnabled)
-        if (!nextEnabled) {
-            clearAllIdleSuggestions()
-        }
-    }, [aiSuggestionsEnabled, setAiSuggestionsEnabled])
 
     return (
         <div className="flex h-full flex-col">
@@ -704,41 +689,6 @@ export default function SettingsPage() {
                             </div>
                         </div>
                     )}
-
-                    {/* AI Suggestions Section */}
-                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                        <div className="px-3 py-2 border-b border-[var(--app-divider)]">
-                            <h2 className="text-sm font-medium">AI Suggestions</h2>
-                            <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                Show idle hints and review chips in chat.
-                            </p>
-                        </div>
-                        <div className="divide-y divide-[var(--app-divider)]">
-                            <div className="px-3 py-2.5 flex items-center justify-between gap-3">
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-sm">Show AI suggestions</div>
-                                    <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                        Toggle inline suggestions and review status cards.
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={handleAiSuggestionsToggle}
-                                    className={`
-                                        relative w-11 h-6 rounded-full transition-colors duration-200
-                                        ${aiSuggestionsEnabled ? 'bg-emerald-500' : 'bg-[var(--app-border)]'}
-                                    `}
-                                >
-                                    <span
-                                        className={`
-                                            absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200
-                                            ${aiSuggestionsEnabled ? 'translate-x-5' : 'translate-x-0'}
-                                        `}
-                                    />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
 
                     {/* Projects Section */}
                     <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
