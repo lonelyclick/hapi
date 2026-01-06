@@ -154,6 +154,23 @@ export class SSEManager {
             return true
         }
 
+        // 任务完成通知（wasThinking: true）：只发送给订阅者
+        // 如果事件带有 notifyRecipientClientIds，只发给列表中的 clientId
+        if (event.type === 'session-updated' && event.notifyRecipientClientIds) {
+            const data = event.data as { wasThinking?: boolean } | undefined
+            if (data?.wasThinking) {
+                // 如果连接正在查看这个 session，允许发送（用于更新 UI 状态）
+                if (event.sessionId && connection.sessionId === event.sessionId) {
+                    return true
+                }
+                // 否则只发给订阅者
+                if (!connection.clientId) {
+                    return false
+                }
+                return event.notifyRecipientClientIds.includes(connection.clientId)
+            }
+        }
+
         if (connection.all) {
             return true
         }

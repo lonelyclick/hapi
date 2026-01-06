@@ -201,6 +201,8 @@ export interface SyncEvent {
     users?: OnlineUser[]
     typing?: TypingUser
     groupMessage?: GroupMessageData
+    // 任务完成通知的接收者列表（用于过滤 SSE 广播）
+    notifyRecipientClientIds?: string[]
 }
 
 export type SyncEventListener = (event: SyncEvent) => void
@@ -665,24 +667,67 @@ export class SyncEngine {
         if (shouldBroadcast) {
             this.lastBroadcastAtBySessionId.set(session.id, now)
             const taskJustCompleted = wasThinking && !session.thinking
+
+            // 如果任务刚完成，需要获取订阅者信息以过滤 SSE 广播
+            if (taskJustCompleted) {
+                this.emitTaskCompleteEvent(session)
+            } else {
+                this.emit({
+                    type: 'session-updated',
+                    sessionId: session.id,
+                    data: {
+                        activeAt: session.activeAt,
+                        thinking: session.thinking,
+                        wasThinking: false,
+                        permissionMode: session.permissionMode,
+                        modelMode: session.modelMode,
+                        modelReasoningEffort: session.modelReasoningEffort
+                    }
+                })
+            }
+        }
+    }
+
+    /**
+     * 发送任务完成事件（带订阅者信息以过滤 SSE 广播）
+     * Toast 通知只发给 owner 和订阅者
+     */
+    private emitTaskCompleteEvent(session: Session): void {
+        // 异步获取订阅者信息，然后发送事件
+        this.store.getSessionNotificationRecipientClientIds(session.id).then(recipientClientIds => {
             this.emit({
                 type: 'session-updated',
                 sessionId: session.id,
                 data: {
                     activeAt: session.activeAt,
                     thinking: session.thinking,
-                    wasThinking: taskJustCompleted,
+                    wasThinking: true,
+                    permissionMode: session.permissionMode,
+                    modelMode: session.modelMode,
+                    modelReasoningEffort: session.modelReasoningEffort
+                },
+                notifyRecipientClientIds: recipientClientIds
+            })
+
+            // 同时发送 Web Push 通知
+            this.sendTaskCompletePushNotification(session)
+        }).catch(error => {
+            console.error('[syncEngine] failed to get notification recipients:', error)
+            // 出错时仍然发送事件，但不带订阅者信息（将广播给所有人）
+            this.emit({
+                type: 'session-updated',
+                sessionId: session.id,
+                data: {
+                    activeAt: session.activeAt,
+                    thinking: session.thinking,
+                    wasThinking: true,
                     permissionMode: session.permissionMode,
                     modelMode: session.modelMode,
                     modelReasoningEffort: session.modelReasoningEffort
                 }
             })
-
-            // Send push notification when task completes (thinking: true -> false)
-            if (taskJustCompleted) {
-                this.sendTaskCompletePushNotification(session)
-            }
-        }
+            this.sendTaskCompletePushNotification(session)
+        })
     }
 
     /**
@@ -772,7 +817,12 @@ export class SyncEngine {
         session.thinking = false
         session.thinkingAt = t
 
-        this.emit({ type: 'session-updated', sessionId: session.id, data: { active: false, thinking: false, wasThinking } })
+        // 如果任务刚完成，使用带订阅者过滤的事件
+        if (wasThinking) {
+            this.emitTaskCompleteEvent(session)
+        } else {
+            this.emit({ type: 'session-updated', sessionId: session.id, data: { active: false, thinking: false, wasThinking: false } })
+        }
     }
 
     async handleMachineAlive(payload: { machineId: string; time: number }): Promise<void> {
