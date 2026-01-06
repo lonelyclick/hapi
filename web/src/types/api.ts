@@ -91,6 +91,7 @@ export type SessionSummaryMetadata = {
     runtimeModel?: string
     runtimeModelReasoningEffort?: ModelReasoningEffort
     worktree?: WorktreeMetadata
+    source?: string
 }
 
 export type SessionViewer = {

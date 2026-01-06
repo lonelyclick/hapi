@@ -169,6 +169,26 @@ function getAgentLabel(session: SessionSummary): string {
     return 'Agent'
 }
 
+function getSourceTag(session: SessionSummary): { label: string; color: string } | null {
+    const source = session.metadata?.source?.trim()
+    if (!source) return null
+    // 机器/自动化 session 标识
+    if (source.startsWith('hapi_repair')) {
+        return { label: '🤖 Auto Repair', color: 'bg-purple-500/15 text-purple-600' }
+    }
+    if (source === 'external-api') {
+        return { label: '🔌 API', color: 'bg-blue-500/15 text-blue-600' }
+    }
+    if (source.startsWith('automation:') || source.startsWith('bot:') || source.startsWith('script:')) {
+        return { label: '⚙️ Automation', color: 'bg-orange-500/15 text-orange-600' }
+    }
+    // 其他自定义 source
+    if (source.length > 0 && source !== 'manual') {
+        return { label: source.slice(0, 20), color: 'bg-gray-500/15 text-gray-600' }
+    }
+    return null
+}
+
 function formatRelativeTime(value: number): string | null {
     const ms = value < 1_000_000_000_000 ? value * 1000 : value
     if (!Number.isFinite(ms)) return null
@@ -191,6 +211,7 @@ function SessionItem(props: {
     const progress = getTodoProgress(s)
     const hasPending = s.pendingRequestsCount > 0
     const runtimeAgent = s.metadata?.runtimeAgent?.trim()
+    const sourceTag = getSourceTag(s)
 
     return (
         <button
@@ -220,6 +241,11 @@ function SessionItem(props: {
                     <span className="truncate text-sm font-medium text-[var(--app-fg)]">
                         {getSessionTitle(s)}
                     </span>
+                    {sourceTag && (
+                        <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sourceTag.color}`}>
+                            {sourceTag.label}
+                        </span>
+                    )}
                     {hasPending && (
                         <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600">
                             {s.pendingRequestsCount} pending
