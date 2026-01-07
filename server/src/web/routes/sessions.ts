@@ -626,6 +626,88 @@ export function createSessionsRoutes(
         })
     })
 
+    // 刷新账号：将旧 session 迁移到当前活跃账号，保留对话上下文
+    app.post('/sessions/:id/refresh-account', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const sessionId = sessionResult.sessionId
+        const session = sessionResult.session
+
+        const flavor = session.metadata?.flavor ?? 'claude'
+        if (flavor !== 'claude') {
+            return c.json({ error: 'Refresh account only supported for Claude sessions' }, 400)
+        }
+
+        const machineId = session.metadata?.machineId?.trim()
+        if (!machineId) {
+            return c.json({ error: 'Session machine not found' }, 409)
+        }
+
+        const machine = engine.getMachineByNamespace(machineId, c.get('namespace'))
+        if (!machine || !machine.active) {
+            return c.json({ error: 'Machine is offline' }, 409)
+        }
+
+        const spawnTarget = await resolveSpawnTarget(engine, machineId, session)
+        if (!spawnTarget.ok) {
+            return c.json({ error: spawnTarget.error }, 409)
+        }
+
+        // Preserve mode settings from original session
+        const modeSettings = {
+            permissionMode: session.permissionMode,
+            modelMode: session.modelMode,
+            modelReasoningEffort: session.modelReasoningEffort,
+            claudeAgent: session.metadata?.runtimeAgent ?? undefined
+        }
+
+        // Spawn new session with current active account
+        const spawnResult = await engine.spawnSession(
+            machineId,
+            spawnTarget.directory,
+            flavor,
+            undefined,
+            spawnTarget.sessionType,
+            spawnTarget.worktreeName,
+            modeSettings
+        )
+
+        if (spawnResult.type !== 'success') {
+            return c.json({ error: spawnResult.message }, 409)
+        }
+
+        const newSessionId = spawnResult.sessionId
+        const online = await waitForSessionOnline(engine, newSessionId, RESUME_TIMEOUT_MS)
+        if (!online) {
+            return c.json({ error: 'New session failed to come online' }, 409)
+        }
+
+        // Send init prompt
+        const role = resolveUserRole(store, c.get('email'))
+        await sendInitPrompt(engine, newSessionId, role)
+
+        // Transfer context from old session
+        const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
+        const contextMessage = buildResumeContextMessage(session, page.messages)
+        if (contextMessage) {
+            await engine.sendMessage(newSessionId, { text: contextMessage, sentFrom: 'webapp' })
+        }
+
+        return c.json({
+            type: 'success',
+            newSessionId,
+            oldSessionId: sessionId
+        })
+    })
+
     app.post('/sessions/:id/permission-mode', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) {

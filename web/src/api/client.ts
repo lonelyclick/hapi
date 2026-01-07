@@ -331,6 +331,13 @@ export class ApiClient {
         })
     }
 
+    async refreshAccount(sessionId: string): Promise<{ type: 'success'; newSessionId: string; oldSessionId: string }> {
+        return await this.request<{ type: 'success'; newSessionId: string; oldSessionId: string }>(`/api/sessions/${encodeURIComponent(sessionId)}/refresh-account`, {
+            method: 'POST',
+            body: JSON.stringify({})
+        })
+    }
+
     async setPermissionMode(sessionId: string, mode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/permission-mode`, {
             method: 'POST',

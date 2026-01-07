@@ -69,7 +69,7 @@ export function SessionChat(props: {
     const controlsDisabled = !props.session.active
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
-    const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, clearMessages, isPending } = useSessionActions(props.api, props.session.id)
+    const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, clearMessages, refreshAccount, isPending } = useSessionActions(props.api, props.session.id)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [clearDialogOpen, setClearDialogOpen] = useState(false)
     const [clearSuggestionDismissed, setClearSuggestionDismissed] = useState(false)
@@ -204,6 +204,22 @@ export function SessionChat(props: {
         setClearDialogOpen(true)
     }, [])
 
+    const handleRefreshAccount = useCallback(async () => {
+        try {
+            const result = await refreshAccount()
+            haptic.notification('success')
+            await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+            // Navigate to the new session
+            navigate({
+                to: '/sessions/$sessionId',
+                params: { sessionId: result.newSessionId }
+            })
+        } catch (error) {
+            haptic.notification('error')
+            console.error('Failed to refresh account:', error)
+        }
+    }, [refreshAccount, haptic, queryClient, navigate])
+
     const handleClearMessagesConfirm = useCallback(async (compact: boolean) => {
         setClearDialogOpen(false)
         try {
@@ -319,8 +335,10 @@ export function SessionChat(props: {
                 onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
                 onClearMessages={handleClearMessagesClick}
                 onDelete={handleDeleteClick}
+                onRefreshAccount={props.session.metadata?.flavor === 'claude' ? handleRefreshAccount : undefined}
                 clearDisabled={isPending}
                 deleteDisabled={isPending}
+                refreshAccountDisabled={isPending}
             />
 
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

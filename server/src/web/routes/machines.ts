@@ -13,7 +13,8 @@ const spawnBodySchema = z.object({
     sessionType: z.enum(['simple', 'worktree']).optional(),
     worktreeName: z.string().optional(),
     claudeAgent: z.string().min(1).optional(),
-    openrouterModel: z.string().min(1).optional()
+    openrouterModel: z.string().min(1).optional(),
+    source: z.string().min(1).max(100).optional()
 })
 
 const pathsExistsSchema = z.object({
@@ -119,6 +120,9 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             return c.json({ error: 'Invalid body' }, 400)
         }
 
+        const rawSource = parsed.data.source?.trim()
+        const source = rawSource ? rawSource : 'external-api'
+
         const result = await engine.spawnSession(
             machineId,
             parsed.data.directory,
@@ -126,7 +130,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             parsed.data.yolo,
             parsed.data.sessionType,
             parsed.data.worktreeName,
-            { claudeAgent: parsed.data.claudeAgent, openrouterModel: parsed.data.openrouterModel }
+            { claudeAgent: parsed.data.claudeAgent, openrouterModel: parsed.data.openrouterModel, source }
         )
 
         // 如果 spawn 成功，等 session online 后发送初始化 prompt（动态生成）

@@ -162,6 +162,28 @@ function ChevronDownIcon(props: { className?: string }) {
     )
 }
 
+function RefreshAccountIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+            <path d="M16 16h5v5" />
+        </svg>
+    )
+}
+
 function getAgentLabel(session: Session): string {
     const flavor = session.metadata?.flavor?.trim()
     if (flavor === 'claude') return 'Claude'
@@ -190,8 +212,10 @@ export function SessionHeader(props: {
     onViewFiles?: () => void
     onClearMessages?: () => void
     onDelete?: () => void
+    onRefreshAccount?: () => void
     clearDisabled?: boolean
     deleteDisabled?: boolean
+    refreshAccountDisabled?: boolean
 }) {
     const { api } = useAppContext()
     const queryClient = useQueryClient()
@@ -501,6 +525,17 @@ export function SessionHeader(props: {
                             </div>
                         )}
                     </div>
+                    {props.onRefreshAccount ? (
+                        <button
+                            type="button"
+                            onClick={props.onRefreshAccount}
+                            disabled={props.refreshAccountDisabled}
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-green-500/10 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="刷新账号 (保留上下文)"
+                        >
+                            <RefreshAccountIcon />
+                        </button>
+                    ) : null}
                     {props.onViewFiles ? (
                         <button
                             type="button"

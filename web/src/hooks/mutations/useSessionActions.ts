@@ -31,6 +31,7 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
     setModelMode: (config: ModelConfig) => Promise<void>
     deleteSession: () => Promise<void>
     clearMessages: (keepCount: number, compact?: boolean) => Promise<ClearMessagesResponse>
+    refreshAccount: () => Promise<{ newSessionId: string }>
     isPending: boolean
 } {
     const queryClient = useQueryClient()
@@ -113,6 +114,18 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         },
     })
 
+    const refreshAccountMutation = useMutation({
+        mutationFn: async () => {
+            if (!api || !sessionId) {
+                throw new Error('Session unavailable')
+            }
+            return await api.refreshAccount(sessionId)
+        },
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+        },
+    })
+
     return {
         abortSession: abortMutation.mutateAsync,
         switchSession: switchMutation.mutateAsync,
@@ -120,11 +133,16 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         setModelMode: modelMutation.mutateAsync,
         deleteSession: deleteMutation.mutateAsync,
         clearMessages: (keepCount: number, compact?: boolean) => clearMessagesMutation.mutateAsync({ keepCount, compact }),
+        refreshAccount: async () => {
+            const result = await refreshAccountMutation.mutateAsync()
+            return { newSessionId: result.newSessionId }
+        },
         isPending: abortMutation.isPending
             || switchMutation.isPending
             || permissionMutation.isPending
             || modelMutation.isPending
             || deleteMutation.isPending
-            || clearMessagesMutation.isPending,
+            || clearMessagesMutation.isPending
+            || refreshAccountMutation.isPending,
     }
 }
