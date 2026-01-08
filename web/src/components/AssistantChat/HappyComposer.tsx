@@ -624,6 +624,35 @@ export function HappyComposer(props: {
         return result.optimized
     }, [apiClient])
 
+    const buildMessageWithAttachments = useCallback((baseText: string) => {
+        const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
+        const fileRefs = uploadedFiles.map(file => `[File: ${file.path}]`).join('\n')
+        const attachmentRefs = [imageRefs, fileRefs].filter(Boolean).join('\n')
+        const currentText = baseText.trim()
+        if (!attachmentRefs) {
+            return currentText
+        }
+        const separator = currentText ? '\n\n' : ''
+        return `${currentText}${separator}${attachmentRefs}`
+    }, [uploadedImages, uploadedFiles])
+
+    // 处理带附件的消息发送
+    const handleSendWithAttachments = useCallback((baseText?: string) => {
+        const newText = buildMessageWithAttachments(baseText ?? composerText)
+        if (!newText) {
+            return
+        }
+        assistantApi.composer().setText(newText)
+
+        // 延迟提交，等待文本更新
+        setTimeout(() => {
+            const form = textareaRef.current?.closest('form')
+            if (form) {
+                form.requestSubmit()
+            }
+        }, 50)
+    }, [buildMessageWithAttachments, composerText, assistantApi])
+
     const handleOptimizeForPreview = useCallback(async () => {
         if (controlsDisabled || isOptimizing) return
         if (!hasText) {
@@ -840,35 +869,6 @@ export function HappyComposer(props: {
             setUploadedFiles([])
         }
     }, [trimmed, addToHistory, clearDraft, resetNavigation, uploadedImages, uploadedFiles])
-
-    const buildMessageWithAttachments = useCallback((baseText: string) => {
-        const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
-        const fileRefs = uploadedFiles.map(file => `[File: ${file.path}]`).join('\n')
-        const attachmentRefs = [imageRefs, fileRefs].filter(Boolean).join('\n')
-        const currentText = baseText.trim()
-        if (!attachmentRefs) {
-            return currentText
-        }
-        const separator = currentText ? '\n\n' : ''
-        return `${currentText}${separator}${attachmentRefs}`
-    }, [uploadedImages, uploadedFiles])
-
-    // 处理带附件的消息发送
-    const handleSendWithAttachments = useCallback((baseText?: string) => {
-        const newText = buildMessageWithAttachments(baseText ?? composerText)
-        if (!newText) {
-            return
-        }
-        assistantApi.composer().setText(newText)
-
-        // 延迟提交，等待文本更新
-        setTimeout(() => {
-            const form = textareaRef.current?.closest('form')
-            if (form) {
-                form.requestSubmit()
-            }
-        }, 50)
-    }, [buildMessageWithAttachments, composerText, assistantApi])
 
     const handlePermissionChange = useCallback((mode: PermissionMode) => {
         if (!onPermissionModeChange || controlsDisabled) return
