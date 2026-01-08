@@ -282,6 +282,26 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         if (converted?.modelInfo) {
             session.updateRuntimeModel(converted.modelInfo.model, converted.modelInfo.reasoningEffort ?? null);
         }
+        recordInFlightEvent(msg.type);
+        if (inFlight) {
+            if (msg.type === 'exec_command_begin') {
+                inFlight.commandCount += 1;
+            }
+            if (msg.type === 'patch_apply_begin') {
+                inFlight.patchCount += 1;
+            }
+            if (msg.type === 'token_count') {
+                inFlight.tokenCountEvents += 1;
+            }
+            if (msg.type === 'task_started' && !inFlight.taskStartedAt) {
+                inFlight.taskStartedAt = Date.now();
+            }
+            if (msg.type === 'task_complete' || msg.type === 'turn_aborted') {
+                inFlight.completedAt = Date.now();
+                inFlight.completedType = msg.type;
+                logInFlightSummary();
+            }
+        }
 
         if (msg.type === 'agent_message') {
             messageBuffer.addMessage(msg.message, 'assistant');
@@ -427,6 +447,19 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         message: string;
         hash: string;
         startedAt: number;
+        rpcCompletedAt?: number;
+        firstEventAt?: number;
+        firstEventType?: string;
+        taskStartedAt?: number;
+        completedAt?: number;
+        completedType?: 'task_complete' | 'turn_aborted';
+        lastEventAt?: number;
+        eventCount: number;
+        commandCount: number;
+        patchCount: number;
+        tokenCountEvents: number;
+        summaryLogged: boolean;
+        abortReason?: string;
     };
 
     let inFlight: InFlightTurn | null = null;
@@ -446,7 +479,52 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         }
     }
 
+    function logPerf(label: string, data: Record<string, unknown>): void {
+        logger.debug(`[CodexPerf] ${label} ${JSON.stringify(data)}`);
+    }
+
+    function recordInFlightEvent(eventType: string): void {
+        if (!inFlight) {
+            return;
+        }
+        const now = Date.now();
+        if (!inFlight.firstEventAt) {
+            inFlight.firstEventAt = now;
+            inFlight.firstEventType = eventType;
+        }
+        inFlight.lastEventAt = now;
+        inFlight.eventCount += 1;
+    }
+
+    function logInFlightSummary(reason?: string): void {
+        if (!inFlight || inFlight.summaryLogged) {
+            return;
+        }
+        const now = Date.now();
+        const endAt = inFlight.completedAt ?? inFlight.lastEventAt ?? now;
+        const summary = {
+            kind: inFlight.kind,
+            hash: inFlight.hash,
+            messageLength: inFlight.message.length,
+            reason: reason ?? inFlight.completedType ?? inFlight.abortReason ?? 'unknown',
+            rpcMs: inFlight.rpcCompletedAt ? inFlight.rpcCompletedAt - inFlight.startedAt : undefined,
+            firstEventMs: inFlight.firstEventAt ? inFlight.firstEventAt - inFlight.startedAt : undefined,
+            taskStartedMs: inFlight.taskStartedAt ? inFlight.taskStartedAt - inFlight.startedAt : undefined,
+            totalMs: endAt - inFlight.startedAt,
+            eventCount: inFlight.eventCount,
+            commandCount: inFlight.commandCount,
+            patchCount: inFlight.patchCount,
+            tokenCountEvents: inFlight.tokenCountEvents,
+            firstEventType: inFlight.firstEventType
+        };
+        logPerf('turn_summary', summary);
+        inFlight.summaryLogged = true;
+    }
+
     function clearInFlight(): void {
+        if (inFlight) {
+            logInFlightSummary('cleared');
+        }
         clearInFlightTimers();
         inFlight = null;
         inFlightAbortRequested = false;
@@ -458,8 +536,18 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
             kind,
             message,
             hash,
-            startedAt: Date.now()
+            startedAt: Date.now(),
+            eventCount: 0,
+            commandCount: 0,
+            patchCount: 0,
+            tokenCountEvents: 0,
+            summaryLogged: false
         };
+        logPerf('turn_start', {
+            kind: inFlight.kind,
+            hash: inFlight.hash,
+            messageLength: inFlight.message.length
+        });
         if (TURN_TIMEOUT_MS <= 0) {
             return;
         }
@@ -486,6 +574,7 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
             return;
         }
         inFlightAbortRequested = true;
+        inFlight.abortReason = reason;
         clearInFlightTimers();
         const ageSeconds = Math.round((Date.now() - inFlight.startedAt) / 1000);
         logger.warn(`[Codex] ${reason} - aborting in-flight ${inFlight.kind} turn (hash=${inFlight.hash}, age=${ageSeconds}s)`);
@@ -675,7 +764,19 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
 
                     startInFlightWatchdog('start', message.message, message.hash);
                     const startResponse = await client.startSession(startConfig, { signal: abortController.signal });
+                    if (inFlight) {
+                        inFlight.rpcCompletedAt = Date.now();
+                        logPerf('turn_rpc', {
+                            kind: inFlight.kind,
+                            hash: inFlight.hash,
+                            rpcMs: inFlight.rpcCompletedAt - inFlight.startedAt,
+                            error: startResponse.error ?? null
+                        });
+                    }
                     if (startResponse.error) {
+                        if (inFlight) {
+                            inFlight.abortReason = 'start_response_error';
+                        }
                         messageBuffer.addMessage(startResponse.error, 'status');
                         session.sendSessionEvent({ type: 'message', message: startResponse.error });
                         continue;
@@ -686,7 +787,19 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                 } else {
                     startInFlightWatchdog('continue', message.message, message.hash);
                     const continueResponse = await client.continueSession(outgoingMessage, { signal: abortController.signal });
+                    if (inFlight) {
+                        inFlight.rpcCompletedAt = Date.now();
+                        logPerf('turn_rpc', {
+                            kind: inFlight.kind,
+                            hash: inFlight.hash,
+                            rpcMs: inFlight.rpcCompletedAt - inFlight.startedAt,
+                            error: continueResponse.error ?? null
+                        });
+                    }
                     if (continueResponse.error) {
+                        if (inFlight) {
+                            inFlight.abortReason = 'continue_response_error';
+                        }
                         messageBuffer.addMessage(continueResponse.error, 'status');
                         session.sendSessionEvent({ type: 'message', message: continueResponse.error });
                         continue;
@@ -697,6 +810,9 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                 logger.warn('Error in codex session:', error);
                 const isAbortError = error instanceof Error && error.name === 'AbortError';
                 const isAbortRequested = inFlightAbortRequested || lastAbortReason !== null;
+                if (inFlight && !inFlight.abortReason) {
+                    inFlight.abortReason = isAbortError ? 'abort_error' : 'exception';
+                }
 
                 if (isAbortError || isAbortRequested) {
                     const abortMessage = lastAbortReason

@@ -543,7 +543,12 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
 
     // Upload image handler - saves image to .hapi/uploads directory
     rpcHandlerManager.registerHandler<UploadImageRequest, UploadImageResponse>('uploadImage', async (data) => {
-        logger.debug('Upload image request:', data.filename, 'mimeType:', data.mimeType);
+        logger.debug('[upload image] request', {
+            filename: data.filename,
+            mimeType: data.mimeType,
+            base64Length: data.content.length,
+            workingDirectory
+        });
 
         try {
             const result = await saveUploadedFile({
@@ -556,12 +561,12 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
             });
 
             if (result.success) {
-                logger.debug('Image uploaded to:', result.path);
+                logger.debug('[upload image] saved', { path: result.path });
             }
 
             return result;
         } catch (error) {
-            logger.debug('Failed to upload image:', error);
+            logger.debug('[upload image] failed:', error);
             return {
                 success: false,
                 error: error instanceof Error ? error.message : 'Failed to upload image'
@@ -571,7 +576,12 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
 
     // Upload file handler - saves file to .hapi/uploads directory
     rpcHandlerManager.registerHandler<UploadFileRequest, UploadFileResponse>('uploadFile', async (data) => {
-        logger.debug('Upload file request:', data.filename, 'mimeType:', data.mimeType);
+        logger.debug('[upload file] request', {
+            filename: data.filename,
+            mimeType: data.mimeType,
+            base64Length: data.content.length,
+            workingDirectory
+        });
 
         try {
             const result = await saveUploadedFile({
@@ -584,12 +594,12 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
             });
 
             if (result.success) {
-                logger.debug('File uploaded to:', result.path);
+                logger.debug('[upload file] saved', { path: result.path });
             }
 
             return result;
         } catch (error) {
-            logger.debug('Failed to upload file:', error);
+            logger.debug('[upload file] failed:', error);
             return {
                 success: false,
                 error: error instanceof Error ? error.message : 'Failed to upload file'
@@ -625,7 +635,16 @@ async function saveUploadedFile(options: UploadSaveOptions): Promise<UploadFileR
     const filePath = join(uploadsDir, uniqueFilename);
 
     const buffer = Buffer.from(options.content, 'base64');
-    if (buffer.length > options.maxBytes) {
+    const sizeBytes = buffer.length;
+    logger.debug('[upload] decoded', {
+        filename: safeName,
+        bytes: sizeBytes,
+        maxBytes: options.maxBytes,
+        mimeType: options.mimeType,
+        workingDirectory: options.workingDirectory
+    });
+    if (sizeBytes > options.maxBytes) {
+        logger.warn('[upload] too large', { filename: safeName, bytes: sizeBytes, maxBytes: options.maxBytes });
         return {
             success: false,
             error: `File too large (max ${options.maxBytes} bytes)`
@@ -636,6 +655,7 @@ async function saveUploadedFile(options: UploadSaveOptions): Promise<UploadFileR
 
     // Return relative path from working directory
     const relativePath = join('.hapi', 'uploads', uniqueFilename);
+    logger.debug('[upload] saved', { path: relativePath, bytes: sizeBytes });
     return { success: true, path: relativePath };
 }
 

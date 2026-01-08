@@ -29,6 +29,14 @@ const fileUploadSchema = z.object({
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_FILE_BYTES = 20 * 1024 * 1024
 
+function logUploadInfo(kind: 'image' | 'file', phase: string, data: Record<string, unknown>): void {
+    console.log(`[upload-${kind}] ${phase}`, data)
+}
+
+function logUploadWarn(kind: 'image' | 'file', phase: string, data: Record<string, unknown>): void {
+    console.warn(`[upload-${kind}] ${phase}`, data)
+}
+
 function parseBooleanParam(value: string | undefined): boolean | undefined {
     if (value === 'true') return true
     if (value === 'false') return false
@@ -300,30 +308,70 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return sessionResult
         }
 
+        const sessionId = sessionResult.sessionId
+        const namespace = c.get('namespace')
+        const clientId = c.get('clientId')
+        const userId = c.get('userId')
+        const contentLength = c.req.header('content-length')
+
         let body: unknown
         try {
             body = await c.req.json()
         } catch {
+            logUploadWarn('image', 'invalid-json', { sessionId, namespace, clientId, userId, contentLength })
             return c.json({ success: false, error: 'Invalid JSON body' }, 400)
         }
 
         const parsed = imageUploadSchema.safeParse(body)
         if (!parsed.success) {
+            logUploadWarn('image', 'invalid-body', {
+                sessionId,
+                namespace,
+                clientId,
+                userId,
+                error: parsed.error.message
+            })
             return c.json({ success: false, error: 'Invalid request: ' + parsed.error.message }, 400)
         }
 
         const { filename, content, mimeType } = parsed.data
         const sizeBytes = estimateBase64Size(content)
+        logUploadInfo('image', 'request', {
+            sessionId,
+            namespace,
+            clientId,
+            userId,
+            filename: basename(filename),
+            mimeType,
+            sizeBytes,
+            contentLength
+        })
         if (sizeBytes > MAX_IMAGE_BYTES) {
+            logUploadWarn('image', 'too-large', {
+                sessionId,
+                filename: basename(filename),
+                sizeBytes,
+                maxBytes: MAX_IMAGE_BYTES
+            })
             return c.json({ success: false, error: 'Image too large (max 10MB)' }, 413)
         }
 
         const result = await runRpc(() => engine.uploadImage(
-            sessionResult.sessionId,
+            sessionId,
             filename,
             content,
             mimeType
         ))
+        const uploadResult = result as { success?: boolean; path?: string; error?: string }
+        if (uploadResult && typeof uploadResult.success === 'boolean') {
+            if (uploadResult.success) {
+                logUploadInfo('image', 'saved', { sessionId, path: uploadResult.path, sizeBytes })
+            } else {
+                logUploadWarn('image', 'failed', { sessionId, error: uploadResult.error })
+            }
+        } else {
+            logUploadWarn('image', 'unexpected-result', { sessionId })
+        }
         return c.json(result)
     })
 
@@ -339,30 +387,70 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return sessionResult
         }
 
+        const sessionId = sessionResult.sessionId
+        const namespace = c.get('namespace')
+        const clientId = c.get('clientId')
+        const userId = c.get('userId')
+        const contentLength = c.req.header('content-length')
+
         let body: unknown
         try {
             body = await c.req.json()
         } catch {
+            logUploadWarn('file', 'invalid-json', { sessionId, namespace, clientId, userId, contentLength })
             return c.json({ success: false, error: 'Invalid JSON body' }, 400)
         }
 
         const parsed = fileUploadSchema.safeParse(body)
         if (!parsed.success) {
+            logUploadWarn('file', 'invalid-body', {
+                sessionId,
+                namespace,
+                clientId,
+                userId,
+                error: parsed.error.message
+            })
             return c.json({ success: false, error: 'Invalid request: ' + parsed.error.message }, 400)
         }
 
         const { filename, content, mimeType } = parsed.data
         const sizeBytes = estimateBase64Size(content)
+        logUploadInfo('file', 'request', {
+            sessionId,
+            namespace,
+            clientId,
+            userId,
+            filename: basename(filename),
+            mimeType,
+            sizeBytes,
+            contentLength
+        })
         if (sizeBytes > MAX_FILE_BYTES) {
+            logUploadWarn('file', 'too-large', {
+                sessionId,
+                filename: basename(filename),
+                sizeBytes,
+                maxBytes: MAX_FILE_BYTES
+            })
             return c.json({ success: false, error: 'File too large (max 20MB)' }, 413)
         }
 
         const result = await runRpc(() => engine.uploadFile(
-            sessionResult.sessionId,
+            sessionId,
             filename,
             content,
             mimeType
         ))
+        const uploadResult = result as { success?: boolean; path?: string; error?: string }
+        if (uploadResult && typeof uploadResult.success === 'boolean') {
+            if (uploadResult.success) {
+                logUploadInfo('file', 'saved', { sessionId, path: uploadResult.path, sizeBytes })
+            } else {
+                logUploadWarn('file', 'failed', { sessionId, error: uploadResult.error })
+            }
+        } else {
+            logUploadWarn('file', 'unexpected-result', { sessionId })
+        }
         return c.json(result)
     })
 
