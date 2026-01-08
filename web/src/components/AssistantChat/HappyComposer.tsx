@@ -28,6 +28,7 @@ import { FloatingOverlay } from '@/components/ChatInput/FloatingOverlay'
 import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { StatusBar } from '@/components/AssistantChat/StatusBar'
 import { ComposerButtons } from '@/components/AssistantChat/ComposerButtons'
+import { FileIcon } from '@/components/FileIcon'
 import type { ApiClient } from '@/api/client'
 
 export interface TextInputState {
@@ -317,13 +318,12 @@ export function HappyComposer(props: {
     const threadIsDisabled = useAssistantState(({ thread }) => thread.isDisabled)
 
     const [uploadedImages, setUploadedImages] = useState<Array<{ path: string; previewUrl: string }>>([])
+    const [uploadedFiles, setUploadedFiles] = useState<Array<{ path: string; name: string; size: number }>>([])
     const MAX_IMAGES = 5
+    const MAX_FILES = 5
+    const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+    const MAX_FILE_BYTES = 20 * 1024 * 1024
 
-    const controlsDisabled = disabled || !active || threadIsDisabled
-    const trimmed = composerText.trim()
-    const hasText = trimmed.length > 0
-    const hasImages = uploadedImages.length > 0
-    const canSend = (hasText || hasImages) && !controlsDisabled && !threadIsRunning
     const showResumeOverlay = !active && Boolean(onRequestResume)
     const resumeLabel = resumePending
         ? 'Resuming...'
@@ -351,9 +351,24 @@ export function HappyComposer(props: {
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
     const prevControlledByUser = useRef(controlledByUser)
     const sttPrefixRef = useRef<string>('')
-    const [isUploading, setIsUploading] = useState(false)
+    const [isUploadingImage, setIsUploadingImage] = useState(false)
+    const [isUploadingFile, setIsUploadingFile] = useState(false)
+
+    const controlsDisabled = disabled || !active || threadIsDisabled
+    const trimmed = composerText.trim()
+    const hasText = trimmed.length > 0
+    const hasImages = uploadedImages.length > 0
+    const hasFiles = uploadedFiles.length > 0
+    const hasAttachments = hasImages || hasFiles
+    const canSend = (hasText || hasAttachments)
+        && !controlsDisabled
+        && !threadIsRunning
+        && !isUploadingImage
+        && !isUploadingFile
+    const showAttachmentPreview = hasAttachments || isUploadingImage || isUploadingFile
 
     // Session 草稿管理
     const { getDraft, setDraft, clearDraft } = useSessionDraft(sessionId)
@@ -610,7 +625,13 @@ export function HappyComposer(props: {
     }, [apiClient])
 
     const handleOptimizeForPreview = useCallback(async () => {
-        if (controlsDisabled || !hasText || isOptimizing) return
+        if (controlsDisabled || isOptimizing) return
+        if (!hasText) {
+            if (hasAttachments) {
+                handleSendWithAttachments()
+            }
+            return
+        }
 
         setIsOptimizing(true)
         haptic('light')
@@ -619,9 +640,13 @@ export function HappyComposer(props: {
             const optimizedResult = await optimizeText(trimmed)
             // If text is the same, just send directly
             if (optimizedResult === trimmed) {
-                const form = textareaRef.current?.closest('form')
-                if (form) {
-                    form.requestSubmit()
+                if (hasAttachments) {
+                    handleSendWithAttachments(optimizedResult)
+                } else {
+                    const form = textareaRef.current?.closest('form')
+                    if (form) {
+                        form.requestSubmit()
+                    }
                 }
             } else {
                 // Show preview dialog
@@ -631,14 +656,18 @@ export function HappyComposer(props: {
             console.error('Failed to optimize text:', error)
             haptic('error')
             // On error, just send the original
-            const form = textareaRef.current?.closest('form')
-            if (form) {
-                form.requestSubmit()
+            if (hasAttachments) {
+                handleSendWithAttachments(trimmed)
+            } else {
+                const form = textareaRef.current?.closest('form')
+                if (form) {
+                    form.requestSubmit()
+                }
             }
         } finally {
             setIsOptimizing(false)
         }
-    }, [controlsDisabled, hasText, isOptimizing, trimmed, optimizeText, haptic])
+    }, [controlsDisabled, hasText, hasAttachments, isOptimizing, trimmed, optimizeText, haptic, handleSendWithAttachments])
 
     const handleKeyDown = useCallback((e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
         const key = e.key
@@ -716,10 +745,16 @@ export function HappyComposer(props: {
             return
         }
 
-        // Intercept Enter for auto-optimize
-        if (key === 'Enter' && !e.shiftKey && autoOptimize && hasText && !isOptimizing && !controlsDisabled && !threadIsRunning) {
-            e.preventDefault()
-            handleOptimizeForPreview()
+        if (key === 'Enter' && !e.shiftKey && !controlsDisabled && !threadIsRunning && !isUploadingImage && !isUploadingFile) {
+            if (autoOptimize && hasText && !isOptimizing) {
+                e.preventDefault()
+                handleOptimizeForPreview()
+                return
+            }
+            if (hasAttachments) {
+                e.preventDefault()
+                handleSendWithAttachments()
+            }
         }
     }, [
         suggestions,
@@ -736,9 +771,13 @@ export function HappyComposer(props: {
         haptic,
         autoOptimize,
         hasText,
+        hasAttachments,
         isOptimizing,
+        isUploadingImage,
+        isUploadingFile,
         controlsDisabled,
         handleOptimizeForPreview,
+        handleSendWithAttachments,
         navigateUp,
         navigateDown,
         isNavigating,
@@ -786,7 +825,7 @@ export function HappyComposer(props: {
         setShowContinueHint(false)
 
         // 添加到历史记录
-        if (trimmed || uploadedImages.length > 0) {
+        if (trimmed || uploadedImages.length > 0 || uploadedFiles.length > 0) {
             addToHistory(trimmed)
         }
         // 清除草稿
@@ -797,24 +836,29 @@ export function HappyComposer(props: {
         if (uploadedImages.length > 0) {
             setUploadedImages([])
         }
-    }, [trimmed, addToHistory, clearDraft, resetNavigation, uploadedImages])
+        if (uploadedFiles.length > 0) {
+            setUploadedFiles([])
+        }
+    }, [trimmed, addToHistory, clearDraft, resetNavigation, uploadedImages, uploadedFiles])
 
-    // 处理带图片的消息发送
-    const handleSendWithImages = useCallback(() => {
-        if (uploadedImages.length === 0) {
-            // 没有图片，直接提交
-            const form = textareaRef.current?.closest('form')
-            if (form) {
-                form.requestSubmit()
-            }
+    const buildMessageWithAttachments = useCallback((baseText: string) => {
+        const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
+        const fileRefs = uploadedFiles.map(file => `[File: ${file.path}]`).join('\n')
+        const attachmentRefs = [imageRefs, fileRefs].filter(Boolean).join('\n')
+        const currentText = baseText.trim()
+        if (!attachmentRefs) {
+            return currentText
+        }
+        const separator = currentText ? '\n\n' : ''
+        return `${currentText}${separator}${attachmentRefs}`
+    }, [uploadedImages, uploadedFiles])
+
+    // 处理带附件的消息发送
+    const handleSendWithAttachments = useCallback((baseText?: string) => {
+        const newText = buildMessageWithAttachments(baseText ?? composerText)
+        if (!newText) {
             return
         }
-
-        // 有图片，先添加图片引用到文本
-        const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
-        const currentText = composerText.trim()
-        const separator = currentText ? '\n\n' : ''
-        const newText = `${currentText}${separator}${imageRefs}`
         assistantApi.composer().setText(newText)
 
         // 延迟提交，等待文本更新
@@ -824,7 +868,7 @@ export function HappyComposer(props: {
                 form.requestSubmit()
             }
         }, 50)
-    }, [uploadedImages, composerText, assistantApi])
+    }, [buildMessageWithAttachments, composerText, assistantApi])
 
     const handlePermissionChange = useCallback((mode: PermissionMode) => {
         if (!onPermissionModeChange || controlsDisabled) return
@@ -853,6 +897,10 @@ export function HappyComposer(props: {
         imageInputRef.current?.click()
     }, [])
 
+    const handleFileClick = useCallback(() => {
+        fileInputRef.current?.click()
+    }, [])
+
     const handleImageChange = useCallback(async (e: ReactChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
@@ -875,14 +923,13 @@ export function HappyComposer(props: {
         }
 
         // Validate file size (max 10MB)
-        const maxSize = 10 * 1024 * 1024
-        if (file.size > maxSize) {
+        if (file.size > MAX_IMAGE_BYTES) {
             haptic('error')
             console.error('Image file too large (max 10MB)')
             return
         }
 
-        setIsUploading(true)
+        setIsUploadingImage(true)
         haptic('light')
 
         try {
@@ -899,9 +946,10 @@ export function HappyComposer(props: {
 
             // Extract base64 content (remove data URL prefix)
             const base64Content = dataUrl.split(',')[1]
+            const mimeType = file.type || 'application/octet-stream'
 
             // Upload to server
-            const result = await apiClient.uploadImage(sessionId, file.name, base64Content, file.type)
+            const result = await apiClient.uploadImage(sessionId, file.name, base64Content, mimeType)
 
             if (result.success && result.path) {
                 haptic('success')
@@ -915,21 +963,81 @@ export function HappyComposer(props: {
             haptic('error')
             console.error('Failed to upload image:', error)
         } finally {
-            setIsUploading(false)
+            setIsUploadingImage(false)
         }
-    }, [apiClient, sessionId, uploadedImages.length, haptic])
+    }, [apiClient, sessionId, uploadedImages.length, haptic, MAX_IMAGE_BYTES])
+
+    const handleFileChange = useCallback(async (e: ReactChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        // Reset input for next selection
+        e.target.value = ''
+
+        // Check max files limit
+        if (uploadedFiles.length >= MAX_FILES) {
+            haptic('error')
+            console.error(`Maximum ${MAX_FILES} files allowed`)
+            return
+        }
+
+        // Validate file size (max 20MB)
+        if (file.size > MAX_FILE_BYTES) {
+            haptic('error')
+            console.error('File too large (max 20MB)')
+            return
+        }
+
+        setIsUploadingFile(true)
+        haptic('light')
+
+        try {
+            const reader = new FileReader()
+            const dataUrlPromise = new Promise<string>((resolve, reject) => {
+                reader.onload = () => {
+                    resolve(reader.result as string)
+                }
+                reader.onerror = reject
+            })
+            reader.readAsDataURL(file)
+            const dataUrl = await dataUrlPromise
+            const base64Content = dataUrl.split(',')[1]
+            const mimeType = file.type || 'application/octet-stream'
+
+            const result = await apiClient.uploadFile(sessionId, file.name, base64Content, mimeType)
+
+            if (result.success && result.path) {
+                haptic('success')
+                setUploadedFiles(prev => [...prev, { path: result.path!, name: file.name, size: file.size }])
+            } else {
+                haptic('error')
+                console.error('Failed to upload file:', result.error)
+            }
+        } catch (error) {
+            haptic('error')
+            console.error('Failed to upload file:', error)
+        } finally {
+            setIsUploadingFile(false)
+        }
+    }, [apiClient, sessionId, uploadedFiles.length, haptic, MAX_FILES, MAX_FILE_BYTES])
 
     const handleRemoveImage = useCallback((index: number) => {
         setUploadedImages(prev => prev.filter((_, i) => i !== index))
         haptic('light')
     }, [haptic])
 
+    const handleRemoveFile = useCallback((index: number) => {
+        setUploadedFiles(prev => prev.filter((_, i) => i !== index))
+        haptic('light')
+    }, [haptic])
+
     const handlePreviewConfirm = useCallback(() => {
         if (!optimizePreview) return
-        assistantApi.composer().setText(optimizePreview.optimized)
+        const nextText = buildMessageWithAttachments(optimizePreview.optimized)
+        assistantApi.composer().setText(nextText)
         setInputState({
-            text: optimizePreview.optimized,
-            selection: { start: optimizePreview.optimized.length, end: optimizePreview.optimized.length }
+            text: nextText,
+            selection: { start: nextText.length, end: nextText.length }
         })
         setOptimizePreview(null)
         // Send after state update
@@ -939,7 +1047,7 @@ export function HappyComposer(props: {
                 form.requestSubmit()
             }
         }, 50)
-    }, [optimizePreview, assistantApi])
+    }, [optimizePreview, buildMessageWithAttachments, assistantApi])
 
     const handlePreviewCancel = useCallback(() => {
         setOptimizePreview(null)
@@ -948,13 +1056,22 @@ export function HappyComposer(props: {
     }, [])
 
     const handlePreviewSendOriginal = useCallback(() => {
+        if (!optimizePreview) return
+        const nextText = buildMessageWithAttachments(optimizePreview.original)
+        assistantApi.composer().setText(nextText)
+        setInputState({
+            text: nextText,
+            selection: { start: nextText.length, end: nextText.length }
+        })
         setOptimizePreview(null)
         // Send original text
-        const form = textareaRef.current?.closest('form')
-        if (form) {
-            form.requestSubmit()
-        }
-    }, [])
+        setTimeout(() => {
+            const form = textareaRef.current?.closest('form')
+            if (form) {
+                form.requestSubmit()
+            }
+        }, 50)
+    }, [optimizePreview, buildMessageWithAttachments, assistantApi])
 
     const showPermissionSettings = Boolean(onPermissionModeChange && permissionModes.length > 0)
     const showModelSettings = Boolean(onModelModeChange && agentFlavor !== 'gemini')
@@ -1441,48 +1558,82 @@ export function HappyComposer(props: {
                     />
 
                     <div className="overflow-hidden rounded-[20px] bg-[var(--app-secondary-bg)]">
-                        {/* Image Preview Area */}
-                        {uploadedImages.length > 0 ? (
-                            <div className="flex gap-2 px-3 pt-3 pb-1 overflow-x-auto">
-                                {uploadedImages.map((img, index) => (
-                                    <div key={img.path} className="relative flex-shrink-0 group">
-                                        <img
-                                            src={img.previewUrl}
-                                            alt={`Upload ${index + 1}`}
-                                            className="h-16 w-16 rounded-lg object-cover border border-[var(--app-divider)]"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => handleRemoveImage(index)}
-                                            className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white text-xs shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                                            aria-label="Remove image"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                                <line x1="18" y1="6" x2="6" y2="18" />
-                                                <line x1="6" y1="6" x2="18" y2="18" />
-                                            </svg>
-                                        </button>
+                        {/* Attachment Preview Area */}
+                        {showAttachmentPreview ? (
+                            <div className="px-3 pt-3 pb-2 space-y-2">
+                                {uploadedImages.length > 0 || isUploadingImage ? (
+                                    <div className="flex gap-2 overflow-x-auto">
+                                        {uploadedImages.map((img, index) => (
+                                            <div key={img.path} className="relative flex-shrink-0 group">
+                                                <img
+                                                    src={img.previewUrl}
+                                                    alt={`Upload ${index + 1}`}
+                                                    className="h-16 w-16 rounded-lg object-cover border border-[var(--app-divider)]"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveImage(index)}
+                                                    className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white text-xs shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                                                    aria-label="Remove image"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {uploadedImages.length < MAX_IMAGES && !isUploadingImage ? (
+                                            <button
+                                                type="button"
+                                                onClick={handleImageClick}
+                                                className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-[var(--app-divider)] text-[var(--app-hint)] hover:border-[var(--app-link)] hover:text-[var(--app-link)] transition-colors"
+                                                aria-label="Add more images"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                                </svg>
+                                            </button>
+                                        ) : null}
+                                        {isUploadingImage ? (
+                                            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-[var(--app-link)] text-[var(--app-link)]">
+                                                <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
+                                                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                                                </svg>
+                                            </div>
+                                        ) : null}
                                     </div>
-                                ))}
-                                {uploadedImages.length < MAX_IMAGES && !isUploading ? (
-                                    <button
-                                        type="button"
-                                        onClick={handleImageClick}
-                                        className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-[var(--app-divider)] text-[var(--app-hint)] hover:border-[var(--app-link)] hover:text-[var(--app-link)] transition-colors"
-                                        aria-label="Add more images"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <line x1="12" y1="5" x2="12" y2="19" />
-                                            <line x1="5" y1="12" x2="19" y2="12" />
-                                        </svg>
-                                    </button>
                                 ) : null}
-                                {isUploading ? (
-                                    <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-[var(--app-link)] text-[var(--app-link)]">
-                                        <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
-                                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
-                                            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                        </svg>
+
+                                {uploadedFiles.length > 0 || isUploadingFile ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {uploadedFiles.map((file, index) => (
+                                            <div key={file.path} className="group flex items-center gap-2 rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)]/70 px-2 py-1 text-xs text-[var(--app-fg)]">
+                                                <FileIcon fileName={file.name} size={16} />
+                                                <span className="max-w-[160px] truncate">{file.name}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveFile(index)}
+                                                    className="flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white text-[10px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                                                    aria-label="Remove file"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {isUploadingFile ? (
+                                            <div className="flex h-7 items-center justify-center rounded-lg border border-dashed border-[var(--app-link)] px-2 text-[var(--app-link)]">
+                                                <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
+                                                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                                                </svg>
+                                            </div>
+                                        ) : null}
                                     </div>
                                 ) : null}
                             </div>
@@ -1553,8 +1704,12 @@ export function HappyComposer(props: {
                             onVoiceToggle={handleVoiceToggle}
                             showImageButton={active}
                             imageDisabled={controlsDisabled}
-                            isUploading={isUploading}
+                            isUploadingImage={isUploadingImage}
                             onImageClick={handleImageClick}
+                            showFileButton={active}
+                            fileDisabled={controlsDisabled}
+                            isUploadingFile={isUploadingFile}
+                            onFileClick={handleFileClick}
                             showSettingsButton={showSettingsButton}
                             onSettingsToggle={handleSettingsToggle}
                             showTerminalButton={showTerminalButton}
@@ -1571,8 +1726,8 @@ export function HappyComposer(props: {
                             autoOptimizeEnabled={autoOptimize}
                             isOptimizing={isOptimizing}
                             onOptimizeSend={handleOptimizeForPreview}
-                            hasImages={hasImages}
-                            onSendWithImages={handleSendWithImages}
+                            hasAttachments={hasAttachments}
+                            onSendWithAttachments={handleSendWithAttachments}
                         />
                         {/* Hidden image input */}
                         <input
@@ -1581,6 +1736,13 @@ export function HappyComposer(props: {
                             accept="image/*"
                             className="hidden"
                             onChange={handleImageChange}
+                        />
+                        {/* Hidden file input */}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            className="hidden"
+                            onChange={handleFileChange}
                         />
                     </div>
                 </ComposerPrimitive.Root>

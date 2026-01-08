@@ -99,6 +99,24 @@ function ImageIcon() {
     )
 }
 
+function AttachmentIcon() {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <path d="M21.44 11.05l-8.49 8.49a5 5 0 0 1-7.07-7.07l8.49-8.49a3.5 3.5 0 0 1 4.95 4.95L9.88 16.36a2 2 0 1 1-2.83-2.83L14.5 6.07" />
+        </svg>
+    )
+}
+
 function AbortIcon(props: { spinning: boolean }) {
     if (props.spinning) {
         return (
@@ -177,8 +195,12 @@ export function ComposerButtons(props: {
     onVoiceToggle: () => void
     showImageButton: boolean
     imageDisabled: boolean
-    isUploading: boolean
+    isUploadingImage: boolean
     onImageClick: () => void
+    showFileButton: boolean
+    fileDisabled: boolean
+    isUploadingFile: boolean
+    onFileClick: () => void
     showSettingsButton: boolean
     onSettingsToggle: () => void
     showTerminalButton: boolean
@@ -195,8 +217,8 @@ export function ComposerButtons(props: {
     autoOptimizeEnabled: boolean
     isOptimizing: boolean
     onOptimizeSend?: () => void
-    hasImages?: boolean
-    onSendWithImages?: () => void
+    hasAttachments?: boolean
+    onSendWithAttachments?: () => void
 }) {
     return (
         <div className="flex items-center justify-between px-2 pb-2">
@@ -224,15 +246,30 @@ export function ComposerButtons(props: {
                 {props.showImageButton ? (
                     <button
                         type="button"
-                        aria-label={props.isUploading ? 'Uploading...' : 'Upload image'}
-                        title={props.isUploading ? 'Uploading...' : 'Upload image'}
-                        disabled={props.imageDisabled || props.controlsDisabled || props.isUploading}
+                        aria-label={props.isUploadingImage ? 'Uploading...' : 'Upload image'}
+                        title={props.isUploadingImage ? 'Uploading...' : 'Upload image'}
+                        disabled={props.imageDisabled || props.controlsDisabled || props.isUploadingImage}
                         className={`flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-fg)]/60 transition-colors hover:bg-[var(--app-bg)] hover:text-[var(--app-link)] disabled:cursor-not-allowed disabled:opacity-50 ${
-                            props.isUploading ? 'animate-pulse text-[var(--app-link)]' : ''
+                            props.isUploadingImage ? 'animate-pulse text-[var(--app-link)]' : ''
                         }`}
                         onClick={props.onImageClick}
                     >
                         <ImageIcon />
+                    </button>
+                ) : null}
+
+                {props.showFileButton ? (
+                    <button
+                        type="button"
+                        aria-label={props.isUploadingFile ? 'Uploading...' : 'Upload file'}
+                        title={props.isUploadingFile ? 'Uploading...' : 'Upload file'}
+                        disabled={props.fileDisabled || props.controlsDisabled || props.isUploadingFile}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-fg)]/60 transition-colors hover:bg-[var(--app-bg)] hover:text-[var(--app-link)] disabled:cursor-not-allowed disabled:opacity-50 ${
+                            props.isUploadingFile ? 'animate-pulse text-[var(--app-link)]' : ''
+                        }`}
+                        onClick={props.onFileClick}
+                    >
+                        <AttachmentIcon />
                     </button>
                 ) : null}
 
@@ -306,7 +343,7 @@ export function ComposerButtons(props: {
                 >
                     {props.isOptimizing ? <SpinnerIcon /> : <SendIcon />}
                 </button>
-            ) : props.hasImages && props.onSendWithImages ? (
+            ) : props.hasAttachments && props.onSendWithAttachments ? (
                 <button
                     type="button"
                     disabled={props.controlsDisabled || !props.canSend || props.isOptimizing}
@@ -317,7 +354,7 @@ export function ComposerButtons(props: {
                             ? 'bg-black text-white'
                             : 'bg-[#C0C0C0] text-white'
                     } disabled:cursor-not-allowed`}
-                    onClick={props.onSendWithImages}
+                    onClick={props.onSendWithAttachments}
                 >
                     <SendIcon />
                 </button>

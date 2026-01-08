@@ -124,6 +124,18 @@ interface UploadImageResponse {
     error?: string;
 }
 
+interface UploadFileRequest {
+    filename: string;
+    content: string; // base64 encoded file
+    mimeType: string;
+}
+
+interface UploadFileResponse {
+    success: boolean;
+    path?: string;
+    error?: string;
+}
+
 /*
  * Spawn Session Options and Result
  * This rpc type is used by the daemon, all other RPCs here are for sessions
@@ -534,26 +546,20 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
         logger.debug('Upload image request:', data.filename, 'mimeType:', data.mimeType);
 
         try {
-            // Create uploads directory under .hapi
-            const uploadsDir = join(workingDirectory, '.hapi', 'uploads');
-            await mkdir(uploadsDir, { recursive: true });
+            const result = await saveUploadedFile({
+                filename: data.filename,
+                content: data.content,
+                mimeType: data.mimeType,
+                workingDirectory,
+                maxBytes: MAX_IMAGE_BYTES,
+                fallbackExtension: '.png'
+            });
 
-            // Generate unique filename with timestamp
-            const timestamp = Date.now();
-            const ext = extname(data.filename) || getExtensionFromMimeType(data.mimeType);
-            const baseFilename = basename(data.filename, extname(data.filename));
-            const uniqueFilename = `${baseFilename}-${timestamp}${ext}`;
-            const filePath = join(uploadsDir, uniqueFilename);
+            if (result.success) {
+                logger.debug('Image uploaded to:', result.path);
+            }
 
-            // Decode base64 and write file
-            const buffer = Buffer.from(data.content, 'base64');
-            await writeFile(filePath, buffer);
-
-            // Return relative path from working directory
-            const relativePath = join('.hapi', 'uploads', uniqueFilename);
-            logger.debug('Image uploaded to:', relativePath);
-
-            return { success: true, path: relativePath };
+            return result;
         } catch (error) {
             logger.debug('Failed to upload image:', error);
             return {
@@ -563,10 +569,77 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
         }
     });
 
+    // Upload file handler - saves file to .hapi/uploads directory
+    rpcHandlerManager.registerHandler<UploadFileRequest, UploadFileResponse>('uploadFile', async (data) => {
+        logger.debug('Upload file request:', data.filename, 'mimeType:', data.mimeType);
+
+        try {
+            const result = await saveUploadedFile({
+                filename: data.filename,
+                content: data.content,
+                mimeType: data.mimeType,
+                workingDirectory,
+                maxBytes: MAX_FILE_BYTES,
+                fallbackExtension: '.bin'
+            });
+
+            if (result.success) {
+                logger.debug('File uploaded to:', result.path);
+            }
+
+            return result;
+        } catch (error) {
+            logger.debug('Failed to upload file:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to upload file'
+            };
+        }
+    });
+
     registerGitHandlers(rpcHandlerManager, workingDirectory);
 }
 
-function getExtensionFromMimeType(mimeType: string): string {
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+
+type UploadSaveOptions = {
+    filename: string;
+    content: string;
+    mimeType: string;
+    workingDirectory: string;
+    maxBytes: number;
+    fallbackExtension: string;
+};
+
+async function saveUploadedFile(options: UploadSaveOptions): Promise<UploadFileResponse> {
+    // Create uploads directory under .hapi
+    const uploadsDir = join(options.workingDirectory, '.hapi', 'uploads');
+    await mkdir(uploadsDir, { recursive: true });
+
+    const safeName = basename(options.filename);
+    const nameExt = extname(safeName);
+    const ext = nameExt || getExtensionFromMimeType(options.mimeType, options.fallbackExtension);
+    const baseFilename = basename(safeName, nameExt) || 'upload';
+    const uniqueFilename = `${baseFilename}-${Date.now()}${ext}`;
+    const filePath = join(uploadsDir, uniqueFilename);
+
+    const buffer = Buffer.from(options.content, 'base64');
+    if (buffer.length > options.maxBytes) {
+        return {
+            success: false,
+            error: `File too large (max ${options.maxBytes} bytes)`
+        };
+    }
+
+    await writeFile(filePath, buffer);
+
+    // Return relative path from working directory
+    const relativePath = join('.hapi', 'uploads', uniqueFilename);
+    return { success: true, path: relativePath };
+}
+
+function getExtensionFromMimeType(mimeType: string, fallbackExtension: string): string {
     const mimeToExt: Record<string, string> = {
         'image/jpeg': '.jpg',
         'image/jpg': '.jpg',
@@ -577,7 +650,15 @@ function getExtensionFromMimeType(mimeType: string): string {
         'image/bmp': '.bmp',
         'image/tiff': '.tiff',
         'image/heic': '.heic',
-        'image/heif': '.heif'
+        'image/heif': '.heif',
+        'application/pdf': '.pdf',
+        'text/plain': '.txt',
+        'text/markdown': '.md',
+        'application/json': '.json',
+        'text/csv': '.csv',
+        'application/zip': '.zip',
+        'application/gzip': '.gz',
+        'application/x-tar': '.tar'
     };
-    return mimeToExt[mimeType] || '.png';
+    return mimeToExt[mimeType] || fallbackExtension;
 }

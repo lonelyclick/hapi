@@ -123,6 +123,8 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
 }
 
 // Parse text for [Image: path] patterns and return structured content
+const ATTACHMENT_PATTERN = /\[(Image|File):\s*([^\]]+)\]/g
+
 export function parseImagesFromText(text: string): Array<{ type: 'text' | 'image'; content: string }> {
     const imagePattern = /\[Image:\s*([^\]]+)\]/g
     const parts: Array<{ type: 'text' | 'image'; content: string }> = []
@@ -161,4 +163,47 @@ export function parseImagesFromText(text: string): Array<{ type: 'text' | 'image
 // Check if text contains any image references
 export function hasImageReferences(text: string): boolean {
     return /\[Image:\s*[^\]]+\]/.test(text)
+}
+
+export function parseAttachmentsFromText(text: string): { textParts: string[]; images: string[]; files: string[] } {
+    const regex = new RegExp(ATTACHMENT_PATTERN.source, 'g')
+    const textParts: string[] = []
+    const images: string[] = []
+    const files: string[] = []
+    let lastIndex = 0
+    let match: RegExpExecArray | null
+
+    while ((match = regex.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+            const textContent = text.slice(lastIndex, match.index).trim()
+            if (textContent) {
+                textParts.push(textContent)
+            }
+        }
+        const refType = match[1]?.toLowerCase()
+        const refValue = match[2]?.trim()
+        if (refType === 'image' && refValue) {
+            images.push(refValue)
+        } else if (refType === 'file' && refValue) {
+            files.push(refValue)
+        }
+        lastIndex = match.index + match[0].length
+    }
+
+    if (lastIndex < text.length) {
+        const textContent = text.slice(lastIndex).trim()
+        if (textContent) {
+            textParts.push(textContent)
+        }
+    }
+
+    if (textParts.length === 0 && images.length === 0 && files.length === 0 && text.trim()) {
+        textParts.push(text)
+    }
+
+    return { textParts, images, files }
+}
+
+export function hasAttachmentReferences(text: string): boolean {
+    return new RegExp(ATTACHMENT_PATTERN.source).test(text)
 }

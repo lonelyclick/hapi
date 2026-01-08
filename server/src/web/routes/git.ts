@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { basename } from 'node:path'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
@@ -19,10 +20,30 @@ const imageUploadSchema = z.object({
     mimeType: z.string().min(1)
 })
 
+const fileUploadSchema = z.object({
+    filename: z.string().min(1),
+    content: z.string().min(1), // Base64 encoded file content
+    mimeType: z.string().min(1)
+})
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_FILE_BYTES = 20 * 1024 * 1024
+
 function parseBooleanParam(value: string | undefined): boolean | undefined {
     if (value === 'true') return true
     if (value === 'false') return false
     return undefined
+}
+
+function estimateBase64Size(content: string): number {
+    if (!content) return 0
+    let padding = 0
+    if (content.endsWith('==')) {
+        padding = 2
+    } else if (content.endsWith('=')) {
+        padding = 1
+    }
+    return Math.floor((content.length * 3) / 4) - padding
 }
 
 async function runRpc<T>(fn: () => Promise<T>): Promise<T | { success: false; error: string }> {
@@ -129,6 +150,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         }
 
         const raw = parseBooleanParam(c.req.query('raw'))
+        const download = parseBooleanParam(c.req.query('download'))
 
         const result = await runRpc(() => engine.readSessionFile(sessionResult.sessionId, parsed.data.path))
 
@@ -138,7 +160,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
 
             // Determine content type from file extension
             const ext = parsed.data.path.split('.').pop()?.toLowerCase() ?? ''
-            const mimeTypes: Record<string, string> = {
+            const imageMimeTypes: Record<string, string> = {
                 'jpg': 'image/jpeg',
                 'jpeg': 'image/jpeg',
                 'png': 'image/png',
@@ -150,15 +172,34 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
                 'heic': 'image/heic',
                 'heif': 'image/heif'
             }
-            const contentType = mimeTypes[ext] ?? 'application/octet-stream'
+            const fileMimeTypes: Record<string, string> = {
+                'pdf': 'application/pdf',
+                'txt': 'text/plain',
+                'md': 'text/markdown',
+                'json': 'application/json',
+                'csv': 'text/csv',
+                'zip': 'application/zip',
+                'gz': 'application/gzip',
+                'tar': 'application/x-tar'
+            }
+            const contentType = imageMimeTypes[ext] ?? fileMimeTypes[ext] ?? 'application/octet-stream'
+            const isImage = Boolean(imageMimeTypes[ext])
+            const fileName = basename(parsed.data.path) || 'download'
+            const safeFileName = fileName.replace(/"/g, '')
+
+            const headers: Record<string, string> = {
+                'Content-Type': contentType,
+                'Content-Length': buffer.length.toString(),
+                'Cache-Control': 'public, max-age=31536000, immutable'
+            }
+
+            if (download || !isImage) {
+                headers['Content-Disposition'] = `attachment; filename="${safeFileName}"`
+            }
 
             return new Response(buffer, {
                 status: 200,
-                headers: {
-                    'Content-Type': contentType,
-                    'Content-Length': buffer.length.toString(),
-                    'Cache-Control': 'public, max-age=31536000, immutable'
-                }
+                headers
             })
         }
 
@@ -272,8 +313,51 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         }
 
         const { filename, content, mimeType } = parsed.data
+        const sizeBytes = estimateBase64Size(content)
+        if (sizeBytes > MAX_IMAGE_BYTES) {
+            return c.json({ success: false, error: 'Image too large (max 10MB)' }, 413)
+        }
 
         const result = await runRpc(() => engine.uploadImage(
+            sessionResult.sessionId,
+            filename,
+            content,
+            mimeType
+        ))
+        return c.json(result)
+    })
+
+    // Upload file endpoint
+    app.post('/sessions/:id/upload-file', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        let body: unknown
+        try {
+            body = await c.req.json()
+        } catch {
+            return c.json({ success: false, error: 'Invalid JSON body' }, 400)
+        }
+
+        const parsed = fileUploadSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ success: false, error: 'Invalid request: ' + parsed.error.message }, 400)
+        }
+
+        const { filename, content, mimeType } = parsed.data
+        const sizeBytes = estimateBase64Size(content)
+        if (sizeBytes > MAX_FILE_BYTES) {
+            return c.json({ success: false, error: 'File too large (max 20MB)' }, 413)
+        }
+
+        const result = await runRpc(() => engine.uploadFile(
             sessionResult.sessionId,
             filename,
             content,

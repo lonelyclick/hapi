@@ -265,6 +265,12 @@ export type ImageUploadResponse = {
     error?: string
 }
 
+export type FileUploadResponse = {
+    success: boolean
+    path?: string
+    error?: string
+}
+
 export type GitFileStatus = {
     fileName: string
     filePath: string

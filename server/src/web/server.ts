@@ -248,11 +248,15 @@ export async function startWebServer(options: {
     })
 
     const socketHandler = options.socketEngine.handler()
+    const socketBodySize = Number.isFinite(socketHandler.maxRequestBodySize)
+        ? socketHandler.maxRequestBodySize
+        : 0
+    const maxHttpBodySize = Math.max(socketBodySize, 40 * 1024 * 1024)
 
     const server = Bun.serve({
         port: configuration.webappPort,
         idleTimeout: Math.max(30, socketHandler.idleTimeout),
-        maxRequestBodySize: socketHandler.maxRequestBodySize,
+        maxRequestBodySize: maxHttpBodySize,
         websocket: socketHandler.websocket,
         fetch: (req, server) => {
             const url = new URL(req.url)

@@ -12,6 +12,7 @@ import type {
     DeleteSessionResponse,
     FileReadResponse,
     FileSearchResponse,
+    FileUploadResponse,
     GitCommandResponse,
     GroupMessagesResponse,
     GroupMemberRole,
@@ -298,6 +299,13 @@ export class ApiClient {
 
     async uploadImage(sessionId: string, filename: string, content: string, mimeType: string): Promise<ImageUploadResponse> {
         return await this.request<ImageUploadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload-image`, {
+            method: 'POST',
+            body: JSON.stringify({ filename, content, mimeType })
+        })
+    }
+
+    async uploadFile(sessionId: string, filename: string, content: string, mimeType: string): Promise<FileUploadResponse> {
+        return await this.request<FileUploadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload-file`, {
             method: 'POST',
             body: JSON.stringify({ filename, content, mimeType })
         })

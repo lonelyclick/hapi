@@ -847,14 +847,23 @@ export class SyncEngine {
 
     private expireInactive(): void {
         const now = Date.now()
-        const sessionTimeoutMs = 30_000
-        const machineTimeoutMs = 45_000
+        const sessionTimeoutMs = 1_800_000 // 30 minutes
+        const machineTimeoutMs = 1_800_000 // 30 minutes
 
         for (const session of this.sessions.values()) {
             if (!session.active) continue
             if (now - session.activeAt <= sessionTimeoutMs) continue
             session.active = false
             session.thinking = false
+
+            // Notify CLI to terminate its process
+            const cliNamespace = this.io.of('/cli')
+            cliNamespace.to(`session:${session.id}`).emit('session-timeout', {
+                sessionId: session.id,
+                reason: 'inactivity',
+                idleMinutes: Math.floor((now - session.activeAt) / 60000)
+            })
+
             this.emit({ type: 'session-updated', sessionId: session.id, data: { active: false } })
         }
 
@@ -1282,6 +1291,10 @@ export class SyncEngine {
 
     async uploadImage(sessionId: string, filename: string, content: string, mimeType: string): Promise<RpcWriteFileResponse> {
         return await this.sessionRpc(sessionId, 'uploadImage', { filename, content, mimeType }) as RpcWriteFileResponse
+    }
+
+    async uploadFile(sessionId: string, filename: string, content: string, mimeType: string): Promise<RpcWriteFileResponse> {
+        return await this.sessionRpc(sessionId, 'uploadFile', { filename, content, mimeType }) as RpcWriteFileResponse
     }
 
     async listSlashCommands(sessionId: string, agent: string): Promise<{

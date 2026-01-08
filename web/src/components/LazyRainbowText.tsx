@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
-import { ImageViewer, parseImagesFromText, hasImageReferences } from '@/components/ImageViewer'
+import { ImageViewer, parseAttachmentsFromText, hasAttachmentReferences } from '@/components/ImageViewer'
+import { FileIcon } from '@/components/FileIcon'
 import { useHappyChatContextSafe } from '@/components/AssistantChat/context'
 
 // 特效单词列表 - 可以轻松扩展
@@ -112,6 +113,18 @@ function buildImageUrl(path: string, sessionId: string): string {
     return `/api/sessions/${encodeURIComponent(sessionId)}/file?path=${encodedPath}&raw=true`
 }
 
+function buildFileUrl(path: string, sessionId: string): string {
+    const encodedPath = encodeURIComponent(path)
+    return `/api/sessions/${encodeURIComponent(sessionId)}/file?path=${encodedPath}&raw=true&download=true`
+}
+
+function getDisplayNameFromPath(path: string): string {
+    const name = path.split('/').pop() ?? path
+    return name
+        .replace(/-\d{13}(?=\.[^./]+$)/, '')
+        .replace(/-\d{13}$/, '')
+}
+
 // Component to render images from message
 function MessageImages({ images, sessionId }: { images: string[]; sessionId: string }) {
     if (images.length === 0) return null
@@ -125,6 +138,31 @@ function MessageImages({ images, sessionId }: { images: string[]; sessionId: str
                     alt={`Uploaded image ${index + 1}`}
                 />
             ))}
+        </div>
+    )
+}
+
+function MessageFiles({ files, sessionId }: { files: string[]; sessionId: string }) {
+    if (files.length === 0) return null
+
+    return (
+        <div className="flex flex-col gap-2 mt-2">
+            {files.map((filePath, index) => {
+                const displayName = getDisplayNameFromPath(filePath)
+                return (
+                    <a
+                        key={`${filePath}-${index}`}
+                        href={buildFileUrl(filePath, sessionId)}
+                        download
+                        className="inline-flex items-center gap-2 rounded-lg border border-[var(--app-divider)] bg-[var(--app-secondary-bg)] px-2 py-1 text-xs text-[var(--app-fg)] hover:border-[var(--app-link)]"
+                        title={filePath}
+                    >
+                        <FileIcon fileName={displayName} size={16} />
+                        <span className="truncate">{displayName}</span>
+                        <span className="ml-auto text-[10px] text-[var(--app-hint)]">下载</span>
+                    </a>
+                )
+            })}
         </div>
     )
 }
@@ -158,8 +196,8 @@ export function LazyRainbowText(props: { text: string }) {
     // Quick check: if no special words, just render markdown
     const hasSpecialWord = hasAnySpecialWord(text, RAINBOW_WORDS)
 
-    // Check for image references
-    const containsImages = hasImageReferences(text)
+    // Check for attachment references
+    const containsAttachments = hasAttachmentReferences(text)
 
     const rainbowComponents = useMemo(() => ({
         p: ({ children }: { children?: React.ReactNode }) => (
@@ -167,11 +205,9 @@ export function LazyRainbowText(props: { text: string }) {
         ),
     }), [])
 
-    // If text contains images, parse and render them separately
-    if (containsImages && sessionId) {
-        const parts = parseImagesFromText(text)
-        const textParts = parts.filter(p => p.type === 'text').map(p => p.content)
-        const imagePaths = parts.filter(p => p.type === 'image').map(p => p.content)
+    // If text contains attachments, parse and render them separately
+    if (containsAttachments && sessionId) {
+        const { textParts, images, files } = parseAttachmentsFromText(text)
         const textContent = textParts.join('\n\n')
 
         return (
@@ -182,7 +218,8 @@ export function LazyRainbowText(props: { text: string }) {
                         components={hasSpecialWord && hasBeenVisible ? rainbowComponents : undefined}
                     />
                 )}
-                <MessageImages images={imagePaths} sessionId={sessionId} />
+                <MessageImages images={images} sessionId={sessionId} />
+                <MessageFiles files={files} sessionId={sessionId} />
             </div>
         )
     }
