@@ -56,6 +56,7 @@ export type NormalizedAgentContent =
         text: string
         uuid: string
         parentUUID: string | null
+        isDelta?: boolean
     }
     | ToolUse
     | ToolResult
@@ -135,6 +136,7 @@ export type AgentReasoningBlock = {
     createdAt: number
     text: string
     meta?: unknown
+    isDelta?: boolean
 }
 
 export type CliOutputBlock = {

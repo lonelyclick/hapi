@@ -80,6 +80,8 @@ See `src/configuration.ts` for all options.
 - `HAPI_LANGFUSE_BASE_URL`/`LANGFUSE_BASE_URL` - Langfuse base URL (default: https://cloud.langfuse.com).
 - `HAPI_LANGFUSE_HOST`/`LANGFUSE_HOST` - Alias for base URL.
 - `HAPI_LANGFUSE_OTEL_ENDPOINT`/`LANGFUSE_OTEL_ENDPOINT` - Override OTLP endpoint (default: /api/public/otel/v1/traces).
+- `HAPI_MCP_EVENT_LOG` - Enable MCP event logging (true/1/yes, default: true).
+- `HAPI_MCP_EVENT_LOG_SAMPLE`/`HAPI_MCP_EVENT_LOG_SAMPLE_RATE` - Sampling rate for MCP event logs (0..1, default: 1).
 
 ### Daemon
 

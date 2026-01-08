@@ -264,8 +264,41 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         return parsed;
     }
 
+    function parseBooleanEnv(name: string, fallback: boolean): boolean {
+        const raw = process.env[name];
+        if (!raw) {
+            return fallback;
+        }
+        const normalized = raw.trim().toLowerCase();
+        if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) {
+            return true;
+        }
+        if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) {
+            return false;
+        }
+        logger.warn(`[Codex] Invalid ${name}=${raw}; using ${fallback}`);
+        return fallback;
+    }
+
+    function parseSampleRateEnv(name: string): number | null {
+        const raw = process.env[name];
+        if (!raw) {
+            return null;
+        }
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+            logger.warn(`[Codex] Invalid ${name}=${raw}; expected 0..1`);
+            return null;
+        }
+        return parsed;
+    }
+
     const TURN_TIMEOUT_MS = parseTimeoutEnv('HAPI_CODEX_TURN_TIMEOUT_MS', 30 * 60 * 1000);
     const TURN_COMPLETE_GRACE_MS = parseTimeoutEnv('HAPI_CODEX_TURN_COMPLETE_GRACE_MS', 5000);
+    const mcpLogEnabled = parseBooleanEnv('HAPI_MCP_EVENT_LOG', true);
+    const mcpLogSampleRate = parseSampleRateEnv('HAPI_MCP_EVENT_LOG_SAMPLE')
+        ?? parseSampleRateEnv('HAPI_MCP_EVENT_LOG_SAMPLE_RATE')
+        ?? 1;
 
     const permissionHandler = new CodexPermissionHandler(session.client);
     const reasoningProcessor = new ReasoningProcessor((message) => {
@@ -274,10 +307,16 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
     const diffProcessor = new DiffProcessor((message) => {
         session.sendCodexMessage(message);
     });
+    let loggedReasoningDelta = false;
+
+    logger.debug(`[Codex] MCP event logging ${mcpLogEnabled ? 'enabled' : 'disabled'} (sample=${mcpLogSampleRate})`);
 
     client.setPermissionHandler(permissionHandler);
     client.setHandler((msg) => {
-        logger.debug(`[Codex] MCP message: ${JSON.stringify(msg)}`);
+        if (mcpLogEnabled && (mcpLogSampleRate >= 1 || Math.random() < mcpLogSampleRate)) {
+            const serialized = safeStringify(msg) ?? String(msg);
+            logger.debug(`[Codex] MCP message: ${serialized}`);
+        }
         const converted = convertCodexEvent(msg);
         if (converted?.modelInfo) {
             session.updateRuntimeModel(converted.modelInfo.model, converted.modelInfo.reasoningEffort ?? null);
@@ -306,6 +345,16 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         if (msg.type === 'agent_message') {
             messageBuffer.addMessage(msg.message, 'assistant');
         } else if (msg.type === 'agent_reasoning_delta') {
+            if (typeof msg.delta === 'string' && msg.delta.length > 0) {
+                if (!loggedReasoningDelta) {
+                    logger.debug('[Codex] Streaming agent_reasoning_delta to UI');
+                    loggedReasoningDelta = true;
+                }
+                session.sendCodexMessage({
+                    type: 'reasoning-delta',
+                    delta: msg.delta
+                });
+            }
         } else if (msg.type === 'agent_reasoning') {
             messageBuffer.addMessage(`[Thinking] ${msg.text.substring(0, 100)}...`, 'system');
         } else if (msg.type === 'exec_command_begin') {

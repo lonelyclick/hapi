@@ -112,6 +112,7 @@ function areAgentReasoningBlocksEqual(left: AgentReasoningBlock, right: AgentRea
         && left.localId === right.localId
         && left.createdAt === right.createdAt
         && left.meta === right.meta
+        && left.isDelta === right.isDelta
 }
 
 function areCliOutputBlocksEqual(left: CliOutputBlock, right: CliOutputBlock): boolean {

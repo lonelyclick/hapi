@@ -309,6 +309,22 @@ function normalizeAgentRecord(
             }
         }
 
+        if (data.type === 'reasoning-delta') {
+            const delta = asString(data.delta) ?? asString(data.message) ?? asString(data.text)
+            if (!delta) {
+                return null
+            }
+            return {
+                id: messageId,
+                localId,
+                createdAt,
+                role: 'agent',
+                isSidechain: false,
+                content: [{ type: 'reasoning', text: delta, uuid: messageId, parentUUID: null, isDelta: true }],
+                meta
+            }
+        }
+
         if (data.type === 'tool-call' && typeof data.callId === 'string') {
             const uuid = asString(data.id) ?? messageId
             return {

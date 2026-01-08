@@ -257,6 +257,46 @@ function mergeAgentTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
     return merged
 }
 
+function mergeAgentReasoningBlocks(blocks: ChatBlock[]): ChatBlock[] {
+    const merged: ChatBlock[] = []
+
+    for (const block of blocks) {
+        if (block.kind !== 'agent-reasoning') {
+            merged.push(block)
+            continue
+        }
+
+        const prev = merged[merged.length - 1]
+        if (prev && prev.kind === 'agent-reasoning' && (prev.isDelta || block.isDelta)) {
+            if (prev.isDelta && !block.isDelta) {
+                if (block.text.startsWith(prev.text)) {
+                    merged[merged.length - 1] = {
+                        ...prev,
+                        text: block.text,
+                        meta: block.meta,
+                        localId: block.localId,
+                        isDelta: false
+                    }
+                } else {
+                    merged.push(block)
+                }
+                continue
+            }
+
+            merged[merged.length - 1] = {
+                ...prev,
+                text: prev.text + block.text,
+                isDelta: prev.isDelta || block.isDelta
+            }
+            continue
+        }
+
+        merged.push(block)
+    }
+
+    return merged
+}
+
 function ensureToolBlock(
     blocks: ChatBlock[],
     toolBlocksById: Map<string, ToolCallBlock>,
@@ -449,7 +489,8 @@ function reduceTimeline(
                         localId: msg.localId,
                         createdAt: msg.createdAt,
                         text: c.text,
-                        meta: msg.meta
+                        meta: msg.meta,
+                        isDelta: c.isDelta
                     })
                     continue
                 }
@@ -577,7 +618,11 @@ function reduceTimeline(
         }
     }
 
-    return { blocks: mergeAgentTextBlocks(mergeCliOutputBlocks(blocks)), toolBlocksById, hasReadyEvent }
+    return {
+        blocks: mergeAgentReasoningBlocks(mergeAgentTextBlocks(mergeCliOutputBlocks(blocks))),
+        toolBlocksById,
+        hasReadyEvent
+    }
 }
 
 export type LatestUsage = {
