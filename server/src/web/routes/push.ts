@@ -55,14 +55,22 @@ export function createPushRoutes(): Hono<WebAppEnv> {
         const clientId = parsed.data.clientId
         const chatId = parsed.data.chatId
 
-        const subscription = webPush.subscribe(
+        // keys 为空会导致崩溃，提前校验
+        if (!parsed.data.keys?.p256dh || !parsed.data.keys?.auth) {
+            return c.json({ error: 'Invalid subscription keys' }, 400)
+        }
+
+        const subscription = await webPush.subscribe(
             namespace,
             parsed.data.endpoint,
             parsed.data.keys,
             userAgent,
             clientId,
             chatId
-        )
+        ).catch((err) => {
+            console.error('[push] failed to save subscription:', err)
+            return null
+        })
 
         if (!subscription) {
             return c.json({ error: 'Failed to save subscription' }, 500)

@@ -644,10 +644,14 @@ export function createSessionsRoutes(
             claudeAgent: flavor === 'claude' ? (session.metadata?.runtimeAgent ?? undefined) : undefined
         }
 
-        // Pre-activate session in DB so heartbeats are accepted
+        // Pre-activate session in DB and memory so heartbeats are accepted
+        // and subsequent resume requests are rejected as already-active
         // (archived sessions have active=false which blocks heartbeats)
         const namespace = c.get('namespace')
-        await store.setSessionActive(sessionId, true, Date.now(), namespace)
+        const now = Date.now()
+        await store.setSessionActive(sessionId, true, now, namespace)
+        session.active = true
+        session.activeAt = now
 
         const resumeAttempt = await engine.spawnSession(
             machineId,
