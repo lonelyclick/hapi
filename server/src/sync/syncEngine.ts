@@ -635,6 +635,17 @@ export class SyncEngine {
         const session = this.sessions.get(payload.sid) ?? await this.refreshSession(payload.sid)
         if (!session) return
 
+        // Check if session is archived in database (don't reactivate archived sessions)
+        // This prevents zombie heartbeats from reactivating aborted sessions
+        if (!session.active) {
+            // Verify with database - if DB says inactive, don't reactivate
+            const stored = await this.store.getSession(payload.sid)
+            if (stored && !stored.active) {
+                // Session is archived in DB, ignore heartbeat
+                return
+            }
+        }
+
         const wasActive = session.active
         const wasThinking = session.thinking
         const previousPermissionMode = session.permissionMode
