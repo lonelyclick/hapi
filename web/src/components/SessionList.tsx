@@ -4,6 +4,7 @@ import { ViewersBadge } from './ViewersBadge'
 
 // Filter types
 type CreatorFilter = 'mine' | 'others'
+type ArchiveFilter = boolean  // true = show archived (offline) sessions only
 type AgentFilter = 'claude' | 'codex'
 type ProjectFilter = string | null  // project id or null for all
 
@@ -63,6 +64,7 @@ function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
 function filterSessions(
     sessions: SessionSummary[],
     creatorFilter: CreatorFilter,
+    archiveFilter: ArchiveFilter,
     agentFilter: AgentFilter,
     projectFilter: ProjectFilter,
     currentUserEmail: string | null,
@@ -72,6 +74,10 @@ function filterSessions(
         // Creator filter
         if (creatorFilter === 'mine' && !isMySession(session, currentUserEmail)) return false
         if (creatorFilter === 'others' && isMySession(session, currentUserEmail)) return false
+
+        // Archive filter: if true, show only offline sessions; if false, show only active sessions
+        if (archiveFilter && session.active) return false
+        if (!archiveFilter && !session.active) return false
 
         // Agent type filter
         const agentType = getAgentType(session)
@@ -151,7 +157,7 @@ function getSourceTag(session: SessionSummary): { label: string; color: string }
         return { label: '⚙️ Automation', color: 'bg-orange-500/15 text-orange-600' }
     }
     // Other custom sources
-    if (source.length > 0 && source !== 'manual') {
+    if (source.length > 0 && source !== 'manual' && source !== 'webapp') {
         return { label: source.slice(0, 20), color: 'bg-gray-500/15 text-gray-600' }
     }
     return null
@@ -171,12 +177,22 @@ function formatRelativeTime(value: number): string | null {
     return new Date(ms).toLocaleDateString()
 }
 
+// Get display name from email (first part before @, or full email if short)
+function getCreatorDisplayName(email: string | undefined | null): string | null {
+    if (!email) return null
+    const atIndex = email.indexOf('@')
+    if (atIndex === -1) return email
+    const name = email.slice(0, atIndex)
+    return name.length > 0 ? name : email
+}
+
 function SessionItem(props: {
     session: SessionSummary
     project: Project | null
+    showCreator: boolean
     onSelect: (sessionId: string) => void
 }) {
-    const { session: s, project, onSelect } = props
+    const { session: s, project, showCreator, onSelect } = props
     const progress = getTodoProgress(s)
     const hasPending = s.pendingRequestsCount > 0
     const runtimeAgent = s.metadata?.runtimeAgent?.trim()
@@ -226,9 +242,15 @@ function SessionItem(props: {
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--app-hint)]">
                     <span className="shrink-0">{getAgentLabel(s)}</span>
+                    {showCreator && s.createdBy && (
+                        <>
+                            <span className="text-[var(--app-divider)]">•</span>
+                            <span className="shrink-0" title={s.createdBy}>{getCreatorDisplayName(s.createdBy)}</span>
+                        </>
+                    )}
                     {project && (
                         <>
-                            <span className="text-[var(--app-divider)]">·</span>
+                            <span className="text-[var(--app-divider)]">•</span>
                             <span className="truncate" title={project.path}>{project.name}</span>
                         </>
                     )}
@@ -280,8 +302,9 @@ export function SessionList(props: {
 }) {
     const { renderHeader = true, currentUserEmail } = props
 
-    // Filter state - defaults: mine, Claude, all projects
+    // Filter state - defaults: mine, not archived, Claude, all projects
     const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>('mine')
+    const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>(false)
     const [agentFilter, setAgentFilter] = useState<AgentFilter>('claude')
     const [projectFilter, setProjectFilter] = useState<ProjectFilter>(null)
 
@@ -307,9 +330,9 @@ export function SessionList(props: {
 
     // Filter and sort sessions (flat display)
     const filteredSessions = useMemo(() => {
-        const filtered = filterSessions(props.sessions, creatorFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap)
+        const filtered = filterSessions(props.sessions, creatorFilter, archiveFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap)
         return sortSessions(filtered)
-    }, [props.sessions, creatorFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap])
+    }, [props.sessions, creatorFilter, archiveFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap])
 
     // Statistics
     const activeCount = filteredSessions.filter(s => s.active).length
@@ -341,6 +364,19 @@ export function SessionList(props: {
                     <div className="flex gap-1">
                         <FilterButton value="mine" current={creatorFilter} label="Mine" onClick={setCreatorFilter} />
                         <FilterButton value="others" current={creatorFilter} label="Others" onClick={setCreatorFilter} />
+                        <button
+                            type="button"
+                            onClick={() => setArchiveFilter(!archiveFilter)}
+                            className={`
+                                px-2 py-1 text-xs rounded-md transition-colors
+                                ${archiveFilter
+                                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                }
+                            `}
+                        >
+                            Archive
+                        </button>
                     </div>
                 </div>
 
@@ -383,6 +419,7 @@ export function SessionList(props: {
                             key={session.id}
                             session={session}
                             project={sessionProjectMap.get(session.id) ?? null}
+                            showCreator={creatorFilter !== 'mine'}
                             onSelect={props.onSelect}
                         />
                     ))
