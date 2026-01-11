@@ -482,7 +482,7 @@ export class PostgresStore implements IStore {
             metadata ? JSON.stringify(metadata) : null, 1,
             agentState ? JSON.stringify(agentState) : null, 1,
             null, null,
-            false, null, 0
+            true, now, 0  // 新 session 默认 active=true，这样心跳不会被归档检查阻止
         ])
 
         const result = await this.pool.query('SELECT * FROM sessions WHERE id = $1', [id])
