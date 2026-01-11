@@ -154,6 +154,8 @@ export default defineConfig({
                 maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
                 // Import custom push notification handlers
                 importScripts: ['/sw-push.js'],
+                // 不要对 /api/ 路径使用 navigateFallback
+                navigateFallbackDenylist: [/^\/api\//],
                 runtimeCaching: [
                     {
                         urlPattern: /^\/api\/sessions$/,
