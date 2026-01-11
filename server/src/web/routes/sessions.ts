@@ -399,13 +399,18 @@ export function createSessionsRoutes(
 
         if (result.type === 'success') {
             const email = c.get('email')
+            const namespace = c.get('namespace')
             const role = resolveUserRole(store, email)
-            void sendInitPromptAfterOnline(engine, result.sessionId, role)
-            // 记录创建者
-            if (email) {
-                const namespace = c.get('namespace')
-                void store.setSessionCreatedBy(result.sessionId, email, namespace)
-            }
+            // Wait for session to be online, then set createdBy and send init prompt
+            void (async () => {
+                const isOnline = await waitForSessionOnline(engine, result.sessionId, 60_000)
+                if (!isOnline) return
+                // Set createdBy after session is confirmed online (exists in DB)
+                if (email) {
+                    await store.setSessionCreatedBy(result.sessionId, email, namespace)
+                }
+                await sendInitPrompt(engine, result.sessionId, role)
+            })()
         }
 
         return c.json(result)
@@ -584,6 +589,12 @@ export function createSessionsRoutes(
         if (resumeAttempt.type === 'success') {
             const online = await waitForSessionOnline(engine, sessionId, RESUME_TIMEOUT_MS)
             if (online) {
+                // Set createdBy after session is confirmed online (exists in DB)
+                const email = c.get('email')
+                if (email) {
+                    const namespace = c.get('namespace')
+                    void store.setSessionCreatedBy(sessionId, email, namespace)
+                }
                 return c.json({ type: 'resumed', sessionId })
             }
         }
@@ -610,12 +621,20 @@ export function createSessionsRoutes(
         }
 
         const newSessionId = fallbackResult.sessionId
+
         const online = await waitForSessionOnline(engine, newSessionId, RESUME_TIMEOUT_MS)
         if (!online) {
             return c.json({ error: 'Session resume timed out' }, 409)
         }
 
-        const role = resolveUserRole(store, c.get('email'))
+        // Set createdBy after session is confirmed online (exists in DB)
+        const email = c.get('email')
+        if (email) {
+            const namespace = c.get('namespace')
+            void store.setSessionCreatedBy(newSessionId, email, namespace)
+        }
+
+        const role = resolveUserRole(store, email)
         await sendInitPrompt(engine, newSessionId, role)
 
         if (!resumeSessionId) {
@@ -693,13 +712,21 @@ export function createSessionsRoutes(
         }
 
         const newSessionId = spawnResult.sessionId
+
         const online = await waitForSessionOnline(engine, newSessionId, RESUME_TIMEOUT_MS)
         if (!online) {
             return c.json({ error: 'New session failed to come online' }, 409)
         }
 
+        // Set createdBy after session is confirmed online (exists in DB)
+        const email = c.get('email')
+        if (email) {
+            const namespace = c.get('namespace')
+            void store.setSessionCreatedBy(newSessionId, email, namespace)
+        }
+
         // Send init prompt
-        const role = resolveUserRole(store, c.get('email'))
+        const role = resolveUserRole(store, email)
         await sendInitPrompt(engine, newSessionId, role)
 
         // Transfer context from old session
@@ -904,7 +931,7 @@ export function createSessionsRoutes(
      * Body: { chatId?: string, clientId?: string }
      * 至少需要提供 chatId 或 clientId 其中之一
      */
-    app.post('/:id/subscribe', async (c) => {
+    app.post('/sessions/:id/subscribe', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
@@ -939,7 +966,7 @@ export function createSessionsRoutes(
      * DELETE /sessions/:id/subscribe
      * Body: { chatId?: string, clientId?: string }
      */
-    app.delete('/:id/subscribe', async (c) => {
+    app.delete('/sessions/:id/subscribe', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
@@ -976,7 +1003,7 @@ export function createSessionsRoutes(
      * 获取 session 的所有订阅者
      * GET /sessions/:id/subscribers
      */
-    app.get('/:id/subscribers', async (c) => {
+    app.get('/sessions/:id/subscribers', async (c) => {
         const sessionId = c.req.param('id')
         const chatIdSubscribers = store.getSessionNotificationSubscribers(sessionId)
         const clientIdSubscribers = store.getSessionNotificationSubscriberClientIds(sessionId)
@@ -996,7 +1023,7 @@ export function createSessionsRoutes(
      * POST /sessions/:id/creator
      * Body: { chatId: string }
      */
-    app.post('/:id/creator', async (c) => {
+    app.post('/sessions/:id/creator', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const body = await c.req.json().catch(() => null)
@@ -1015,7 +1042,7 @@ export function createSessionsRoutes(
      * subscriberId 可以是 chatId 或 clientId
      * Query: type=chatId|clientId （可选，默认为 chatId）
      */
-    app.delete('/:id/subscribers/:subscriberId', async (c) => {
+    app.delete('/sessions/:id/subscribers/:subscriberId', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
         const subscriberId = c.req.param('subscriberId')
@@ -1042,7 +1069,7 @@ export function createSessionsRoutes(
      * DELETE /sessions/:id/subscribers
      * 清除所有订阅者，包括 creator
      */
-    app.delete('/:id/subscribers', async (c) => {
+    app.delete('/sessions/:id/subscribers', async (c) => {
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
 

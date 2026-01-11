@@ -80,13 +80,6 @@ async function waitForSessionOnline(engine: SyncEngine, sessionId: string, timeo
     })
 }
 
-async function sendInitPromptAfterOnline(engine: SyncEngine, sessionId: string, role: UserRole): Promise<void> {
-    const isOnline = await waitForSessionOnline(engine, sessionId, 60_000)
-    if (!isOnline) {
-        return
-    }
-    await sendInitPrompt(engine, sessionId, role)
-}
 
 export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
@@ -133,9 +126,10 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             { claudeAgent: parsed.data.claudeAgent, openrouterModel: parsed.data.openrouterModel, source }
         )
 
-        // 如果 spawn 成功，等 session online 后发送初始化 prompt（动态生成）
+        // 如果 spawn 成功，等 session online 后设置 createdBy 并发送初始化 prompt
         if (result.type === 'success') {
             const email = c.get('email')
+            const namespace = c.get('namespace')
             // 获取用户角色
             let role: UserRole = 'developer'
             if (email) {
@@ -147,7 +141,16 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                     }
                 }
             }
-            void sendInitPromptAfterOnline(engine, result.sessionId, role)
+            // Wait for session to be online, then set createdBy and send init prompt
+            void (async () => {
+                const isOnline = await waitForSessionOnline(engine, result.sessionId, 60_000)
+                if (!isOnline) return
+                // Set createdBy after session is confirmed online (exists in DB)
+                if (email) {
+                    await store.setSessionCreatedBy(result.sessionId, email, namespace)
+                }
+                await sendInitPrompt(engine, result.sessionId, role)
+            })()
         }
 
         return c.json(result)

@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react'
 import type { Project, SessionSummary } from '@/types/api'
 import { ViewersBadge } from './ViewersBadge'
 
-// 过滤条件类型
+// Filter types
 type CreatorFilter = 'mine' | 'others'
 type AgentFilter = 'claude' | 'codex'
-type ProjectFilter = string | null  // project id 或 null 表示全部
+type ProjectFilter = string | null  // project id or null for all
 
 function getSessionPath(session: SessionSummary): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -33,14 +33,14 @@ function matchSessionToProject(session: SessionSummary, projects: Project[]): Pr
     return null
 }
 
-// 判断是否为当前用户创建的 session
+// Check if session was created by current user
 function isMySession(session: SessionSummary, currentUserEmail: string | null): boolean {
     if (!currentUserEmail) return false
     if (!session.createdBy) return false
     return session.createdBy.toLowerCase() === currentUserEmail.toLowerCase()
 }
 
-// 获取 agent 类型
+// Get agent type
 function getAgentType(session: SessionSummary): 'claude' | 'codex' | 'other' {
     const flavor = session.metadata?.flavor?.trim()?.toLowerCase()
     if (flavor === 'claude') return 'claude'
@@ -48,7 +48,7 @@ function getAgentType(session: SessionSummary): 'claude' | 'codex' | 'other' {
     return 'other'
 }
 
-// 平铺排序 sessions
+// Sort sessions flat
 function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
     if (!Array.isArray(sessions)) return []
     return [...sessions].sort((a, b) => {
@@ -59,7 +59,7 @@ function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
     })
 }
 
-// 过滤 sessions
+// Filter sessions
 function filterSessions(
     sessions: SessionSummary[],
     creatorFilter: CreatorFilter,
@@ -69,16 +69,16 @@ function filterSessions(
     sessionProjectMap: Map<string, Project | null>
 ): SessionSummary[] {
     return sessions.filter(session => {
-        // 创建者过滤
+        // Creator filter
         if (creatorFilter === 'mine' && !isMySession(session, currentUserEmail)) return false
         if (creatorFilter === 'others' && isMySession(session, currentUserEmail)) return false
 
-        // Agent 类型过滤
+        // Agent type filter
         const agentType = getAgentType(session)
         if (agentFilter === 'claude' && agentType !== 'claude') return false
         if (agentFilter === 'codex' && agentType !== 'codex') return false
 
-        // Project 过滤
+        // Project filter
         if (projectFilter !== null) {
             const project = sessionProjectMap.get(session.id)
             if (project?.id !== projectFilter) return false
@@ -140,7 +140,7 @@ function getAgentLabel(session: SessionSummary): string {
 function getSourceTag(session: SessionSummary): { label: string; color: string } | null {
     const source = session.metadata?.source?.trim()
     if (!source) return null
-    // 机器/自动化 session 标识
+    // Machine/automation session tags
     if (source.startsWith('hapi_repair')) {
         return { label: '🤖 Auto Repair', color: 'bg-purple-500/15 text-purple-600' }
     }
@@ -150,7 +150,7 @@ function getSourceTag(session: SessionSummary): { label: string; color: string }
     if (source.startsWith('automation:') || source.startsWith('bot:') || source.startsWith('script:')) {
         return { label: '⚙️ Automation', color: 'bg-orange-500/15 text-orange-600' }
     }
-    // 其他自定义 source
+    // Other custom sources
     if (source.length > 0 && source !== 'manual') {
         return { label: source.slice(0, 20), color: 'bg-gray-500/15 text-gray-600' }
     }
@@ -210,15 +210,6 @@ function SessionItem(props: {
                     <span className="truncate text-sm font-medium text-[var(--app-fg)]">
                         {getSessionTitle(s)}
                     </span>
-                    {/* Project tag */}
-                    {project && (
-                        <span
-                            className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--app-secondary-bg)] text-[var(--app-hint)] border border-[var(--app-divider)]"
-                            title={project.path}
-                        >
-                            {project.name}
-                        </span>
-                    )}
                     {sourceTag && (
                         <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sourceTag.color}`}>
                             {sourceTag.label}
@@ -235,22 +226,10 @@ function SessionItem(props: {
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--app-hint)]">
                     <span className="shrink-0">{getAgentLabel(s)}</span>
-                    {runtimeAgent && (
+                    {project && (
                         <>
-                            <span className="text-[var(--app-divider)]">•</span>
-                            <span className="truncate">{runtimeAgent}</span>
-                        </>
-                    )}
-                    {s.metadata?.worktree?.branch && (
-                        <>
-                            <span className="text-[var(--app-divider)]">•</span>
-                            <span className="truncate">{s.metadata.worktree.branch}</span>
-                        </>
-                    )}
-                    {progress && (
-                        <>
-                            <span className="text-[var(--app-divider)]">•</span>
-                            <span>{progress.completed}/{progress.total} tasks</span>
+                            <span className="text-[var(--app-divider)]">·</span>
+                            <span className="truncate" title={project.path}>{project.name}</span>
                         </>
                     )}
                 </div>
@@ -264,7 +243,7 @@ function SessionItem(props: {
     )
 }
 
-// 过滤按钮组件
+// Filter button component
 function FilterButton<T extends string>(props: {
     value: T
     current: T
@@ -301,12 +280,12 @@ export function SessionList(props: {
 }) {
     const { renderHeader = true, currentUserEmail } = props
 
-    // 过滤状态 - 默认：我的、Claude、全部项目
+    // Filter state - defaults: mine, Claude, all projects
     const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>('mine')
     const [agentFilter, setAgentFilter] = useState<AgentFilter>('claude')
     const [projectFilter, setProjectFilter] = useState<ProjectFilter>(null)
 
-    // 构建 session 到 project 的映射
+    // Build session to project mapping
     const sessionProjectMap = useMemo(() => {
         const map = new Map<string, Project | null>()
         if (Array.isArray(props.sessions) && Array.isArray(props.projects)) {
@@ -317,7 +296,7 @@ export function SessionList(props: {
         return map
     }, [props.sessions, props.projects])
 
-    // 获取有 session 的项目列表（用于过滤选项）
+    // Get projects that have sessions (for filter options)
     const projectsWithSessions = useMemo(() => {
         const projectSet = new Set<string>()
         sessionProjectMap.forEach((project) => {
@@ -326,13 +305,13 @@ export function SessionList(props: {
         return props.projects.filter(p => projectSet.has(p.id))
     }, [props.projects, sessionProjectMap])
 
-    // 过滤并排序 sessions（平铺显示）
+    // Filter and sort sessions (flat display)
     const filteredSessions = useMemo(() => {
         const filtered = filterSessions(props.sessions, creatorFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap)
         return sortSessions(filtered)
     }, [props.sessions, creatorFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap])
 
-    // 统计数据
+    // Statistics
     const activeCount = filteredSessions.filter(s => s.active).length
 
     return (
@@ -354,18 +333,18 @@ export function SessionList(props: {
                 </div>
             ) : null}
 
-            {/* 过滤条件 */}
+            {/* Filters */}
             <div className="flex flex-wrap items-center gap-4 px-3 py-2 border-b border-[var(--app-divider)]">
-                {/* 创建者过滤 */}
+                {/* Creator filter */}
                 <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-[var(--app-hint)]">创建者:</span>
+                    <span className="text-xs text-[var(--app-hint)]">Creator:</span>
                     <div className="flex gap-1">
-                        <FilterButton value="mine" current={creatorFilter} label="我的" onClick={setCreatorFilter} />
-                        <FilterButton value="others" current={creatorFilter} label="其他人" onClick={setCreatorFilter} />
+                        <FilterButton value="mine" current={creatorFilter} label="Mine" onClick={setCreatorFilter} />
+                        <FilterButton value="others" current={creatorFilter} label="Others" onClick={setCreatorFilter} />
                     </div>
                 </div>
 
-                {/* Agent 类型过滤 */}
+                {/* Agent type filter */}
                 <div className="flex items-center gap-1.5">
                     <span className="text-xs text-[var(--app-hint)]">Agent:</span>
                     <div className="flex gap-1">
@@ -374,16 +353,16 @@ export function SessionList(props: {
                     </div>
                 </div>
 
-                {/* Project 过滤 */}
+                {/* Project filter */}
                 {projectsWithSessions.length > 0 && (
                     <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-[var(--app-hint)]">项目:</span>
+                        <span className="text-xs text-[var(--app-hint)]">Project:</span>
                         <select
                             value={projectFilter ?? ''}
                             onChange={(e) => setProjectFilter(e.target.value || null)}
                             className="text-xs px-2 py-1 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-fg)] border border-[var(--app-divider)] focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         >
-                            <option value="">全部项目</option>
+                            <option value="">All Projects</option>
                             {projectsWithSessions.map(project => (
                                 <option key={project.id} value={project.id}>{project.name}</option>
                             ))}
@@ -392,11 +371,11 @@ export function SessionList(props: {
                 )}
             </div>
 
-            {/* 平铺 Sessions 列表 */}
+            {/* Sessions list */}
             <div className="flex flex-col divide-y divide-[var(--app-divider)]">
                 {filteredSessions.length === 0 ? (
                     <div className="px-3 py-8 text-center text-sm text-[var(--app-hint)]">
-                        没有匹配的 Session
+                        No matching sessions
                     </div>
                 ) : (
                     filteredSessions.map((session) => (

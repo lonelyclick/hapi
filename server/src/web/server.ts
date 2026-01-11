@@ -96,6 +96,7 @@ function createWebApp(options: {
 
     app.route('/api', createAuthRoutes(options.jwtSecret, options.store))
     app.route('/api', createBindRoutes(options.jwtSecret, options.store))
+    app.route('/api', createVersionRoutes(options.embeddedAssetMap))  // Public, no auth required
 
     app.use('/api/*', createAuthMiddleware(options.jwtSecret))
     app.route('/api', createEventsRoutes(options.getSseManager, options.getSyncEngine))
@@ -106,7 +107,6 @@ function createWebApp(options: {
     app.route('/api', createGitRoutes(options.getSyncEngine))
     app.route('/api', createSpeechRoutes())
     app.route('/api', createOptimizeRoutes())
-    app.route('/api', createVersionRoutes(options.embeddedAssetMap))
     app.route('/api', createSettingsRoutes(options.store))
     app.route('/api', createPushRoutes())
     app.route('/api', createUsageRoutes(options.getSyncEngine))
