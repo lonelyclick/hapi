@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, ReactNode } from 'react'
+import { useState, useEffect, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 import {
     MarkdownTextPrimitive,
     unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
@@ -21,11 +21,55 @@ function isAbsolutePath(text: string): boolean {
     return ABSOLUTE_PATH_REGEX.test(text.trim())
 }
 
-// 文件路径链接组件
-function FilePathLink({ path, sessionId, token }: { path: string; sessionId: string; token: string }) {
-    const encodedPath = encodeURIComponent(path)
-    const downloadUrl = `/api/sessions/${encodeURIComponent(sessionId)}/file?path=${encodedPath}&raw=true&download=true&token=${encodeURIComponent(token)}`
+// 文件路径链接组件 - 异步复制文件到服务器后提供下载链接
+function FilePathLink({ path }: { path: string }) {
+    const context = useHappyChatContextSafe()
+    const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(false)
+
     const filename = path.split('/').pop() || path
+
+    useEffect(() => {
+        if (!context?.api || !context?.sessionId) {
+            setError(true)
+            setLoading(false)
+            return
+        }
+
+        let cancelled = false
+
+        const copyFile = async () => {
+            try {
+                const result = await context.api.copyFile(context.sessionId, path)
+                if (cancelled) return
+
+                if (result.success && result.path) {
+                    const token = context.api.getCurrentToken()
+                    const url = `/api/${result.path}${token ? `?token=${encodeURIComponent(token)}` : ''}`
+                    setDownloadUrl(url)
+                } else {
+                    setError(true)
+                }
+            } catch {
+                if (!cancelled) setError(true)
+            } finally {
+                if (!cancelled) setLoading(false)
+            }
+        }
+
+        copyFile()
+
+        return () => { cancelled = true }
+    }, [path, context?.api, context?.sessionId])
+
+    if (loading) {
+        return <span className="text-[var(--app-hint)]">{path}</span>
+    }
+
+    if (error || !downloadUrl) {
+        return <span>{path}</span>
+    }
 
     return (
         <a
@@ -33,7 +77,7 @@ function FilePathLink({ path, sessionId, token }: { path: string; sessionId: str
             target="_blank"
             rel="noreferrer"
             className="text-[var(--app-link)] underline hover:opacity-80"
-            title={`Download ${filename}`}
+            title={`Open ${filename}`}
         >
             {path}
         </a>
@@ -79,7 +123,6 @@ function Pre(props: ComponentPropsWithoutRef<'pre'>) {
 
 function Code(props: ComponentPropsWithoutRef<'code'>) {
     const isCodeBlock = useIsMarkdownCodeBlock()
-    const context = useHappyChatContextSafe()
 
     if (isCodeBlock) {
         return (
@@ -92,20 +135,17 @@ function Code(props: ComponentPropsWithoutRef<'code'>) {
 
     // 检查是否是绝对路径的行内代码
     const content = typeof props.children === 'string' ? props.children : null
-    if (content && isAbsolutePath(content) && context?.api && context?.sessionId) {
-        const token = context.api.getCurrentToken()
-        if (token) {
-            return (
-                <code
-                    className={cn(
-                        'aui-md-code break-words rounded bg-[var(--app-inline-code-bg)] px-[0.3em] py-[0.1em] font-mono text-[0.9em]',
-                        props.className
-                    )}
-                >
-                    <FilePathLink path={content.trim()} sessionId={context.sessionId} token={token} />
-                </code>
-            )
-        }
+    if (content && isAbsolutePath(content)) {
+        return (
+            <code
+                className={cn(
+                    'aui-md-code break-words rounded bg-[var(--app-inline-code-bg)] px-[0.3em] py-[0.1em] font-mono text-[0.9em]',
+                    props.className
+                )}
+            >
+                <FilePathLink path={content.trim()} />
+            </code>
+        )
     }
 
     return (
@@ -120,12 +160,12 @@ function Code(props: ComponentPropsWithoutRef<'code'>) {
 }
 
 function A(props: ComponentPropsWithoutRef<'a'>) {
-    const rel = props.target === '_blank' ? (props.rel ?? 'noreferrer') : props.rel
-
+    // 所有链接都在新标签页打开
     return (
         <a
             {...props}
-            rel={rel}
+            target="_blank"
+            rel="noreferrer"
             className={cn('aui-md-a text-[var(--app-link)] underline', props.className)}
         />
     )

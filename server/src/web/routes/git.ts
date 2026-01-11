@@ -468,6 +468,136 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         return c.json(result)
     })
 
+    // 复制绝对路径文件到服务器存储（通过 RPC 读取后存储到服务器）
+    app.post('/sessions/:id/copy-file', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const sessionId = sessionResult.sessionId
+
+        let body: unknown
+        try {
+            body = await c.req.json()
+        } catch {
+            return c.json({ success: false, error: 'Invalid JSON body' }, 400)
+        }
+
+        const parsed = z.object({ path: z.string().min(1) }).safeParse(body)
+        if (!parsed.success) {
+            return c.json({ success: false, error: 'Invalid path' }, 400)
+        }
+
+        const absolutePath = parsed.data.path
+
+        // 通过 RPC 读取文件内容
+        const result = await runRpc(() => engine.readSessionFile(sessionId, absolutePath))
+        if (!result.success || !result.content) {
+            return c.json({ success: false, error: result.error || 'Failed to read file' }, 404)
+        }
+
+        try {
+            const config = getConfiguration()
+            const uploadsDir = join(config.dataDir, 'downloads', sessionId)
+
+            if (!existsSync(uploadsDir)) {
+                mkdirSync(uploadsDir, { recursive: true })
+            }
+
+            // 生成唯一文件名，保留原始扩展名
+            const originalFilename = basename(absolutePath)
+            const ext = originalFilename.includes('.') ? originalFilename.split('.').pop() : ''
+            const uniqueFilename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext ? '.' + ext : ''}`
+            const filePath = join(uploadsDir, uniqueFilename)
+
+            // 解码并保存文件
+            const buffer = Buffer.from(result.content, 'base64')
+            writeFileSync(filePath, buffer)
+
+            // 返回下载路径
+            const downloadPath = `server-downloads/${sessionId}/${uniqueFilename}`
+            console.log('[copy-file] saved', { sessionId, originalPath: absolutePath, downloadPath, size: buffer.length })
+
+            return c.json({
+                success: true,
+                path: downloadPath,
+                filename: originalFilename,
+                size: buffer.length
+            })
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+            console.error('[copy-file] save failed:', errorMsg)
+            return c.json({ success: false, error: errorMsg }, 500)
+        }
+    })
+
+    // 直接读取服务器端存储的下载文件
+    app.get('/server-downloads/:sessionId/:filename', async (c) => {
+        const sessionId = c.req.param('sessionId')
+        const filename = c.req.param('filename')
+
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const session = requireSession(c, engine, sessionId)
+        if (session instanceof Response) {
+            return session
+        }
+
+        try {
+            const config = getConfiguration()
+            const filePath = join(config.dataDir, 'downloads', sessionId, filename)
+
+            if (!existsSync(filePath)) {
+                return c.json({ error: 'File not found' }, 404)
+            }
+
+            const buffer = readFileSync(filePath)
+            const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+
+            // 文本类型
+            const textMimeTypes: Record<string, string> = {
+                'ts': 'text/typescript',
+                'tsx': 'text/typescript',
+                'js': 'text/javascript',
+                'jsx': 'text/javascript',
+                'json': 'application/json',
+                'md': 'text/markdown',
+                'txt': 'text/plain',
+                'css': 'text/css',
+                'html': 'text/html',
+                'xml': 'text/xml',
+                'yaml': 'text/yaml',
+                'yml': 'text/yaml',
+                'sh': 'text/x-shellscript',
+                'py': 'text/x-python',
+                'rs': 'text/x-rust',
+                'go': 'text/x-go',
+            }
+            const contentType = textMimeTypes[ext] ?? 'application/octet-stream'
+
+            return new Response(buffer, {
+                status: 200,
+                headers: {
+                    'Content-Type': contentType,
+                    'Content-Length': buffer.length.toString(),
+                    'Cache-Control': 'public, max-age=31536000, immutable'
+                }
+            })
+        } catch (error) {
+            console.error('[server-downloads] read error:', error)
+            return c.json({ error: 'Failed to read file' }, 500)
+        }
+    })
+
     // 直接读取服务器端存储的上传文件（不走 RPC）
     app.get('/server-uploads/:sessionId/:filename', async (c) => {
         const sessionId = c.req.param('sessionId')

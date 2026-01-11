@@ -316,6 +316,14 @@ export class ApiClient {
         })
     }
 
+    /** 复制绝对路径文件到服务器存储，返回下载路径 */
+    async copyFile(sessionId: string, absolutePath: string): Promise<{ success: boolean; path?: string; filename?: string; error?: string }> {
+        return await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/copy-file`, {
+            method: 'POST',
+            body: JSON.stringify({ path: absolutePath })
+        })
+    }
+
     async sendMessage(sessionId: string, text: string, localId?: string | null): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
             method: 'POST',
