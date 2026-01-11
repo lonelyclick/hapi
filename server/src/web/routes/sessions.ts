@@ -497,9 +497,6 @@ export function createSessionsRoutes(
             return b.updatedAt - a.updatedAt
         })
 
-        const activeCount = allSessions.filter(s => s.active).length
-        console.log(`[sessions] total=${allSessions.length}, active=${activeCount}, offline=${allSessions.length - activeCount}`)
-
         return c.json({ sessions: allSessions })
     })
 
