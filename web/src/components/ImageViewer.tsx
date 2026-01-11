@@ -52,65 +52,63 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         setHasError(false)
 
         // 清理旧的 blob URL
-        setBlobUrl(prevUrl => {
-            if (prevUrl) {
-                URL.revokeObjectURL(prevUrl)
-            }
-            return null
-        })
+        if (blobUrl) {
+            URL.revokeObjectURL(blobUrl)
+            setBlobUrl(null)
+        }
 
-        const abortController = new AbortController()
-
-        let retryCount = 0
-        const MAX_RETRIES = 2
-        const RETRY_DELAY = 1000
+        let cancelled = false
 
         const fetchImage = async () => {
-            console.log('[ImageViewer] fetchImage called, aborted?', abortController.signal.aborted)
+            console.log('[ImageViewer] fetchImage called')
             try {
                 const token = api.getCurrentToken()
                 console.log('[ImageViewer] Fetching image', { src, hasToken: !!token })
                 const response = await fetch(src, {
                     headers: {
                         'Authorization': `Bearer ${token}`
-                    },
-                    signal: abortController.signal
+                    }
                 })
 
-                console.log('[ImageViewer] Response received', { status: response.status, ok: response.ok, aborted: abortController.signal.aborted })
+                console.log('[ImageViewer] Response received', { status: response.status, ok: response.ok, cancelled })
+
+                if (cancelled) {
+                    console.log('[ImageViewer] Request cancelled, ignoring response')
+                    return
+                }
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`)
                 }
 
                 const blob = await response.blob()
-                if (abortController.signal.aborted) return
+                console.log('[ImageViewer] Blob received', { size: blob.size, type: blob.type, cancelled })
+
+                if (cancelled) {
+                    console.log('[ImageViewer] Request cancelled after blob, ignoring')
+                    return
+                }
 
                 const url = URL.createObjectURL(blob)
                 console.log('[ImageViewer] Created blob URL', { url })
                 setBlobUrl(url)
                 setIsLoading(false)
             } catch (error) {
-                console.log('[ImageViewer] Fetch error', { error, retryCount })
-                if (abortController.signal.aborted) return
+                console.log('[ImageViewer] Fetch error', { error, cancelled })
+                if (cancelled) return
 
-                if (retryCount < MAX_RETRIES) {
-                    retryCount++
-                    setTimeout(fetchImage, RETRY_DELAY)
-                } else {
-                    setHasError(true)
-                    setIsLoading(false)
-                }
+                setHasError(true)
+                setIsLoading(false)
             }
         }
 
         fetchImage()
 
         return () => {
-            console.log('[ImageViewer] Cleanup, aborting fetch')
-            abortController.abort()
+            console.log('[ImageViewer] Cleanup, setting cancelled=true')
+            cancelled = true
         }
-    }, [src, api])
+    }, [src, api]) // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (!isOpen) return
