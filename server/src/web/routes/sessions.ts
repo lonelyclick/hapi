@@ -493,6 +493,8 @@ export function createSessionsRoutes(
                 return b.updatedAt - a.updatedAt
             })
 
+        console.log(`[sessions] active=${activeSessionSummaries.length}, stored=${storedSessions.length}, offline=${offlineSessionSummaries.length}, total=${allSessions.length}`)
+
         return c.json({ sessions: allSessions })
     })
 
