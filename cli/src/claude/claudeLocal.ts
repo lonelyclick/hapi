@@ -6,7 +6,7 @@ import { getProjectPath } from "./utils/path";
 import { appendMcpConfigArg } from "./utils/mcpConfig";
 import { systemPrompt } from "./utils/systemPrompt";
 import { withBunRuntimeEnv } from "@/utils/bunRuntime";
-import { spawnWithAbort } from "@/utils/spawnWithAbort";
+import { spawnWithAbort, type InterruptRegistrar } from "@/utils/spawnWithAbort";
 
 export async function claudeLocal(opts: {
     abort: AbortSignal,
@@ -17,6 +17,13 @@ export async function claudeLocal(opts: {
     claudeArgs?: string[]
     allowedTools?: string[]
     hookSettingsPath: string
+    /**
+     * A function that registers an interrupt handler.
+     * When called, it receives a function that sends SIGINT to the Claude process
+     * to cancel the current task without terminating the process.
+     * Returns a cleanup function that should be called when the process exits.
+     */
+    onInterruptRegistrar?: InterruptRegistrar
 }) {
 
     // Ensure project directory exists
@@ -87,6 +94,7 @@ export async function claudeLocal(opts: {
             cwd: opts.path,
             env: withBunRuntimeEnv(env, { allowBunBeBun: false }),
             signal: opts.abort,
+            onInterruptRegistrar: opts.onInterruptRegistrar,
             logLabel: 'ClaudeLocal',
             spawnName: 'claude',
             installHint: 'Claude CLI',

@@ -1178,16 +1178,11 @@ export class SyncEngine {
     async abortSession(sessionId: string): Promise<void> {
         const session = this.sessions.get(sessionId)
         if (session) {
-            // Mark session as inactive immediately (don't wait for CLI response)
-            session.active = false
+            // Only stop thinking, keep session active so user can continue
             session.thinking = false
-            const now = Date.now()
 
-            // Persist to database
-            await this.store.setSessionActive(sessionId, false, now, session.namespace)
-
-            // Notify clients
-            this.emit({ type: 'session-updated', sessionId, data: { active: false, thinking: false } })
+            // Notify clients that thinking stopped (session remains active)
+            this.emit({ type: 'session-updated', sessionId, data: { thinking: false } })
         }
 
         // Send abort RPC to CLI (may not respond if process is hung)

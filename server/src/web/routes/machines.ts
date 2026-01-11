@@ -153,7 +153,10 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                     console.warn(`[machines/spawn] Session ${result.sessionId} did not come online within 60s, skipping init prompt`)
                     return
                 }
-                console.log(`[machines/spawn] Session ${result.sessionId} is online, sending init prompt`)
+                console.log(`[machines/spawn] Session ${result.sessionId} is online, waiting for socket to join room...`)
+                // Give CLI socket time to join the session room (socket.join is async)
+                await new Promise(resolve => setTimeout(resolve, 500))
+                console.log(`[machines/spawn] Sending init prompt to session ${result.sessionId}`)
                 // Set createdBy after session is confirmed online (exists in DB)
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)

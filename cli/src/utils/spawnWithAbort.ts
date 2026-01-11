@@ -13,6 +13,12 @@ const isAbortError = (error: unknown): boolean => {
     return maybeError.name === 'AbortError' || maybeError.code === 'ABORT_ERR';
 };
 
+/**
+ * Function type for registering an interrupt handler.
+ * The returned cleanup function should be called when the process exits.
+ */
+export type InterruptRegistrar = (sendInterrupt: () => void) => (() => void);
+
 export type SpawnWithAbortOptions = {
     command: string;
     args: string[];
@@ -29,6 +35,13 @@ export type SpawnWithAbortOptions = {
     logExit?: boolean;
     shell?: SpawnOptions['shell'];
     stdio?: StdioOptions;
+    /**
+     * A function that registers an interrupt handler.
+     * When called, it receives a function that sends SIGINT to the child process.
+     * This allows external code to trigger interrupts multiple times.
+     * Returns a cleanup function that should be called when the process exits.
+     */
+    onInterruptRegistrar?: InterruptRegistrar;
 };
 
 export async function spawnWithAbort(options: SpawnWithAbortOptions): Promise<void> {
@@ -52,7 +65,25 @@ export async function spawnWithAbort(options: SpawnWithAbortOptions): Promise<vo
         });
 
         let abortKillTimeout: NodeJS.Timeout | null = null;
+        let interruptCleanup: (() => void) | null = null;
 
+        // Register interrupt handler if provided
+        // This allows external code to send SIGINT to cancel current task
+        if (options.onInterruptRegistrar) {
+            const sendInterrupt = () => {
+                if (child.exitCode === null && !child.killed) {
+                    logDebug('Sending SIGINT for interrupt');
+                    try {
+                        child.kill('SIGINT');
+                    } catch (error) {
+                        logDebug('Failed to send SIGINT', error);
+                    }
+                }
+            };
+            interruptCleanup = options.onInterruptRegistrar(sendInterrupt);
+        }
+
+        // Handle abort signal (SIGTERM/SIGKILL) - for process termination
         const abortHandler = () => {
             if (abortKillTimeout) {
                 return;
@@ -75,16 +106,17 @@ export async function spawnWithAbort(options: SpawnWithAbortOptions): Promise<vo
             options.signal.addEventListener('abort', abortHandler);
         }
 
-        const cleanupAbortHandler = () => {
+        const cleanupHandlers = () => {
             if (abortKillTimeout) {
                 clearTimeout(abortKillTimeout);
                 abortKillTimeout = null;
             }
             options.signal.removeEventListener('abort', abortHandler);
+            interruptCleanup?.();
         };
 
         child.on('error', (error) => {
-            cleanupAbortHandler();
+            cleanupHandlers();
             if (options.signal.aborted && isAbortError(error)) {
                 logDebug('Spawn aborted while switching');
                 if (!child.pid) {
@@ -107,7 +139,7 @@ export async function spawnWithAbort(options: SpawnWithAbortOptions): Promise<vo
         });
 
         child.on('exit', (code, signal) => {
-            cleanupAbortHandler();
+            cleanupHandlers();
             if (options.logExit) {
                 logDebug(`Child exited (code=${code ?? 'null'}, signal=${signal ?? 'null'}, aborted=${options.signal.aborted})`);
             }

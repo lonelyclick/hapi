@@ -33,10 +33,14 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
     session.addSessionFoundCallback(handleSessionFound);
 
 
-    // Handle abort
+    // Handle abort and interrupt
     let exitReason: 'switch' | 'exit' | null = null;
     const processAbortController = new AbortController();
     const exitFuture = new Future<void>();
+
+    // Store the interrupt function when it's registered by spawnWithAbort
+    let sendInterrupt: (() => void) | null = null;
+
     try {
         async function abort() {
 
@@ -52,16 +56,13 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
         async function doAbort() {
             logger.debug('[local]: doAbort');
 
-            // Switching to remote mode
-            if (!exitReason) {
-                exitReason = 'switch';
+            // Send SIGINT to cancel current task without killing the process
+            if (sendInterrupt) {
+                logger.debug('[local]: sending SIGINT via interrupt handler');
+                sendInterrupt();
+            } else {
+                logger.debug('[local]: no interrupt handler registered, cannot send SIGINT');
             }
-
-            // Reset sent messages
-            session.queue.reset();
-
-            // Abort
-            await abort();
         }
 
         async function doSwitch() {
@@ -76,8 +77,8 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
             await abort();
         }
 
-        // When to abort
-        session.client.rpcHandlerManager.registerHandler('abort', doAbort); // Abort current process, clean queue and switch to remote mode
+        // When to abort (now sends SIGINT instead of killing)
+        session.client.rpcHandlerManager.registerHandler('abort', doAbort); // Send SIGINT to cancel current task
         session.client.rpcHandlerManager.registerHandler('switch', doSwitch); // When user wants to switch to remote mode
         session.queue.setOnMessage((message: string, mode) => {
             // Switch to remote mode when message received
@@ -103,6 +104,14 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
                     path: session.path,
                     sessionId: session.sessionId,
                     abort: processAbortController.signal,
+                    onInterruptRegistrar: (interruptFn) => {
+                        // Store the interrupt function so doAbort can call it
+                        sendInterrupt = interruptFn;
+                        // Return cleanup function
+                        return () => {
+                            sendInterrupt = null;
+                        };
+                    },
                     claudeEnvVars: session.claudeEnvVars,
                     claudeArgs: session.claudeArgs,
                     mcpServers: session.mcpServers,
