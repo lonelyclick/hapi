@@ -172,6 +172,7 @@ function LazyFilePathLink({ path }: { path: string }) {
     const [absolutePath, setAbsolutePath] = useState<string | null>(null)
 
     useEffect(() => {
+        console.log('[LazyFilePathLink] checking path:', path, 'context:', !!context?.api, !!context?.sessionId)
         if (!context?.api || !context?.sessionId) {
             setStatus('not-exists')
             return
@@ -180,6 +181,7 @@ function LazyFilePathLink({ path }: { path: string }) {
         let cancelled = false
 
         context.api.checkFile(context.sessionId, path).then(result => {
+            console.log('[LazyFilePathLink] checkFile result:', path, result)
             if (cancelled) return
             if (result.exists && result.absolutePath) {
                 setAbsolutePath(result.absolutePath)
@@ -187,7 +189,8 @@ function LazyFilePathLink({ path }: { path: string }) {
             } else {
                 setStatus('not-exists')
             }
-        }).catch(() => {
+        }).catch((err) => {
+            console.error('[LazyFilePathLink] checkFile error:', path, err)
             if (!cancelled) {
                 setStatus('not-exists')
             }
