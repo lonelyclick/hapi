@@ -537,6 +537,55 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         }
     })
 
+    // 检查文件是否存在（支持相对路径）
+    app.post('/sessions/:id/check-file', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSession(c, engine, c.req.param('id'))
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const { sessionId, session } = sessionResult
+
+        let body: unknown
+        try {
+            body = await c.req.json()
+        } catch {
+            return c.json({ exists: false, error: 'Invalid JSON body' }, 400)
+        }
+
+        const parsed = z.object({ path: z.string().min(1) }).safeParse(body)
+        if (!parsed.success) {
+            return c.json({ exists: false, error: 'Invalid path' }, 400)
+        }
+
+        const inputPath = parsed.data.path
+
+        // 如果是相对路径，转换为绝对路径
+        let absolutePath: string
+        if (inputPath.startsWith('/')) {
+            absolutePath = inputPath
+        } else {
+            const projectRoot = session.metadata?.path?.trim()
+            if (!projectRoot) {
+                return c.json({ exists: false, error: 'No project root' })
+            }
+            absolutePath = join(projectRoot, inputPath)
+        }
+
+        // 通过 RPC 检查文件是否存在（尝试读取）
+        const result = await runRpc(() => engine.readAbsoluteFile(sessionId, absolutePath))
+
+        return c.json({
+            exists: result.success && !!result.content,
+            absolutePath
+        })
+    })
+
     // 直接读取服务器端存储的下载文件
     app.get('/server-downloads/:sessionId/:filename', async (c) => {
         const sessionId = c.req.param('sessionId')

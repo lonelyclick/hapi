@@ -1,4 +1,4 @@
-import { useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { useState, useEffect, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 import {
     MarkdownTextPrimitive,
     unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
@@ -16,23 +16,34 @@ export const MARKDOWN_PLUGINS = [remarkGfm]
 
 // 检测是否是绝对路径 (支持 @ + ~ 等常见路径字符)
 const ABSOLUTE_PATH_REGEX = /^(\/[\w.@+~-]+)+\/?$/
-// 用于在文本中查找绝对路径的正则（全局匹配）
-const ABSOLUTE_PATH_GLOBAL_REGEX = /(\/[\w.@+~-]+)+\/?/g
+// 检测是否是相对路径（以 ./ 或 字母/下划线开头，包含 /，有文件扩展名）
+const RELATIVE_PATH_REGEX = /^(?:\.\/|[\w@][\w.@+~-]*\/)+[\w.@+~-]+\.[a-zA-Z0-9]+$/
+// 用于在文本中查找路径的正则（全局匹配）- 匹配绝对路径或相对路径
+const PATH_GLOBAL_REGEX = /(?:\/[\w.@+~-]+)+\/?|(?:\.\/|[\w@][\w.@+~-]*\/)+[\w.@+~-]+\.[a-zA-Z0-9]+/g
 
 function isAbsolutePath(text: string): boolean {
     return ABSOLUTE_PATH_REGEX.test(text.trim())
 }
 
-// 将文本中的绝对路径转换为链接
+function isRelativePath(text: string): boolean {
+    return RELATIVE_PATH_REGEX.test(text.trim())
+}
+
+function isPath(text: string): boolean {
+    const trimmed = text.trim()
+    return isAbsolutePath(trimmed) || isRelativePath(trimmed)
+}
+
+// 将文本中的路径转换为链接
 function processTextWithPaths(text: string): ReactNode[] {
     const parts: ReactNode[] = []
     let lastIndex = 0
     let match: RegExpExecArray | null
 
     // 重置正则的 lastIndex
-    ABSOLUTE_PATH_GLOBAL_REGEX.lastIndex = 0
+    PATH_GLOBAL_REGEX.lastIndex = 0
 
-    while ((match = ABSOLUTE_PATH_GLOBAL_REGEX.exec(text)) !== null) {
+    while ((match = PATH_GLOBAL_REGEX.exec(text)) !== null) {
         const path = match[0]
         const startIndex = match.index
 
@@ -41,8 +52,14 @@ function processTextWithPaths(text: string): ReactNode[] {
             parts.push(text.slice(lastIndex, startIndex))
         }
 
-        // 添加路径链接
-        parts.push(<FilePathLink key={startIndex} path={path} />)
+        // 判断是绝对路径还是相对路径
+        if (path.startsWith('/')) {
+            // 绝对路径直接渲染为链接
+            parts.push(<FilePathLink key={startIndex} path={path} />)
+        } else {
+            // 相对路径需要先验证是否存在
+            parts.push(<LazyFilePathLink key={startIndex} path={path} />)
+        }
 
         lastIndex = startIndex + path.length
     }
@@ -126,6 +143,48 @@ function FilePathLink({ path }: { path: string }) {
             {loading ? `${path} (loading...)` : path}
         </a>
     )
+}
+
+// 懒加载文件路径链接 - 先检查文件是否存在，存在才显示为链接
+function LazyFilePathLink({ path }: { path: string }) {
+    const context = useHappyChatContextSafe()
+    const [status, setStatus] = useState<'checking' | 'exists' | 'not-exists'>('checking')
+    const [absolutePath, setAbsolutePath] = useState<string | null>(null)
+
+    useEffect(() => {
+        if (!context?.api || !context?.sessionId) {
+            setStatus('not-exists')
+            return
+        }
+
+        let cancelled = false
+
+        context.api.checkFile(context.sessionId, path).then(result => {
+            if (cancelled) return
+            if (result.exists && result.absolutePath) {
+                setAbsolutePath(result.absolutePath)
+                setStatus('exists')
+            } else {
+                setStatus('not-exists')
+            }
+        }).catch(() => {
+            if (!cancelled) {
+                setStatus('not-exists')
+            }
+        })
+
+        return () => {
+            cancelled = true
+        }
+    }, [context?.api, context?.sessionId, path])
+
+    // 正在检查或不存在时，显示为普通文本
+    if (status !== 'exists' || !absolutePath) {
+        return <>{path}</>
+    }
+
+    // 存在时，显示为链接（使用绝对路径）
+    return <FilePathLink path={absolutePath} />
 }
 
 function CodeHeader(props: CodeHeaderProps) {

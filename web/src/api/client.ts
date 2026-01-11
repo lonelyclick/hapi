@@ -362,6 +362,14 @@ export class ApiClient {
         })
     }
 
+    /** 检查文件是否存在（支持相对路径，会自动转换为绝对路径） */
+    async checkFile(sessionId: string, path: string): Promise<{ exists: boolean; absolutePath?: string; error?: string }> {
+        return await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/check-file`, {
+            method: 'POST',
+            body: JSON.stringify({ path })
+        })
+    }
+
     async sendMessage(sessionId: string, text: string, localId?: string | null): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
             method: 'POST',
