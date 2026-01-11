@@ -216,6 +216,12 @@ function clampAliveTime(t: number): number | null {
     return t
 }
 
+const DEBUG_THINKING = process.env.DEBUG_THINKING === '1'
+
+function shortId(id: string): string {
+    return id.length <= 8 ? id : id.slice(0, 8)
+}
+
 export class SyncEngine {
     private sessions: Map<string, Session> = new Map()
     private machines: Map<string, Machine> = new Map()
@@ -683,6 +689,15 @@ export class SyncEngine {
             || modeChanged
             || (now - lastBroadcastAt > 10_000)
 
+        if (DEBUG_THINKING && (wasThinking !== session.thinking || wasActive !== session.active)) {
+            const machineId = session.metadata?.machineId ?? 'unknown'
+            console.log(
+                `[sync] session-alive sid=${shortId(session.id)} machine=${machineId} ` +
+                `active ${wasActive}->${session.active} thinking ${wasThinking}->${session.thinking} ` +
+                `mode=${payload.mode ?? 'n/a'} perm=${session.permissionMode ?? 'unset'} model=${session.modelMode ?? 'unset'}`
+            )
+        }
+
         if (shouldBroadcast) {
             this.lastBroadcastAtBySessionId.set(session.id, now)
             const taskJustCompleted = wasThinking && !session.thinking
@@ -712,6 +727,13 @@ export class SyncEngine {
      * Toast 通知只发给 owner 和订阅者
      */
     private emitTaskCompleteEvent(session: Session): void {
+        if (DEBUG_THINKING) {
+            console.log(
+                `[sync] task-complete sid=${shortId(session.id)} ` +
+                `active=${session.active} thinking=${session.thinking}`
+            )
+        }
+
         // 异步获取订阅者信息，然后发送事件
         this.store.getSessionNotificationRecipientClientIds(session.id).then(recipientClientIds => {
             this.emit({
