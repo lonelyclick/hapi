@@ -261,11 +261,11 @@ function Image(props: ComponentPropsWithoutRef<'img'>) {
     return <img {...props} className={cn('aui-md-img max-w-full rounded', props.className)} />
 }
 
+// Code 组件不能被 memoize，因为 FilePathLink 需要使用 context hook
 export const defaultComponents = memoizeMarkdownComponents({
     SyntaxHighlighter,
     CodeHeader,
     pre: Pre,
-    code: Code,
     h1: H1,
     h2: H2,
     h3: H3,
@@ -290,11 +290,17 @@ export const defaultComponents = memoizeMarkdownComponents({
     img: Image,
 } as const)
 
+// 合并 memoized 和非 memoized 组件
+const allComponents = {
+    ...defaultComponents,
+    code: Code, // Code 不能 memoize，因为内部使用了 context hook
+}
+
 export function MarkdownText() {
     return (
         <MarkdownTextPrimitive
             remarkPlugins={MARKDOWN_PLUGINS}
-            components={defaultComponents}
+            components={allComponents}
             className={cn('aui-md min-w-0 max-w-full break-words text-sm')}
         />
     )
