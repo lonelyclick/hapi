@@ -14,8 +14,8 @@ import { useHappyChatContextSafe } from '@/components/AssistantChat/context'
 
 export const MARKDOWN_PLUGINS = [remarkGfm]
 
-// 检测是否是绝对路径
-const ABSOLUTE_PATH_REGEX = /^(\/[\w.-]+)+\/?$/
+// 检测是否是绝对路径 (支持 @ + ~ 等常见路径字符)
+const ABSOLUTE_PATH_REGEX = /^(\/[\w.@+~-]+)+\/?$/
 
 function isAbsolutePath(text: string): boolean {
     return ABSOLUTE_PATH_REGEX.test(text.trim())
