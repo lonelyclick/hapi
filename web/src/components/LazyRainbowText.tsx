@@ -107,6 +107,10 @@ function processChildrenForRainbow(children: React.ReactNode): React.ReactNode {
 
 // Build image URL from relative path
 function buildImageUrl(path: string, sessionId: string): string {
+    // server-uploads 路径直接使用服务器端存储
+    if (path.startsWith('server-uploads/')) {
+        return `/api/${path}`
+    }
     // The image is stored in .hapi/uploads/ directory on the CLI side
     // We need to fetch it through the session file read API
     const encodedPath = encodeURIComponent(path)
