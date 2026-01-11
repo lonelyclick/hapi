@@ -275,7 +275,13 @@ export function App() {
                 const sessionsData = queryClient.getQueryData<{ sessions: SessionSummary[] }>(queryKeys.sessions)
                 const session = sessionsData?.sessions.find(s => s.id === event.sessionId)
 
-                const title = session?.metadata?.summary?.text || session?.metadata?.name || 'Task completed'
+                // 如果 session 不在当前用户的列表中，说明不是自己的 session，跳过通知
+                if (!session) {
+                    console.log('[notification] skipping - session not in user list', event.sessionId)
+                    return
+                }
+
+                const title = session.metadata?.summary?.text || session.metadata?.name || 'Task completed'
 
                 // 查找匹配的项目
                 const projectsData = queryClient.getQueryData<{ projects: Project[] }>(['projects'])
@@ -334,6 +340,17 @@ export function App() {
             if (document.visibilityState === 'visible') {
                 const pending = getPendingNotification()
                 if (pending) {
+                    // 如果用户已经在查看某个 session，不要强制跳转到其他 session
+                    // 只有当用户不在任何 session 页面，或者 pending 就是当前 session 时才跳转
+                    if (selectedSessionId && selectedSessionId !== pending.sessionId) {
+                        console.log('[notification] skipping auto-navigate - user is viewing different session', {
+                            current: selectedSessionId,
+                            pending: pending.sessionId
+                        })
+                        clearPendingNotification()
+                        return
+                    }
+
                     console.log('[notification] handling pending notification', pending.sessionId)
                     clearPendingNotification()
                     navigate({
@@ -351,7 +368,7 @@ export function App() {
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange)
         }
-    }, [navigate])
+    }, [navigate, selectedSessionId])
 
     // Loading auth source
     if (isAuthSourceLoading) {

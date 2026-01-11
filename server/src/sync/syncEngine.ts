@@ -713,7 +713,8 @@ export class SyncEngine {
             this.sendTaskCompletePushNotification(session)
         }).catch(error => {
             console.error('[syncEngine] failed to get notification recipients:', error)
-            // 出错时仍然发送事件，但不带订阅者信息（将广播给所有人）
+            // 出错时发送空订阅者列表，这样 SSE 过滤器不会广播给 all:true 订阅
+            // 只有正在查看该 session 的用户会收到（用于更新 UI 状态）
             this.emit({
                 type: 'session-updated',
                 sessionId: session.id,
@@ -724,7 +725,8 @@ export class SyncEngine {
                     permissionMode: session.permissionMode,
                     modelMode: session.modelMode,
                     modelReasoningEffort: session.modelReasoningEffort
-                }
+                },
+                notifyRecipientClientIds: []  // 空数组，防止广播
             })
             this.sendTaskCompletePushNotification(session)
         })
