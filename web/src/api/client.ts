@@ -100,6 +100,44 @@ export class ApiClient {
         return this.getToken ? this.getToken() : this.token
     }
 
+    /** 确保 token 是新鲜的（如果过期则刷新），返回可用的 token */
+    public async ensureFreshToken(): Promise<string | null> {
+        const token = this.getCurrentToken()
+        if (!token) return null
+
+        // 解析 token 过期时间
+        try {
+            const parts = token.split('.')
+            if (parts.length < 2) return token
+
+            const payloadBase64Url = parts[1] ?? ''
+            const payloadBase64 = payloadBase64Url
+                .replace(/-/g, '+')
+                .replace(/_/g, '/')
+                .padEnd(Math.ceil(payloadBase64Url.length / 4) * 4, '=')
+
+            const decoded = globalThis.atob(payloadBase64)
+            const payload = JSON.parse(decoded) as { exp?: unknown }
+            if (typeof payload.exp !== 'number') return token
+
+            const expMs = payload.exp * 1000
+            const now = Date.now()
+
+            // 如果 token 将在 60 秒内过期，刷新它
+            if (expMs - now < 60_000 && this.onUnauthorized) {
+                const refreshed = await this.onUnauthorized()
+                if (refreshed) {
+                    this.token = refreshed
+                    return refreshed
+                }
+            }
+        } catch {
+            // 解析失败，返回当前 token
+        }
+
+        return this.getCurrentToken()
+    }
+
     private buildUrl(path: string): string {
         if (!this.baseUrl) {
             return path

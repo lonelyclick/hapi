@@ -38,7 +38,8 @@ function FilePathLink({ path }: { path: string }) {
             const result = await context.api.copyFile(context.sessionId, path)
             console.log('[FilePathLink] copyFile result:', result)
             if (result.success && result.path) {
-                const token = context.api.getCurrentToken()
+                // 确保 token 是新鲜的（如果快过期则刷新）
+                const token = await context.api.ensureFreshToken()
                 const url = `${window.location.origin}/api/${result.path}${token ? `?token=${encodeURIComponent(token)}` : ''}`
                 console.log('[FilePathLink] opening URL:', url)
                 // 使用 window.open 确保在新标签页打开，绕过 PWA 拦截
