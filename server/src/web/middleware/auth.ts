@@ -30,7 +30,9 @@ export function createAuthMiddleware(jwtSecret: Uint8Array): MiddlewareHandler<W
 
         const authorization = c.req.header('authorization')
         const tokenFromHeader = authorization?.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : undefined
-        const tokenFromQuery = path === '/api/events' ? c.req.query().token : undefined
+        // 支持从 URL query 获取 token（用于 SSE 和图片等需要直接 URL 访问的场景）
+        const allowTokenInQuery = path === '/api/events' || path.includes('/file')
+        const tokenFromQuery = allowTokenInQuery ? c.req.query().token : undefined
         const token = tokenFromHeader ?? tokenFromQuery
 
         if (!token) {

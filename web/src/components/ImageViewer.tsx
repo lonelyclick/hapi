@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useHappyChatContextSafe } from '@/components/AssistantChat/context'
 
@@ -12,9 +12,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
     const [hasError, setHasError] = useState(false)
-    const [blobUrl, setBlobUrl] = useState<string | null>(null)
     const context = useHappyChatContextSafe()
-    const abortControllerRef = useRef<AbortController | null>(null)
 
     const handleOpen = useCallback(() => {
         setIsOpen(true)
@@ -32,83 +30,21 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
 
     const api = context?.api ?? null
 
-    // 使用带认证的 fetch 请求加载图片
+    // 构建带 token 的图片 URL
+    const imageUrl = useMemo(() => {
+        if (!src || !api) return null
+        const token = api.getCurrentToken()
+        if (!token) return null
+        // 添加 token 到 URL query 参数
+        const separator = src.includes('?') ? '&' : '?'
+        return `${src}${separator}token=${encodeURIComponent(token)}`
+    }, [src, api])
+
+    // 当 src 变化时重置状态
     useEffect(() => {
-        console.log('[ImageViewer] useEffect triggered', { src, hasApi: !!api, hasContext: !!context })
-
-        if (!src || !api) {
-            console.log('[ImageViewer] Missing src or api, waiting...', { src, hasApi: !!api })
-            // 如果没有 api，等待而不是立即报错
-            if (!api) {
-                return
-            }
-            setHasError(true)
-            setIsLoading(false)
-            return
-        }
-
-        // 重置状态
         setIsLoading(true)
         setHasError(false)
-
-        // 清理旧的 blob URL
-        if (blobUrl) {
-            URL.revokeObjectURL(blobUrl)
-            setBlobUrl(null)
-        }
-
-        let cancelled = false
-
-        const fetchImage = async () => {
-            console.log('[ImageViewer] fetchImage called')
-            try {
-                const token = api.getCurrentToken()
-                console.log('[ImageViewer] Fetching image', { src, hasToken: !!token })
-                const response = await fetch(src, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                })
-
-                console.log('[ImageViewer] Response received', { status: response.status, ok: response.ok, cancelled })
-
-                if (cancelled) {
-                    console.log('[ImageViewer] Request cancelled, ignoring response')
-                    return
-                }
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`)
-                }
-
-                const blob = await response.blob()
-                console.log('[ImageViewer] Blob received', { size: blob.size, type: blob.type, cancelled })
-
-                if (cancelled) {
-                    console.log('[ImageViewer] Request cancelled after blob, ignoring')
-                    return
-                }
-
-                const url = URL.createObjectURL(blob)
-                console.log('[ImageViewer] Created blob URL', { url })
-                setBlobUrl(url)
-                setIsLoading(false)
-            } catch (error) {
-                console.log('[ImageViewer] Fetch error', { error, cancelled })
-                if (cancelled) return
-
-                setHasError(true)
-                setIsLoading(false)
-            }
-        }
-
-        fetchImage()
-
-        return () => {
-            console.log('[ImageViewer] Cleanup, setting cancelled=true')
-            cancelled = true
-        }
-    }, [src, api]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [src])
 
     useEffect(() => {
         if (!isOpen) return
@@ -121,14 +57,28 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         }
     }, [isOpen, handleKeyDown])
 
-    // 清理 blob URL
-    useEffect(() => {
-        return () => {
-            if (blobUrl) {
-                URL.revokeObjectURL(blobUrl)
-            }
-        }
-    }, [blobUrl])
+    const handleImageLoad = useCallback(() => {
+        setIsLoading(false)
+        setHasError(false)
+    }, [])
+
+    const handleImageError = useCallback(() => {
+        setIsLoading(false)
+        setHasError(true)
+    }, [])
+
+    if (!imageUrl) {
+        return (
+            <div className={`inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs ${className}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                </svg>
+                <span>Loading...</span>
+            </div>
+        )
+    }
 
     if (hasError) {
         return (
@@ -158,13 +108,13 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
                         </svg>
                     </div>
                 )}
-                {blobUrl && (
-                    <img
-                        src={blobUrl}
-                        alt={alt}
-                        className="max-h-48 max-w-full object-contain"
-                    />
-                )}
+                <img
+                    src={imageUrl}
+                    alt={alt}
+                    className="max-h-48 max-w-full object-contain"
+                    onLoad={handleImageLoad}
+                    onError={handleImageError}
+                />
                 <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-lg">
@@ -177,7 +127,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
                 </div>
             </button>
 
-            {isOpen && blobUrl && createPortal(
+            {isOpen && createPortal(
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
                     onClick={handleClose}
@@ -194,7 +144,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
                         </svg>
                     </button>
                     <img
-                        src={blobUrl}
+                        src={imageUrl}
                         alt={alt}
                         onClick={(e) => e.stopPropagation()}
                         className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
