@@ -34,10 +34,13 @@ function FilePathLink({ path }: { path: string }) {
 
         setLoading(true)
         try {
+            console.log('[FilePathLink] calling copyFile:', { sessionId: context.sessionId, path })
             const result = await context.api.copyFile(context.sessionId, path)
+            console.log('[FilePathLink] copyFile result:', result)
             if (result.success && result.path) {
                 const token = context.api.getCurrentToken()
                 const url = `${window.location.origin}/api/${result.path}${token ? `?token=${encodeURIComponent(token)}` : ''}`
+                console.log('[FilePathLink] opening URL:', url)
                 // 使用 window.open 确保在新标签页打开，绕过 PWA 拦截
                 window.open(url, '_blank', 'noopener,noreferrer')
             } else {
