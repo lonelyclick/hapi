@@ -371,7 +371,14 @@ export function query(config: {
         }
     }
 
-    config.options?.abort?.addEventListener('abort', cleanup)
+    // Force kill on abort to ensure process stops immediately
+    const abortCleanup = () => {
+        if (!child.killed) {
+            void killProcessByChildProcess(child, true) // force: true = SIGKILL
+        }
+    }
+
+    config.options?.abort?.addEventListener('abort', abortCleanup)
     process.on('exit', cleanup)
 
     // Handle process exit
@@ -404,7 +411,7 @@ export function query(config: {
     // Cleanup on exit
     processExitPromise.finally(() => {
         cleanup()
-        config.options?.abort?.removeEventListener('abort', cleanup)
+        config.options?.abort?.removeEventListener('abort', abortCleanup)
         if (process.env.CLAUDE_SDK_MCP_SERVERS) {
             delete process.env.CLAUDE_SDK_MCP_SERVERS
         }
