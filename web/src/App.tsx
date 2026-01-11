@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { getTelegramWebApp } from '@/hooks/useTelegram'
@@ -26,7 +26,39 @@ export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
     const { authSource, isLoading: isAuthSourceLoading, setAccessToken } = useAuthSource(baseUrl)
     const { token, user, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
-    const { hasUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
+    const { hasUpdate: hasApiUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
+
+    // Service Worker update state
+    const [swUpdateFn, setSwUpdateFn] = useState<((reloadPage?: boolean) => Promise<void>) | null>(null)
+    const [swUpdateDismissed, setSwUpdateDismissed] = useState(false)
+
+    useEffect(() => {
+        const handleSwUpdate = (event: Event) => {
+            const customEvent = event as CustomEvent<{ updateSW: (reloadPage?: boolean) => Promise<void> }>
+            setSwUpdateFn(() => customEvent.detail.updateSW)
+        }
+        window.addEventListener('sw-update-available', handleSwUpdate)
+        return () => window.removeEventListener('sw-update-available', handleSwUpdate)
+    }, [])
+
+    const hasSwUpdate = Boolean(swUpdateFn && !swUpdateDismissed)
+    const hasUpdate = hasApiUpdate || hasSwUpdate
+
+    const handleRefresh = useCallback(() => {
+        if (swUpdateFn) {
+            swUpdateFn(true)
+        } else {
+            refreshApp()
+        }
+    }, [swUpdateFn, refreshApp])
+
+    const handleDismiss = useCallback(() => {
+        if (swUpdateFn) {
+            setSwUpdateDismissed(true)
+        } else {
+            dismissUpdate()
+        }
+    }, [swUpdateFn, dismissUpdate])
 
     // Subscribe to Web Push notifications when authenticated
     // This enables true background push on iOS 16.4+ and other platforms
@@ -465,7 +497,7 @@ export function App() {
 
     return (
         <AppContextProvider value={{ api, token, userEmail: user?.email ?? null }}>
-            {hasUpdate && <UpdateBanner onRefresh={refreshApp} onDismiss={dismissUpdate} />}
+            {hasUpdate && <UpdateBanner onRefresh={handleRefresh} onDismiss={handleDismiss} />}
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />
             <div className="h-full flex flex-col">

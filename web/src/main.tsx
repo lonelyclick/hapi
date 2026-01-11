@@ -71,10 +71,10 @@ async function bootstrap() {
     const updateSW = registerSW({
         immediate: true,
         onNeedRefresh() {
-            // Auto update without asking - especially important for Telegram Mini App
-            // where confirm() dialogs may not work properly
-            console.log('New version available, updating...')
-            updateSW(true)
+            // Show update banner instead of auto-updating
+            // User needs to click to trigger the update
+            console.log('New version available, waiting for user action...')
+            window.dispatchEvent(new CustomEvent('sw-update-available', { detail: { updateSW } }))
         },
         onOfflineReady() {
             console.log('App ready for offline use')
