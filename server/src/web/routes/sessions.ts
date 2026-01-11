@@ -37,6 +37,7 @@ type SessionSummary = {
     active: boolean
     activeAt: number
     updatedAt: number
+    createdBy?: string
     metadata: SessionSummaryMetadata | null
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number
@@ -71,6 +72,7 @@ function toSessionSummary(session: Session): SessionSummary {
         active: session.active,
         activeAt: session.activeAt,
         updatedAt: session.updatedAt,
+        createdBy: session.createdBy,
         metadata,
         todoProgress,
         pendingRequestsCount,
@@ -396,8 +398,14 @@ export function createSessionsRoutes(
         )
 
         if (result.type === 'success') {
-            const role = resolveUserRole(store, c.get('email'))
+            const email = c.get('email')
+            const role = resolveUserRole(store, email)
             void sendInitPromptAfterOnline(engine, result.sessionId, role)
+            // 记录创建者
+            if (email) {
+                const namespace = c.get('namespace')
+                void store.setSessionCreatedBy(result.sessionId, email, namespace)
+            }
         }
 
         return c.json(result)

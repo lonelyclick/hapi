@@ -3,7 +3,7 @@ import type { Project, SessionSummary } from '@/types/api'
 import { ViewersBadge } from './ViewersBadge'
 
 // 过滤条件类型
-type CreatorFilter = 'all' | 'manual' | 'automated'
+type CreatorFilter = 'all' | 'mine' | 'others'
 type AgentFilter = 'all' | 'claude' | 'codex'
 
 function getSessionPath(session: SessionSummary): string | null {
@@ -32,15 +32,11 @@ function matchSessionToProject(session: SessionSummary, projects: Project[]): Pr
     return null
 }
 
-// 判断是否为自动创建的 session
-function isAutomatedSession(session: SessionSummary): boolean {
-    const source = session.metadata?.source?.trim()
-    if (!source || source === 'manual') return false
-    // 自动化标识：hapi_repair, external-api, automation:, bot:, script:
-    if (source.startsWith('hapi_repair')) return true
-    if (source === 'external-api') return true
-    if (source.startsWith('automation:') || source.startsWith('bot:') || source.startsWith('script:')) return true
-    return false
+// 判断是否为当前用户创建的 session
+function isMySession(session: SessionSummary, currentUserEmail: string | null): boolean {
+    if (!currentUserEmail) return false
+    if (!session.createdBy) return false
+    return session.createdBy.toLowerCase() === currentUserEmail.toLowerCase()
 }
 
 // 获取 agent 类型
@@ -66,12 +62,13 @@ function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
 function filterSessions(
     sessions: SessionSummary[],
     creatorFilter: CreatorFilter,
-    agentFilter: AgentFilter
+    agentFilter: AgentFilter,
+    currentUserEmail: string | null
 ): SessionSummary[] {
     return sessions.filter(session => {
         // 创建者过滤
-        if (creatorFilter === 'manual' && isAutomatedSession(session)) return false
-        if (creatorFilter === 'automated' && !isAutomatedSession(session)) return false
+        if (creatorFilter === 'mine' && !isMySession(session, currentUserEmail)) return false
+        if (creatorFilter === 'others' && isMySession(session, currentUserEmail)) return false
 
         // Agent 类型过滤
         if (agentFilter !== 'all') {
@@ -288,13 +285,14 @@ function FilterButton<T extends string>(props: {
 export function SessionList(props: {
     sessions: SessionSummary[]
     projects: Project[]
+    currentUserEmail: string | null
     onSelect: (sessionId: string) => void
     onNewSession: () => void
     onRefresh: () => void
     isLoading: boolean
     renderHeader?: boolean
 }) {
-    const { renderHeader = true } = props
+    const { renderHeader = true, currentUserEmail } = props
 
     // 过滤状态
     const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>('all')
@@ -313,9 +311,9 @@ export function SessionList(props: {
 
     // 过滤并排序 sessions（平铺显示）
     const filteredSessions = useMemo(() => {
-        const filtered = filterSessions(props.sessions, creatorFilter, agentFilter)
+        const filtered = filterSessions(props.sessions, creatorFilter, agentFilter, currentUserEmail)
         return sortSessions(filtered)
-    }, [props.sessions, creatorFilter, agentFilter])
+    }, [props.sessions, creatorFilter, agentFilter, currentUserEmail])
 
     // 统计数据
     const activeCount = filteredSessions.filter(s => s.active).length
@@ -346,8 +344,8 @@ export function SessionList(props: {
                     <span className="text-xs text-[var(--app-hint)]">创建者:</span>
                     <div className="flex gap-1">
                         <FilterButton value="all" current={creatorFilter} label="全部" onClick={setCreatorFilter} />
-                        <FilterButton value="manual" current={creatorFilter} label="手动" onClick={setCreatorFilter} />
-                        <FilterButton value="automated" current={creatorFilter} label="自动" onClick={setCreatorFilter} />
+                        <FilterButton value="mine" current={creatorFilter} label="我的" onClick={setCreatorFilter} />
+                        <FilterButton value="others" current={creatorFilter} label="其他人" onClick={setCreatorFilter} />
                     </div>
                 </div>
 

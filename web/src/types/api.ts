@@ -162,6 +162,7 @@ export type SessionSummary = {
     active: boolean
     activeAt: number
     updatedAt: number
+    createdBy?: string
     metadata: SessionSummaryMetadata | null
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number

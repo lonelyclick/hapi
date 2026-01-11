@@ -65,6 +65,7 @@ export interface IStore {
     shouldInjectAdvisorPrompt(id: string): Promise<boolean>
     isRolePromptSent(id: string): Promise<boolean>
     setSessionRolePromptSent(id: string, namespace: string): Promise<boolean>
+    setSessionCreatedBy(id: string, email: string, namespace: string): Promise<boolean>
     getSession(id: string): Promise<StoredSession | null>
     getSessionByNamespace(id: string, namespace: string): Promise<StoredSession | null>
     getSessions(): Promise<StoredSession[]>

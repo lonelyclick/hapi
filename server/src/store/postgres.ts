@@ -85,6 +85,7 @@ export class PostgresStore implements IStore {
                 machine_id TEXT,
                 created_at BIGINT NOT NULL,
                 updated_at BIGINT NOT NULL,
+                created_by TEXT,
                 metadata JSONB,
                 metadata_version INTEGER DEFAULT 1,
                 agent_state JSONB,
@@ -100,6 +101,8 @@ export class PostgresStore implements IStore {
                 advisor_prompt_injected BOOLEAN DEFAULT FALSE,
                 role_prompt_sent BOOLEAN DEFAULT FALSE
             );
+            -- Add created_by column if not exists (migration)
+            ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_by TEXT;
             CREATE INDEX IF NOT EXISTS idx_sessions_tag ON sessions(tag);
             CREATE INDEX IF NOT EXISTS idx_sessions_tag_namespace ON sessions(tag, namespace);
 
@@ -621,6 +624,15 @@ export class PostgresStore implements IStore {
         const result = await this.pool.query(`
             UPDATE sessions SET role_prompt_sent = TRUE, updated_at = $1 WHERE id = $2 AND namespace = $3
         `, [Date.now(), id, namespace])
+        return (result.rowCount ?? 0) > 0
+    }
+
+    async setSessionCreatedBy(id: string, email: string, namespace: string): Promise<boolean> {
+        // 只在 created_by 为空时设置，避免覆盖已有的创建者信息
+        const result = await this.pool.query(`
+            UPDATE sessions SET created_by = $1, updated_at = $2
+            WHERE id = $3 AND namespace = $4 AND created_by IS NULL
+        `, [email, Date.now(), id, namespace])
         return (result.rowCount ?? 0) > 0
     }
 
@@ -2637,6 +2649,7 @@ export class PostgresStore implements IStore {
             machineId: row.machine_id,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at),
+            createdBy: row.created_by ?? null,
             metadata: row.metadata,
             metadataVersion: row.metadata_version,
             agentState: row.agent_state,

@@ -118,7 +118,7 @@ function UsageIcon(props: { className?: string }) {
 }
 
 function SessionsPage() {
-    const { api } = useAppContext()
+    const { api, userEmail } = useAppContext()
     const navigate = useNavigate()
     const { sessions, isLoading, error, refetch } = useSessions(api)
     const { users: onlineUsers } = useOnlineUsers(api)
@@ -242,6 +242,7 @@ function SessionsPage() {
                 <SessionList
                     sessions={sessions}
                     projects={projects}
+                    currentUserEmail={userEmail}
                     onSelect={(sessionId) => navigate({
                         to: '/sessions/$sessionId',
                         params: { sessionId },

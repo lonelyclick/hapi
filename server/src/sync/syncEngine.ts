@@ -83,6 +83,7 @@ export interface Session {
     updatedAt: number
     active: boolean
     activeAt: number
+    createdBy?: string  // 创建者 email
     metadata: Metadata | null
     metadataVersion: number
     agentState: AgentState | null
@@ -929,6 +930,7 @@ export class SyncEngine {
             updatedAt: stored.updatedAt,
             active: existing?.active ?? stored.active,
             activeAt: existing?.activeAt ?? (stored.activeAt ?? stored.createdAt),
+            createdBy: stored.createdBy ?? undefined,
             metadata,
             metadataVersion: stored.metadataVersion,
             agentState,

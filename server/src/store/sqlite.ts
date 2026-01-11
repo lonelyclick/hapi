@@ -740,6 +740,10 @@ export class SqliteStore implements IStore {
         return this.store.setSessionRolePromptSent(id, namespace)
     }
 
+    async setSessionCreatedBy(id: string, email: string, namespace: string): Promise<boolean> {
+        return this.store.setSessionCreatedBy(id, email, namespace)
+    }
+
     async getSession(id: string): Promise<StoredSession | null> {
         return this.store.getSession(id)
     }

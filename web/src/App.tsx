@@ -25,7 +25,7 @@ import { notifyTaskComplete, getPendingNotification, clearPendingNotification, u
 export function App() {
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
     const { authSource, isLoading: isAuthSourceLoading, setAccessToken } = useAuthSource(baseUrl)
-    const { token, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
+    const { token, user, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
     const { hasUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
 
     // Subscribe to Web Push notifications when authenticated
@@ -464,7 +464,7 @@ export function App() {
     }
 
     return (
-        <AppContextProvider value={{ api, token }}>
+        <AppContextProvider value={{ api, token, userEmail: user?.email ?? null }}>
             {hasUpdate && <UpdateBanner onRefresh={refreshApp} onDismiss={dismissUpdate} />}
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />
