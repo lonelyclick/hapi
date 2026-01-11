@@ -88,6 +88,8 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
 
     async function doAbort() {
         logger.debug('[remote]: doAbort');
+        // Reset queue to prevent stale messages from being processed on next launch
+        session.queue.reset();
         await abort();
     }
 
@@ -96,6 +98,8 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         if (!exitReason) {
             exitReason = 'switch';
         }
+        // Reset queue to prevent stale messages from being processed on next launch
+        session.queue.reset();
         await abort();
     }
 

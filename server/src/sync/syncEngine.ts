@@ -662,13 +662,16 @@ export class SyncEngine {
         session.activeAt = Math.max(session.activeAt, t)
         session.thinking = Boolean(payload.thinking)
         session.thinkingAt = t
-        if (payload.permissionMode !== undefined) {
+        // Only update mode values from CLI heartbeat if server doesn't have authoritative values
+        // This prevents CLI heartbeats with stale values from overwriting server-set values
+        // (e.g., when Web UI just set a new mode via applySessionConfig but CLI hasn't synced yet)
+        if (payload.permissionMode !== undefined && session.permissionMode === undefined) {
             session.permissionMode = payload.permissionMode
         }
-        if (payload.modelMode !== undefined) {
+        if (payload.modelMode !== undefined && session.modelMode === undefined) {
             session.modelMode = payload.modelMode
         }
-        if (payload.modelReasoningEffort !== undefined) {
+        if (payload.modelReasoningEffort !== undefined && session.modelReasoningEffort === undefined) {
             session.modelReasoningEffort = payload.modelReasoningEffort
         }
 
@@ -1149,6 +1152,15 @@ export class SyncEngine {
             decision,
             answers
         })
+
+        // Update server-side permissionMode when mode is changed via permission approval
+        if (mode !== undefined) {
+            const session = this.sessions.get(sessionId)
+            if (session && session.permissionMode !== mode) {
+                session.permissionMode = mode
+                this.emit({ type: 'session-updated', sessionId, data: { permissionMode: mode } })
+            }
+        }
     }
 
     async denyPermission(
