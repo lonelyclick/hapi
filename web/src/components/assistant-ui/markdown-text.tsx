@@ -118,6 +118,7 @@ function Code(props: ComponentPropsWithoutRef<'code'>) {
 
     // 检查是否是绝对路径的行内代码
     const content = typeof props.children === 'string' ? props.children : null
+    console.log('[Code] children type:', typeof props.children, 'content:', content, 'isAbsPath:', content ? isAbsolutePath(content) : false)
     if (content && isAbsolutePath(content)) {
         return (
             <code
