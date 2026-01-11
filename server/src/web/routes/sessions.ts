@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { DecryptedMessage, Session, SyncEngine } from '../../sync/syncEngine'
 import type { SSEManager } from '../../sse/sseManager'
-import type { IStore, UserRole } from '../../store'
+import type { IStore, UserRole, StoredSession } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireMachine, requireSessionFromParam, requireSyncEngine } from './guards'
 import { buildInitPrompt } from '../prompts/initPrompt'
@@ -78,6 +78,28 @@ function toSessionSummary(session: Session): SessionSummary {
         pendingRequestsCount,
         modelMode: session.modelMode,
         modelReasoningEffort: session.modelReasoningEffort
+    }
+}
+
+// Convert StoredSession (from database) to SessionSummary
+function storedSessionToSummary(stored: StoredSession): SessionSummary {
+    const meta = stored.metadata as SessionSummaryMetadata | null
+    const todos = stored.todos as Array<{ status: string }> | null
+
+    const todoProgress = todos?.length ? {
+        completed: todos.filter(t => t.status === 'completed').length,
+        total: todos.length
+    } : null
+
+    return {
+        id: stored.id,
+        active: stored.active,
+        activeAt: stored.activeAt ?? stored.updatedAt,
+        updatedAt: stored.updatedAt,
+        createdBy: stored.createdBy ?? undefined,
+        metadata: meta,
+        todoProgress,
+        pendingRequestsCount: 0  // Offline sessions have no pending requests
     }
 }
 
@@ -416,7 +438,7 @@ export function createSessionsRoutes(
         return c.json(result)
     })
 
-    app.get('/sessions', (c) => {
+    app.get('/sessions', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) {
             return engine
@@ -426,38 +448,52 @@ export function createSessionsRoutes(
 
         const namespace = c.get('namespace')
         const sseManager = getSseManager()
-        const sessions = engine.getSessionsByNamespace(namespace)
+
+        // Get active sessions from memory (SyncEngine)
+        const activeSessions = engine.getSessionsByNamespace(namespace)
+        const activeSessionIds = new Set(activeSessions.map(s => s.id))
+
+        // Get all sessions from database (including offline ones)
+        const storedSessions = await store.getSessionsByNamespace(namespace)
+
+        // Convert active sessions to summaries
+        const activeSessionSummaries = activeSessions.map((session) => {
+            const summary = toSessionSummary(session)
+            // 添加该 session 的查看者
+            if (sseManager) {
+                const viewers = sseManager.getSessionViewers(namespace, session.id)
+                if (viewers.length > 0) {
+                    summary.viewers = viewers.map(v => ({
+                        email: v.email,
+                        clientId: v.clientId,
+                        deviceType: v.deviceType
+                    }))
+                }
+            }
+            return summary
+        })
+
+        // Convert offline sessions (not in memory) to summaries
+        const offlineSessionSummaries = storedSessions
+            .filter(s => !activeSessionIds.has(s.id))
+            .map(storedSessionToSummary)
+
+        // Merge and sort all sessions
+        const allSessions = [...activeSessionSummaries, ...offlineSessionSummaries]
             .sort((a, b) => {
                 // Active sessions first
                 if (a.active !== b.active) {
                     return a.active ? -1 : 1
                 }
                 // Within active sessions, sort by pending requests count
-                const aPending = getPendingCount(a)
-                const bPending = getPendingCount(b)
-                if (a.active && aPending !== bPending) {
-                    return bPending - aPending
+                if (a.active && a.pendingRequestsCount !== b.pendingRequestsCount) {
+                    return b.pendingRequestsCount - a.pendingRequestsCount
                 }
                 // Then by updatedAt
                 return b.updatedAt - a.updatedAt
             })
-            .map((session) => {
-                const summary = toSessionSummary(session)
-                // 添加该 session 的查看者
-                if (sseManager) {
-                    const viewers = sseManager.getSessionViewers(namespace, session.id)
-                    if (viewers.length > 0) {
-                        summary.viewers = viewers.map(v => ({
-                            email: v.email,
-                            clientId: v.clientId,
-                            deviceType: v.deviceType
-                        }))
-                    }
-                }
-                return summary
-            })
 
-        return c.json({ sessions })
+        return c.json({ sessions: allSessions })
     })
 
     app.get('/sessions/:id', (c) => {
