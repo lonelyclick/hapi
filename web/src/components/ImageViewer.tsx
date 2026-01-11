@@ -66,6 +66,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         const RETRY_DELAY = 1000
 
         const fetchImage = async () => {
+            console.log('[ImageViewer] fetchImage called, aborted?', abortController.signal.aborted)
             try {
                 const token = api.getCurrentToken()
                 console.log('[ImageViewer] Fetching image', { src, hasToken: !!token })
@@ -76,7 +77,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
                     signal: abortController.signal
                 })
 
-                console.log('[ImageViewer] Response', { status: response.status, ok: response.ok })
+                console.log('[ImageViewer] Response received', { status: response.status, ok: response.ok, aborted: abortController.signal.aborted })
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`)
