@@ -80,13 +80,33 @@ function processChildren(children: ReactNode): ReactNode {
     }
 
     if (Array.isArray(children)) {
-        return children.map((child, index) => {
+        // 先把连续的字符串合并，避免路径被分割到多个文本节点
+        const merged: ReactNode[] = []
+        let currentStrings: string[] = []
+
+        for (const child of children) {
             if (typeof child === 'string') {
-                const parts = processTextWithPaths(child)
-                return parts.length === 1 ? parts[0] : <span key={index}>{parts}</span>
+                currentStrings.push(child)
+            } else {
+                // 遇到非字符串节点，先处理累积的字符串
+                if (currentStrings.length > 0) {
+                    const combinedText = currentStrings.join('')
+                    const parts = processTextWithPaths(combinedText)
+                    merged.push(...parts)
+                    currentStrings = []
+                }
+                merged.push(child)
             }
-            return child
-        })
+        }
+
+        // 处理剩余的字符串
+        if (currentStrings.length > 0) {
+            const combinedText = currentStrings.join('')
+            const parts = processTextWithPaths(combinedText)
+            merged.push(...parts)
+        }
+
+        return merged.length === 1 ? merged[0] : <>{merged}</>
     }
 
     return children
