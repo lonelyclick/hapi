@@ -34,6 +34,9 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
             return failureCount < 2
         },
         enabled: Boolean(api && sessionId),
+        // Prevent showing stale messages from a different session when switching
+        placeholderData: undefined,
+        staleTime: 0,
     })
 
     const messages = useMemo(() => {

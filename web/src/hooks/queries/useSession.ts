@@ -26,6 +26,9 @@ export function useSession(api: ApiClient | null, sessionId: string | null): {
             return failureCount < 2
         },
         enabled: Boolean(api && sessionId),
+        // Prevent showing stale data from a different session when switching
+        placeholderData: undefined,
+        staleTime: 0,
     })
 
     const notFound = query.error instanceof ApiError && query.error.status === 404
