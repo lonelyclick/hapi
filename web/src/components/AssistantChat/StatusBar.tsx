@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { AgentState, ModelMode, PermissionMode } from '@/types/api'
+import type { AgentState, ModelMode, PermissionMode, TypingUser } from '@/types/api'
 import { getContextBudgetTokens } from '@/chat/modelConfig'
 
 const PERMISSION_MODE_LABELS: Record<string, string> = {
@@ -87,6 +87,14 @@ function getContextWarning(contextSize: number, maxContextSize: number): { text:
     }
 }
 
+// Get display name from email (first part before @)
+function getDisplayName(email: string): string {
+    const atIndex = email.indexOf('@')
+    if (atIndex === -1) return email
+    const name = email.slice(0, atIndex)
+    return name.length > 0 ? name : email
+}
+
 export function StatusBar(props: {
     active: boolean
     thinking: boolean
@@ -95,6 +103,7 @@ export function StatusBar(props: {
     modelMode?: ModelMode
     permissionMode?: PermissionMode
     agentFlavor?: string | null
+    otherUserTyping?: TypingUser | null
 }) {
     const connectionStatus = useMemo(
         () => getConnectionStatus(props.active, props.thinking, props.agentState),
@@ -131,6 +140,11 @@ export function StatusBar(props: {
                 {contextWarning ? (
                     <span className={`text-[10px] ${contextWarning.color}`}>
                         {contextWarning.text}
+                    </span>
+                ) : null}
+                {props.otherUserTyping ? (
+                    <span className="text-[10px] text-[var(--app-hint)] italic">
+                        {getDisplayName(props.otherUserTyping.email)} typing…
                     </span>
                 ) : null}
             </div>
