@@ -449,14 +449,15 @@ export function createSessionsRoutes(
         const namespace = c.get('namespace')
         const sseManager = getSseManager()
 
-        // Get active sessions from memory (SyncEngine)
-        const activeSessions = engine.getSessionsByNamespace(namespace)
+        // Get sessions from memory (SyncEngine) - filter only truly active ones
+        const memorySessions = engine.getSessionsByNamespace(namespace)
+        const activeSessions = memorySessions.filter(s => s.active)
         const activeSessionIds = new Set(activeSessions.map(s => s.id))
 
         // Get all sessions from database (including offline ones)
         const storedSessions = await store.getSessionsByNamespace(namespace)
 
-        // Convert active sessions to summaries
+        // Convert active sessions to summaries (with viewers info from SSE)
         const activeSessionSummaries = activeSessions.map((session) => {
             const summary = toSessionSummary(session)
             // 添加该 session 的查看者
@@ -473,7 +474,7 @@ export function createSessionsRoutes(
             return summary
         })
 
-        // Convert offline sessions (not in memory) to summaries
+        // Convert offline sessions (not active in memory) to summaries
         const offlineSessionSummaries = storedSessions
             .filter(s => !activeSessionIds.has(s.id))
             .map(storedSessionToSummary)
@@ -493,7 +494,7 @@ export function createSessionsRoutes(
                 return b.updatedAt - a.updatedAt
             })
 
-        console.log(`[sessions] active=${activeSessionSummaries.length}, stored=${storedSessions.length}, offline=${offlineSessionSummaries.length}, total=${allSessions.length}`)
+        console.log(`[sessions] memory=${memorySessions.length}, active=${activeSessionSummaries.length}, stored=${storedSessions.length}, offline=${offlineSessionSummaries.length}, total=${allSessions.length}`)
 
         return c.json({ sessions: allSessions })
     })
