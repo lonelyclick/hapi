@@ -1,4 +1,4 @@
-import { useState, type ComponentPropsWithoutRef } from 'react'
+import { useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 import {
     MarkdownTextPrimitive,
     unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
@@ -16,9 +16,63 @@ export const MARKDOWN_PLUGINS = [remarkGfm]
 
 // 检测是否是绝对路径 (支持 @ + ~ 等常见路径字符)
 const ABSOLUTE_PATH_REGEX = /^(\/[\w.@+~-]+)+\/?$/
+// 用于在文本中查找绝对路径的正则（全局匹配）
+const ABSOLUTE_PATH_GLOBAL_REGEX = /(\/[\w.@+~-]+)+\/?/g
 
 function isAbsolutePath(text: string): boolean {
     return ABSOLUTE_PATH_REGEX.test(text.trim())
+}
+
+// 将文本中的绝对路径转换为链接
+function processTextWithPaths(text: string): ReactNode[] {
+    const parts: ReactNode[] = []
+    let lastIndex = 0
+    let match: RegExpExecArray | null
+
+    // 重置正则的 lastIndex
+    ABSOLUTE_PATH_GLOBAL_REGEX.lastIndex = 0
+
+    while ((match = ABSOLUTE_PATH_GLOBAL_REGEX.exec(text)) !== null) {
+        const path = match[0]
+        const startIndex = match.index
+
+        // 添加路径之前的文本
+        if (startIndex > lastIndex) {
+            parts.push(text.slice(lastIndex, startIndex))
+        }
+
+        // 添加路径链接
+        parts.push(<FilePathLink key={startIndex} path={path} />)
+
+        lastIndex = startIndex + path.length
+    }
+
+    // 添加剩余的文本
+    if (lastIndex < text.length) {
+        parts.push(text.slice(lastIndex))
+    }
+
+    return parts
+}
+
+// 递归处理 children，将文本中的路径转换为链接
+function processChildren(children: ReactNode): ReactNode {
+    if (typeof children === 'string') {
+        const parts = processTextWithPaths(children)
+        return parts.length === 1 ? parts[0] : <>{parts}</>
+    }
+
+    if (Array.isArray(children)) {
+        return children.map((child, index) => {
+            if (typeof child === 'string') {
+                const parts = processTextWithPaths(child)
+                return parts.length === 1 ? parts[0] : <span key={index}>{parts}</span>
+            }
+            return child
+        })
+    }
+
+    return children
 }
 
 // 文件路径链接组件 - 点击时复制文件到服务器并在新窗口打开
@@ -163,7 +217,12 @@ function A(props: ComponentPropsWithoutRef<'a'>) {
 }
 
 function Paragraph(props: ComponentPropsWithoutRef<'p'>) {
-    return <p {...props} className={cn('aui-md-p leading-relaxed', props.className)} />
+    const { children, ...rest } = props
+    return (
+        <p {...rest} className={cn('aui-md-p leading-relaxed', props.className)}>
+            {processChildren(children)}
+        </p>
+    )
 }
 
 function Blockquote(props: ComponentPropsWithoutRef<'blockquote'>) {
@@ -187,7 +246,12 @@ function OrderedList(props: ComponentPropsWithoutRef<'ol'>) {
 }
 
 function ListItem(props: ComponentPropsWithoutRef<'li'>) {
-    return <li {...props} className={cn('aui-md-li', props.className)} />
+    const { children, ...rest } = props
+    return (
+        <li {...rest} className={cn('aui-md-li', props.className)}>
+            {processChildren(children)}
+        </li>
+    )
 }
 
 function Hr(props: ComponentPropsWithoutRef<'hr'>) {
