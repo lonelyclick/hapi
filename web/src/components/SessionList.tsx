@@ -3,8 +3,9 @@ import type { Project, SessionSummary } from '@/types/api'
 import { ViewersBadge } from './ViewersBadge'
 
 // 过滤条件类型
-type CreatorFilter = 'all' | 'mine' | 'others'
-type AgentFilter = 'all' | 'claude' | 'codex'
+type CreatorFilter = 'mine' | 'others'
+type AgentFilter = 'claude' | 'codex'
+type ProjectFilter = string | null  // project id 或 null 表示全部
 
 function getSessionPath(session: SessionSummary): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -63,7 +64,9 @@ function filterSessions(
     sessions: SessionSummary[],
     creatorFilter: CreatorFilter,
     agentFilter: AgentFilter,
-    currentUserEmail: string | null
+    projectFilter: ProjectFilter,
+    currentUserEmail: string | null,
+    sessionProjectMap: Map<string, Project | null>
 ): SessionSummary[] {
     return sessions.filter(session => {
         // 创建者过滤
@@ -71,10 +74,14 @@ function filterSessions(
         if (creatorFilter === 'others' && isMySession(session, currentUserEmail)) return false
 
         // Agent 类型过滤
-        if (agentFilter !== 'all') {
-            const agentType = getAgentType(session)
-            if (agentFilter === 'claude' && agentType !== 'claude') return false
-            if (agentFilter === 'codex' && agentType !== 'codex') return false
+        const agentType = getAgentType(session)
+        if (agentFilter === 'claude' && agentType !== 'claude') return false
+        if (agentFilter === 'codex' && agentType !== 'codex') return false
+
+        // Project 过滤
+        if (projectFilter !== null) {
+            const project = sessionProjectMap.get(session.id)
+            if (project?.id !== projectFilter) return false
         }
 
         return true
@@ -294,9 +301,10 @@ export function SessionList(props: {
 }) {
     const { renderHeader = true, currentUserEmail } = props
 
-    // 过滤状态
-    const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>('all')
-    const [agentFilter, setAgentFilter] = useState<AgentFilter>('all')
+    // 过滤状态 - 默认：我的、Claude、全部项目
+    const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>('mine')
+    const [agentFilter, setAgentFilter] = useState<AgentFilter>('claude')
+    const [projectFilter, setProjectFilter] = useState<ProjectFilter>(null)
 
     // 构建 session 到 project 的映射
     const sessionProjectMap = useMemo(() => {
@@ -309,11 +317,20 @@ export function SessionList(props: {
         return map
     }, [props.sessions, props.projects])
 
+    // 获取有 session 的项目列表（用于过滤选项）
+    const projectsWithSessions = useMemo(() => {
+        const projectSet = new Set<string>()
+        sessionProjectMap.forEach((project) => {
+            if (project) projectSet.add(project.id)
+        })
+        return props.projects.filter(p => projectSet.has(p.id))
+    }, [props.projects, sessionProjectMap])
+
     // 过滤并排序 sessions（平铺显示）
     const filteredSessions = useMemo(() => {
-        const filtered = filterSessions(props.sessions, creatorFilter, agentFilter, currentUserEmail)
+        const filtered = filterSessions(props.sessions, creatorFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap)
         return sortSessions(filtered)
-    }, [props.sessions, creatorFilter, agentFilter, currentUserEmail])
+    }, [props.sessions, creatorFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap])
 
     // 统计数据
     const activeCount = filteredSessions.filter(s => s.active).length
@@ -343,7 +360,6 @@ export function SessionList(props: {
                 <div className="flex items-center gap-1.5">
                     <span className="text-xs text-[var(--app-hint)]">创建者:</span>
                     <div className="flex gap-1">
-                        <FilterButton value="all" current={creatorFilter} label="全部" onClick={setCreatorFilter} />
                         <FilterButton value="mine" current={creatorFilter} label="我的" onClick={setCreatorFilter} />
                         <FilterButton value="others" current={creatorFilter} label="其他人" onClick={setCreatorFilter} />
                     </div>
@@ -353,11 +369,27 @@ export function SessionList(props: {
                 <div className="flex items-center gap-1.5">
                     <span className="text-xs text-[var(--app-hint)]">Agent:</span>
                     <div className="flex gap-1">
-                        <FilterButton value="all" current={agentFilter} label="全部" onClick={setAgentFilter} />
                         <FilterButton value="claude" current={agentFilter} label="Claude" onClick={setAgentFilter} />
                         <FilterButton value="codex" current={agentFilter} label="Codex" onClick={setAgentFilter} />
                     </div>
                 </div>
+
+                {/* Project 过滤 */}
+                {projectsWithSessions.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-[var(--app-hint)]">项目:</span>
+                        <select
+                            value={projectFilter ?? ''}
+                            onChange={(e) => setProjectFilter(e.target.value || null)}
+                            className="text-xs px-2 py-1 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-fg)] border border-[var(--app-divider)] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        >
+                            <option value="">全部项目</option>
+                            {projectsWithSessions.map(project => (
+                                <option key={project.id} value={project.id}>{project.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
             </div>
 
             {/* 平铺 Sessions 列表 */}
