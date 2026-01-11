@@ -43,9 +43,13 @@ function processTextWithPaths(text: string): ReactNode[] {
     // 重置正则的 lastIndex
     PATH_GLOBAL_REGEX.lastIndex = 0
 
+    console.log('[processTextWithPaths] input:', text)
+
     while ((match = PATH_GLOBAL_REGEX.exec(text)) !== null) {
         const path = match[0]
         const startIndex = match.index
+
+        console.log('[processTextWithPaths] match:', path, 'at index:', startIndex, 'isAbsolute:', path.startsWith('/'))
 
         // 添加路径之前的文本
         if (startIndex > lastIndex) {
@@ -68,6 +72,8 @@ function processTextWithPaths(text: string): ReactNode[] {
     if (lastIndex < text.length) {
         parts.push(text.slice(lastIndex))
     }
+
+    console.log('[processTextWithPaths] parts count:', parts.length)
 
     return parts
 }
