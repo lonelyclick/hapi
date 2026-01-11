@@ -1,15 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Project, SessionSummary } from '@/types/api'
 import { ViewersBadge } from './ViewersBadge'
 
-type SessionGroup = {
-    projectId: string | null
-    projectName: string
-    projectPath: string | null
-    sessions: SessionSummary[]
-    latestUpdatedAt: number
-    hasActiveSession: boolean
-}
+// 过滤条件类型
+type CreatorFilter = 'all' | 'manual' | 'automated'
+type AgentFilter = 'all' | 'claude' | 'codex'
 
 function getSessionPath(session: SessionSummary): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -37,49 +32,56 @@ function matchSessionToProject(session: SessionSummary, projects: Project[]): Pr
     return null
 }
 
-function groupSessionsByProject(sessions: SessionSummary[], projects: Project[]): SessionGroup[] {
-    const groups = new Map<string, { project: Project | null; sessions: SessionSummary[] }>()
+// 判断是否为自动创建的 session
+function isAutomatedSession(session: SessionSummary): boolean {
+    const source = session.metadata?.source?.trim()
+    if (!source || source === 'manual') return false
+    // 自动化标识：hapi_repair, external-api, automation:, bot:, script:
+    if (source.startsWith('hapi_repair')) return true
+    if (source === 'external-api') return true
+    if (source.startsWith('automation:') || source.startsWith('bot:') || source.startsWith('script:')) return true
+    return false
+}
+
+// 获取 agent 类型
+function getAgentType(session: SessionSummary): 'claude' | 'codex' | 'other' {
+    const flavor = session.metadata?.flavor?.trim()?.toLowerCase()
+    if (flavor === 'claude') return 'claude'
+    if (flavor === 'codex') return 'codex'
+    return 'other'
+}
+
+// 平铺排序 sessions
+function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
     if (!Array.isArray(sessions)) return []
-
-    sessions.forEach(session => {
-        const project = matchSessionToProject(session, projects)
-        const key = project?.id ?? '__other__'
-
-        if (!groups.has(key)) {
-            groups.set(key, { project, sessions: [] })
-        }
-        groups.get(key)!.sessions.push(session)
+    return [...sessions].sort((a, b) => {
+        const rankA = a.active ? (a.pendingRequestsCount > 0 ? 0 : 1) : 2
+        const rankB = b.active ? (b.pendingRequestsCount > 0 ? 0 : 1) : 2
+        if (rankA !== rankB) return rankA - rankB
+        return b.updatedAt - a.updatedAt
     })
+}
 
-    return Array.from(groups.entries())
-        .map(([key, { project, sessions: groupSessions }]) => {
-            const sortedSessions = [...groupSessions].sort((a, b) => {
-                const rankA = a.active ? (a.pendingRequestsCount > 0 ? 0 : 1) : 2
-                const rankB = b.active ? (b.pendingRequestsCount > 0 ? 0 : 1) : 2
-                if (rankA !== rankB) return rankA - rankB
-                return b.updatedAt - a.updatedAt
-            })
-            const latestUpdatedAt = groupSessions.reduce(
-                (max, s) => (s.updatedAt > max ? s.updatedAt : max),
-                -Infinity
-            )
-            const hasActiveSession = groupSessions.some(s => s.active)
+// 过滤 sessions
+function filterSessions(
+    sessions: SessionSummary[],
+    creatorFilter: CreatorFilter,
+    agentFilter: AgentFilter
+): SessionSummary[] {
+    return sessions.filter(session => {
+        // 创建者过滤
+        if (creatorFilter === 'manual' && isAutomatedSession(session)) return false
+        if (creatorFilter === 'automated' && !isAutomatedSession(session)) return false
 
-            return {
-                projectId: project?.id ?? null,
-                projectName: project?.name ?? 'Other',
-                projectPath: project?.path ?? null,
-                sessions: sortedSessions,
-                latestUpdatedAt,
-                hasActiveSession
-            }
-        })
-        .sort((a, b) => {
-            if (a.hasActiveSession !== b.hasActiveSession) {
-                return a.hasActiveSession ? -1 : 1
-            }
-            return b.latestUpdatedAt - a.latestUpdatedAt
-        })
+        // Agent 类型过滤
+        if (agentFilter !== 'all') {
+            const agentType = getAgentType(session)
+            if (agentFilter === 'claude' && agentType !== 'claude') return false
+            if (agentFilter === 'codex' && agentType !== 'codex') return false
+        }
+
+        return true
+    })
 }
 
 function PlusIcon(props: { className?: string }) {
@@ -98,44 +100,6 @@ function PlusIcon(props: { className?: string }) {
         >
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-    )
-}
-
-function ChevronIcon(props: { className?: string; collapsed?: boolean }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={`${props.className ?? ''} transition-transform duration-200 ${props.collapsed ? '' : 'rotate-90'}`}
-        >
-            <polyline points="9 18 15 12 9 6" />
-        </svg>
-    )
-}
-
-function FolderIcon(props: { className?: string }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={props.className}
-        >
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
         </svg>
     )
 }
@@ -205,9 +169,10 @@ function formatRelativeTime(value: number): string | null {
 
 function SessionItem(props: {
     session: SessionSummary
+    project: Project | null
     onSelect: (sessionId: string) => void
 }) {
-    const { session: s, onSelect } = props
+    const { session: s, project, onSelect } = props
     const progress = getTodoProgress(s)
     const hasPending = s.pendingRequestsCount > 0
     const runtimeAgent = s.metadata?.runtimeAgent?.trim()
@@ -218,7 +183,7 @@ function SessionItem(props: {
             type="button"
             onClick={() => onSelect(s.id)}
             className={`
-                group flex w-full items-center gap-3 px-3 py-2 text-left
+                group flex w-full items-center gap-3 px-3 py-2.5 text-left
                 transition-all duration-150
                 hover:bg-[var(--app-secondary-bg)]
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]
@@ -241,6 +206,15 @@ function SessionItem(props: {
                     <span className="truncate text-sm font-medium text-[var(--app-fg)]">
                         {getSessionTitle(s)}
                     </span>
+                    {/* Project tag */}
+                    {project && (
+                        <span
+                            className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--app-secondary-bg)] text-[var(--app-hint)] border border-[var(--app-divider)]"
+                            title={project.path}
+                        >
+                            {project.name}
+                        </span>
+                    )}
                     {sourceTag && (
                         <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sourceTag.color}`}>
                             {sourceTag.label}
@@ -286,6 +260,31 @@ function SessionItem(props: {
     )
 }
 
+// 过滤按钮组件
+function FilterButton<T extends string>(props: {
+    value: T
+    current: T
+    label: string
+    onClick: (value: T) => void
+}) {
+    const isActive = props.value === props.current
+    return (
+        <button
+            type="button"
+            onClick={() => props.onClick(props.value)}
+            className={`
+                px-2 py-1 text-xs rounded-md transition-colors
+                ${isActive
+                    ? 'bg-[var(--app-link)] text-white'
+                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                }
+            `}
+        >
+            {props.label}
+        </button>
+    )
+}
+
 export function SessionList(props: {
     sessions: SessionSummary[]
     projects: Project[]
@@ -297,52 +296,37 @@ export function SessionList(props: {
 }) {
     const { renderHeader = true } = props
 
-    const groups = useMemo(
-        () => groupSessionsByProject(props.sessions, props.projects),
-        [props.sessions, props.projects]
-    )
-    const [collapseOverrides, setCollapseOverrides] = useState<Map<string, boolean>>(
-        () => new Map()
-    )
-    const getGroupKey = (group: SessionGroup): string => group.projectId ?? '__other__'
+    // 过滤状态
+    const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>('all')
+    const [agentFilter, setAgentFilter] = useState<AgentFilter>('all')
 
-    const isGroupCollapsed = (group: SessionGroup): boolean => {
-        const override = collapseOverrides.get(getGroupKey(group))
-        if (override !== undefined) return override
-        return !group.hasActiveSession
-    }
+    // 构建 session 到 project 的映射
+    const sessionProjectMap = useMemo(() => {
+        const map = new Map<string, Project | null>()
+        if (Array.isArray(props.sessions) && Array.isArray(props.projects)) {
+            props.sessions.forEach(session => {
+                map.set(session.id, matchSessionToProject(session, props.projects))
+            })
+        }
+        return map
+    }, [props.sessions, props.projects])
 
-    const toggleGroup = (group: SessionGroup, isCollapsed: boolean) => {
-        const key = getGroupKey(group)
-        setCollapseOverrides(prev => {
-            const next = new Map(prev)
-            next.set(key, !isCollapsed)
-            return next
-        })
-    }
+    // 过滤并排序 sessions（平铺显示）
+    const filteredSessions = useMemo(() => {
+        const filtered = filterSessions(props.sessions, creatorFilter, agentFilter)
+        return sortSessions(filtered)
+    }, [props.sessions, creatorFilter, agentFilter])
 
-    useEffect(() => {
-        setCollapseOverrides(prev => {
-            if (prev.size === 0) return prev
-            const next = new Map(prev)
-            const knownGroups = new Set(groups.map(getGroupKey))
-            let changed = false
-            for (const key of next.keys()) {
-                if (!knownGroups.has(key)) {
-                    next.delete(key)
-                    changed = true
-                }
-            }
-            return changed ? next : prev
-        })
-    }, [groups])
+    // 统计数据
+    const activeCount = filteredSessions.filter(s => s.active).length
 
     return (
         <div className="mx-auto w-full max-w-content flex flex-col">
             {renderHeader ? (
                 <div className="flex items-center justify-between px-3 py-1">
                     <div className="text-xs text-[var(--app-hint)]">
-                        {props.sessions.length} sessions in {groups.length} projects
+                        {filteredSessions.length} sessions
+                        {activeCount > 0 && ` (${activeCount} active)`}
                     </div>
                     <button
                         type="button"
@@ -355,63 +339,45 @@ export function SessionList(props: {
                 </div>
             ) : null}
 
-            <div className="flex flex-col gap-1 p-2">
-                {/* Sessions grouped by project */}
-                {groups.map((group) => {
-                    const isCollapsed = isGroupCollapsed(group)
-                    const activeCount = group.sessions.filter(s => s.active).length
-                    const groupKey = getGroupKey(group)
-                    return (
-                        <div
-                            key={groupKey}
-                            className="rounded-lg bg-[var(--app-subtle-bg)]"
-                        >
-                            {/* Group header */}
-                            <button
-                                type="button"
-                                onClick={() => toggleGroup(group, isCollapsed)}
-                                title={group.projectPath ?? group.projectName}
-                                className="
-                                    flex w-full items-center gap-2 px-3 py-2
-                                    text-left transition-colors
-                                    hover:bg-[var(--app-secondary-bg)]
-                                "
-                            >
-                                <ChevronIcon
-                                    className="shrink-0 text-[var(--app-hint)]"
-                                    collapsed={isCollapsed}
-                                />
-                                <FolderIcon className="shrink-0 text-[var(--app-hint)]" />
-                                <span className="truncate text-sm font-medium">
-                                    {group.projectName}
-                                </span>
-                                <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                                    {activeCount > 0 && (
-                                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">
-                                            {activeCount} active
-                                        </span>
-                                    )}
-                                    <span className="text-[11px] text-[var(--app-hint)]">
-                                        {group.sessions.length}
-                                    </span>
-                                </div>
-                            </button>
+            {/* 过滤条件 */}
+            <div className="flex flex-wrap items-center gap-4 px-3 py-2 border-b border-[var(--app-divider)]">
+                {/* 创建者过滤 */}
+                <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-[var(--app-hint)]">创建者:</span>
+                    <div className="flex gap-1">
+                        <FilterButton value="all" current={creatorFilter} label="全部" onClick={setCreatorFilter} />
+                        <FilterButton value="manual" current={creatorFilter} label="手动" onClick={setCreatorFilter} />
+                        <FilterButton value="automated" current={creatorFilter} label="自动" onClick={setCreatorFilter} />
+                    </div>
+                </div>
 
-                            {/* Sessions list */}
-                            {!isCollapsed && (
-                                <div className="border-t border-[var(--app-divider)]">
-                                    {group.sessions.map((s) => (
-                                        <SessionItem
-                                            key={s.id}
-                                            session={s}
-                                            onSelect={props.onSelect}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )
-                })}
+                {/* Agent 类型过滤 */}
+                <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-[var(--app-hint)]">Agent:</span>
+                    <div className="flex gap-1">
+                        <FilterButton value="all" current={agentFilter} label="全部" onClick={setAgentFilter} />
+                        <FilterButton value="claude" current={agentFilter} label="Claude" onClick={setAgentFilter} />
+                        <FilterButton value="codex" current={agentFilter} label="Codex" onClick={setAgentFilter} />
+                    </div>
+                </div>
+            </div>
+
+            {/* 平铺 Sessions 列表 */}
+            <div className="flex flex-col divide-y divide-[var(--app-divider)]">
+                {filteredSessions.length === 0 ? (
+                    <div className="px-3 py-8 text-center text-sm text-[var(--app-hint)]">
+                        没有匹配的 Session
+                    </div>
+                ) : (
+                    filteredSessions.map((session) => (
+                        <SessionItem
+                            key={session.id}
+                            session={session}
+                            project={sessionProjectMap.get(session.id) ?? null}
+                            onSelect={props.onSelect}
+                        />
+                    ))
+                )}
             </div>
         </div>
     )
