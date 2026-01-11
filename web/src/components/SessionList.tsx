@@ -272,7 +272,7 @@ function FilterButton<T extends string>(props: {
             className={`
                 px-2 py-1 text-xs rounded-md transition-colors
                 ${isActive
-                    ? 'bg-[var(--app-link)] text-white'
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
                     : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
                 }
             `}
