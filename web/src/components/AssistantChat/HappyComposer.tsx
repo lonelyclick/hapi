@@ -1571,7 +1571,7 @@ export function HappyComposer(props: {
                         {showAttachmentPreview ? (
                             <div className="px-3 pt-3 pb-2 space-y-2">
                                 {uploadedImages.length > 0 || isUploadingImage ? (
-                                    <div className="flex gap-2 overflow-x-auto">
+                                    <div className="flex gap-2 overflow-x-auto pt-2 pr-2">
                                         {uploadedImages.map((img, index) => (
                                             <div key={img.path} className="relative flex-shrink-0 group">
                                                 <img
