@@ -30,9 +30,15 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         }
     }, [handleClose])
 
+    const api = context?.api ?? null
+
     // 使用带认证的 fetch 请求加载图片
     useEffect(() => {
-        if (!src || !context?.api) {
+        if (!src || !api) {
+            // 如果没有 api，等待而不是立即报错
+            if (!api) {
+                return
+            }
             setHasError(true)
             setIsLoading(false)
             return
@@ -58,7 +64,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
 
         const fetchImage = async () => {
             try {
-                const token = context.api.getCurrentToken()
+                const token = api.getCurrentToken()
                 const response = await fetch(src, {
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -94,7 +100,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         return () => {
             abortController.abort()
         }
-    }, [src, context?.api]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [src, api])
 
     useEffect(() => {
         if (!isOpen) return
