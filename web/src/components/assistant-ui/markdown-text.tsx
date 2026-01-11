@@ -42,8 +42,14 @@ function FilePathLink({ path }: { path: string }) {
                 const token = await context.api.ensureFreshToken()
                 const url = `${window.location.origin}/api/${result.path}${token ? `?token=${encodeURIComponent(token)}` : ''}`
                 console.log('[FilePathLink] opening URL:', url)
-                // 使用 window.open 确保在新标签页打开，绕过 PWA 拦截
-                window.open(url, '_blank', 'noopener,noreferrer')
+                // 使用隐藏的 <a> 标签触发下载，绕过 PWA 拦截
+                const link = document.createElement('a')
+                link.href = url
+                link.download = result.filename || path.split('/').pop() || 'file'
+                link.style.display = 'none'
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
             } else {
                 console.error('[FilePathLink] copy failed:', result.error)
                 alert(`Failed to load file: ${result.error || 'Unknown error'}`)
