@@ -43,10 +43,7 @@ function processTextWithPaths(text: string): ReactNode[] {
     // 重置正则的 lastIndex
     PATH_GLOBAL_REGEX.lastIndex = 0
 
-    console.log('[processTextWithPaths] input:', JSON.stringify(text))
-
     while ((match = PATH_GLOBAL_REGEX.exec(text)) !== null) {
-        console.log('[processTextWithPaths] matched:', match[0])
         const path = match[0]
         const startIndex = match.index
 
@@ -165,28 +162,172 @@ function FilePathLink({ path }: { path: string }) {
     )
 }
 
-// 相对路径链接组件 - 点击时先解析为绝对路径再下载
+// 相对路径文件存在性缓存 (sessionId -> path -> { exists, absolutePath })
+const relativePathCache = new Map<string, Map<string, { exists: boolean; absolutePath?: string } | 'pending'>>()
+
+// 获取或创建 session 的缓存
+function getSessionCache(sessionId: string): Map<string, { exists: boolean; absolutePath?: string } | 'pending'> {
+    let cache = relativePathCache.get(sessionId)
+    if (!cache) {
+        cache = new Map()
+        relativePathCache.set(sessionId, cache)
+    }
+    return cache
+}
+
+// 待检查的路径队列 (sessionId -> Set<path>)
+const pendingChecks = new Map<string, Set<string>>()
+// 等待检查完成的回调 (sessionId -> path -> callbacks)
+const checkCallbacks = new Map<string, Map<string, Array<() => void>>>()
+
+// 批量检查文件存在性
+async function batchCheckFiles(api: { checkFiles: (sessionId: string, paths: string[]) => Promise<Record<string, { exists: boolean; absolutePath?: string }>> }, sessionId: string) {
+    const pending = pendingChecks.get(sessionId)
+    if (!pending || pending.size === 0) return
+
+    const paths = Array.from(pending)
+    pending.clear()
+
+    try {
+        const results = await api.checkFiles(sessionId, paths)
+        const cache = getSessionCache(sessionId)
+
+        for (const path of paths) {
+            const result = results[path] || { exists: false }
+            cache.set(path, result)
+
+            // 触发等待的回调
+            const callbacks = checkCallbacks.get(sessionId)?.get(path)
+            if (callbacks) {
+                callbacks.forEach(cb => cb())
+                checkCallbacks.get(sessionId)?.delete(path)
+            }
+        }
+    } catch (err) {
+        console.error('[batchCheckFiles] error:', err)
+        const cache = getSessionCache(sessionId)
+        for (const path of paths) {
+            cache.set(path, { exists: false })
+            const callbacks = checkCallbacks.get(sessionId)?.get(path)
+            if (callbacks) {
+                callbacks.forEach(cb => cb())
+                checkCallbacks.get(sessionId)?.delete(path)
+            }
+        }
+    }
+}
+
+// 调度批量检查（防抖）
+let batchCheckTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleBatchCheck(api: { checkFiles: (sessionId: string, paths: string[]) => Promise<Record<string, { exists: boolean; absolutePath?: string }>> }, sessionId: string) {
+    if (batchCheckTimer) {
+        clearTimeout(batchCheckTimer)
+    }
+    batchCheckTimer = setTimeout(() => {
+        batchCheckTimer = null
+        void batchCheckFiles(api, sessionId)
+    }, 50) // 50ms 防抖
+}
+
+// 相对路径链接组件 - 懒加载检查文件是否存在
 function RelativeFilePathLink({ path }: { path: string }) {
     const context = useHappyChatContextSafe()
+    const [status, setStatus] = useState<'checking' | 'exists' | 'not-exists'>('checking')
+    const [absolutePath, setAbsolutePath] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
 
     const filename = path.split('/').pop() || path
 
+    useEffect(() => {
+        if (!context?.api || !context?.sessionId) {
+            setStatus('not-exists')
+            return
+        }
+
+        const sessionId = context.sessionId
+        const cache = getSessionCache(sessionId)
+        const cached = cache.get(path)
+
+        if (cached && cached !== 'pending') {
+            // 已缓存
+            if (cached.exists && cached.absolutePath) {
+                setAbsolutePath(cached.absolutePath)
+                setStatus('exists')
+            } else {
+                setStatus('not-exists')
+            }
+            return
+        }
+
+        if (cached === 'pending') {
+            // 正在检查中，等待回调
+            let callbacks = checkCallbacks.get(sessionId)
+            if (!callbacks) {
+                callbacks = new Map()
+                checkCallbacks.set(sessionId, callbacks)
+            }
+            let pathCallbacks = callbacks.get(path)
+            if (!pathCallbacks) {
+                pathCallbacks = []
+                callbacks.set(path, pathCallbacks)
+            }
+            pathCallbacks.push(() => {
+                const result = cache.get(path)
+                if (result && result !== 'pending') {
+                    if (result.exists && result.absolutePath) {
+                        setAbsolutePath(result.absolutePath)
+                        setStatus('exists')
+                    } else {
+                        setStatus('not-exists')
+                    }
+                }
+            })
+            return
+        }
+
+        // 加入待检查队列
+        cache.set(path, 'pending')
+        let pending = pendingChecks.get(sessionId)
+        if (!pending) {
+            pending = new Set()
+            pendingChecks.set(sessionId, pending)
+        }
+        pending.add(path)
+
+        // 注册回调
+        let callbacks = checkCallbacks.get(sessionId)
+        if (!callbacks) {
+            callbacks = new Map()
+            checkCallbacks.set(sessionId, callbacks)
+        }
+        let pathCallbacks = callbacks.get(path)
+        if (!pathCallbacks) {
+            pathCallbacks = []
+            callbacks.set(path, pathCallbacks)
+        }
+        pathCallbacks.push(() => {
+            const result = cache.get(path)
+            if (result && result !== 'pending') {
+                if (result.exists && result.absolutePath) {
+                    setAbsolutePath(result.absolutePath)
+                    setStatus('exists')
+                } else {
+                    setStatus('not-exists')
+                }
+            }
+        })
+
+        // 调度批量检查
+        scheduleBatchCheck(context.api, sessionId)
+    }, [context?.api, context?.sessionId, path])
+
     const handleClick = async (e: React.MouseEvent) => {
         e.preventDefault()
-        if (loading || !context?.api || !context?.sessionId) return
+        if (loading || !context?.api || !context?.sessionId || !absolutePath) return
 
         setLoading(true)
         try {
-            // 先检查文件并获取绝对路径
-            const checkResult = await context.api.checkFile(context.sessionId, path)
-            if (!checkResult.exists || !checkResult.absolutePath) {
-                alert(`File not found: ${path}`)
-                return
-            }
-
-            // 使用绝对路径复制文件
-            const result = await context.api.copyFile(context.sessionId, checkResult.absolutePath)
+            const result = await context.api.copyFile(context.sessionId, absolutePath)
             if (result.success && result.path) {
                 const token = await context.api.ensureFreshToken()
                 const url = `${window.location.origin}/api/${result.path}${token ? `?token=${encodeURIComponent(token)}` : ''}`
@@ -208,8 +349,8 @@ function RelativeFilePathLink({ path }: { path: string }) {
         }
     }
 
-    // 没有 context 时显示为普通文本
-    if (!context?.api || !context?.sessionId) {
+    // 检查中或不存在时，显示为普通文本
+    if (status !== 'exists') {
         return <>{path}</>
     }
 
@@ -331,7 +472,6 @@ function A(props: ComponentPropsWithoutRef<'a'>) {
 
 function Paragraph(props: ComponentPropsWithoutRef<'p'>) {
     const { children, ...rest } = props
-    console.log('[Paragraph] children:', children)
     return (
         <p {...rest} className={cn('aui-md-p leading-relaxed', props.className)}>
             {processChildren(children)}

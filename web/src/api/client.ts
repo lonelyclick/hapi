@@ -370,6 +370,14 @@ export class ApiClient {
         })
     }
 
+    /** 批量检查文件是否存在 */
+    async checkFiles(sessionId: string, paths: string[]): Promise<Record<string, { exists: boolean; absolutePath?: string }>> {
+        return await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/check-files`, {
+            method: 'POST',
+            body: JSON.stringify({ paths })
+        })
+    }
+
     async sendMessage(sessionId: string, text: string, localId?: string | null): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
             method: 'POST',

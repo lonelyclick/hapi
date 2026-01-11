@@ -591,6 +591,60 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         })
     })
 
+    // 批量检查文件是否存在（支持相对路径）
+    app.post('/sessions/:id/check-files', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const { sessionId, session } = sessionResult
+
+        let body: unknown
+        try {
+            body = await c.req.json()
+        } catch {
+            return c.json({}, 400)
+        }
+
+        const parsed = z.object({ paths: z.array(z.string().min(1)) }).safeParse(body)
+        if (!parsed.success) {
+            return c.json({}, 400)
+        }
+
+        const projectRoot = session.metadata?.path?.trim()
+        const results: Record<string, { exists: boolean; absolutePath?: string }> = {}
+
+        // 并行检查所有文件
+        await Promise.all(parsed.data.paths.map(async (inputPath) => {
+            let absolutePath: string
+            if (inputPath.startsWith('/')) {
+                absolutePath = inputPath
+            } else {
+                if (!projectRoot) {
+                    results[inputPath] = { exists: false }
+                    return
+                }
+                absolutePath = join(projectRoot, inputPath)
+            }
+
+            try {
+                const result = await runRpc(() => engine.readAbsoluteFile(sessionId, absolutePath))
+                const exists = 'content' in result && result.success && !!result.content
+                results[inputPath] = { exists, absolutePath: exists ? absolutePath : undefined }
+            } catch {
+                results[inputPath] = { exists: false }
+            }
+        }))
+
+        return c.json(results)
+    })
+
     // 直接读取服务器端存储的下载文件
     app.get('/server-downloads/:sessionId/:filename', async (c) => {
         const sessionId = c.req.param('sessionId')
