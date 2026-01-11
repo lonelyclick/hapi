@@ -34,7 +34,10 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
 
     // 使用带认证的 fetch 请求加载图片
     useEffect(() => {
+        console.log('[ImageViewer] useEffect triggered', { src, hasApi: !!api, hasContext: !!context })
+
         if (!src || !api) {
+            console.log('[ImageViewer] Missing src or api, waiting...', { src, hasApi: !!api })
             // 如果没有 api，等待而不是立即报错
             if (!api) {
                 return
@@ -65,12 +68,15 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         const fetchImage = async () => {
             try {
                 const token = api.getCurrentToken()
+                console.log('[ImageViewer] Fetching image', { src, hasToken: !!token })
                 const response = await fetch(src, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     },
                     signal: abortController.signal
                 })
+
+                console.log('[ImageViewer] Response', { status: response.status, ok: response.ok })
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`)
@@ -80,9 +86,11 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
                 if (abortController.signal.aborted) return
 
                 const url = URL.createObjectURL(blob)
+                console.log('[ImageViewer] Created blob URL', { url })
                 setBlobUrl(url)
                 setIsLoading(false)
             } catch (error) {
+                console.log('[ImageViewer] Fetch error', { error, retryCount })
                 if (abortController.signal.aborted) return
 
                 if (retryCount < MAX_RETRIES) {
@@ -98,6 +106,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         fetchImage()
 
         return () => {
+            console.log('[ImageViewer] Cleanup, aborting fetch')
             abortController.abort()
         }
     }, [src, api])
