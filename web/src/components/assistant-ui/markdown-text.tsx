@@ -274,9 +274,12 @@ function Code(props: ComponentPropsWithoutRef<'code'>) {
         )
     }
 
-    // 检查是否是绝对路径的行内代码
+    // 检查是否是路径的行内代码
     const content = typeof props.children === 'string' ? props.children : null
-    if (content && isAbsolutePath(content)) {
+    const trimmedContent = content?.trim()
+
+    // 绝对路径
+    if (trimmedContent && isAbsolutePath(trimmedContent)) {
         return (
             <code
                 className={cn(
@@ -284,7 +287,21 @@ function Code(props: ComponentPropsWithoutRef<'code'>) {
                     props.className
                 )}
             >
-                <FilePathLink path={content.trim()} />
+                <FilePathLink path={trimmedContent} />
+            </code>
+        )
+    }
+
+    // 相对路径
+    if (trimmedContent && isRelativePath(trimmedContent)) {
+        return (
+            <code
+                className={cn(
+                    'aui-md-code break-words rounded bg-[var(--app-inline-code-bg)] px-[0.3em] py-[0.1em] font-mono text-[0.9em]',
+                    props.className
+                )}
+            >
+                <RelativeFilePathLink path={trimmedContent} />
             </code>
         )
     }
