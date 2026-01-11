@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useHappyChatContextSafe } from '@/components/AssistantChat/context'
 
 interface ImageViewerProps {
     src: string
@@ -11,10 +12,9 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
     const [hasError, setHasError] = useState(false)
-    const [retryCount, setRetryCount] = useState(0)
-    const imgRef = useRef<HTMLImageElement>(null)
-    const MAX_RETRIES = 2
-    const RETRY_DELAY = 1000
+    const [blobUrl, setBlobUrl] = useState<string | null>(null)
+    const context = useHappyChatContextSafe()
+    const abortControllerRef = useRef<AbortController | null>(null)
 
     const handleOpen = useCallback(() => {
         setIsOpen(true)
@@ -30,6 +30,72 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         }
     }, [handleClose])
 
+    // 使用带认证的 fetch 请求加载图片
+    useEffect(() => {
+        if (!src || !context?.api) {
+            setHasError(true)
+            setIsLoading(false)
+            return
+        }
+
+        // 取消之前的请求
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+        }
+
+        const abortController = new AbortController()
+        abortControllerRef.current = abortController
+
+        let retryCount = 0
+        const MAX_RETRIES = 2
+        const RETRY_DELAY = 1000
+
+        const fetchImage = async () => {
+            try {
+                setIsLoading(true)
+                setHasError(false)
+
+                const token = context.api.getCurrentToken()
+                const response = await fetch(src, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    signal: abortController.signal
+                })
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`)
+                }
+
+                const blob = await response.blob()
+                if (abortController.signal.aborted) return
+
+                const url = URL.createObjectURL(blob)
+                setBlobUrl(url)
+                setIsLoading(false)
+            } catch (error) {
+                if (abortController.signal.aborted) return
+
+                if (retryCount < MAX_RETRIES) {
+                    retryCount++
+                    setTimeout(fetchImage, RETRY_DELAY)
+                } else {
+                    setHasError(true)
+                    setIsLoading(false)
+                }
+            }
+        }
+
+        fetchImage()
+
+        return () => {
+            abortController.abort()
+            if (blobUrl) {
+                URL.revokeObjectURL(blobUrl)
+            }
+        }
+    }, [src, context?.api]) // eslint-disable-line react-hooks/exhaustive-deps
+
     useEffect(() => {
         if (!isOpen) return
 
@@ -41,29 +107,14 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         }
     }, [isOpen, handleKeyDown])
 
-    const handleLoad = useCallback(() => {
-        setIsLoading(false)
-        setHasError(false)
-        setRetryCount(0)
-    }, [])
-
-    const handleError = useCallback(() => {
-        if (retryCount < MAX_RETRIES) {
-            // 重试加载图片，可能是上传刚完成但文件还未完全写入
-            setTimeout(() => {
-                setRetryCount(prev => prev + 1)
-                if (imgRef.current) {
-                    // 强制重新加载图片
-                    const currentSrc = imgRef.current.src
-                    imgRef.current.src = ''
-                    imgRef.current.src = currentSrc
-                }
-            }, RETRY_DELAY)
-        } else {
-            setIsLoading(false)
-            setHasError(true)
+    // 清理 blob URL
+    useEffect(() => {
+        return () => {
+            if (blobUrl) {
+                URL.revokeObjectURL(blobUrl)
+            }
         }
-    }, [retryCount])
+    }, [blobUrl])
 
     if (hasError) {
         return (
@@ -86,21 +137,20 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
                 className={`group relative inline-block cursor-pointer rounded-lg overflow-hidden border border-[var(--app-divider)] hover:border-[var(--app-link)] transition-colors ${className}`}
             >
                 {isLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--app-secondary-bg)]">
+                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--app-secondary-bg)] min-w-16 min-h-16">
                         <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
                             <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                         </svg>
                     </div>
                 )}
-                <img
-                    ref={imgRef}
-                    src={src}
-                    alt={alt}
-                    onLoad={handleLoad}
-                    onError={handleError}
-                    className="max-h-48 max-w-full object-contain"
-                />
+                {blobUrl && (
+                    <img
+                        src={blobUrl}
+                        alt={alt}
+                        className="max-h-48 max-w-full object-contain"
+                    />
+                )}
                 <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-lg">
@@ -113,7 +163,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
                 </div>
             </button>
 
-            {isOpen && createPortal(
+            {isOpen && blobUrl && createPortal(
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
                     onClick={handleClose}
@@ -130,7 +180,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
                         </svg>
                     </button>
                     <img
-                        src={src}
+                        src={blobUrl}
                         alt={alt}
                         onClick={(e) => e.stopPropagation()}
                         className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"

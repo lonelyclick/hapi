@@ -95,6 +95,11 @@ export class ApiClient {
         this.onUnauthorized = options?.onUnauthorized ?? null
     }
 
+    /** 获取当前有效的认证 token */
+    public getCurrentToken(): string | null {
+        return this.getToken ? this.getToken() : this.token
+    }
+
     private buildUrl(path: string): string {
         if (!this.baseUrl) {
             return path
