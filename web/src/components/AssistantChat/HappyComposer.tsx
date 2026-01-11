@@ -644,6 +644,14 @@ export function HappyComposer(props: {
         }
         assistantApi.composer().setText(newText)
 
+        // 立即清空附件列表，不等待表单提交
+        if (uploadedImages.length > 0) {
+            setUploadedImages([])
+        }
+        if (uploadedFiles.length > 0) {
+            setUploadedFiles([])
+        }
+
         // 延迟提交，等待文本更新
         setTimeout(() => {
             const form = textareaRef.current?.closest('form')
@@ -651,7 +659,7 @@ export function HappyComposer(props: {
                 form.requestSubmit()
             }
         }, 50)
-    }, [buildMessageWithAttachments, composerText, assistantApi])
+    }, [buildMessageWithAttachments, composerText, assistantApi, uploadedImages.length, uploadedFiles.length])
 
     const handleOptimizeForPreview = useCallback(async () => {
         if (controlsDisabled || isOptimizing) return

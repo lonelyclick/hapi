@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 interface ImageViewerProps {
@@ -11,6 +11,10 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
     const [isOpen, setIsOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
     const [hasError, setHasError] = useState(false)
+    const [retryCount, setRetryCount] = useState(0)
+    const imgRef = useRef<HTMLImageElement>(null)
+    const MAX_RETRIES = 2
+    const RETRY_DELAY = 1000
 
     const handleOpen = useCallback(() => {
         setIsOpen(true)
@@ -39,12 +43,27 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
 
     const handleLoad = useCallback(() => {
         setIsLoading(false)
+        setHasError(false)
+        setRetryCount(0)
     }, [])
 
     const handleError = useCallback(() => {
-        setIsLoading(false)
-        setHasError(true)
-    }, [])
+        if (retryCount < MAX_RETRIES) {
+            // 重试加载图片，可能是上传刚完成但文件还未完全写入
+            setTimeout(() => {
+                setRetryCount(prev => prev + 1)
+                if (imgRef.current) {
+                    // 强制重新加载图片
+                    const currentSrc = imgRef.current.src
+                    imgRef.current.src = ''
+                    imgRef.current.src = currentSrc
+                }
+            }, RETRY_DELAY)
+        } else {
+            setIsLoading(false)
+            setHasError(true)
+        }
+    }, [retryCount])
 
     if (hasError) {
         return (
@@ -75,6 +94,7 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
                     </div>
                 )}
                 <img
+                    ref={imgRef}
                     src={src}
                     alt={alt}
                     onLoad={handleLoad}
