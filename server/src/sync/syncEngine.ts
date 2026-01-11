@@ -1285,6 +1285,10 @@ export class SyncEngine {
         return await this.sessionRpc(sessionId, 'readFile', { path }) as RpcReadFileResponse
     }
 
+    async readAbsoluteFile(sessionId: string, path: string): Promise<RpcReadFileResponse> {
+        return await this.sessionRpc(sessionId, 'readAbsoluteFile', { path }) as RpcReadFileResponse
+    }
+
     async runRipgrep(sessionId: string, args: string[], cwd?: string): Promise<RpcCommandResponse> {
         return await this.sessionRpc(sessionId, 'ripgrep', { args, cwd }) as RpcCommandResponse
     }

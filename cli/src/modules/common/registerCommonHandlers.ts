@@ -256,6 +256,26 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
         }
     });
 
+    // Read absolute file handler - reads any absolute path (for copy-file feature)
+    // This is used to copy files from anywhere on the system to server storage
+    rpcHandlerManager.registerHandler<ReadFileRequest, ReadFileResponse>('readAbsoluteFile', async (data) => {
+        logger.debug('Read absolute file request:', data.path);
+
+        // Only allow absolute paths
+        if (!data.path.startsWith('/')) {
+            return { success: false, error: 'Path must be absolute' };
+        }
+
+        try {
+            const buffer = await readFile(data.path);
+            const content = buffer.toString('base64');
+            return { success: true, content };
+        } catch (error) {
+            logger.debug('Failed to read absolute file:', error);
+            return { success: false, error: error instanceof Error ? error.message : 'Failed to read file' };
+        }
+    });
+
     // Write file handler - with hash verification
     rpcHandlerManager.registerHandler<WriteFileRequest, WriteFileResponse>('writeFile', async (data) => {
         logger.debug('Write file request:', data.path);

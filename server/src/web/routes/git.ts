@@ -496,8 +496,8 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
 
         const absolutePath = parsed.data.path
 
-        // 通过 RPC 读取文件内容
-        const result = await runRpc(() => engine.readSessionFile(sessionId, absolutePath))
+        // 通过 RPC 读取文件内容（使用 readAbsoluteFile 支持任意绝对路径）
+        const result = await runRpc(() => engine.readAbsoluteFile(sessionId, absolutePath))
         if (!result.success || !result.content) {
             return c.json({ success: false, error: result.error || 'Failed to read file' }, 404)
         }
