@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { basename } from 'node:path'
+import { basename, join } from 'node:path'
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireSessionFromParam, requireSyncEngine } from './guards'
+import { requireSession, requireSessionFromParam, requireSyncEngine } from './guards'
+import { getConfiguration } from '../../configuration'
 
 const fileSearchSchema = z.object({
     query: z.string().optional(),
@@ -356,23 +358,35 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return c.json({ success: false, error: 'Image too large (max 10MB)' }, 413)
         }
 
-        const result = await runRpc(() => engine.uploadImage(
-            sessionId,
-            filename,
-            content,
-            mimeType
-        ))
-        const uploadResult = result as { success?: boolean; path?: string; error?: string }
-        if (uploadResult && typeof uploadResult.success === 'boolean') {
-            if (uploadResult.success) {
-                logUploadInfo('image', 'saved', { sessionId, path: uploadResult.path, sizeBytes })
-            } else {
-                logUploadWarn('image', 'failed', { sessionId, error: uploadResult.error })
+        // 存储到服务器端（不走 RPC）
+        try {
+            const config = getConfiguration()
+            const uploadsDir = join(config.dataDir, 'uploads', sessionId)
+
+            // 确保目录存在
+            if (!existsSync(uploadsDir)) {
+                mkdirSync(uploadsDir, { recursive: true })
             }
-        } else {
-            logUploadWarn('image', 'unexpected-result', { sessionId })
+
+            // 生成唯一文件名
+            const ext = filename.split('.').pop() || 'jpg'
+            const uniqueFilename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+            const filePath = join(uploadsDir, uniqueFilename)
+
+            // 解码并保存文件
+            const buffer = Buffer.from(content, 'base64')
+            writeFileSync(filePath, buffer)
+
+            // 返回服务器端存储路径
+            const serverPath = `server-uploads/${sessionId}/${uniqueFilename}`
+            logUploadInfo('image', 'saved-to-server', { sessionId, path: serverPath, sizeBytes })
+
+            return c.json({ success: true, path: serverPath })
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+            logUploadWarn('image', 'server-save-failed', { sessionId, error: errorMsg })
+            return c.json({ success: false, error: errorMsg }, 500)
         }
-        return c.json(result)
     })
 
     // Upload file endpoint
@@ -452,6 +466,62 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             logUploadWarn('file', 'unexpected-result', { sessionId })
         }
         return c.json(result)
+    })
+
+    // 直接读取服务器端存储的上传文件（不走 RPC）
+    app.get('/server-uploads/:sessionId/:filename', async (c) => {
+        const sessionId = c.req.param('sessionId')
+        const filename = c.req.param('filename')
+
+        // 验证 session 存在
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const session = requireSession(c, engine, sessionId)
+        if (session instanceof Response) {
+            return session
+        }
+
+        try {
+            const config = getConfiguration()
+            const filePath = join(config.dataDir, 'uploads', sessionId, filename)
+
+            if (!existsSync(filePath)) {
+                return c.json({ error: 'File not found' }, 404)
+            }
+
+            const buffer = readFileSync(filePath)
+
+            // 从文件名推断 MIME 类型
+            const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+            const imageMimeTypes: Record<string, string> = {
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'png': 'image/png',
+                'gif': 'image/gif',
+                'webp': 'image/webp',
+                'svg': 'image/svg+xml',
+                'bmp': 'image/bmp',
+                'ico': 'image/x-icon',
+                'heic': 'image/heic',
+                'heif': 'image/heif'
+            }
+            const contentType = imageMimeTypes[ext] ?? 'application/octet-stream'
+
+            return new Response(buffer, {
+                status: 200,
+                headers: {
+                    'Content-Type': contentType,
+                    'Content-Length': buffer.length.toString(),
+                    'Cache-Control': 'public, max-age=31536000, immutable'
+                }
+            })
+        } catch (error) {
+            console.error('[server-uploads] read error:', error)
+            return c.json({ error: 'Failed to read file' }, 500)
+        }
     })
 
     return app

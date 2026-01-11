@@ -35,9 +35,16 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
         if (!src || !api) return null
         const token = api.getCurrentToken()
         if (!token) return null
+
+        // server-uploads 路径直接作为 API 路径使用
+        let fullPath = src
+        if (src.startsWith('server-uploads/')) {
+            fullPath = `/api/${src}`
+        }
+
         // 添加 token 到 URL query 参数
-        const separator = src.includes('?') ? '&' : '?'
-        return `${src}${separator}token=${encodeURIComponent(token)}`
+        const separator = fullPath.includes('?') ? '&' : '?'
+        return `${fullPath}${separator}token=${encodeURIComponent(token)}`
     }, [src, api])
 
     // 当 src 变化时重置状态
