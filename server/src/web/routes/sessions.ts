@@ -494,7 +494,12 @@ export function createSessionsRoutes(
                 return b.updatedAt - a.updatedAt
             })
 
+        // Debug: log some session active states
+        const sampleMemory = memorySessions.slice(0, 3).map(s => `${s.id.slice(0, 8)}:${s.active}`)
+        const sampleStored = storedSessions.slice(0, 3).map(s => `${s.id.slice(0, 8)}:${s.active}`)
         console.log(`[sessions] memory=${memorySessions.length}, active=${activeSessionSummaries.length}, stored=${storedSessions.length}, offline=${offlineSessionSummaries.length}, total=${allSessions.length}`)
+        console.log(`[sessions] sample memory: ${sampleMemory.join(', ')}`)
+        console.log(`[sessions] sample stored: ${sampleStored.join(', ')}`)
 
         return c.json({ sessions: allSessions })
     })
