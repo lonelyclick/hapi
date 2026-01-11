@@ -189,16 +189,20 @@ async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserR
         const projectRoot = session?.metadata?.path?.trim()
             || session?.metadata?.worktree?.basePath?.trim()
             || null
+        console.log(`[sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}`)
         const prompt = await buildInitPrompt(role, { projectRoot })
         if (!prompt.trim()) {
+            console.warn(`[sendInitPrompt] Empty prompt for session ${sessionId}, skipping`)
             return
         }
+        console.log(`[sendInitPrompt] Sending prompt to session ${sessionId}, length=${prompt.length}`)
         await engine.sendMessage(sessionId, {
             text: prompt,
             sentFrom: 'webapp'
         })
-    } catch {
-        // Ignore failures.
+        console.log(`[sendInitPrompt] Successfully sent init prompt to session ${sessionId}`)
+    } catch (err) {
+        console.error(`[sendInitPrompt] Failed for session ${sessionId}:`, err)
     }
 }
 
@@ -425,8 +429,13 @@ export function createSessionsRoutes(
             const role = resolveUserRole(store, email)
             // Wait for session to be online, then set createdBy and send init prompt
             void (async () => {
+                console.log(`[spawnSession] Waiting for session ${result.sessionId} to come online...`)
                 const isOnline = await waitForSessionOnline(engine, result.sessionId, 60_000)
-                if (!isOnline) return
+                if (!isOnline) {
+                    console.warn(`[spawnSession] Session ${result.sessionId} did not come online within 60s, skipping init prompt`)
+                    return
+                }
+                console.log(`[spawnSession] Session ${result.sessionId} is online, sending init prompt`)
                 // Set createdBy after session is confirmed online (exists in DB)
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
