@@ -449,57 +449,56 @@ export function createSessionsRoutes(
         const namespace = c.get('namespace')
         const sseManager = getSseManager()
 
-        // Get sessions from memory (SyncEngine) - filter only truly active ones
+        // Get sessions from memory (SyncEngine) for live data (viewers, pending requests, thinking state)
         const memorySessions = engine.getSessionsByNamespace(namespace)
-        const activeSessions = memorySessions.filter(s => s.active)
-        const activeSessionIds = new Set(activeSessions.map(s => s.id))
+        const memorySessionMap = new Map(memorySessions.map(s => [s.id, s]))
 
-        // Get all sessions from database (including offline ones)
+        // Get all sessions from database - this is the source of truth for active status
         const storedSessions = await store.getSessionsByNamespace(namespace)
 
-        // Convert active sessions to summaries (with viewers info from SSE)
-        const activeSessionSummaries = activeSessions.map((session) => {
-            const summary = toSessionSummary(session)
-            // 添加该 session 的查看者
-            if (sseManager) {
-                const viewers = sseManager.getSessionViewers(namespace, session.id)
-                if (viewers.length > 0) {
-                    summary.viewers = viewers.map(v => ({
-                        email: v.email,
-                        clientId: v.clientId,
-                        deviceType: v.deviceType
-                    }))
+        // Convert all sessions to summaries, using memory for live data when available
+        const allSessions = storedSessions.map((stored) => {
+            const memorySession = memorySessionMap.get(stored.id)
+
+            // Start with database summary
+            const summary = storedSessionToSummary(stored)
+
+            // If session is in memory and actively connected, enhance with live data
+            if (memorySession) {
+                // Use memory's pending requests count (live data)
+                summary.pendingRequestsCount = memorySession.agentState?.requests
+                    ? Object.keys(memorySession.agentState.requests).length
+                    : 0
+
+                // Add viewers info
+                if (sseManager) {
+                    const viewers = sseManager.getSessionViewers(namespace, stored.id)
+                    if (viewers.length > 0) {
+                        summary.viewers = viewers.map(v => ({
+                            email: v.email,
+                            clientId: v.clientId,
+                            deviceType: v.deviceType
+                        }))
+                    }
                 }
             }
+
             return summary
+        }).sort((a, b) => {
+            // Active sessions first
+            if (a.active !== b.active) {
+                return a.active ? -1 : 1
+            }
+            // Within active sessions, sort by pending requests count
+            if (a.active && a.pendingRequestsCount !== b.pendingRequestsCount) {
+                return b.pendingRequestsCount - a.pendingRequestsCount
+            }
+            // Then by updatedAt
+            return b.updatedAt - a.updatedAt
         })
 
-        // Convert offline sessions (not active in memory) to summaries
-        const offlineSessionSummaries = storedSessions
-            .filter(s => !activeSessionIds.has(s.id))
-            .map(storedSessionToSummary)
-
-        // Merge and sort all sessions
-        const allSessions = [...activeSessionSummaries, ...offlineSessionSummaries]
-            .sort((a, b) => {
-                // Active sessions first
-                if (a.active !== b.active) {
-                    return a.active ? -1 : 1
-                }
-                // Within active sessions, sort by pending requests count
-                if (a.active && a.pendingRequestsCount !== b.pendingRequestsCount) {
-                    return b.pendingRequestsCount - a.pendingRequestsCount
-                }
-                // Then by updatedAt
-                return b.updatedAt - a.updatedAt
-            })
-
-        // Debug: log some session active states
-        const sampleMemory = memorySessions.slice(0, 3).map(s => `${s.id.slice(0, 8)}:${s.active}`)
-        const sampleStored = storedSessions.slice(0, 3).map(s => `${s.id.slice(0, 8)}:${s.active}`)
-        console.log(`[sessions] memory=${memorySessions.length}, active=${activeSessionSummaries.length}, stored=${storedSessions.length}, offline=${offlineSessionSummaries.length}, total=${allSessions.length}`)
-        console.log(`[sessions] sample memory: ${sampleMemory.join(', ')}`)
-        console.log(`[sessions] sample stored: ${sampleStored.join(', ')}`)
+        const activeCount = allSessions.filter(s => s.active).length
+        console.log(`[sessions] total=${allSessions.length}, active=${activeCount}, offline=${allSessions.length - activeCount}`)
 
         return c.json({ sessions: allSessions })
     })
