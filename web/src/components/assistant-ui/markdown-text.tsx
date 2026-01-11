@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef } from 'react'
+import type { ComponentPropsWithoutRef, ReactNode } from 'react'
 import {
     MarkdownTextPrimitive,
     unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
@@ -10,8 +10,35 @@ import { cn } from '@/lib/utils'
 import { SyntaxHighlighter } from '@/components/assistant-ui/shiki-highlighter'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { CopyIcon, CheckIcon } from '@/components/icons'
+import { useHappyChatContextSafe } from '@/components/AssistantChat/context'
 
 export const MARKDOWN_PLUGINS = [remarkGfm]
+
+// 检测是否是绝对路径
+const ABSOLUTE_PATH_REGEX = /^(\/[\w.-]+)+\/?$/
+
+function isAbsolutePath(text: string): boolean {
+    return ABSOLUTE_PATH_REGEX.test(text.trim())
+}
+
+// 文件路径链接组件
+function FilePathLink({ path, sessionId, token }: { path: string; sessionId: string; token: string }) {
+    const encodedPath = encodeURIComponent(path)
+    const downloadUrl = `/api/sessions/${encodeURIComponent(sessionId)}/file?path=${encodedPath}&raw=true&download=true&token=${encodeURIComponent(token)}`
+    const filename = path.split('/').pop() || path
+
+    return (
+        <a
+            href={downloadUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[var(--app-link)] underline hover:opacity-80"
+            title={`Download ${filename}`}
+        >
+            {path}
+        </a>
+    )
+}
 
 function CodeHeader(props: CodeHeaderProps) {
     const { copied, copy } = useCopyToClipboard()
@@ -52,6 +79,7 @@ function Pre(props: ComponentPropsWithoutRef<'pre'>) {
 
 function Code(props: ComponentPropsWithoutRef<'code'>) {
     const isCodeBlock = useIsMarkdownCodeBlock()
+    const context = useHappyChatContextSafe()
 
     if (isCodeBlock) {
         return (
@@ -60,6 +88,24 @@ function Code(props: ComponentPropsWithoutRef<'code'>) {
                 className={cn('aui-md-codeblockcode font-mono', props.className)}
             />
         )
+    }
+
+    // 检查是否是绝对路径的行内代码
+    const content = typeof props.children === 'string' ? props.children : null
+    if (content && isAbsolutePath(content) && context?.api && context?.sessionId) {
+        const token = context.api.getCurrentToken()
+        if (token) {
+            return (
+                <code
+                    className={cn(
+                        'aui-md-code break-words rounded bg-[var(--app-inline-code-bg)] px-[0.3em] py-[0.1em] font-mono text-[0.9em]',
+                        props.className
+                    )}
+                >
+                    <FilePathLink path={content.trim()} sessionId={context.sessionId} token={token} />
+                </code>
+            )
+        }
     }
 
     return (
