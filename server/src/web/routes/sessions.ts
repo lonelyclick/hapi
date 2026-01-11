@@ -1005,16 +1005,17 @@ export function createSessionsRoutes(
      */
     app.get('/sessions/:id/subscribers', async (c) => {
         const sessionId = c.req.param('id')
-        const chatIdSubscribers = store.getSessionNotificationSubscribers(sessionId)
-        const clientIdSubscribers = store.getSessionNotificationSubscriberClientIds(sessionId)
-        const creatorChatId = store.getSessionCreatorChatId(sessionId)
+        const chatIdSubscribers = await store.getSessionNotificationSubscribers(sessionId)
+        const clientIdSubscribers = await store.getSessionNotificationSubscriberClientIds(sessionId)
+        const creatorChatId = await store.getSessionCreatorChatId(sessionId)
+        const recipients = await store.getSessionNotificationRecipients(sessionId)
 
         return c.json({
             sessionId,
             creatorChatId,
             subscribers: chatIdSubscribers,          // Telegram chatId 订阅者
             clientIdSubscribers: clientIdSubscribers, // clientId 订阅者
-            totalRecipients: store.getSessionNotificationRecipients(sessionId).length + clientIdSubscribers.length
+            totalRecipients: recipients.length + clientIdSubscribers.length
         })
     })
 
