@@ -1,4 +1,4 @@
-import { useState, useEffect, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { useState, type ComponentPropsWithoutRef } from 'react'
 import {
     MarkdownTextPrimitive,
     unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
@@ -21,65 +21,45 @@ function isAbsolutePath(text: string): boolean {
     return ABSOLUTE_PATH_REGEX.test(text.trim())
 }
 
-// 文件路径链接组件 - 异步复制文件到服务器后提供下载链接
+// 文件路径链接组件 - 点击时复制文件到服务器并在新窗口打开
 function FilePathLink({ path }: { path: string }) {
     const context = useHappyChatContextSafe()
-    const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState(false)
+    const [loading, setLoading] = useState(false)
 
     const filename = path.split('/').pop() || path
 
-    useEffect(() => {
-        if (!context?.api || !context?.sessionId) {
-            setError(true)
-            setLoading(false)
-            return
-        }
+    const handleClick = async (e: React.MouseEvent) => {
+        e.preventDefault()
+        if (loading || !context?.api || !context?.sessionId) return
 
-        let cancelled = false
-
-        const copyFile = async () => {
-            try {
-                const result = await context.api.copyFile(context.sessionId, path)
-                if (cancelled) return
-
-                if (result.success && result.path) {
-                    const token = context.api.getCurrentToken()
-                    const url = `/api/${result.path}${token ? `?token=${encodeURIComponent(token)}` : ''}`
-                    setDownloadUrl(url)
-                } else {
-                    setError(true)
-                }
-            } catch {
-                if (!cancelled) setError(true)
-            } finally {
-                if (!cancelled) setLoading(false)
+        setLoading(true)
+        try {
+            const result = await context.api.copyFile(context.sessionId, path)
+            if (result.success && result.path) {
+                const token = context.api.getCurrentToken()
+                const url = `${window.location.origin}/api/${result.path}${token ? `?token=${encodeURIComponent(token)}` : ''}`
+                // 使用 window.open 确保在新标签页打开，绕过 PWA 拦截
+                window.open(url, '_blank', 'noopener,noreferrer')
+            } else {
+                console.error('[FilePathLink] copy failed:', result.error)
+                alert(`Failed to load file: ${result.error || 'Unknown error'}`)
             }
+        } catch (err) {
+            console.error('[FilePathLink] error:', err)
+            alert('Failed to load file')
+        } finally {
+            setLoading(false)
         }
-
-        copyFile()
-
-        return () => { cancelled = true }
-    }, [path, context?.api, context?.sessionId])
-
-    if (loading) {
-        return <span className="text-[var(--app-hint)]">{path}</span>
-    }
-
-    if (error || !downloadUrl) {
-        return <span>{path}</span>
     }
 
     return (
         <a
-            href={downloadUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[var(--app-link)] underline hover:opacity-80"
+            href="#"
+            onClick={handleClick}
+            className={`text-[var(--app-link)] underline hover:opacity-80 ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
             title={`Open ${filename}`}
         >
-            {path}
+            {loading ? `${path} (loading...)` : path}
         </a>
     )
 }
