@@ -580,9 +580,14 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         // 通过 RPC 检查文件是否存在（尝试读取）
         const result = await runRpc(() => engine.readAbsoluteFile(sessionId, absolutePath))
 
+        // runRpc 失败时返回 { success: false, error: string }
+        // 成功时返回 RpcReadFileResponse { success: boolean, content?: string, error?: string }
+        const exists = 'content' in result && result.success && !!result.content
+
         return c.json({
-            exists: result.success && !!result.content,
-            absolutePath
+            exists,
+            absolutePath,
+            error: !exists ? (result.error || 'File not found or session inactive') : undefined
         })
     })
 

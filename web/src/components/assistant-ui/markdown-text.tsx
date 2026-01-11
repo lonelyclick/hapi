@@ -43,13 +43,12 @@ function processTextWithPaths(text: string): ReactNode[] {
     // 重置正则的 lastIndex
     PATH_GLOBAL_REGEX.lastIndex = 0
 
-    console.log('[processTextWithPaths] input:', text)
+    console.log('[processTextWithPaths] input:', JSON.stringify(text))
 
     while ((match = PATH_GLOBAL_REGEX.exec(text)) !== null) {
+        console.log('[processTextWithPaths] matched:', match[0])
         const path = match[0]
         const startIndex = match.index
-
-        console.log('[processTextWithPaths] match:', path, 'at index:', startIndex, 'isAbsolute:', path.startsWith('/'))
 
         // 添加路径之前的文本
         if (startIndex > lastIndex) {
@@ -61,8 +60,8 @@ function processTextWithPaths(text: string): ReactNode[] {
             // 绝对路径直接渲染为链接
             parts.push(<FilePathLink key={startIndex} path={path} />)
         } else {
-            // 相对路径需要先验证是否存在
-            parts.push(<LazyFilePathLink key={startIndex} path={path} />)
+            // 相对路径也显示为链接，点击时再验证
+            parts.push(<RelativeFilePathLink key={startIndex} path={path} />)
         }
 
         lastIndex = startIndex + path.length
@@ -72,8 +71,6 @@ function processTextWithPaths(text: string): ReactNode[] {
     if (lastIndex < text.length) {
         parts.push(text.slice(lastIndex))
     }
-
-    console.log('[processTextWithPaths] parts count:', parts.length)
 
     return parts
 }
@@ -131,9 +128,7 @@ function FilePathLink({ path }: { path: string }) {
 
         setLoading(true)
         try {
-            console.log('[FilePathLink] calling copyFile:', { sessionId: context.sessionId, path })
             const result = await context.api.copyFile(context.sessionId, path)
-            console.log('[FilePathLink] copyFile result:', result)
             if (result.success && result.path) {
                 // 确保 token 是新鲜的（如果快过期则刷新）
                 const token = await context.api.ensureFreshToken()
@@ -148,7 +143,6 @@ function FilePathLink({ path }: { path: string }) {
                 link.click()
                 document.body.removeChild(link)
             } else {
-                console.error('[FilePathLink] copy failed:', result.error)
                 alert(`Failed to load file: ${result.error || 'Unknown error'}`)
             }
         } catch (err) {
@@ -171,49 +165,64 @@ function FilePathLink({ path }: { path: string }) {
     )
 }
 
-// 懒加载文件路径链接 - 先检查文件是否存在，存在才显示为链接
-function LazyFilePathLink({ path }: { path: string }) {
+// 相对路径链接组件 - 点击时先解析为绝对路径再下载
+function RelativeFilePathLink({ path }: { path: string }) {
     const context = useHappyChatContextSafe()
-    const [status, setStatus] = useState<'checking' | 'exists' | 'not-exists'>('checking')
-    const [absolutePath, setAbsolutePath] = useState<string | null>(null)
+    const [loading, setLoading] = useState(false)
 
-    useEffect(() => {
-        console.log('[LazyFilePathLink] checking path:', path, 'context:', !!context?.api, !!context?.sessionId)
-        if (!context?.api || !context?.sessionId) {
-            setStatus('not-exists')
-            return
-        }
+    const filename = path.split('/').pop() || path
 
-        let cancelled = false
+    const handleClick = async (e: React.MouseEvent) => {
+        e.preventDefault()
+        if (loading || !context?.api || !context?.sessionId) return
 
-        context.api.checkFile(context.sessionId, path).then(result => {
-            console.log('[LazyFilePathLink] checkFile result:', path, result)
-            if (cancelled) return
-            if (result.exists && result.absolutePath) {
-                setAbsolutePath(result.absolutePath)
-                setStatus('exists')
+        setLoading(true)
+        try {
+            // 先检查文件并获取绝对路径
+            const checkResult = await context.api.checkFile(context.sessionId, path)
+            if (!checkResult.exists || !checkResult.absolutePath) {
+                alert(`File not found: ${path}`)
+                return
+            }
+
+            // 使用绝对路径复制文件
+            const result = await context.api.copyFile(context.sessionId, checkResult.absolutePath)
+            if (result.success && result.path) {
+                const token = await context.api.ensureFreshToken()
+                const url = `${window.location.origin}/api/${result.path}${token ? `?token=${encodeURIComponent(token)}` : ''}`
+                const link = document.createElement('a')
+                link.href = url
+                link.download = result.filename || filename
+                link.style.display = 'none'
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
             } else {
-                setStatus('not-exists')
+                alert(`Failed to load file: ${result.error || 'Unknown error'}`)
             }
-        }).catch((err) => {
-            console.error('[LazyFilePathLink] checkFile error:', path, err)
-            if (!cancelled) {
-                setStatus('not-exists')
-            }
-        })
-
-        return () => {
-            cancelled = true
+        } catch (err) {
+            console.error('[RelativeFilePathLink] error:', err)
+            alert('Failed to load file')
+        } finally {
+            setLoading(false)
         }
-    }, [context?.api, context?.sessionId, path])
+    }
 
-    // 正在检查或不存在时，显示为普通文本
-    if (status !== 'exists' || !absolutePath) {
+    // 没有 context 时显示为普通文本
+    if (!context?.api || !context?.sessionId) {
         return <>{path}</>
     }
 
-    // 存在时，显示为链接（使用绝对路径）
-    return <FilePathLink path={absolutePath} />
+    return (
+        <a
+            href="#"
+            onClick={handleClick}
+            className={`text-[var(--app-link)] underline hover:opacity-80 ${loading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+            title={`Open ${filename}`}
+        >
+            {loading ? `${path} (loading...)` : path}
+        </a>
+    )
 }
 
 function CodeHeader(props: CodeHeaderProps) {
@@ -267,7 +276,6 @@ function Code(props: ComponentPropsWithoutRef<'code'>) {
 
     // 检查是否是绝对路径的行内代码
     const content = typeof props.children === 'string' ? props.children : null
-    console.log('[Code] children type:', typeof props.children, 'content:', content, 'isAbsPath:', content ? isAbsolutePath(content) : false)
     if (content && isAbsolutePath(content)) {
         return (
             <code
@@ -306,6 +314,7 @@ function A(props: ComponentPropsWithoutRef<'a'>) {
 
 function Paragraph(props: ComponentPropsWithoutRef<'p'>) {
     const { children, ...rest } = props
+    console.log('[Paragraph] children:', children)
     return (
         <p {...rest} className={cn('aui-md-p leading-relaxed', props.className)}>
             {processChildren(children)}
