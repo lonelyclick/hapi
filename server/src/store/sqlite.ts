@@ -744,6 +744,10 @@ export class SqliteStore implements IStore {
         return this.store.setSessionCreatedBy(id, email, namespace)
     }
 
+    async setSessionActive(_id: string, _active: boolean, _activeAt: number, _namespace: string): Promise<boolean> {
+        throw new Error('setSessionActive not implemented in SqliteStore')
+    }
+
     async getSession(id: string): Promise<StoredSession | null> {
         return this.store.getSession(id)
     }

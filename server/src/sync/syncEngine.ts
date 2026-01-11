@@ -655,6 +655,13 @@ export class SyncEngine {
             session.modelReasoningEffort = payload.modelReasoningEffort
         }
 
+        // If session just became active, persist to database
+        if (!wasActive) {
+            this.store.setSessionActive(session.id, true, session.activeAt, session.namespace).catch(err => {
+                console.error(`[handleSessionAlive] Failed to persist active=true for session ${session.id}:`, err)
+            })
+        }
+
         const now = Date.now()
         const lastBroadcastAt = this.lastBroadcastAtBySessionId.get(session.id) ?? 0
         const modeChanged = previousPermissionMode !== session.permissionMode
@@ -820,6 +827,9 @@ export class SyncEngine {
         session.thinking = false
         session.thinkingAt = t
 
+        // Persist active=false to database so it survives server restarts
+        await this.store.setSessionActive(session.id, false, t, session.namespace)
+
         // 如果任务刚完成，使用带订阅者过滤的事件
         if (wasThinking) {
             this.emitTaskCompleteEvent(session)
@@ -858,6 +868,11 @@ export class SyncEngine {
             if (now - session.activeAt <= sessionTimeoutMs) continue
             session.active = false
             session.thinking = false
+
+            // Persist active=false to database so it survives server restarts
+            this.store.setSessionActive(session.id, false, now, session.namespace).catch(err => {
+                console.error(`[expireInactive] Failed to persist active=false for session ${session.id}:`, err)
+            })
 
             // Notify CLI to terminate its process
             const cliNamespace = this.io.of('/cli')

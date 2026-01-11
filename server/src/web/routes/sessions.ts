@@ -449,45 +449,64 @@ export function createSessionsRoutes(
         const namespace = c.get('namespace')
         const sseManager = getSseManager()
 
-        // Get sessions from memory (SyncEngine) - these have live active status
+        // Get sessions from memory (SyncEngine) - these have live data
         const memorySessions = engine.getSessionsByNamespace(namespace)
         const memorySessionMap = new Map(memorySessions.map(s => [s.id, s]))
 
-        // Get all sessions from database (for offline sessions not in memory)
+        // Get all sessions from database
         const storedSessions = await store.getSessionsByNamespace(namespace)
-        const storedSessionIds = new Set(storedSessions.map(s => s.id))
 
-        // Build session summaries:
-        // 1. For sessions in memory: use memory state (has live active status)
-        // 2. For sessions only in database: use database state (offline sessions)
+        // Determine if a session is truly active:
+        // - Must be in memory AND have recent activeAt (within 2 minutes)
+        // This prevents sessions that were loaded into memory but have no CLI connected
+        // from showing as active
+        const ACTIVE_THRESHOLD_MS = 2 * 60 * 1000 // 2 minutes
+        const now = Date.now()
 
-        const sessionSummaries: SessionSummary[] = []
+        const isSessionTrulyActive = (memorySession: Session | undefined): boolean => {
+            if (!memorySession) return false
+            if (!memorySession.active) return false
+            // Check if activeAt is recent (CLI is sending heartbeats)
+            const timeSinceActive = now - memorySession.activeAt
+            return timeSinceActive < ACTIVE_THRESHOLD_MS
+        }
 
-        // Add sessions from memory (with live data)
-        for (const memorySession of memorySessions) {
-            const summary = toSessionSummary(memorySession)
+        // Build session summaries from database, enhanced with memory data
+        const sessionSummaries: SessionSummary[] = storedSessions.map((stored) => {
+            const memorySession = memorySessionMap.get(stored.id)
+            const trulyActive = isSessionTrulyActive(memorySession)
 
-            // Add viewers info
-            if (sseManager) {
-                const viewers = sseManager.getSessionViewers(namespace, memorySession.id)
-                if (viewers.length > 0) {
-                    summary.viewers = viewers.map(v => ({
-                        email: v.email,
-                        clientId: v.clientId,
-                        deviceType: v.deviceType
-                    }))
+            // Start with database data
+            const summary = storedSessionToSummary(stored)
+
+            // Override active status based on live memory state
+            summary.active = trulyActive
+            if (memorySession) {
+                summary.activeAt = memorySession.activeAt
+            }
+
+            // If session is in memory, enhance with live data
+            if (memorySession) {
+                // Use memory's pending requests count (live data)
+                summary.pendingRequestsCount = memorySession.agentState?.requests
+                    ? Object.keys(memorySession.agentState.requests).length
+                    : 0
+
+                // Add viewers info
+                if (sseManager) {
+                    const viewers = sseManager.getSessionViewers(namespace, stored.id)
+                    if (viewers.length > 0) {
+                        summary.viewers = viewers.map(v => ({
+                            email: v.email,
+                            clientId: v.clientId,
+                            deviceType: v.deviceType
+                        }))
+                    }
                 }
             }
 
-            sessionSummaries.push(summary)
-        }
-
-        // Add sessions from database that are not in memory (offline sessions)
-        for (const stored of storedSessions) {
-            if (!memorySessionMap.has(stored.id)) {
-                sessionSummaries.push(storedSessionToSummary(stored))
-            }
-        }
+            return summary
+        })
 
         // Sort: active first, then by pending requests, then by updatedAt
         const allSessions = sessionSummaries.sort((a, b) => {
@@ -502,9 +521,6 @@ export function createSessionsRoutes(
             // Then by updatedAt
             return b.updatedAt - a.updatedAt
         })
-
-        const activeCount = allSessions.filter(s => s.active).length
-        console.log(`[sessions] memory=${memorySessions.length}, stored=${storedSessions.length}, fromDB=${storedSessions.filter(s => !memorySessionMap.has(s.id)).length}, active=${activeCount}`)
 
         return c.json({ sessions: allSessions })
     })

@@ -636,6 +636,14 @@ export class PostgresStore implements IStore {
         return (result.rowCount ?? 0) > 0
     }
 
+    async setSessionActive(id: string, active: boolean, activeAt: number, namespace: string): Promise<boolean> {
+        const result = await this.pool.query(`
+            UPDATE sessions SET active = $1, active_at = $2
+            WHERE id = $3 AND namespace = $4
+        `, [active, activeAt, id, namespace])
+        return (result.rowCount ?? 0) > 0
+    }
+
     async getSession(id: string): Promise<StoredSession | null> {
         const result = await this.pool.query('SELECT * FROM sessions WHERE id = $1', [id])
         return result.rows.length > 0 ? this.toStoredSession(result.rows[0]) : null
