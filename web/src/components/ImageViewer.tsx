@@ -38,13 +38,19 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
             return
         }
 
-        // 取消之前的请求
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort()
-        }
+        // 重置状态
+        setIsLoading(true)
+        setHasError(false)
+
+        // 清理旧的 blob URL
+        setBlobUrl(prevUrl => {
+            if (prevUrl) {
+                URL.revokeObjectURL(prevUrl)
+            }
+            return null
+        })
 
         const abortController = new AbortController()
-        abortControllerRef.current = abortController
 
         let retryCount = 0
         const MAX_RETRIES = 2
@@ -52,9 +58,6 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
 
         const fetchImage = async () => {
             try {
-                setIsLoading(true)
-                setHasError(false)
-
                 const token = context.api.getCurrentToken()
                 const response = await fetch(src, {
                     headers: {
@@ -90,9 +93,6 @@ export function ImageViewer({ src, alt = 'Image', className = '' }: ImageViewerP
 
         return () => {
             abortController.abort()
-            if (blobUrl) {
-                URL.revokeObjectURL(blobUrl)
-            }
         }
     }, [src, context?.api]) // eslint-disable-line react-hooks/exhaustive-deps
 
