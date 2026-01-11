@@ -265,7 +265,7 @@ export class HappyBot {
             .webApp('Open Session', url)
 
         // 只通知 owner 和订阅者，不再广播给所有人
-        const recipientChatIds = this.store.getSessionNotificationRecipients(sessionId)
+        const recipientChatIds = await this.store.getSessionNotificationRecipients(sessionId)
         if (recipientChatIds.length === 0) {
             return
         }
@@ -368,7 +368,7 @@ export class HappyBot {
         }
 
         // 发送 Telegram 通知（告知已自动批准）
-        const recipientChatIds = this.store.getSessionNotificationRecipients(sessionId)
+        const recipientChatIds = await this.store.getSessionNotificationRecipients(sessionId)
         if (recipientChatIds.length === 0) return
 
         const toolNames = requestIds.map(id => requests[id]?.tool).filter(Boolean).join(', ')
@@ -455,7 +455,7 @@ export class HappyBot {
         const keyboard = createNotificationKeyboard(session, this.miniAppUrl)
 
         // 只通知 owner 和订阅者
-        const recipientChatIds = this.store.getSessionNotificationRecipients(sessionId)
+        const recipientChatIds = await this.store.getSessionNotificationRecipients(sessionId)
         if (recipientChatIds.length === 0) {
             return
         }
