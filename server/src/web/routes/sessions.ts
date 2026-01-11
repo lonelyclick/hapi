@@ -457,14 +457,17 @@ export function createSessionsRoutes(
         const storedSessions = await store.getSessionsByNamespace(namespace)
 
         // Determine if a session is truly active:
-        // - Must be in memory AND have recent activeAt (within 2 minutes)
-        // This prevents sessions that were loaded into memory but have no CLI connected
-        // from showing as active
+        // - Database active=false means session is archived (source of truth for offline state)
+        // - If database says active=true, check memory state
+        // - Must have recent activeAt (within 2 minutes) to be considered truly active
         const ACTIVE_THRESHOLD_MS = 2 * 60 * 1000 // 2 minutes
         const now = Date.now()
 
-        const isSessionTrulyActive = (memorySession: Session | undefined): boolean => {
-            if (!memorySession) return false
+        const isSessionTrulyActive = (stored: StoredSession, memorySession: Session | undefined): boolean => {
+            // Database active=false is the source of truth for archived sessions
+            if (!stored.active) return false
+            // If not in memory, use database state
+            if (!memorySession) return stored.active
             if (!memorySession.active) return false
             // Check if activeAt is recent (CLI is sending heartbeats)
             const timeSinceActive = now - memorySession.activeAt
@@ -474,12 +477,12 @@ export function createSessionsRoutes(
         // Build session summaries from database, enhanced with memory data
         const sessionSummaries: SessionSummary[] = storedSessions.map((stored) => {
             const memorySession = memorySessionMap.get(stored.id)
-            const trulyActive = isSessionTrulyActive(memorySession)
+            const trulyActive = isSessionTrulyActive(stored, memorySession)
 
             // Start with database data
             const summary = storedSessionToSummary(stored)
 
-            // Override active status based on live memory state
+            // Override active status based on combined memory + DB state
             summary.active = trulyActive
             if (memorySession) {
                 summary.activeAt = memorySession.activeAt
