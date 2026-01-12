@@ -18,8 +18,8 @@ export const MARKDOWN_PLUGINS = [remarkGfm]
 const ABSOLUTE_PATH_REGEX = /^(\/[\w.@+~-]*[a-zA-Z_][\w.@+~-]*\/)+[\w.@+~-]*$/
 // 检测是否是相对路径（以 ./ 或 字母/下划线开头，包含 /，可以有或没有文件扩展名）
 const RELATIVE_PATH_REGEX = /^(?:\.\/|(?:[\w@][\w.@+~-]*\/))[\w.@+~-]*[a-zA-Z_][\w.@+~-]*(\.[a-zA-Z0-9]+)?$/
-// 用于在文本中查找路径的正则（全局匹配）- 绝对路径需开头，相对路径以 ./ 或 @ 开头
-const PATH_GLOBAL_REGEX = /(?:^|[\s"'])(\/[\w.@+~-]*[a-zA-Z_][\w.@+~-]*\/)+[\w.@+~-]*|(?:\.\/|(?:[\w@][\w.@+~-]*\/))[\w.@+~-]*[a-zA-Z_][\w.@+~-]*(\.[a-zA-Z0-9]+)?/g
+// 用于在文本中查找路径的正则（全局匹配）- 绝对路径以 / 开头（非路径字符后面），相对路径以 ./ 或 @ 开头
+const PATH_GLOBAL_REGEX = /(?<![/\w])(\/[\w.@+~-]*[a-zA-Z_][\w.@+~-]*\/)+[\w.@+~-]*|(?:\.\/|(?:[\w@][\w.@+~-]*\/))[\w.@+~-]*[a-zA-Z_][\w.@+~-]*(\.[a-zA-Z0-9]+)?/g
 
 function isAbsolutePath(text: string): boolean {
     return ABSOLUTE_PATH_REGEX.test(text.trim())
@@ -51,8 +51,7 @@ function processTextWithPaths(text: string): ReactNode[] {
     while ((match = PATH_GLOBAL_REGEX.exec(text)) !== null) {
         // 绝对路径在 group[1]，相对路径直接在 match[0]
         const path = match[1] ?? match[0]
-        const prefixLength = match[1] ? match[0].length - match[1].length : 0
-        const startIndex = match.index + prefixLength
+        const startIndex = match.index
 
         // 添加路径之前的文本
         if (startIndex > lastIndex) {
