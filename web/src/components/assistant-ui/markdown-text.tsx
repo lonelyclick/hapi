@@ -14,12 +14,12 @@ import { useHappyChatContextSafe } from '@/components/AssistantChat/context'
 
 export const MARKDOWN_PLUGINS = [remarkGfm]
 
-// 检测是否是绝对路径 (支持 @ + ~ 等常见路径字符)
-const ABSOLUTE_PATH_REGEX = /^(\/[\w.@+~-]+)+\/?$/
-// 检测是否是相对路径（以 ./ 或 字母/下划线开头，包含 /，有文件扩展名）
-const RELATIVE_PATH_REGEX = /^(?:\.\/|[\w@][\w.@+~-]*\/)+[\w.@+~-]+\.[a-zA-Z0-9]+$/
+// 检测是否是绝对路径 (支持 @ + ~ 等常见路径字符，且至少包含一个非数字字符)
+const ABSOLUTE_PATH_REGEX = /^(\/[\w.@+~-]*[a-zA-Z_][\w.@+~-]*\/)+[\w.@+~-]*$/
+// 检测是否是相对路径（以 ./ 或 字母/下划线开头，包含 /，可以有或没有文件扩展名）
+const RELATIVE_PATH_REGEX = /^(?:\.\/|(?:[\w@][\w.@+~-]*\/))[\w.@+~-]*[a-zA-Z_][\w.@+~-]*(\.[a-zA-Z0-9]+)?$/
 // 用于在文本中查找路径的正则（全局匹配）- 匹配绝对路径或相对路径
-const PATH_GLOBAL_REGEX = /(?:\/[\w.@+~-]+)+\/?|(?:\.\/|[\w@][\w.@+~-]*\/)+[\w.@+~-]+\.[a-zA-Z0-9]+/g
+const PATH_GLOBAL_REGEX = /(?:\/[\w.@+~-]*[a-zA-Z_][\w.@+~-]*\/)+[\w.@+~-]*|(?:\.\/|(?:[\w@][\w.@+~-]*\/))[\w.@+~-]*[a-zA-Z_][\w.@+~-]*(\.[a-zA-Z0-9]+)?/g
 
 function isAbsolutePath(text: string): boolean {
     return ABSOLUTE_PATH_REGEX.test(text.trim())
@@ -27,6 +27,11 @@ function isAbsolutePath(text: string): boolean {
 
 function isRelativePath(text: string): boolean {
     return RELATIVE_PATH_REGEX.test(text.trim())
+}
+
+// 判断是否是文件夹（以 / 结尾或没有扩展名）
+function isFolderPath(path: string): boolean {
+    return path.endsWith('/') || !/\.[a-zA-Z0-9]+$/.test(path)
 }
 
 function isPath(text: string): boolean {
@@ -237,6 +242,11 @@ function RelativeFilePathLink({ path }: { path: string }) {
     const [loading, setLoading] = useState(false)
 
     const filename = path.split('/').pop() || path
+
+    // 文件夹路径不显示为链接，直接显示文本
+    if (isFolderPath(path)) {
+        return <>{path}</>
+    }
 
     useEffect(() => {
         if (!context?.api || !context?.sessionId) {
