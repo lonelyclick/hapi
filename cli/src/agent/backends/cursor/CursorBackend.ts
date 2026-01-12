@@ -231,6 +231,19 @@ export class CursorBackend implements AgentBackend {
 
             session.childProcess = child;
 
+            // Handle parent process exit - ensure child is killed
+            const processExitHandler = () => {
+                if (child.exitCode === null && !child.killed) {
+                    logger.debug('[Cursor] Parent process exiting, killing child process');
+                    try {
+                        child.kill('SIGKILL');
+                    } catch (error) {
+                        logger.debug('[Cursor] Failed to kill child on parent exit', error);
+                    }
+                }
+            };
+            process.on('exit', processExitHandler);
+
             let textContent = '';
             let lastStderr = '';
 
@@ -261,6 +274,7 @@ export class CursorBackend implements AgentBackend {
             // 处理进程退出
             child.on('exit', (code, signal) => {
                 logger.debug('[Cursor] Process exited', { code, signal });
+                process.removeListener('exit', processExitHandler);
 
                 if (code === 0 || signal === 'SIGTERM') {
                     // 检查是否有未处理的 buffer

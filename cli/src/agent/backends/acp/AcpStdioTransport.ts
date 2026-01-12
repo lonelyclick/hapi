@@ -40,6 +40,8 @@ export class AcpStdioTransport {
     private nextId = 1;
     private protocolError: Error | null = null;
 
+    private processExitHandler: (() => void) | null = null;
+
     constructor(options: {
         command: string;
         args?: string[];
@@ -49,6 +51,19 @@ export class AcpStdioTransport {
             env: options.env,
             stdio: ['pipe', 'pipe', 'pipe']
         });
+
+        // Handle parent process exit - ensure child is killed
+        this.processExitHandler = () => {
+            if (this.process.exitCode === null && !this.process.killed) {
+                logger.debug('[ACP] Parent process exiting, killing child process');
+                try {
+                    this.process.kill('SIGKILL');
+                } catch (error) {
+                    logger.debug('[ACP] Failed to kill child on parent exit', error);
+                }
+            }
+        };
+        process.on('exit', this.processExitHandler);
 
         this.process.stdout.setEncoding('utf8');
         this.process.stdout.on('data', (chunk) => this.handleStdout(chunk));
@@ -61,6 +76,10 @@ export class AcpStdioTransport {
         this.process.on('exit', (code, signal) => {
             const message = `ACP process exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
             logger.debug(message);
+            if (this.processExitHandler) {
+                process.removeListener('exit', this.processExitHandler);
+                this.processExitHandler = null;
+            }
             this.rejectAllPending(new Error(message));
         });
 
@@ -113,6 +132,10 @@ export class AcpStdioTransport {
     }
 
     async close(): Promise<void> {
+        if (this.processExitHandler) {
+            process.removeListener('exit', this.processExitHandler);
+            this.processExitHandler = null;
+        }
         this.process.stdin.end();
         await killProcessByChildProcess(this.process);
         this.rejectAllPending(new Error('ACP transport closed'));

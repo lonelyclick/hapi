@@ -340,6 +340,19 @@ export class AiderCliBackend implements AgentBackend {
 
             session.childProcess = child;
 
+            // Handle parent process exit - ensure child is killed
+            const processExitHandler = () => {
+                if (child.exitCode === null && !child.killed) {
+                    logger.debug('[Aider] Parent process exiting, killing child process');
+                    try {
+                        child.kill('SIGKILL');
+                    } catch (error) {
+                        logger.debug('[Aider] Failed to kill child on parent exit', error);
+                    }
+                }
+            };
+            process.on('exit', processExitHandler);
+
             let textContent = '';
             let lastStderr = '';
 
@@ -360,6 +373,7 @@ export class AiderCliBackend implements AgentBackend {
             // 处理进程退出
             child.on('exit', (code, signal) => {
                 logger.debug('[Aider] Process exited', { code, signal });
+                process.removeListener('exit', processExitHandler);
 
                 if (code === 0 || signal === 'SIGTERM') {
                     resolve(textContent);

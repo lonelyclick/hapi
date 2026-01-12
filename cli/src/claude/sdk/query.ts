@@ -412,6 +412,7 @@ export function query(config: {
     processExitPromise.finally(() => {
         cleanup()
         config.options?.abort?.removeEventListener('abort', abortCleanup)
+        process.removeListener('exit', cleanup)
         if (process.env.CLAUDE_SDK_MCP_SERVERS) {
             delete process.env.CLAUDE_SDK_MCP_SERVERS
         }
