@@ -140,11 +140,16 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
 
     const auth = socket.handshake.auth as Record<string, unknown> | undefined
     const sessionId = typeof auth?.sessionId === 'string' ? auth.sessionId : null
+    // Track when socket.join() is complete for the session room
+    // This ensures session-alive events are only processed after the socket can receive messages
+    let sessionJoinPromise: Promise<boolean> | null = null
     if (sessionId) {
-        resolveSessionAccess(sessionId).then((result) => {
+        sessionJoinPromise = resolveSessionAccess(sessionId).then((result) => {
             if (result.ok) {
                 socket.join(`session:${sessionId}`)
+                return true
             }
+            return false
         })
     }
 
@@ -345,6 +350,16 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
     socket.on('session-alive', async (data: SessionAlivePayload) => {
         if (!data || typeof data.sid !== 'string' || typeof data.time !== 'number') {
             return
+        }
+        // Wait for socket.join() to complete before processing session-alive
+        // This ensures the socket can receive messages when session becomes "online"
+        // Only proceed if the socket successfully joined the session room
+        if (sessionJoinPromise && data.sid === sessionId) {
+            const joined = await sessionJoinPromise
+            if (!joined) {
+                // Socket failed to join the room during connection, skip processing
+                return
+            }
         }
         const sessionAccess = await resolveSessionAccess(data.sid)
         if (!sessionAccess.ok) {

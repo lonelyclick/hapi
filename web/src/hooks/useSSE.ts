@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
-import type { MessagesResponse, SyncEvent } from '@/types/api'
+import type { MessagesResponse, Session, SessionResponse, SessionsResponse, SessionSummary, SyncEvent } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { upsertMessagesInCache } from '@/lib/messages'
 
@@ -102,34 +102,102 @@ export function useSSE(options: {
             }
 
             if (event.type === 'session-added' || event.type === 'session-updated' || event.type === 'session-removed') {
-                if (import.meta.env.DEV) {
-                    const sessionId = 'sessionId' in event ? event.sessionId : undefined
-                    console.log('[sse] invalidate sessions', event.type, sessionId)
-                }
-                void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
                 if ('sessionId' in event) {
                     if (event.type === 'session-removed') {
                         if (import.meta.env.DEV) {
                             console.log('[sse] remove session queries', event.sessionId)
                         }
+                        void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
                         void queryClient.removeQueries({ queryKey: queryKeys.session(event.sessionId) })
                         void queryClient.removeQueries({ queryKey: queryKeys.messages(event.sessionId) })
-                    } else {
-                        if (event.type === 'session-updated') {
-                            const data = ('data' in event ? event.data : null) as { active?: boolean; thinking?: boolean } | null
-                            if (data && data.active === false && data.thinking === false) {
-                                if (import.meta.env.DEV) {
-                                    console.log('[sse] skip session invalidation (ended)', event.sessionId)
-                                }
-                                onEventRef.current(event)
-                                return
-                            }
-                        }
+                    } else if (event.type === 'session-added') {
+                        // New session added - invalidate to fetch fresh data
                         if (import.meta.env.DEV) {
-                            console.log('[sse] invalidate session', event.sessionId)
+                            console.log('[sse] invalidate sessions (new session)', event.sessionId)
                         }
+                        void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
                         void queryClient.invalidateQueries({ queryKey: queryKeys.session(event.sessionId) })
+                    } else if (event.type === 'session-updated') {
+                        // Session updated - update cache directly instead of invalidating
+                        // Only for heartbeat events that contain active/thinking status
+                        const data = ('data' in event ? event.data : null) as {
+                            active?: boolean
+                            activeAt?: number
+                            thinking?: boolean
+                            wasThinking?: boolean
+                            permissionMode?: string
+                            modelMode?: string
+                            modelReasoningEffort?: string
+                        } | null
+
+                        // Check if this is a heartbeat-style event with status fields we can update directly
+                        // If it only has 'sid' or other non-status fields, we should invalidate instead
+                        const hasStatusFields = data && (
+                            data.active !== undefined ||
+                            data.thinking !== undefined ||
+                            data.permissionMode !== undefined ||
+                            data.modelMode !== undefined ||
+                            data.modelReasoningEffort !== undefined
+                        )
+
+                        if (hasStatusFields) {
+                            if (import.meta.env.DEV) {
+                                console.log('[sse] update session cache directly', event.sessionId, data)
+                            }
+                            // Update individual session cache
+                            queryClient.setQueryData<SessionResponse>(
+                                queryKeys.session(event.sessionId),
+                                (prev) => {
+                                    if (!prev?.session) return prev
+                                    return {
+                                        ...prev,
+                                        session: {
+                                            ...prev.session,
+                                            ...(data.active !== undefined && { active: data.active }),
+                                            ...(data.thinking !== undefined && { thinking: data.thinking }),
+                                            ...(data.permissionMode !== undefined && { permissionMode: data.permissionMode as Session['permissionMode'] }),
+                                            ...(data.modelMode !== undefined && { modelMode: data.modelMode as Session['modelMode'] }),
+                                            ...(data.modelReasoningEffort !== undefined && { modelReasoningEffort: data.modelReasoningEffort as Session['modelReasoningEffort'] }),
+                                        }
+                                    }
+                                }
+                            )
+                            // Update sessions list cache (only fields that exist in SessionSummary)
+                            queryClient.setQueryData<SessionsResponse>(
+                                queryKeys.sessions,
+                                (prev) => {
+                                    if (!prev?.sessions) return prev
+                                    return {
+                                        ...prev,
+                                        sessions: prev.sessions.map((s) =>
+                                            s.id === event.sessionId
+                                                ? {
+                                                    ...s,
+                                                    ...(data.active !== undefined && { active: data.active }),
+                                                    ...(data.activeAt !== undefined && { activeAt: data.activeAt }),
+                                                    ...(data.modelMode !== undefined && { modelMode: data.modelMode as SessionSummary['modelMode'] }),
+                                                    ...(data.modelReasoningEffort !== undefined && { modelReasoningEffort: data.modelReasoningEffort as SessionSummary['modelReasoningEffort'] }),
+                                                }
+                                                : s
+                                        )
+                                    }
+                                }
+                            )
+                        } else {
+                            // No status fields in event (e.g., todos/metadata update), fallback to invalidation
+                            if (import.meta.env.DEV) {
+                                console.log('[sse] invalidate session (no status fields)', event.sessionId, data)
+                            }
+                            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+                            void queryClient.invalidateQueries({ queryKey: queryKeys.session(event.sessionId) })
+                        }
                     }
+                } else {
+                    // No sessionId in event, invalidate all
+                    if (import.meta.env.DEV) {
+                        console.log('[sse] invalidate sessions (no sessionId)')
+                    }
+                    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
                 }
             }
 

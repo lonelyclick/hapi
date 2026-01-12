@@ -713,6 +713,7 @@ export class SyncEngine {
                     type: 'session-updated',
                     sessionId: session.id,
                     data: {
+                        active: session.active,
                         activeAt: session.activeAt,
                         thinking: session.thinking,
                         wasThinking: false,
@@ -743,6 +744,7 @@ export class SyncEngine {
                 type: 'session-updated',
                 sessionId: session.id,
                 data: {
+                    active: session.active,
                     activeAt: session.activeAt,
                     thinking: session.thinking,
                     wasThinking: true,
@@ -763,6 +765,7 @@ export class SyncEngine {
                 type: 'session-updated',
                 sessionId: session.id,
                 data: {
+                    active: session.active,
                     activeAt: session.activeAt,
                     thinking: session.thinking,
                     wasThinking: true,
