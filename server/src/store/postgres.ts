@@ -2562,6 +2562,13 @@ export class PostgresStore implements IStore {
         await this.pool.end()
     }
 
+    /**
+     * 获取连接池（用于 Review 等独立模块共享连接）
+     */
+    getPool(): Pool {
+        return this.pool
+    }
+
     // ========== 迁移辅助方法 ==========
 
     /**

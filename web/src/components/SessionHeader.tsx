@@ -5,6 +5,7 @@ import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
 import { getClientId } from '@/lib/client-identity'
 import { ViewersBadge } from './ViewersBadge'
 import { useAppContext } from '@/lib/app-context'
+import { JoinReviewButton } from './Review'
 
 function getSessionTitle(session: Session): string {
     if (session.metadata?.name) {
@@ -213,6 +214,7 @@ export function SessionHeader(props: {
     onClearMessages?: () => void
     onDelete?: () => void
     onRefreshAccount?: () => void
+    onReviewCreated?: (reviewSessionId: string) => void
     clearDisabled?: boolean
     deleteDisabled?: boolean
     refreshAccountDisabled?: boolean
@@ -405,6 +407,13 @@ export function SessionHeader(props: {
                         >
                             {agentLabel}
                         </span>
+                    )}
+                    {/* Join Review AI 按钮 (试验性功能) */}
+                    {props.session.active && (
+                        <JoinReviewButton
+                            sessionId={props.session.id}
+                            onReviewCreated={props.onReviewCreated}
+                        />
                     )}
                     {props.viewers && props.viewers.length > 0 && (
                         <ViewersBadge viewers={props.viewers} compact buttonClassName="h-5 leading-none" />

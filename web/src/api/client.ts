@@ -981,6 +981,60 @@ export class ApiClient {
     }> {
         return await this.request('/api/claude-accounts/usage')
     }
+
+    // ==================== Review (试验性功能) ====================
+
+    async createReviewSession(data: {
+        mainSessionId: string
+        reviewModel: string
+        reviewModelVariant?: string
+    }): Promise<ReviewSession> {
+        return await this.request<ReviewSession>('/api/review/sessions', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        })
+    }
+
+    async getReviewSessions(mainSessionId: string): Promise<{ reviewSessions: ReviewSession[] }> {
+        return await this.request<{ reviewSessions: ReviewSession[] }>(
+            `/api/review/sessions?mainSessionId=${encodeURIComponent(mainSessionId)}`
+        )
+    }
+
+    async getActiveReviewSession(mainSessionId: string): Promise<ReviewSession> {
+        return await this.request<ReviewSession>(
+            `/api/review/sessions/active/${encodeURIComponent(mainSessionId)}`
+        )
+    }
+
+    async cancelReviewSession(reviewId: string): Promise<{ success: boolean }> {
+        return await this.request<{ success: boolean }>(
+            `/api/review/sessions/${encodeURIComponent(reviewId)}/cancel`,
+            { method: 'POST' }
+        )
+    }
+
+    async deleteReviewSession(reviewId: string): Promise<{ success: boolean }> {
+        return await this.request<{ success: boolean }>(
+            `/api/review/sessions/${encodeURIComponent(reviewId)}`,
+            { method: 'DELETE' }
+        )
+    }
+}
+
+// Types for Review (试验性功能)
+export interface ReviewSession {
+    id: string
+    mainSessionId: string
+    reviewSessionId: string
+    reviewModel: string
+    reviewModelVariant?: string
+    status: 'pending' | 'active' | 'completed' | 'cancelled'
+    contextSummary: string
+    reviewResult?: string
+    createdAt: number
+    updatedAt: number
+    completedAt?: number
 }
 
 // Types for Claude Accounts

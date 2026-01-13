@@ -13,6 +13,7 @@ import { HappyComposer } from '@/components/AssistantChat/HappyComposer'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { SessionHeader } from '@/components/SessionHeader'
+import { ReviewPanel } from '@/components/Review'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
@@ -75,6 +76,8 @@ export function SessionChat(props: {
     const [clearSuggestionDismissed, setClearSuggestionDismissed] = useState(false)
     const [isResuming, setIsResuming] = useState(false)
     const [resumeError, setResumeError] = useState<string | null>(null)
+    // Review 面板状态 (试验性功能)
+    const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
     const pendingMessageRef = useRef<string | null>(null)
     const composerSetTextRef = useRef<((text: string) => void) | null>(null)
 
@@ -84,6 +87,7 @@ export function SessionChat(props: {
         setIsResuming(false)
         setResumeError(null)
         setClearSuggestionDismissed(false)
+        setReviewSessionId(null)
         pendingMessageRef.current = null
     }, [props.session.id])
 
@@ -326,20 +330,33 @@ export function SessionChat(props: {
     const resolvedReasoningEffort = props.session.modelReasoningEffort
         ?? props.session.metadata?.runtimeModelReasoningEffort
 
+    // 处理 Review 创建
+    const handleReviewCreated = useCallback((newReviewSessionId: string) => {
+        setReviewSessionId(newReviewSessionId)
+    }, [])
+
+    // 处理打开 Review Session（在新窗口）
+    const handleOpenReviewSession = useCallback((sessionId: string) => {
+        navigate({ to: '/sessions/$sessionId', params: { sessionId } })
+    }, [navigate])
+
     return (
-        <div className="flex h-full flex-col">
-            <SessionHeader
-                session={props.session}
-                viewers={props.viewers}
-                onBack={props.onBack}
-                onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
-                onClearMessages={handleClearMessagesClick}
-                onDelete={handleDeleteClick}
-                onRefreshAccount={props.session.metadata?.flavor === 'claude' ? handleRefreshAccount : undefined}
-                clearDisabled={isPending}
-                deleteDisabled={isPending}
-                refreshAccountDisabled={isPending}
-            />
+        <div className="flex h-full">
+            {/* 主聊天区域 */}
+            <div className="flex h-full flex-1 flex-col min-w-0">
+                <SessionHeader
+                    session={props.session}
+                    viewers={props.viewers}
+                    onBack={props.onBack}
+                    onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
+                    onClearMessages={handleClearMessagesClick}
+                    onDelete={handleDeleteClick}
+                    onRefreshAccount={props.session.metadata?.flavor === 'claude' ? handleRefreshAccount : undefined}
+                    onReviewCreated={handleReviewCreated}
+                    clearDisabled={isPending}
+                    deleteDisabled={isPending}
+                    refreshAccountDisabled={isPending}
+                />
 
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                 <DialogContent>
@@ -498,6 +515,31 @@ export function SessionChat(props: {
                     />
                 </div>
             </AssistantRuntimeProvider>
+            </div>
+
+            {/* Review 面板 (试验性功能) - 移动端全屏覆盖，桌面端侧边栏 */}
+            {reviewSessionId && (
+                <>
+                    {/* 移动端全屏覆盖 */}
+                    <div className="fixed inset-0 z-40 bg-[var(--app-bg)] sm:hidden">
+                        <ReviewPanel
+                            mainSessionId={props.session.id}
+                            reviewSessionId={reviewSessionId}
+                            onClose={() => setReviewSessionId(null)}
+                            onOpenReviewSession={handleOpenReviewSession}
+                        />
+                    </div>
+                    {/* 桌面端侧边栏 */}
+                    <div className="hidden sm:block">
+                        <ReviewPanel
+                            mainSessionId={props.session.id}
+                            reviewSessionId={reviewSessionId}
+                            onClose={() => setReviewSessionId(null)}
+                            onOpenReviewSession={handleOpenReviewSession}
+                        />
+                    </div>
+                </>
+            )}
         </div>
     )
 }

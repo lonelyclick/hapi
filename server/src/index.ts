@@ -18,6 +18,7 @@ import { getOrCreateJwtSecret } from './web/jwtSecret'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
+import { ReviewStore } from './review'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -92,7 +93,12 @@ async function main() {
         ssl: process.env.PG_SSL === 'true'
     }
     console.log(`[Server] Store: PostgreSQL (${pgConfig.host}/${pgConfig.database})`)
-    const store: IStore = await PostgresStore.create(pgConfig)
+    const store = await PostgresStore.create(pgConfig)
+
+    // 初始化 Review Store（试验性功能）
+    const reviewStore = new ReviewStore(store.getPool())
+    await reviewStore.initSchema()
+    console.log('[Server] Review: enabled (experimental)')
 
     // Initialize Web Push service
     const webPushConfig = config.webPushVapidPublicKey && config.webPushVapidPrivateKey && config.webPushVapidSubject
@@ -140,6 +146,7 @@ async function main() {
         getSseManager: () => sseManager,
         jwtSecret,
         store,
+        reviewStore,
         socketEngine: socketServer.engine
     })
 
