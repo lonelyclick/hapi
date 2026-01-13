@@ -94,7 +94,6 @@ export function JoinReviewButton(props: {
         onSuccess: (result) => {
             setShowMenu(false)
             setSelectedModel(null)
-            setSelectedVariant(null)
             queryClient.invalidateQueries({ queryKey: ['review-sessions', props.sessionId] })
             props.onReviewCreated?.(result.reviewSessionId)
         }
