@@ -6,6 +6,7 @@
 
 export { ReviewStore } from './store'
 export { createReviewRoutes } from './routes'
+export { AutoReviewService } from './autoReview'
 export type {
     StoredReviewSession,
     ReviewSessionStatus,

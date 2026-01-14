@@ -276,6 +276,10 @@ export function createReviewRoutes(
         const id = c.req.param('id')
         const engine = getSyncEngine()
 
+        if (!engine) {
+            return c.json({ error: 'Sync engine not available' }, 503)
+        }
+
         const reviewSession = await reviewStore.getReviewSession(id)
         if (!reviewSession) {
             return c.json({ error: 'Review session not found' }, 404)

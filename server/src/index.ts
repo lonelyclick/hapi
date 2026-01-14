@@ -18,7 +18,7 @@ import { getOrCreateJwtSecret } from './web/jwtSecret'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
-import { ReviewStore } from './review'
+import { ReviewStore, AutoReviewService } from './review'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -129,6 +129,10 @@ async function main() {
     })
 
     syncEngine = new SyncEngine(store, socketServer.io, socketServer.rpcRegistry, sseManager)
+
+    // Initialize Auto Review Service
+    const autoReviewService = new AutoReviewService(syncEngine, reviewStore)
+    autoReviewService.start()
 
     // Initialize Telegram bot (optional)
     if (config.telegramEnabled && config.telegramBotToken) {
