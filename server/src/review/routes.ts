@@ -402,11 +402,11 @@ export function createReviewRoutes(
             return c.json({ error: 'Review session not found' }, 404)
         }
 
-        // 获取主 Session 消息
-        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
+        // 获取主 Session 所有消息
+        const allMessages = await engine.getAllMessages(reviewSession.mainSessionId)
 
         // 按轮次分组消息
-        const allRounds = groupMessagesIntoRounds(messagesResult.messages)
+        const allRounds = groupMessagesIntoRounds(allMessages)
 
         // 获取已汇总的轮次
         const existingRounds = await reviewStore.getReviewRounds(id)
@@ -574,9 +574,9 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'No summary found in AI response', noSummary: true }, 400)
         }
 
-        // 获取主 Session 消息以获取原始数据
-        const mainMessagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
-        const allRounds = groupMessagesIntoRounds(mainMessagesResult.messages)
+        // 获取主 Session 所有消息以获取原始数据
+        const allMessages = await engine.getAllMessages(reviewSession.mainSessionId)
+        const allRounds = groupMessagesIntoRounds(allMessages)
 
         // 获取已存在的轮次
         const existingRounds = await reviewStore.getReviewRounds(id)
@@ -726,11 +726,11 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'Review session not found' }, 404)
         }
 
-        // 获取主 Session 消息
-        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
+        // 获取主 Session 所有消息
+        const allMessages = await engine.getAllMessages(reviewSession.mainSessionId)
 
         // 按轮次分组消息
-        const allRounds = groupMessagesIntoRounds(messagesResult.messages)
+        const allRounds = groupMessagesIntoRounds(allMessages)
 
         // 获取已汇总的轮次
         const existingRounds = await reviewStore.getReviewRounds(id)
@@ -761,13 +761,13 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'Review session not found' }, 404)
         }
 
-        // 获取主 Session 的消息（获取更多以确保完整上下文）
-        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
+        // 获取主 Session 所有消息以确保完整上下文
+        const allMessages = await engine.getAllMessages(reviewSession.mainSessionId)
 
         // 提取完整对话（用户和 AI 的消息都要）
         const dialogueMessages: Array<{ role: string; text: string }> = []
 
-        for (const m of messagesResult.messages) {
+        for (const m of allMessages) {
             const content = m.content as Record<string, unknown>
             const role = content?.role
 

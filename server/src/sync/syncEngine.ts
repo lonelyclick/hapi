@@ -587,6 +587,31 @@ export class SyncEngine {
         }))
     }
 
+    // 获取所有消息（分页循环获取）
+    async getAllMessages(sessionId: string): Promise<DecryptedMessage[]> {
+        const allMessages: DecryptedMessage[] = []
+        const PAGE_SIZE = 200
+        let beforeSeq: number | null = null
+
+        while (true) {
+            const result = await this.getMessagesPage(sessionId, { limit: PAGE_SIZE, beforeSeq })
+            if (result.messages.length === 0) {
+                break
+            }
+
+            // 消息已经按 seq 排序（从小到大），添加到开头
+            allMessages.unshift(...result.messages)
+
+            if (!result.page.hasMore) {
+                break
+            }
+
+            beforeSeq = result.page.nextBeforeSeq
+        }
+
+        return allMessages
+    }
+
     async getMessageCount(sessionId: string): Promise<number> {
         return await this.store.getMessageCount(sessionId)
     }
