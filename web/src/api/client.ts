@@ -1007,11 +1007,19 @@ export class ApiClient {
         )
     }
 
-    async syncReviewRounds(reviewId: string): Promise<{ success: boolean; syncingRound?: number; totalRounds: number; summarizedRounds: number; pendingRounds: number; message: string }> {
-        return await this.request<{ success: boolean; syncingRound?: number; totalRounds: number; summarizedRounds: number; pendingRounds: number; message: string }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}/sync`,
-            { method: 'POST' }
-        )
+    async syncReviewRounds(reviewId: string): Promise<{ success: boolean; error?: string; syncingRound?: number; totalRounds?: number; summarizedRounds?: number; pendingRounds?: number; message?: string }> {
+        try {
+            return await this.request<{ success: boolean; syncingRound?: number; totalRounds: number; summarizedRounds: number; pendingRounds: number; message: string }>(
+                `/api/review/sessions/${encodeURIComponent(reviewId)}/sync`,
+                { method: 'POST' }
+            )
+        } catch (e) {
+            // 409 Conflict 表示 AI 正忙，返回 busy 状态而不是抛出异常
+            if (e instanceof ApiError && e.status === 409) {
+                return { success: false, error: 'busy', message: 'Review AI 正在处理中' }
+            }
+            throw e
+        }
     }
 
     async saveReviewSummary(reviewId: string): Promise<{ success: boolean; savedRound?: number; summary?: string; message: string; alreadyExists?: boolean; noSummary?: boolean }> {
