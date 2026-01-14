@@ -148,6 +148,13 @@ export function useHappyRuntime(props: {
         isRunning: props.session.thinking,
     })
 
+    // Debug log
+    console.log('[useHappyRuntime] Converted messages:', {
+        inputBlocksCount: props.blocks.length,
+        convertedCount: convertedMessages.length,
+        converted: convertedMessages
+    })
+
     const onNew = useCallback(async (message: AppendMessage) => {
         const text = getTextFromAppendMessage(message)
         if (!text) return

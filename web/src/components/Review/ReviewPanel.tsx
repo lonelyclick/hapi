@@ -254,9 +254,10 @@ export function ReviewPanel(props: {
     useEffect(() => {
         console.log('[ReviewPanel] Runtime state:', {
             blocksCount: reconciled.blocks.length,
-            blocks: reconciled.blocks.map(b => ({ id: b.id, kind: b.kind })),
+            blocks: reconciled.blocks.map(b => ({ id: b.id, kind: b.kind, type: b.type })),
             sessionActive: virtualSession.active,
-            sessionThinking: virtualSession.thinking
+            sessionThinking: virtualSession.thinking,
+            fullBlocks: reconciled.blocks
         })
     }, [reconciled.blocks, virtualSession.active, virtualSession.thinking])
 
