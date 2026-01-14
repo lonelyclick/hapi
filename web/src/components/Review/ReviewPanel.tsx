@@ -6,7 +6,7 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { AssistantRuntimeProvider, ComposerPrimitive, useAssistantApi, useAssistantState } from '@assistant-ui/react'
+import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import { useAppContext } from '@/lib/app-context'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { reduceChatBlocks } from '@/chat/reducer'
@@ -15,7 +15,6 @@ import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import type { DecryptedMessage, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 // Icons
 function ReviewIcon(props: { className?: string }) {
@@ -58,91 +57,6 @@ function LoadingIcon(props: { className?: string }) {
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`animate-spin ${props.className ?? ''}`}>
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
-    )
-}
-
-function SendIcon(props: { className?: string }) {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
-            <line x1="22" y1="2" x2="11" y2="13" />
-            <polygon points="22 2 15 22 11 13 2 9 22 2" />
-        </svg>
-    )
-}
-
-function StopIcon(props: { className?: string }) {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
-            <rect x="6" y="6" width="12" height="12" rx="2" />
-        </svg>
-    )
-}
-
-/**
- * Review 专用的简化输入框组件
- */
-function ReviewComposer(props: { disabled?: boolean; thinking?: boolean }) {
-    const assistantApi = useAssistantApi()
-    const composerText = useAssistantState(({ composer }) => composer.text)
-    const threadIsRunning = useAssistantState(({ thread }) => thread.isRunning)
-    const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-    const trimmed = composerText.trim()
-    const canSend = trimmed.length > 0 && !props.disabled && !threadIsRunning
-    const showAbort = threadIsRunning || props.thinking
-
-    const handleAbort = useCallback(() => {
-        assistantApi.thread().cancelRun()
-    }, [assistantApi])
-
-    const handleKeyDown = useCallback((e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.nativeEvent.isComposing) return
-        if (e.key === 'Enter' && !e.shiftKey) {
-            // Let the form submit naturally
-        }
-        if (e.key === 'Escape' && threadIsRunning) {
-            e.preventDefault()
-            handleAbort()
-        }
-    }, [threadIsRunning, handleAbort])
-
-    return (
-        <div className="border-t border-[var(--app-divider)] p-3 bg-[var(--app-subtle-bg)]">
-            <ComposerPrimitive.Root className="relative">
-                <div className="flex items-end gap-2 rounded-xl bg-[var(--app-bg)] border border-[var(--app-divider)] px-3 py-2">
-                    <ComposerPrimitive.Input
-                        ref={textareaRef}
-                        autoFocus={false}
-                        placeholder="输入消息..."
-                        disabled={props.disabled}
-                        maxRows={4}
-                        submitOnEnter
-                        cancelOnEscape={false}
-                        enterKeyHint="send"
-                        onKeyDown={handleKeyDown}
-                        className="flex-1 resize-none bg-transparent text-sm leading-snug text-[var(--app-fg)] placeholder-[var(--app-hint)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                    />
-                    {showAbort ? (
-                        <button
-                            type="button"
-                            onClick={handleAbort}
-                            className="shrink-0 flex h-8 w-8 items-center justify-center rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
-                            title="停止"
-                        >
-                            <StopIcon />
-                        </button>
-                    ) : (
-                        <ComposerPrimitive.Send
-                            disabled={!canSend}
-                            className="shrink-0 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            title="发送"
-                        >
-                            <SendIcon />
-                        </ComposerPrimitive.Send>
-                    )}
-                </div>
-            </ComposerPrimitive.Root>
-        </div>
     )
 }
 
@@ -650,9 +564,6 @@ export function ReviewPanel(props: {
                         renderedMessagesCount={reconciled.blocks.length}
                     />
                 </div>
-
-                {/* 输入框 */}
-                <ReviewComposer disabled={!session?.active} thinking={session?.thinking} />
             </AssistantRuntimeProvider>
 
             {/* 底部操作栏 */}
