@@ -154,10 +154,12 @@ export class AutoReviewService {
         if (!event.sessionId) return
 
         const data = event.data as { wasThinking?: boolean } | undefined
+        console.log(`[ReviewSync] handleEvent: sessionId=${event.sessionId}, wasThinking=${data?.wasThinking}`)
         if (!data?.wasThinking) return
 
         const sessionId = event.sessionId
         const session = this.engine.getSession(sessionId)
+        console.log(`[ReviewSync] session metadata:`, session?.metadata)
 
         // 检查是否是 Review Session 的 AI 回复结束
         if (session?.metadata?.source === 'review') {
@@ -173,8 +175,10 @@ export class AutoReviewService {
      * 主 Session AI 回复结束后，自动触发同步
      */
     private async handleMainSessionComplete(mainSessionId: string): Promise<void> {
+        console.log(`[ReviewSync] handleMainSessionComplete called for session: ${mainSessionId}`)
         try {
             const reviewSession = await this.reviewStore.getActiveReviewSession(mainSessionId)
+            console.log(`[ReviewSync] getActiveReviewSession result:`, reviewSession ? `found review ${reviewSession.id}` : 'null')
             if (!reviewSession) {
                 return
             }
@@ -220,15 +224,19 @@ export class AutoReviewService {
     private async syncRounds(reviewSession: StoredReviewSession): Promise<void> {
         const reviewId = reviewSession.id
         const mainSessionId = reviewSession.mainSessionId
+        console.log(`[ReviewSync] syncRounds called: reviewId=${reviewId}, mainSessionId=${mainSessionId}`)
 
         // 防止重复同步
         if (this.syncingReviewIds.has(reviewId)) {
+            console.log(`[ReviewSync] syncRounds - already syncing, skipping`)
             return
         }
 
         // 检查 Review AI 是否正在处理中
         const reviewAISession = this.engine.getSession(reviewSession.reviewSessionId)
+        console.log(`[ReviewSync] syncRounds - reviewAISession thinking: ${reviewAISession?.thinking}`)
         if (reviewAISession?.thinking) {
+            console.log(`[ReviewSync] syncRounds - Review AI is thinking, skipping`)
             return
         }
 
@@ -322,10 +330,12 @@ export class AutoReviewService {
     private async saveSummary(reviewSession: StoredReviewSession): Promise<void> {
         const reviewId = reviewSession.id
         const mainSessionId = reviewSession.mainSessionId
+        console.log(`[ReviewSync] saveSummary called: reviewId=${reviewId}, mainSessionId=${mainSessionId}`)
 
         try {
             // 获取 Review Session 的最新消息
             const messagesResult = await this.engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 10, beforeSeq: null })
+            console.log(`[ReviewSync] saveSummary - got ${messagesResult.messages.length} messages from review session`)
 
             // 提取汇总
             let summaries: Array<{ round: number; summary: string }> = []
@@ -406,16 +416,33 @@ export class AutoReviewService {
 
             if (summaries.length === 0) {
                 console.log(`[ReviewSync] Session ${mainSessionId.slice(0, 8)}: no summary found in AI response`)
+                // 打印原始消息内容以便调试
+                for (const m of messagesResult.messages) {
+                    const content = m.content as Record<string, unknown>
+                    if (content?.role === 'agent') {
+                        console.log(`[ReviewSync] DEBUG - agent message raw content type:`, typeof content?.content)
+                        const rawContent = content?.content
+                        if (typeof rawContent === 'string') {
+                            console.log(`[ReviewSync] DEBUG - agent message string (first 500 chars):`, rawContent.slice(0, 500))
+                        } else if (typeof rawContent === 'object') {
+                            console.log(`[ReviewSync] DEBUG - agent message object keys:`, Object.keys(rawContent as object))
+                        }
+                    }
+                }
                 return
             }
+
+            console.log(`[ReviewSync] saveSummary - parsed ${summaries.length} summaries:`, summaries.map(s => s.round))
 
             // 获取主 Session 消息
             const allMessages = await this.engine.getAllMessages(mainSessionId)
             const allRounds = groupMessagesIntoRounds(allMessages)
+            console.log(`[ReviewSync] saveSummary - main session has ${allRounds.length} rounds`)
 
             // 获取已存在的轮次
             const existingRounds = await this.reviewStore.getReviewRounds(reviewId)
             const existingRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
+            console.log(`[ReviewSync] saveSummary - existing rounds in DB:`, [...existingRoundNumbers])
 
             // 保存
             const savedRounds: number[] = []
@@ -490,10 +517,14 @@ export class AutoReviewService {
      * 手动触发同步（供 API 调用）
      */
     async triggerSync(mainSessionId: string): Promise<void> {
+        console.log(`[ReviewSync] triggerSync called for mainSessionId: ${mainSessionId}`)
         const reviewSession = await this.reviewStore.getActiveReviewSession(mainSessionId)
+        console.log(`[ReviewSync] triggerSync - reviewSession:`, reviewSession ? `found ${reviewSession.id}, reviewSessionId=${reviewSession.reviewSessionId}` : 'null')
         if (reviewSession) {
             this.reviewToMainMap.set(reviewSession.reviewSessionId, mainSessionId)
             await this.syncRounds(reviewSession)
+        } else {
+            console.log(`[ReviewSync] triggerSync - no active review session found for ${mainSessionId}`)
         }
     }
 }
