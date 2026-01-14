@@ -15,6 +15,7 @@ import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import type { DecryptedMessage, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
+import { ReviewSuggestions, parseReviewResult } from './ReviewSuggestions'
 
 // Icons
 function ReviewIcon(props: { className?: string }) {
@@ -488,6 +489,29 @@ export function ReviewPanel(props: {
         }
     })
 
+    // 从已处理的 blocks 中提取最新的包含 suggestions JSON 的文本
+    const latestReviewText = useMemo(() => {
+        // 从后往前遍历 blocks，找包含 suggestions 的 agent-text 消息
+        for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
+            const block = reconciled.blocks[i]
+            if (block.kind !== 'agent-text') continue
+
+            const result = parseReviewResult(block.text)
+            if (result && result.suggestions.length > 0) {
+                return block.text
+            }
+        }
+        return null
+    }, [reconciled.blocks])
+
+    // 应用建议到主 Session
+    const applySuggestionsMutation = useMutation({
+        mutationFn: async (details: string[]) => {
+            // 合并所有选中的建议详情
+            const combined = details.join('\n\n---\n\n')
+            await api.sendMessage(props.mainSessionId, combined)
+        }
+    })
 
     // 刷新
     const handleRefresh = useCallback(() => {
@@ -569,24 +593,36 @@ export function ReviewPanel(props: {
 
             {/* 对话界面 - 复用 HappyThread */}
             <AssistantRuntimeProvider runtime={runtime}>
-                <div className="relative flex min-h-0 flex-1 flex-col">
-                    <HappyThread
-                        key={props.reviewSessionId}
-                        api={api}
-                        sessionId={props.reviewSessionId}
-                        metadata={session?.metadata ?? null}
-                        disabled={false}
-                        onRefresh={handleRefresh}
-                        onRetryMessage={undefined}
-                        isLoadingMessages={isLoadingMessages}
-                        messagesWarning={null}
-                        hasMoreMessages={false}
-                        isLoadingMoreMessages={false}
-                        onLoadMore={async () => {}}
-                        rawMessagesCount={messages.length}
-                        normalizedMessagesCount={normalizedMessages.length}
-                        renderedMessagesCount={reconciled.blocks.length}
-                    />
+                <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto">
+                        <HappyThread
+                            key={props.reviewSessionId}
+                            api={api}
+                            sessionId={props.reviewSessionId}
+                            metadata={session?.metadata ?? null}
+                            disabled={false}
+                            onRefresh={handleRefresh}
+                            onRetryMessage={undefined}
+                            isLoadingMessages={isLoadingMessages}
+                            messagesWarning={null}
+                            hasMoreMessages={false}
+                            isLoadingMoreMessages={false}
+                            onLoadMore={async () => {}}
+                            rawMessagesCount={messages.length}
+                            normalizedMessagesCount={normalizedMessages.length}
+                            renderedMessagesCount={reconciled.blocks.length}
+                        />
+                        {/* 建议卡片 - 显示在对话列表下方 */}
+                        {latestReviewText && (
+                            <div className="mx-auto w-full max-w-content min-w-0 px-3 pb-4">
+                                <ReviewSuggestions
+                                    reviewText={latestReviewText}
+                                    onApply={(details) => applySuggestionsMutation.mutate(details)}
+                                    isApplying={applySuggestionsMutation.isPending}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </div>
             </AssistantRuntimeProvider>
 
