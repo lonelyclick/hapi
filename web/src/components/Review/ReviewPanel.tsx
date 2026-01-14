@@ -142,14 +142,14 @@ export function ReviewPanel(props: {
     // 获取当前 Review Session 的 ID（用于检查未汇总轮次）
     const currentReviewForPending = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
 
-    // 检查未汇总的轮次
+    // 检查未汇总的轮次（pending 和 active 状态都需要查询）
     const { data: pendingRoundsData } = useQuery({
         queryKey: ['review-pending-rounds', currentReviewForPending?.id],
         queryFn: async () => {
             if (!currentReviewForPending?.id) throw new Error('No review ID')
             return await api.getReviewPendingRounds(currentReviewForPending.id)
         },
-        enabled: Boolean(currentReviewForPending?.id) && currentReviewForPending?.status === 'active',
+        enabled: Boolean(currentReviewForPending?.id) && (currentReviewForPending?.status === 'pending' || currentReviewForPending?.status === 'active'),
         refetchInterval: 5000  // 每 5 秒检查一次
     })
 
@@ -265,7 +265,20 @@ export function ReviewPanel(props: {
         onAbort: handleAbort
     })
 
-    // 开始 Review / 继续 Review
+    // 同步数据（汇总到数据库）
+    const syncRoundsMutation = useMutation({
+        mutationFn: async () => {
+            if (!currentReview) {
+                throw new Error('No current review found')
+            }
+            return await api.syncReviewRounds(currentReview.id)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
+        }
+    })
+
+    // 开始 Review（发送给 Review AI）
     const startReviewMutation = useMutation({
         mutationFn: async () => {
             if (!currentReview) {
@@ -372,31 +385,62 @@ export function ReviewPanel(props: {
 
             {/* 底部操作栏 */}
             <div className="border-t border-[var(--app-divider)] p-4 bg-[var(--app-subtle-bg)]">
-                {/* pending 状态 - 显示开始按钮 */}
+                {/* pending 状态 - 显示同步和开始 Review 两个按钮 */}
                 {currentReview?.status === 'pending' && (
-                    <button
-                        type="button"
-                        onClick={() => startReviewMutation.mutate()}
-                        disabled={startReviewMutation.isPending}
-                        className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                        {startReviewMutation.isPending ? (
-                            <span className="flex items-center justify-center gap-3">
-                                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                </svg>
-                                正在启动 Review...
-                            </span>
-                        ) : (
-                            <span className="flex items-center justify-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <polygon points="5 3 19 12 5 21 5 3" />
-                                </svg>
-                                开始 Review
-                            </span>
-                        )}
-                    </button>
+                    <div className="flex flex-col gap-3">
+                        {/* 同步数据按钮 */}
+                        <button
+                            type="button"
+                            onClick={() => syncRoundsMutation.mutate()}
+                            disabled={syncRoundsMutation.isPending}
+                            className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-slate-500 to-slate-600 text-white shadow-lg hover:from-slate-600 hover:to-slate-700 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            {syncRoundsMutation.isPending ? (
+                                <span className="flex items-center justify-center gap-3">
+                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    正在同步数据...
+                                </span>
+                            ) : (
+                                <span className="flex items-center justify-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                        <path d="M3 3v5h5" />
+                                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                        <path d="M16 16h5v5" />
+                                    </svg>
+                                    同步数据
+                                </span>
+                            )}
+                        </button>
+
+                        {/* 开始 Review 按钮 */}
+                        <button
+                            type="button"
+                            onClick={() => startReviewMutation.mutate()}
+                            disabled={startReviewMutation.isPending}
+                            className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            {startReviewMutation.isPending ? (
+                                <span className="flex items-center justify-center gap-3">
+                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    正在启动 Review...
+                                </span>
+                            ) : (
+                                <span className="flex items-center justify-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polygon points="5 3 19 12 5 21 5 3" />
+                                    </svg>
+                                    开始 Review
+                                </span>
+                            )}
+                        </button>
+                    </div>
                 )}
 
                 {/* active 状态且 AI 正在思考 - 显示进行中 */}
@@ -413,46 +457,62 @@ export function ReviewPanel(props: {
 
                 {/* active 状态但 AI 不在思考 */}
                 {currentReview?.status === 'active' && !session?.thinking && (
-                    <>
-                        {/* 有未汇总的轮次 - 显示继续 Review 按钮 */}
+                    <div className="flex flex-col gap-3">
+                        {/* 有未汇总的轮次 - 显示同步新数据按钮 */}
                         {pendingRoundsData?.hasPendingRounds && (
                             <button
                                 type="button"
-                                onClick={() => startReviewMutation.mutate()}
-                                disabled={startReviewMutation.isPending}
+                                onClick={() => syncRoundsMutation.mutate()}
+                                disabled={syncRoundsMutation.isPending}
                                 className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg hover:from-amber-600 hover:to-orange-600 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
                             >
-                                {startReviewMutation.isPending ? (
+                                {syncRoundsMutation.isPending ? (
                                     <span className="flex items-center justify-center gap-3">
                                         <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                         </svg>
-                                        正在继续 Review...
+                                        正在同步新数据...
                                     </span>
                                 ) : (
                                     <span className="flex items-center justify-center gap-2">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M5 12h14" />
-                                            <path d="m12 5 7 7-7 7" />
+                                            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                            <path d="M3 3v5h5" />
+                                            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                            <path d="M16 16h5v5" />
                                         </svg>
-                                        继续 Review ({pendingRoundsData.pendingRounds} 个新轮次)
+                                        同步新数据 ({pendingRoundsData.pendingRounds} 个新轮次)
                                     </span>
                                 )}
                             </button>
                         )}
 
-                        {/* 没有未汇总的轮次 - Review 完成 */}
-                        {!pendingRoundsData?.hasPendingRounds && (
-                            <div className="flex items-center justify-center gap-2 py-2 text-emerald-500">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                    <polyline points="22 4 12 14.01 9 11.01" />
-                                </svg>
-                                <span className="font-medium">Review 分析完成</span>
-                            </div>
-                        )}
-                    </>
+                        {/* 继续 Review 按钮（同步完成后可点击） */}
+                        <button
+                            type="button"
+                            onClick={() => startReviewMutation.mutate()}
+                            disabled={startReviewMutation.isPending}
+                            className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            {startReviewMutation.isPending ? (
+                                <span className="flex items-center justify-center gap-3">
+                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    正在执行 Review...
+                                </span>
+                            ) : (
+                                <span className="flex items-center justify-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polygon points="5 3 19 12 5 21 5 3" />
+                                    </svg>
+                                    执行 Review
+                                </span>
+                            )}
+                        </button>
+                    </div>
                 )}
 
                 {/* completed 状态 */}

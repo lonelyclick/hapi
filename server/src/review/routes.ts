@@ -387,8 +387,66 @@ export function createReviewRoutes(
         return c.json({ success: true })
     })
 
-    // 触发 Review（发送 prompt 开始 Review）
-    // 支持 pending 状态（首次 Review）和 active 状态（继续 Review）
+    // 同步汇总（只存数据库，不发 Review）
+    // 将主 Session 中未汇总的轮次提取并存储到数据库
+    app.post('/review/sessions/:id/sync', async (c) => {
+        const id = c.req.param('id')
+        const engine = getSyncEngine()
+
+        if (!engine) {
+            return c.json({ error: 'Sync engine not available' }, 503)
+        }
+
+        const reviewSession = await reviewStore.getReviewSession(id)
+        if (!reviewSession) {
+            return c.json({ error: 'Review session not found' }, 404)
+        }
+
+        // 获取主 Session 消息
+        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
+
+        // 按轮次分组消息
+        const allRounds = groupMessagesIntoRounds(messagesResult.messages)
+
+        // 获取已汇总的轮次
+        const existingRounds = await reviewStore.getReviewRounds(id)
+        const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
+
+        // 找出未汇总的轮次
+        const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
+
+        if (pendingRounds.length === 0) {
+            return c.json({
+                success: true,
+                newRoundsSynced: 0,
+                totalRounds: allRounds.length,
+                summarizedRounds: existingRounds.length
+            })
+        }
+
+        // 为新轮次创建汇总并存储到数据库
+        for (const round of pendingRounds) {
+            const aiSummary = summarizeAIMessages(round.aiMessages)
+
+            // 存储到数据库
+            await reviewStore.createReviewRound({
+                reviewSessionId: id,
+                roundNumber: round.roundNumber,
+                userInput: round.userInput,
+                aiSummary,
+                originalMessageIds: round.messageIds
+            })
+        }
+
+        return c.json({
+            success: true,
+            newRoundsSynced: pendingRounds.length,
+            totalRounds: allRounds.length,
+            summarizedRounds: existingRounds.length + pendingRounds.length
+        })
+    })
+
+    // 执行 Review（读取所有已汇总的轮次，发给 Review AI）
     app.post('/review/sessions/:id/start', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
@@ -407,77 +465,39 @@ export function createReviewRoutes(
             return c.json({ error: 'Review session is not in pending or active status' }, 400)
         }
 
-        const isFirstReview = reviewSession.status === 'pending'
+        // 获取所有已汇总的轮次
+        const allSummarizedRounds = await reviewStore.getReviewRounds(id)
 
-        // 获取主 Session 消息
-        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
-
-        // 按轮次分组消息
-        const allRounds = groupMessagesIntoRounds(messagesResult.messages)
-
-        // 获取已汇总的轮次
-        const existingRounds = await reviewStore.getReviewRounds(id)
-        const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
-
-        // 找出未汇总的轮次
-        const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
-
-        if (pendingRounds.length === 0) {
-            return c.json({ error: 'No new rounds to review', noNewRounds: true }, 400)
+        if (allSummarizedRounds.length === 0) {
+            return c.json({ error: 'No summarized rounds found. Please sync first.', noRounds: true }, 400)
         }
 
-        // 为新轮次创建汇总并存储到数据库
-        const newRoundsSummaryParts: string[] = []
-
-        for (const round of pendingRounds) {
-            const aiSummary = summarizeAIMessages(round.aiMessages)
-
-            // 存储到数据库
-            await reviewStore.createReviewRound({
-                reviewSessionId: id,
-                roundNumber: round.roundNumber,
-                userInput: round.userInput,
-                aiSummary,
-                originalMessageIds: round.messageIds
-            })
-
-            // 构建汇总文本
-            newRoundsSummaryParts.push(`[用户] ${round.userInput}`)
-            newRoundsSummaryParts.push(`[AI] ${aiSummary}`)
+        // 构建完整的对话汇总
+        const roundsSummaryParts: string[] = []
+        for (const round of allSummarizedRounds) {
+            roundsSummaryParts.push(`[用户] ${round.userInput}`)
+            roundsSummaryParts.push(`[AI] ${round.aiSummary}`)
         }
 
-        const newRoundsSummary = newRoundsSummaryParts.join('\n\n')
+        const roundsSummary = roundsSummaryParts.join('\n\n')
 
-        // 根据是首次还是继续 Review，使用不同的 prompt
-        let reviewPrompt: string
-        if (isFirstReview) {
-            reviewPrompt = buildReviewPrompt(newRoundsSummary)
-        } else {
-            // 继续 Review：发送新轮次的摘要
-            reviewPrompt = `## 新增对话内容
-
-以下是自上次 Review 以来新增的 ${pendingRounds.length} 轮对话：
-
-${newRoundsSummary}
-
-请基于新增的对话内容，结合之前的 Review 结果，继续分析并给出建议。仍然以 JSON 格式输出。`
-        }
+        // 发送 Review Prompt
+        const reviewPrompt = buildReviewPrompt(roundsSummary)
 
         await engine.sendMessage(reviewSession.reviewSessionId, {
             text: reviewPrompt,
             sentFrom: 'webapp'
         })
 
-        // 首次 Review 时更新状态为 active
-        if (isFirstReview) {
+        // 更新状态为 active
+        if (reviewSession.status === 'pending') {
             await reviewStore.updateReviewSessionStatus(id, 'active')
         }
 
         return c.json({
             success: true,
             status: 'active',
-            newRoundsProcessed: pendingRounds.length,
-            totalRounds: allRounds.length
+            roundsReviewed: allSummarizedRounds.length
         })
     })
 

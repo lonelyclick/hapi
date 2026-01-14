@@ -46,22 +46,6 @@ async function clearAllCaches(): Promise<void> {
     }
 }
 
-// Check if we need to force refresh on startup (version mismatch from last session)
-function checkStartupVersionMismatch(serverVersion: string): boolean {
-    try {
-        const cachedVersion = localStorage.getItem(CACHED_VERSION_KEY)
-        if (cachedVersion && cachedVersion !== serverVersion) {
-            console.log(`[VersionCheck] Startup version mismatch: cached=${cachedVersion}, server=${serverVersion}`)
-            return true
-        }
-        // Save current server version
-        localStorage.setItem(CACHED_VERSION_KEY, serverVersion)
-    } catch {
-        // Ignore storage errors
-    }
-    return false
-}
-
 interface UseVersionCheckOptions {
     baseUrl: string
     enabled?: boolean
@@ -83,7 +67,6 @@ export function useVersionCheck(options: UseVersionCheckOptions): UseVersionChec
     const [serverVersion, setServerVersion] = useState<string | null>(null)
     const [dismissed, setDismissed] = useState(false)
     const initialCheckDone = useRef(false)
-    const autoRefreshTriggered = useRef(false)
 
     const checkVersion = useCallback(async () => {
         try {
@@ -94,18 +77,10 @@ export function useVersionCheck(options: UseVersionCheckOptions): UseVersionChec
                 const data = await response.json()
                 setServerVersion(data.version)
 
-                // On first check, auto-refresh if version mismatch detected
-                if (!autoRefreshTriggered.current && data.version) {
-                    const needsRefresh = checkStartupVersionMismatch(data.version)
-                    if (needsRefresh) {
-                        autoRefreshTriggered.current = true
-                        console.log('[VersionCheck] Auto-refreshing due to version mismatch...')
-                        // Clear caches and reload
-                        await clearAllCaches()
-                        localStorage.setItem(CACHED_VERSION_KEY, data.version)
-                        window.location.reload()
-                        return
-                    }
+                // On first check, just save the server version (no auto-refresh)
+                // User will see update banner and can manually refresh
+                if (data.version) {
+                    localStorage.setItem(CACHED_VERSION_KEY, data.version)
                 }
             }
         } catch {
