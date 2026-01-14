@@ -160,6 +160,17 @@ export function ReviewPanel(props: {
     const [panelWidth, setPanelWidth] = useState(500)
     const [panelX, setPanelX] = useState<number | null>(null)
 
+    // 移动端检测
+    const [isMobile, setIsMobile] = useState(false)
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 768)
+        }
+        checkMobile()
+        window.addEventListener('resize', checkMobile)
+        return () => window.removeEventListener('resize', checkMobile)
+    }, [])
+
     // 同步进度状态
     const [syncProgress, setSyncProgress] = useState<{
         isRunning: boolean
@@ -551,10 +562,12 @@ export function ReviewPanel(props: {
             <button
                 type="button"
                 onClick={() => setIsExpanded(true)}
-                className="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-[var(--app-secondary-bg)] text-[var(--app-fg)] shadow-lg border border-[var(--app-divider)] hover:bg-[var(--app-subtle-bg)] hover:scale-105 transition-all flex items-center justify-center"
+                className={`fixed z-50 rounded-full bg-[var(--app-secondary-bg)] text-[var(--app-fg)] shadow-lg border border-[var(--app-divider)] hover:bg-[var(--app-subtle-bg)] hover:scale-105 transition-all flex items-center justify-center ${
+                    isMobile ? 'bottom-20 right-4 w-12 h-12' : 'bottom-5 right-5 w-14 h-14'
+                }`}
                 title="打开 Review AI"
             >
-                <ReviewIcon className="w-6 h-6" />
+                <ReviewIcon className={isMobile ? 'w-5 h-5' : 'w-6 h-6'} />
                 {(currentReview?.status === 'active' || session?.thinking) && (
                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-pulse" />
                 )}
@@ -562,34 +575,42 @@ export function ReviewPanel(props: {
         )
     }
 
-    const rightPos = panelX === null ? 0 : undefined
-    const leftPos = panelX !== null ? panelX : undefined
+    // 移动端全屏，桌面端保持可拖拽
+    const rightPos = isMobile ? 0 : (panelX === null ? 0 : undefined)
+    const leftPos = isMobile ? 0 : (panelX !== null ? panelX : undefined)
+    const actualWidth = isMobile ? '100%' : `${panelWidth}px`
 
     return (
         <div
             ref={panelRef}
-            className="fixed top-0 bottom-0 z-50 shadow-2xl border-l border-[var(--app-divider)] bg-[var(--app-bg)] flex flex-col"
+            className={`fixed top-0 bottom-0 z-50 shadow-2xl bg-[var(--app-bg)] flex flex-col ${
+                isMobile ? '' : 'border-l border-[var(--app-divider)]'
+            }`}
             style={{
-                width: `${panelWidth}px`,
+                width: actualWidth,
                 right: rightPos,
                 left: leftPos,
-                cursor: dragMode === 'move' ? 'grabbing' : undefined
+                cursor: !isMobile && dragMode === 'move' ? 'grabbing' : undefined
             }}
         >
-            {/* 左边缘拖拽调整宽度 */}
-            <div
-                className="absolute top-0 bottom-0 left-0 w-1 cursor-ew-resize hover:bg-[var(--app-divider)] z-10"
-                onMouseDown={handleResizeStart}
-                style={{ backgroundColor: dragMode === 'resize' ? 'var(--app-divider)' : undefined }}
-            />
+            {/* 左边缘拖拽调整宽度 - 仅桌面端 */}
+            {!isMobile && (
+                <div
+                    className="absolute top-0 bottom-0 left-0 w-1 cursor-ew-resize hover:bg-[var(--app-divider)] z-10"
+                    onMouseDown={handleResizeStart}
+                    style={{ backgroundColor: dragMode === 'resize' ? 'var(--app-divider)' : undefined }}
+                />
+            )}
 
             {/* Header */}
             <div
-                className="flex items-center justify-between px-3 py-2 border-b border-[var(--app-divider)] bg-[var(--app-subtle-bg)] cursor-grab active:cursor-grabbing select-none"
-                onMouseDown={handleMoveStart}
+                className={`flex items-center justify-between px-3 py-2 border-b border-[var(--app-divider)] bg-[var(--app-subtle-bg)] select-none ${
+                    isMobile ? '' : 'cursor-grab active:cursor-grabbing'
+                }`}
+                onMouseDown={isMobile ? undefined : handleMoveStart}
             >
                 <div className="flex items-center gap-2">
-                    <GripIcon className="w-4 h-4 text-[var(--app-hint)]" />
+                    {!isMobile && <GripIcon className="w-4 h-4 text-[var(--app-hint)]" />}
                     <ReviewIcon className="w-4 h-4 text-[var(--app-fg)]" />
                     <span className="text-sm font-medium">Review AI</span>
                     {session?.thinking && (
