@@ -340,7 +340,7 @@ export function createReviewRoutes(
         }
 
         // 获取主 Session 的最近消息
-        const messagesResult = await engine.getMessages(reviewSession.mainSessionId, { limit: 30 })
+        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 30, beforeSeq: null })
 
         // 提取用户消息作为摘要
         const userMessages = messagesResult.messages
@@ -395,7 +395,7 @@ ${userMessages.map((msg, i) => `[${i + 1}] ${msg}`).join('\n\n')}
         }
 
         // 获取 Review Session 的最新 AI 回复
-        const messagesResult = await engine.getMessages(reviewSession.reviewSessionId, { limit: 50 })
+        const messagesResult = await engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 50, beforeSeq: null })
 
         // 提取最新的 AI 回复
         const agentMessages = messagesResult.messages
