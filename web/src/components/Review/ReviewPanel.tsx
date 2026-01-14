@@ -343,8 +343,8 @@ export function ReviewPanel(props: {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {/* 状态显示 */}
-                {currentReview?.status === 'pending' && (
+                {/* 开始 Review 按钮 - pending 状态或没有 currentReview 时显示 */}
+                {(currentReview?.status === 'pending' || !currentReview) && (
                     <div className="text-center py-8">
                         <p className="text-sm text-[var(--app-hint)] mb-4">
                             点击下方按钮开始 Review
@@ -352,7 +352,7 @@ export function ReviewPanel(props: {
                         <button
                             type="button"
                             onClick={() => startReviewMutation.mutate()}
-                            disabled={startReviewMutation.isPending}
+                            disabled={startReviewMutation.isPending || !currentReview}
                             className="px-6 py-2.5 text-sm font-medium rounded-lg bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-divider)] disabled:opacity-50 transition-colors"
                         >
                             {startReviewMutation.isPending ? (
@@ -364,10 +364,16 @@ export function ReviewPanel(props: {
                                 '开始 Review'
                             )}
                         </button>
+                        {!currentReview && (
+                            <p className="text-xs text-[var(--app-hint)] mt-2">
+                                正在加载 Review Session...
+                            </p>
+                        )}
                     </div>
                 )}
 
-                {currentReview?.status === 'active' && !reviewResult && (
+                {/* 正在分析 - active 状态且没有 AI 回复 */}
+                {currentReview?.status === 'active' && !aiResponse && (
                     <div className="text-center py-8">
                         <LoadingIcon className="w-8 h-8 mx-auto mb-4 text-[var(--app-hint)]" />
                         <p className="text-sm text-[var(--app-hint)]">
@@ -376,7 +382,7 @@ export function ReviewPanel(props: {
                     </div>
                 )}
 
-                {/* 建议列表 */}
+                {/* 建议列表 - 如果解析成功 */}
                 {reviewResult && (
                     <div className="space-y-4">
                         {/* 总结 */}
@@ -439,11 +445,11 @@ export function ReviewPanel(props: {
                     </div>
                 )}
 
-                {/* 原始回复（如果解析失败）*/}
-                {currentReview?.status === 'active' && aiResponse && !reviewResult && (
+                {/* AI 原始回复 - 总是显示（如果有的话）*/}
+                {aiResponse && (
                     <div className="space-y-2">
-                        <p className="text-xs text-[var(--app-hint)]">AI 回复（格式解析失败）：</p>
-                        <div className="p-3 rounded-lg bg-[var(--app-subtle-bg)] text-sm whitespace-pre-wrap">
+                        <p className="text-xs text-[var(--app-hint)]">Review AI 回复：</p>
+                        <div className="p-3 rounded-lg bg-[var(--app-subtle-bg)] text-sm whitespace-pre-wrap text-[var(--app-fg)] leading-relaxed">
                             {aiResponse}
                         </div>
                     </div>
