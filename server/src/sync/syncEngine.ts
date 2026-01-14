@@ -1087,6 +1087,25 @@ export class SyncEngine {
         }
     }
 
+    /**
+     * Wait for at least one socket to join the session room.
+     * This is useful for ensuring init prompts are received after session spawn.
+     */
+    async waitForSocketInRoom(sessionId: string, timeoutMs: number = 2000): Promise<boolean> {
+        const roomName = `session:${sessionId}`
+        const cliNamespace = this.io.of('/cli')
+        const startTime = Date.now()
+
+        while (Date.now() - startTime < timeoutMs) {
+            const sockets = await cliNamespace.in(roomName).fetchSockets()
+            if (sockets.length > 0) {
+                return true
+            }
+            await new Promise(resolve => setTimeout(resolve, 50))
+        }
+        return false
+    }
+
     async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp'; meta?: Record<string, unknown> }): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
 

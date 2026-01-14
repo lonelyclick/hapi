@@ -154,8 +154,11 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                     return
                 }
                 console.log(`[machines/spawn] Session ${result.sessionId} is online, waiting for socket to join room...`)
-                // Give CLI socket time to join the session room (socket.join takes ~2-80ms based on measurements)
-                await new Promise(resolve => setTimeout(resolve, 100))
+                // Wait for CLI socket to actually join the session room (not just session-alive)
+                const hasSocket = await engine.waitForSocketInRoom(result.sessionId, 5000)
+                if (!hasSocket) {
+                    console.warn(`[machines/spawn] No socket joined room for session ${result.sessionId} within 5s, sending anyway`)
+                }
                 console.log(`[machines/spawn] Sending init prompt to session ${result.sessionId}`)
                 // Set createdBy after session is confirmed online (exists in DB)
                 if (email) {
