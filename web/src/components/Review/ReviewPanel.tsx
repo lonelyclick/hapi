@@ -286,12 +286,8 @@ export function ReviewPanel(props: {
             }
             return await api.saveReviewSummary(currentReview.id)
         },
-        onSuccess: (data) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
-            // 保存成功后，发送确认消息到 Review Session
-            if (data.savedRound && !data.alreadyExists) {
-                api.sendMessage(props.reviewSessionId, `✅ 第 ${data.savedRound} 轮汇总已保存`)
-            }
         },
         onError: (error) => {
             // noSummary 错误通常是因为消息还没同步完成，静默忽略
