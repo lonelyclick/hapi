@@ -519,13 +519,9 @@ export function ReviewPanel(props: {
             if (block.kind !== 'agent-text') continue
             agentTextCount++
 
-            // 打印最后 3 个 agent-text block 的信息
-            if (agentTextCount <= 3) {
-                console.log(`[ReviewPanel] agent-text #${agentTextCount}: len=${block.text.length}, preview:`, block.text.substring(0, 200))
-                // 如果包含 suggestions，打印更多
-                if (block.text.includes('suggestions')) {
-                    console.log(`[ReviewPanel] agent-text #${agentTextCount} contains 'suggestions', full text:`, block.text)
-                }
+            // 检查是否包含 json 代码块
+            if (block.text.includes('```json')) {
+                console.log(`[ReviewPanel] agent-text #${agentTextCount}: len=${block.text.length}, has json block, full text:`, block.text)
             }
 
             const result = parseReviewResult(block.text)
