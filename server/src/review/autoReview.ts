@@ -321,6 +321,13 @@ export class AutoReviewService {
             })
 
             // 发送给 Review AI
+            // 等待 CLI daemon 有足够时间 join socket room
+            const reviewAISessionCheck = this.engine.getSession(reviewSession.reviewSessionId)
+            if (!reviewAISessionCheck?.active) {
+                console.log('[ReviewSync] Review AI session not active, waiting...')
+                await new Promise(resolve => setTimeout(resolve, 3000))
+            }
+
             console.log('[ReviewSync] Sending prompt to Review AI, length:', syncPrompt.length)
             await this.engine.sendMessage(reviewSession.reviewSessionId, {
                 text: syncPrompt,

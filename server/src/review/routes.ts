@@ -397,10 +397,12 @@ export function createReviewRoutes(
 
         // 自动触发同步历史对话
         if (autoReviewService) {
-            // 异步触发，不阻塞响应
-            autoReviewService.triggerSync(mainSessionId).catch(err => {
-                console.error('[Review] Failed to trigger auto sync:', err)
-            })
+            // 延迟触发，确保 CLI daemon 有时间 join socket room
+            setTimeout(() => {
+                autoReviewService.triggerSync(mainSessionId).catch(err => {
+                    console.error('[Review] Failed to trigger auto sync:', err)
+                })
+            }, 3000)
         }
 
         return c.json({
