@@ -136,27 +136,27 @@ export function ReviewPanel(props: {
             const result = await api.getReviewSessions(props.mainSessionId)
             return result.reviewSessions
         },
-        refetchInterval: 5000
+        refetchInterval: 2000
     })
 
-    // 获取 Review Session 信息
+    // 获取 Review Session 信息（更快刷新）
     const { data: reviewSession } = useQuery({
         queryKey: ['session', props.reviewSessionId],
         queryFn: async () => {
             return await api.getSession(props.reviewSessionId)
         },
         enabled: Boolean(props.reviewSessionId),
-        refetchInterval: 3000
+        refetchInterval: 1000
     })
 
-    // 获取 Review Session 的消息
+    // 获取 Review Session 的消息（更快刷新）
     const { data: reviewMessagesData, isLoading: isLoadingMessages } = useQuery({
         queryKey: ['messages', props.reviewSessionId],
         queryFn: async () => {
             return await api.getMessages(props.reviewSessionId, { limit: 100 })
         },
         enabled: Boolean(props.reviewSessionId),
-        refetchInterval: 2000
+        refetchInterval: 1000
     })
 
     const currentReview = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
@@ -314,9 +314,10 @@ export function ReviewPanel(props: {
                 </div>
             </div>
 
-            {/* 开始 Review 按钮 - pending 状态时显示 */}
-            {currentReview?.status === 'pending' && (
-                <div className="border-b border-[var(--app-divider)] p-3 bg-[var(--app-subtle-bg)]">
+            {/* 状态栏 */}
+            <div className="border-b border-[var(--app-divider)] p-3 bg-[var(--app-subtle-bg)]">
+                {/* pending 状态 - 显示开始按钮 */}
+                {currentReview?.status === 'pending' && (
                     <button
                         type="button"
                         onClick={() => startReviewMutation.mutate()}
@@ -332,8 +333,34 @@ export function ReviewPanel(props: {
                             '开始 Review'
                         )}
                     </button>
-                </div>
-            )}
+                )}
+
+                {/* active 状态 - 显示正在进行 */}
+                {currentReview?.status === 'active' && (
+                    <div className="flex items-center justify-center gap-2 text-sm text-[var(--app-hint)]">
+                        <LoadingIcon className="text-green-500" />
+                        <span>Review 进行中...</span>
+                        <span className="text-xs">({messages.length} 条消息)</span>
+                    </div>
+                )}
+
+                {/* completed 状态 */}
+                {currentReview?.status === 'completed' && (
+                    <div className="flex items-center justify-center gap-2 text-sm text-green-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span>Review 完成</span>
+                    </div>
+                )}
+
+                {/* 没有找到 currentReview */}
+                {!currentReview && reviewSessions !== undefined && (
+                    <div className="text-sm text-[var(--app-hint)] text-center">
+                        等待 Review 数据加载...
+                    </div>
+                )}
+            </div>
 
             {/* 对话界面 */}
             <AssistantRuntimeProvider runtime={runtime}>
