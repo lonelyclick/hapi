@@ -364,12 +364,12 @@ export function ReviewPanel(props: {
 
                 if (stopSyncRef.current) break
 
-                // 等待 AI 回复被保存，然后尝试保存汇总结果
-                // 最多重试 10 次，每次等待 2 秒
-                let saveSuccess = false
-                for (let saveAttempt = 0; saveAttempt < 10 && !stopSyncRef.current; saveAttempt++) {
-                    if (!await interruptibleWait(2000)) break
+                // 等待 AI 回复被同步到数据库（初始等待 3 秒）
+                if (!await interruptibleWait(3000)) break
 
+                // 尝试保存汇总结果，最多重试 15 次，每次等待 2 秒（共 30 秒）
+                let saveSuccess = false
+                for (let saveAttempt = 0; saveAttempt < 15 && !stopSyncRef.current; saveAttempt++) {
                     try {
                         const saveResult = await api.saveReviewSummary(currentReview.id)
                         if (saveResult.success || saveResult.alreadyExists) {
@@ -380,6 +380,8 @@ export function ReviewPanel(props: {
                     } catch {
                         // 网络错误，继续重试
                     }
+                    // 等待后再重试
+                    if (!await interruptibleWait(2000)) break
                 }
 
                 if (stopSyncRef.current) break

@@ -544,13 +544,17 @@ ${batchRounds.map(r => `  {
         // 提取最新的 AI 回复 - 支持单个对象或数组
         let summaries: Array<{ round: number; summary: string }> = []
 
+        console.log('[save-summary] Messages count:', messagesResult.messages.length)
+
         for (const m of messagesResult.messages.reverse()) {
             const content = m.content as Record<string, unknown>
+            console.log('[save-summary] Message role:', content?.role)
             if (content?.role !== 'agent') continue
 
             // 解析消息内容
             let payload: Record<string, unknown> | null = null
             const rawContent = content?.content
+            console.log('[save-summary] rawContent type:', typeof rawContent)
             if (typeof rawContent === 'string') {
                 try {
                     payload = JSON.parse(rawContent)
@@ -561,9 +565,13 @@ ${batchRounds.map(r => `  {
                 payload = rawContent as Record<string, unknown>
             }
 
-            if (!payload) continue
+            if (!payload) {
+                console.log('[save-summary] No payload')
+                continue
+            }
 
             const data = payload.data as Record<string, unknown>
+            console.log('[save-summary] data.type:', data?.type)
             if (!data || data.type !== 'assistant') continue
 
             const message = data.message as Record<string, unknown>
@@ -571,9 +579,11 @@ ${batchRounds.map(r => `  {
                 const contentArr = message.content as Array<{ type?: string; text?: string }>
                 for (const item of contentArr) {
                     if (item.type === 'text' && item.text) {
+                        console.log('[save-summary] Found text, length:', item.text.length, 'preview:', item.text.slice(0, 200))
                         // 尝试从文本中提取 JSON
                         const jsonMatch = item.text.match(/```json\s*([\s\S]*?)\s*```/)
                         if (jsonMatch) {
+                            console.log('[save-summary] Found json block')
                             try {
                                 const parsed = JSON.parse(jsonMatch[1])
                                 // 支持数组格式
@@ -583,8 +593,8 @@ ${batchRounds.map(r => `  {
                                     summaries = [parsed]
                                 }
                                 if (summaries.length > 0) break
-                            } catch {
-                                // 继续尝试
+                            } catch (e) {
+                                console.log('[save-summary] JSON parse error:', (e as Error).message)
                             }
                         }
                         // 也尝试直接解析整个文本
@@ -604,6 +614,8 @@ ${batchRounds.map(r => `  {
             }
             if (summaries.length > 0) break
         }
+
+        console.log('[save-summary] Summaries found:', summaries.length)
 
         if (summaries.length === 0) {
             return c.json({ error: 'No summary found in AI response', noSummary: true }, 400)
