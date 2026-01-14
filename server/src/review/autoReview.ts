@@ -273,7 +273,7 @@ ${reviewText}
      * 构建对话摘要
      */
     private async buildConversationSummary(sessionId: string): Promise<string | null> {
-        const messagesResult = await this.engine.getMessagesPage(sessionId, { limit: 100, beforeSeq: null })
+        const messagesResult = await this.engine.getMessagesPage(sessionId, { limit: 50, beforeSeq: null })
         const dialogueMessages: Array<{ role: string; text: string }> = []
 
         for (const m of messagesResult.messages) {
@@ -295,7 +295,8 @@ ${reviewText}
 
                 const text = typeof payload?.text === 'string' ? payload.text : ''
                 if (text) {
-                    dialogueMessages.push({ role: 'User', text })
+                    // 用户消息截断到 500 字符
+                    dialogueMessages.push({ role: 'U', text: text.slice(0, 500) + (text.length > 500 ? '...' : '') })
                 }
             } else if (role === 'agent') {
                 let payload: Record<string, unknown> | null = null
@@ -318,11 +319,16 @@ ${reviewText}
                 const message = data.message as Record<string, unknown>
                 if (message?.content) {
                     const contentArr = message.content as Array<{ type?: string; text?: string }>
+                    const texts: string[] = []
                     for (const item of contentArr) {
                         if (item.type === 'text' && item.text) {
-                            const text = item.text
-                            dialogueMessages.push({ role: 'AI', text: text.slice(0, 2000) + (text.length > 2000 ? '...(truncated)' : '') })
+                            texts.push(item.text)
                         }
+                    }
+                    if (texts.length > 0) {
+                        // 合并所有文本，截断到 500 字符
+                        const combined = texts.join(' ').slice(0, 500)
+                        dialogueMessages.push({ role: 'A', text: combined + (texts.join(' ').length > 500 ? '...' : '') })
                     }
                 }
             }
@@ -332,24 +338,14 @@ ${reviewText}
             return null
         }
 
-        // 取最近的对话
-        const recentMessages = dialogueMessages.slice(-40)
+        // 取最近 15 条对话
+        const recentMessages = dialogueMessages.slice(-15)
 
-        return `以下是主 Session 中的对话内容，请进行 Review 并给出反馈：
+        return `Review 以下对话，指出问题和改进建议：
 
----
+${recentMessages.map((msg) => `[${msg.role}] ${msg.text}`).join('\n\n')}
 
-${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n')}
-
----
-
-请分析上述对话内容，关注：
-1. 用户的需求是否被正确理解和完成
-2. AI 的实现是否有问题或可以改进
-3. 代码是否有 bug、安全问题或性能问题
-4. 有什么遗漏或需要注意的地方
-
-请给出简洁的 Review 意见。`
+重点关注：代码质量、安全问题、遗漏点。简洁回复。`
     }
 
     /**
