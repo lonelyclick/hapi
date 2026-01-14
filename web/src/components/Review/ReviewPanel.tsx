@@ -1,15 +1,20 @@
 /**
  * Review 面板组件
  *
- * 简化流程：
- * 1. 点击"开始 Review" → 发送对话+diff 给 AI
- * 2. AI 返回 JSON 建议列表
- * 3. 用户选择建议 → 发送到主 Session
+ * 显示建议列表 + 完整对话界面
  */
 
-import { useRef, useState, useCallback, useEffect } from 'react'
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import { useAppContext } from '@/lib/app-context'
+import { normalizeDecryptedMessage } from '@/chat/normalize'
+import { reduceChatBlocks } from '@/chat/reducer'
+import { reconcileChatBlocks } from '@/chat/reconcile'
+import { useHappyRuntime } from '@/lib/assistant-runtime'
+import { HappyThread } from '@/components/AssistantChat/HappyThread'
+import type { DecryptedMessage, Session } from '@/types/api'
+import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 
 // Icons
 function ReviewIcon(props: { className?: string }) {
@@ -47,128 +52,12 @@ function GripIcon(props: { className?: string }) {
     )
 }
 
-function CheckIcon(props: { className?: string }) {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
-            <polyline points="20 6 9 17 4 12" />
-        </svg>
-    )
-}
-
 function LoadingIcon(props: { className?: string }) {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`animate-spin ${props.className ?? ''}`}>
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
     )
-}
-
-// 建议类型
-interface ReviewSuggestion {
-    id: string
-    type: 'bug' | 'security' | 'performance' | 'improvement' | 'question'
-    severity: 'high' | 'medium' | 'low'
-    title: string
-    description: string
-    action: string
-}
-
-interface ReviewResult {
-    suggestions: ReviewSuggestion[]
-    summary: string
-}
-
-// 从 AI 回复中解析 JSON 建议
-function parseReviewResult(text: string): ReviewResult | null {
-    try {
-        // 尝试找到 JSON 块
-        const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
-        const jsonStr = jsonMatch ? jsonMatch[1] : text
-
-        const parsed = JSON.parse(jsonStr)
-        if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-            return parsed as ReviewResult
-        }
-    } catch {
-        // 解析失败
-    }
-    return null
-}
-
-// 从消息中提取所有 AI 回复文本
-function extractAIResponse(messagesData: { messages: Array<{ id: string; content: unknown }> } | undefined): string | null {
-    if (!messagesData?.messages) return null
-
-    const allTexts: string[] = []
-
-    for (const m of messagesData.messages) {
-        const content = m.content as Record<string, unknown>
-        const role = content?.role
-
-        if (role === 'agent') {
-            let payload: Record<string, unknown> | null = null
-            const rawContent = content?.content
-            if (typeof rawContent === 'string') {
-                try {
-                    payload = JSON.parse(rawContent)
-                } catch {
-                    payload = null
-                }
-            } else if (typeof rawContent === 'object' && rawContent) {
-                payload = rawContent as Record<string, unknown>
-            }
-
-            if (!payload) continue
-
-            const data = payload.data as Record<string, unknown>
-            if (!data) continue
-
-            // 检查 assistant 类型
-            if (data.type === 'assistant') {
-                const message = data.message as Record<string, unknown>
-                if (message?.content) {
-                    const contentArr = message.content as Array<{ type?: string; text?: string }>
-                    for (const item of contentArr) {
-                        if (item.type === 'text' && item.text) {
-                            allTexts.push(item.text)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    return allTexts.length > 0 ? allTexts.join('\n\n---\n\n') : null
-}
-
-function getSeverityColor(severity: string) {
-    switch (severity) {
-        case 'high':
-            return 'text-red-500 bg-red-500/10'
-        case 'medium':
-            return 'text-yellow-500 bg-yellow-500/10'
-        case 'low':
-            return 'text-green-500 bg-green-500/10'
-        default:
-            return 'text-gray-500 bg-gray-500/10'
-    }
-}
-
-function getTypeLabel(type: string) {
-    switch (type) {
-        case 'bug':
-            return 'Bug'
-        case 'security':
-            return '安全'
-        case 'performance':
-            return '性能'
-        case 'improvement':
-            return '改进'
-        case 'question':
-            return '问题'
-        default:
-            return type
-    }
 }
 
 export function ReviewPanel(props: {
@@ -178,11 +67,12 @@ export function ReviewPanel(props: {
     const { api } = useAppContext()
     const queryClient = useQueryClient()
     const panelRef = useRef<HTMLDivElement>(null)
+    const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
+    const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
 
     const [isExpanded, setIsExpanded] = useState(true)
-    const [panelWidth, setPanelWidth] = useState(400)
+    const [panelWidth, setPanelWidth] = useState(500)
     const [panelX, setPanelX] = useState<number | null>(null)
-    const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set())
 
     // 拖拽状态
     const [dragMode, setDragMode] = useState<'none' | 'resize' | 'move'>('none')
@@ -215,7 +105,7 @@ export function ReviewPanel(props: {
         const handleMouseMove = (e: MouseEvent) => {
             if (dragMode === 'resize') {
                 const delta = dragStartRef.current.x - e.clientX
-                const newWidth = Math.max(320, Math.min(800, dragStartRef.current.width + delta))
+                const newWidth = Math.max(400, Math.min(900, dragStartRef.current.width + delta))
                 setPanelWidth(newWidth)
                 const newX = dragStartRef.current.panelX - delta
                 setPanelX(Math.max(0, newX))
@@ -249,26 +139,99 @@ export function ReviewPanel(props: {
         refetchInterval: 5000
     })
 
-    // 获取 Review Session 的消息
-    const { data: reviewMessagesData } = useQuery({
-        queryKey: ['messages', props.reviewSessionId],
+    // 获取 Review Session 信息
+    const { data: reviewSession } = useQuery({
+        queryKey: ['session', props.reviewSessionId],
         queryFn: async () => {
-            return await api.getMessages(props.reviewSessionId, { limit: 50 })
+            return await api.getSession(props.reviewSessionId)
         },
         enabled: Boolean(props.reviewSessionId),
         refetchInterval: 3000
     })
 
+    // 获取 Review Session 的消息
+    const { data: reviewMessagesData, isLoading: isLoadingMessages } = useQuery({
+        queryKey: ['messages', props.reviewSessionId],
+        queryFn: async () => {
+            return await api.getMessages(props.reviewSessionId, { limit: 100 })
+        },
+        enabled: Boolean(props.reviewSessionId),
+        refetchInterval: 2000
+    })
+
     const currentReview = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
+    const messages = (reviewMessagesData?.messages ?? []) as DecryptedMessage[]
 
-    // Debug log
-    console.log('[ReviewPanel] reviewSessions:', reviewSessions?.length, 'currentReview:', currentReview?.status, 'reviewSessionId:', props.reviewSessionId)
-    console.log('[ReviewPanel] reviewMessagesData:', reviewMessagesData?.messages?.length, 'messages')
+    // 消息规范化管道
+    const normalizedMessages: NormalizedMessage[] = useMemo(() => {
+        const cache = normalizedCacheRef.current
+        const normalized: NormalizedMessage[] = []
+        const seen = new Set<string>()
+        for (const message of messages) {
+            seen.add(message.id)
+            const cached = cache.get(message.id)
+            if (cached && cached.source === message) {
+                if (cached.normalized) normalized.push(cached.normalized)
+                continue
+            }
+            const next = normalizeDecryptedMessage(message)
+            cache.set(message.id, { source: message, normalized: next })
+            if (next) normalized.push(next)
+        }
+        for (const id of cache.keys()) {
+            if (!seen.has(id)) {
+                cache.delete(id)
+            }
+        }
+        return normalized
+    }, [messages])
 
-    // 解析 AI 回复中的建议
-    const aiResponse = extractAIResponse(reviewMessagesData)
-    console.log('[ReviewPanel] aiResponse:', aiResponse ? aiResponse.slice(0, 200) + '...' : null)
-    const reviewResult = aiResponse ? parseReviewResult(aiResponse) : null
+    const reduced = useMemo(
+        () => reduceChatBlocks(normalizedMessages, reviewSession?.agentState ?? null),
+        [normalizedMessages, reviewSession?.agentState]
+    )
+
+    const reconciled = useMemo(
+        () => reconcileChatBlocks(reduced.blocks, blocksByIdRef.current),
+        [reduced.blocks]
+    )
+
+    useEffect(() => {
+        blocksByIdRef.current = reconciled.byId
+    }, [reconciled.byId])
+
+    // 创建一个虚拟的 Session 对象用于 Runtime
+    const virtualSession: Session = useMemo(() => ({
+        id: props.reviewSessionId,
+        active: reviewSession?.active ?? false,
+        thinking: reviewSession?.thinking ?? false,
+        agentState: reviewSession?.agentState ?? null,
+        permissionMode: reviewSession?.permissionMode ?? 'default',
+        modelMode: reviewSession?.modelMode ?? 'default',
+        modelReasoningEffort: reviewSession?.modelReasoningEffort ?? null,
+        metadata: reviewSession?.metadata ?? null,
+        createdAt: reviewSession?.createdAt ?? Date.now(),
+        namespace: reviewSession?.namespace ?? ''
+    }), [props.reviewSessionId, reviewSession])
+
+    // 发送消息到 Review Session
+    const handleSendMessage = useCallback((text: string) => {
+        api.sendMessage(props.reviewSessionId, { text })
+    }, [api, props.reviewSessionId])
+
+    // 中止 Review Session
+    const handleAbort = useCallback(async () => {
+        await api.abortSession(props.reviewSessionId)
+    }, [api, props.reviewSessionId])
+
+    // 创建运行时
+    const runtime = useHappyRuntime({
+        session: virtualSession,
+        blocks: reconciled.blocks,
+        isSending: false,
+        onSendMessage: handleSendMessage,
+        onAbort: handleAbort
+    })
 
     // 开始 Review
     const startReviewMutation = useMutation({
@@ -283,15 +246,10 @@ export function ReviewPanel(props: {
         }
     })
 
-    // 应用建议
-    const applySuggestionMutation = useMutation({
-        mutationFn: async (suggestion: ReviewSuggestion) => {
-            return await api.applyReviewSuggestion(currentReview!.id, suggestion.action)
-        },
-        onSuccess: (_, suggestion) => {
-            setAppliedSuggestions(prev => new Set(prev).add(suggestion.id))
-        }
-    })
+    // 刷新
+    const handleRefresh = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: ['messages', props.reviewSessionId] })
+    }, [queryClient, props.reviewSessionId])
 
     // 气泡模式
     if (!isExpanded) {
@@ -303,7 +261,7 @@ export function ReviewPanel(props: {
                 title="打开 Review AI"
             >
                 <ReviewIcon className="w-6 h-6" />
-                {currentReview?.status === 'active' && (
+                {(currentReview?.status === 'active' || reviewSession?.thinking) && (
                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-pulse" />
                 )}
             </button>
@@ -340,6 +298,9 @@ export function ReviewPanel(props: {
                     <GripIcon className="w-4 h-4 text-[var(--app-hint)]" />
                     <ReviewIcon className="w-4 h-4 text-[var(--app-fg)]" />
                     <span className="text-sm font-medium">Review AI</span>
+                    {reviewSession?.thinking && (
+                        <LoadingIcon className="w-4 h-4 text-green-500" />
+                    )}
                 </div>
                 <div className="flex items-center gap-1" onMouseDown={e => e.stopPropagation()}>
                     <button
@@ -353,127 +314,49 @@ export function ReviewPanel(props: {
                 </div>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {/* 状态栏 */}
-                <div className="text-xs text-[var(--app-hint)] px-2">
-                    状态: {currentReview?.status ?? '加载中...'}
-                </div>
-
-                {/* 开始 Review 按钮 - pending 状态时显示 */}
-                {currentReview?.status === 'pending' && (
-                    <div className="text-center py-6">
-                        <button
-                            type="button"
-                            onClick={() => startReviewMutation.mutate()}
-                            disabled={startReviewMutation.isPending}
-                            className="px-6 py-2.5 text-sm font-medium rounded-lg bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-divider)] disabled:opacity-50 transition-colors"
-                        >
-                            {startReviewMutation.isPending ? (
-                                <span className="flex items-center gap-2">
-                                    <LoadingIcon />
-                                    启动中...
-                                </span>
-                            ) : (
-                                '开始 Review'
-                            )}
-                        </button>
-                    </div>
-                )}
-
-                {/* 加载中 */}
-                {!currentReview && (
-                    <div className="text-center py-8">
-                        <LoadingIcon className="w-6 h-6 mx-auto mb-2 text-[var(--app-hint)]" />
-                        <p className="text-sm text-[var(--app-hint)]">
-                            正在加载 Review Session...
-                        </p>
-                    </div>
-                )}
-
-                {/* 正在分析 - active 状态且没有 AI 回复 */}
-                {currentReview?.status === 'active' && !aiResponse && (
-                    <div className="text-center py-8">
-                        <LoadingIcon className="w-8 h-8 mx-auto mb-4 text-[var(--app-hint)]" />
-                        <p className="text-sm text-[var(--app-hint)]">
-                            Review AI 正在分析代码...
-                        </p>
-                    </div>
-                )}
-
-                {/* 建议列表 - 如果解析成功 */}
-                {reviewResult && (
-                    <div className="space-y-4">
-                        {/* 总结 */}
-                        {reviewResult.summary && (
-                            <div className="p-3 rounded-lg bg-[var(--app-subtle-bg)] text-sm">
-                                <p className="text-[var(--app-fg)]">{reviewResult.summary}</p>
-                            </div>
-                        )}
-
-                        {/* 建议卡片 */}
-                        {reviewResult.suggestions.length === 0 ? (
-                            <div className="text-center py-4 text-sm text-[var(--app-hint)]">
-                                没有发现问题，代码看起来不错！
-                            </div>
+            {/* 开始 Review 按钮 - pending 状态时显示 */}
+            {currentReview?.status === 'pending' && (
+                <div className="border-b border-[var(--app-divider)] p-3 bg-[var(--app-subtle-bg)]">
+                    <button
+                        type="button"
+                        onClick={() => startReviewMutation.mutate()}
+                        disabled={startReviewMutation.isPending}
+                        className="w-full px-4 py-2 text-sm font-medium rounded-lg bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-divider)] disabled:opacity-50 transition-colors"
+                    >
+                        {startReviewMutation.isPending ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <LoadingIcon />
+                                启动中...
+                            </span>
                         ) : (
-                            <div className="space-y-3">
-                                {reviewResult.suggestions.map((suggestion) => {
-                                    const isApplied = appliedSuggestions.has(suggestion.id)
-                                    return (
-                                        <div
-                                            key={suggestion.id}
-                                            className={`p-3 rounded-lg border ${isApplied ? 'border-green-500/30 bg-green-500/5' : 'border-[var(--app-divider)] bg-[var(--app-bg)]'}`}
-                                        >
-                                            <div className="flex items-start justify-between gap-2 mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getSeverityColor(suggestion.severity)}`}>
-                                                        {suggestion.severity.toUpperCase()}
-                                                    </span>
-                                                    <span className="text-xs text-[var(--app-hint)]">
-                                                        {getTypeLabel(suggestion.type)}
-                                                    </span>
-                                                </div>
-                                                {isApplied ? (
-                                                    <span className="flex items-center gap-1 text-xs text-green-500">
-                                                        <CheckIcon className="w-3 h-3" />
-                                                        已发送
-                                                    </span>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => applySuggestionMutation.mutate(suggestion)}
-                                                        disabled={applySuggestionMutation.isPending}
-                                                        className="px-2 py-1 text-xs rounded bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-divider)] disabled:opacity-50"
-                                                    >
-                                                        应用
-                                                    </button>
-                                                )}
-                                            </div>
-                                            <h4 className="text-sm font-medium text-[var(--app-fg)] mb-1">
-                                                {suggestion.title}
-                                            </h4>
-                                            <p className="text-xs text-[var(--app-hint)] leading-relaxed">
-                                                {suggestion.description}
-                                            </p>
-                                        </div>
-                                    )
-                                })}
-                            </div>
+                            '开始 Review'
                         )}
-                    </div>
-                )}
+                    </button>
+                </div>
+            )}
 
-                {/* AI 原始回复 - 总是显示（如果有的话）*/}
-                {aiResponse && (
-                    <div className="space-y-2">
-                        <p className="text-xs text-[var(--app-hint)]">Review AI 回复：</p>
-                        <div className="p-3 rounded-lg bg-[var(--app-subtle-bg)] text-sm whitespace-pre-wrap text-[var(--app-fg)] leading-relaxed">
-                            {aiResponse}
-                        </div>
-                    </div>
-                )}
-            </div>
+            {/* 对话界面 */}
+            <AssistantRuntimeProvider runtime={runtime}>
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                    <HappyThread
+                        key={props.reviewSessionId}
+                        api={api}
+                        sessionId={props.reviewSessionId}
+                        metadata={reviewSession?.metadata ?? null}
+                        disabled={!reviewSession?.active}
+                        onRefresh={handleRefresh}
+                        onRetryMessage={undefined}
+                        isLoadingMessages={isLoadingMessages}
+                        messagesWarning={null}
+                        hasMoreMessages={false}
+                        isLoadingMoreMessages={false}
+                        onLoadMore={async () => {}}
+                        rawMessagesCount={messages.length}
+                        normalizedMessagesCount={normalizedMessages.length}
+                        renderedMessagesCount={reconciled.blocks.length}
+                    />
+                </div>
+            </AssistantRuntimeProvider>
         </div>
     )
 }
