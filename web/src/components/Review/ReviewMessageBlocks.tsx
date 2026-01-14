@@ -62,32 +62,27 @@ function extractJsonFromText(text: string): string | null {
     // 1. 尝试 ```json 代码块
     const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
     if (jsonBlockMatch) {
-        console.log('[extractJsonFromText] Found json block')
         return jsonBlockMatch[1].trim()
     }
 
     // 2. 尝试普通 ``` 代码块
     const codeBlockMatch = text.match(/```\s*([\s\S]*?)\s*```/)
     if (codeBlockMatch) {
-        console.log('[extractJsonFromText] Found code block')
         return codeBlockMatch[1].trim()
     }
 
     // 3. 尝试直接 JSON 数组（以 [ 开头，以 ] 结尾）- 贪婪匹配
     const arrayMatch = text.match(/(\[\s*\{[\s\S]*\}\s*\])/)
     if (arrayMatch) {
-        console.log('[extractJsonFromText] Found array')
         return arrayMatch[1].trim()
     }
 
     // 4. 尝试直接 JSON 对象（以 { 开头，以 } 结尾，包含 round 和 summary）
     const objectMatch = text.match(/(\{\s*"round"\s*:[\s\S]*?"summary"\s*:[\s\S]*?\})/)
     if (objectMatch) {
-        console.log('[extractJsonFromText] Found object')
         return objectMatch[1].trim()
     }
 
-    console.log('[extractJsonFromText] No match found, text preview:', text.slice(0, 300))
     return null
 }
 
@@ -110,6 +105,23 @@ function isValidSummaryJson(parsed: unknown): parsed is Array<{ round: number; s
 }
 
 /**
+ * 快速检查 JSON 字符串是否看起来完整（基本的括号匹配）
+ * 用于在 streaming 过程中避免尝试解析不完整的 JSON
+ */
+function looksLikeCompleteJson(jsonStr: string): boolean {
+    const trimmed = jsonStr.trim()
+    if (trimmed.startsWith('[')) {
+        // 数组：必须以 ] 结尾
+        return trimmed.endsWith(']')
+    }
+    if (trimmed.startsWith('{')) {
+        // 对象：必须以 } 结尾
+        return trimmed.endsWith('}')
+    }
+    return false
+}
+
+/**
  * 检测是否为 Review JSON 汇总结果
  * 支持单个对象或数组格式，多种文本格式
  */
@@ -117,15 +129,17 @@ export function isReviewSummaryResult(text: string): boolean {
     const jsonStr = extractJsonFromText(text)
     if (!jsonStr) return false
 
+    // 快速检查：如果 JSON 看起来不完整（streaming 中），直接返回 false
+    // 这样可以避免大量无意义的 parse error 日志
+    if (!looksLikeCompleteJson(jsonStr)) {
+        return false
+    }
+
     try {
         const parsed = JSON.parse(jsonStr)
-        const isValid = isValidSummaryJson(parsed)
-        if (!isValid) {
-            console.log('[isReviewSummaryResult] JSON valid but not summary format:', typeof parsed, Array.isArray(parsed) ? `array[${parsed.length}]` : 'object')
-        }
-        return isValid
-    } catch (e) {
-        console.log('[isReviewSummaryResult] JSON parse error:', (e as Error).message, 'jsonStr preview:', jsonStr.slice(0, 100))
+        return isValidSummaryJson(parsed)
+    } catch {
+        // 静默处理解析错误，因为 streaming 时经常会出现
         return false
     }
 }
