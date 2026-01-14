@@ -424,15 +424,22 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         // 获取 Review Session 的最新 AI 回复
         const messagesResult = await engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 50, beforeSeq: null })
 
-        console.log('[Review] Execute - messages count:', messagesResult.messages.length)
+        // 详细日志用于调试
+        console.log('[Review Execute] Session:', reviewSession.reviewSessionId)
+        console.log('[Review Execute] Messages count:', messagesResult.messages.length)
 
         // 提取最新的 AI 回复
         const agentMessages: string[] = []
         for (const m of messagesResult.messages) {
             const content = m.content as Record<string, unknown>
-            console.log('[Review] Message role:', content?.role, 'type:', content?.type)
+            const role = content?.role
+            const type = content?.type
 
-            if (content?.role === 'agent') {
+            // 打印每条消息的关键信息
+            console.log('[Review Execute] Msg:', { role, type, hasContent: !!content?.content })
+
+            // agent 消息的 type 可能是 'text' 或其他
+            if (role === 'agent') {
                 const payload = content?.content as Record<string, unknown>
                 const data = payload?.data
                 let text = ''
@@ -449,7 +456,12 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         }
 
         if (agentMessages.length === 0) {
-            console.log('[Review] No agent messages found, raw messages:', JSON.stringify(messagesResult.messages.slice(0, 3), null, 2))
+            // 打印原始消息用于调试
+            const rawSample = messagesResult.messages.slice(0, 5).map(m => {
+                const c = m.content as Record<string, unknown>
+                return { role: c?.role, type: c?.type, content: JSON.stringify(c?.content).slice(0, 200) }
+            })
+            console.log('[Review Execute] No agent messages found. Sample:', JSON.stringify(rawSample))
             return c.json({ error: 'No review output found' }, 400)
         }
 
