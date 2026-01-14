@@ -484,12 +484,25 @@ export class AutoReviewService {
             const newExistingRounds = await this.reviewStore.getReviewRounds(reviewId)
             const pendingCount = allRounds.length - newExistingRounds.length
 
+            // 计算未 review 的轮次数
+            const executions = await this.reviewStore.getReviewExecutions(reviewId)
+            const reviewedRoundNumbers = new Set<number>()
+            for (const exec of executions) {
+                if (exec.status === 'completed' && exec.reviewedRoundNumbers) {
+                    for (const roundNum of exec.reviewedRoundNumbers) {
+                        reviewedRoundNumbers.add(roundNum)
+                    }
+                }
+            }
+            const unreviewedCount = newExistingRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber)).length
+
             this.broadcastSyncStatus(reviewSession, {
                 status: pendingCount > 0 ? 'syncing' : 'complete',
                 totalRounds: allRounds.length,
                 summarizedRounds: newExistingRounds.length,
                 pendingRounds: pendingCount,
-                savedRounds
+                savedRounds,
+                unreviewedRounds: unreviewedCount
             })
         } catch (err) {
             console.error('[ReviewSync] Failed to save summary:', err)
@@ -506,6 +519,7 @@ export class AutoReviewService {
         pendingRounds: number
         syncingRounds?: number[]
         savedRounds?: number[]
+        unreviewedRounds?: number
     }): void {
         if (!this.sseManager) return
 

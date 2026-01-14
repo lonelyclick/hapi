@@ -223,6 +223,7 @@ export function useSSE(options: {
                     pendingRounds?: number
                     syncingRounds?: number[]
                     savedRounds?: number[]
+                    unreviewedRounds?: number
                 }
                 if (data.reviewSessionId) {
                     if (import.meta.env.DEV) {
@@ -231,12 +232,18 @@ export function useSSE(options: {
                     // 直接更新 pending rounds 数据
                     queryClient.setQueryData(
                         ['review-pending-rounds', data.reviewSessionId],
-                        {
+                        (old: { unreviewedRounds?: number; hasUnreviewedRounds?: boolean; reviewedRounds?: number } | undefined) => ({
+                            ...old,
                             totalRounds: data.totalRounds ?? 0,
                             summarizedRounds: data.summarizedRounds ?? 0,
                             pendingRounds: data.pendingRounds ?? 0,
-                            hasPendingRounds: (data.pendingRounds ?? 0) > 0
-                        }
+                            hasPendingRounds: (data.pendingRounds ?? 0) > 0,
+                            // 更新 unreviewedRounds（如果后端发送了的话）
+                            ...(data.unreviewedRounds !== undefined ? {
+                                unreviewedRounds: data.unreviewedRounds,
+                                hasUnreviewedRounds: data.unreviewedRounds > 0
+                            } : {})
+                        })
                     )
                     // 同时存储同步状态（用于显示 "正在同步..." 等）
                     queryClient.setQueryData(
