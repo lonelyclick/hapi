@@ -513,9 +513,16 @@ export function ReviewPanel(props: {
     const allReviewTexts = useMemo(() => {
         console.log('[ReviewPanel] Searching for suggestions in', reconciled.blocks.length, 'blocks')
         // 倒序查找第一个有效的 review 结果
+        let agentTextCount = 0
         for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
             const block = reconciled.blocks[i]
             if (block.kind !== 'agent-text') continue
+            agentTextCount++
+
+            // 打印最后 3 个 agent-text block 的前 200 字符
+            if (agentTextCount <= 3) {
+                console.log(`[ReviewPanel] agent-text #${agentTextCount}:`, block.text.substring(0, 200))
+            }
 
             const result = parseReviewResult(block.text)
             // 只要能解析出 suggestions（包括空数组），就认为是有效结果
@@ -530,7 +537,7 @@ export function ReviewPanel(props: {
                 return [block.text]
             }
         }
-        console.log('[ReviewPanel] No suggestions found')
+        console.log('[ReviewPanel] No suggestions found in', agentTextCount, 'agent-text blocks')
         return []
     }, [reconciled.blocks])
 
