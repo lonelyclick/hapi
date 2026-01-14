@@ -152,6 +152,7 @@ async function main() {
         jwtSecret,
         store,
         reviewStore,
+        autoReviewService,
         socketEngine: socketServer.engine
     })
 

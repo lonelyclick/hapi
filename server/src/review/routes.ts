@@ -10,6 +10,7 @@ import type { SyncEngine, DecryptedMessage } from '../sync/syncEngine'
 import type { SSEManager } from '../sse/sseManager'
 import type { WebAppEnv } from '../web/middleware/auth'
 import type { ReviewStore } from './store'
+import type { AutoReviewService } from './autoReview'
 
 // Review 上下文最大消息数
 const REVIEW_CONTEXT_MAX_MESSAGES = 10
@@ -231,7 +232,8 @@ ${roundsSummary}
 export function createReviewRoutes(
     reviewStore: ReviewStore,
     getSyncEngine: () => SyncEngine | null,
-    getSseManager: () => SSEManager | null
+    getSseManager: () => SSEManager | null,
+    autoReviewService?: AutoReviewService
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -323,7 +325,7 @@ export function createReviewRoutes(
             return c.json({ error: 'Review session failed to come online' }, 500)
         }
 
-        // 保存 Review Session 记录（状态为 pending，等待用户手动触发）
+        // 保存 Review Session 记录
         const reviewSession = await reviewStore.createReviewSession({
             namespace,
             mainSessionId,
@@ -332,6 +334,14 @@ export function createReviewRoutes(
             reviewModelVariant,
             contextSummary
         })
+
+        // 自动触发同步历史对话
+        if (autoReviewService) {
+            // 异步触发，不阻塞响应
+            autoReviewService.triggerSync(mainSessionId).catch(err => {
+                console.error('[Review] Failed to trigger auto sync:', err)
+            })
+        }
 
         return c.json({
             id: reviewSession.id,

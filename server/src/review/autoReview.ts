@@ -1,12 +1,19 @@
 /**
- * Review 同步检测服务
+ * Review 自动同步服务
  *
- * 主 Session 每轮对话结束后，检查是否有活跃的 Review Session 需要同步新数据
+ * 1. 主 Session 每轮对话结束后，自动触发同步到 Review Session
+ * 2. Review Session AI 回复结束后，自动保存汇总结果
+ * 3. 实时通知前端同步状态
  */
 
 import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { SSEManager } from '../sse/sseManager'
-import type { ReviewStore } from './store'
+import type { ReviewStore, StoredReviewSession } from './store'
+
+// 同步配置
+const MAX_BATCH_CHARS = 50000  // 每批最大字符数
+const MAX_ROUNDS_PER_BATCH = 10  // 每批最大轮数
+const MIN_ROUNDS_PER_BATCH = 1   // 每批最小轮数
 
 /**
  * 从消息内容中提取用户文本
@@ -90,7 +97,6 @@ function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown 
         const aiText = extractAIText(message.content)
 
         if (userText) {
-            // 用户输入开始新的一轮
             if (currentRound) {
                 rounds.push(currentRound)
             }
@@ -102,13 +108,11 @@ function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown 
                 messageIds: [message.id]
             }
         } else if (aiText && currentRound) {
-            // AI 回复添加到当前轮
             currentRound.aiMessages.push(aiText)
             currentRound.messageIds.push(message.id)
         }
     }
 
-    // 添加最后一轮
     if (currentRound) {
         rounds.push(currentRound)
     }
@@ -120,94 +124,368 @@ export class AutoReviewService {
     private engine: SyncEngine
     private reviewStore: ReviewStore
     private sseManager: SSEManager | null = null
+    // 正在同步的 Review Session（防止重复触发）
+    private syncingReviewIds: Set<string> = new Set()
+    // Review Session ID -> Main Session ID 的映射（用于监听 Review AI 回复）
+    private reviewToMainMap: Map<string, string> = new Map()
 
     constructor(engine: SyncEngine, reviewStore: ReviewStore) {
         this.engine = engine
         this.reviewStore = reviewStore
     }
 
-    /**
-     * 设置 SSE Manager（用于通知前端）
-     */
     setSseManager(sseManager: SSEManager): void {
         this.sseManager = sseManager
     }
 
-    /**
-     * 启动服务，监听 session-updated 事件（AI 回复结束）
-     */
     start(): void {
         this.engine.subscribe(this.handleEvent.bind(this))
-        console.log('[ReviewSync] Service started - monitoring session updates')
+        console.log('[ReviewSync] Service started - auto sync enabled')
     }
 
     private async handleEvent(event: SyncEvent): Promise<void> {
-        // 监听 session-updated 事件，检查是否是 AI 回复结束
         if (event.type !== 'session-updated') return
         if (!event.sessionId) return
 
-        const data = event.data as { wasThinking?: boolean; thinking?: boolean } | undefined
-
-        // wasThinking: true 表示 AI 刚刚完成思考（从 thinking 变为非 thinking）
+        const data = event.data as { wasThinking?: boolean } | undefined
         if (!data?.wasThinking) return
 
         const sessionId = event.sessionId
-
-        // 检查是否是 Review Session（不处理 Review Session 自己的事件）
         const session = this.engine.getSession(sessionId)
-        if (session?.metadata?.source === 'review') return
 
-        // 检查是否有活跃的 Review Session
-        await this.checkAndNotifyPendingRounds(sessionId)
+        // 检查是否是 Review Session 的 AI 回复结束
+        if (session?.metadata?.source === 'review') {
+            await this.handleReviewAIResponse(sessionId)
+            return
+        }
+
+        // 主 Session AI 回复结束，检查是否需要同步
+        await this.handleMainSessionComplete(sessionId)
     }
 
     /**
-     * 检查是否有未同步的轮次，并通知前端
+     * 主 Session AI 回复结束后，自动触发同步
      */
-    private async checkAndNotifyPendingRounds(mainSessionId: string): Promise<void> {
+    private async handleMainSessionComplete(mainSessionId: string): Promise<void> {
         try {
-            // 获取活跃的 Review Session
             const reviewSession = await this.reviewStore.getActiveReviewSession(mainSessionId)
             if (!reviewSession) {
-                // 没有活跃的 Review Session，不需要处理
                 return
             }
 
+            // 注册映射关系
+            this.reviewToMainMap.set(reviewSession.reviewSessionId, mainSessionId)
+
+            // 触发同步
+            await this.syncRounds(reviewSession)
+        } catch (err) {
+            console.error('[ReviewSync] Failed to handle main session complete:', err)
+        }
+    }
+
+    /**
+     * Review Session AI 回复结束后，保存汇总结果并继续同步
+     */
+    private async handleReviewAIResponse(reviewSessionId: string): Promise<void> {
+        const mainSessionId = this.reviewToMainMap.get(reviewSessionId)
+        if (!mainSessionId) {
+            return
+        }
+
+        try {
+            const reviewSession = await this.reviewStore.getActiveReviewSession(mainSessionId)
+            if (!reviewSession || reviewSession.reviewSessionId !== reviewSessionId) {
+                return
+            }
+
+            // 保存汇总结果
+            await this.saveSummary(reviewSession)
+
+            // 检查是否还有待同步的轮次
+            await this.syncRounds(reviewSession)
+        } catch (err) {
+            console.error('[ReviewSync] Failed to handle review AI response:', err)
+        }
+    }
+
+    /**
+     * 同步轮次到 Review AI
+     */
+    private async syncRounds(reviewSession: StoredReviewSession): Promise<void> {
+        const reviewId = reviewSession.id
+        const mainSessionId = reviewSession.mainSessionId
+
+        // 防止重复同步
+        if (this.syncingReviewIds.has(reviewId)) {
+            return
+        }
+
+        // 检查 Review AI 是否正在处理中
+        const reviewAISession = this.engine.getSession(reviewSession.reviewSessionId)
+        if (reviewAISession?.thinking) {
+            return
+        }
+
+        try {
+            this.syncingReviewIds.add(reviewId)
+
             // 获取主 Session 所有消息
             const allMessages = await this.engine.getAllMessages(mainSessionId)
-
-            // 按轮次分组
             const allRounds = groupMessagesIntoRounds(allMessages)
 
             // 获取已汇总的轮次
-            const existingRounds = await this.reviewStore.getReviewRounds(reviewSession.id)
+            const existingRounds = await this.reviewStore.getReviewRounds(reviewId)
             const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
-            // 计算未汇总的轮次
+            // 找出未汇总的轮次
             const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
 
-            console.log(`[ReviewSync] Session ${mainSessionId.slice(0, 8)}: total=${allRounds.length}, summarized=${existingRounds.length}, pending=${pendingRounds.length}`)
+            // 通知前端当前状态
+            this.broadcastSyncStatus(reviewSession, {
+                status: 'checking',
+                totalRounds: allRounds.length,
+                summarizedRounds: existingRounds.length,
+                pendingRounds: pendingRounds.length
+            })
 
-            // 通过 SSE 通知前端
-            if (this.sseManager) {
-                const session = this.engine.getSession(mainSessionId)
-                if (session) {
-                    this.sseManager.broadcast({
-                        type: 'review-sync-status',
-                        namespace: session.namespace,
-                        sessionId: mainSessionId,
-                        data: {
-                            reviewSessionId: reviewSession.id,
-                            totalRounds: allRounds.length,
-                            summarizedRounds: existingRounds.length,
-                            pendingRounds: pendingRounds.length,
-                            hasPendingRounds: pendingRounds.length > 0
-                        }
-                    } as SyncEvent)
+            if (pendingRounds.length === 0) {
+                console.log(`[ReviewSync] Session ${mainSessionId.slice(0, 8)}: all rounds synced`)
+                this.broadcastSyncStatus(reviewSession, {
+                    status: 'complete',
+                    totalRounds: allRounds.length,
+                    summarizedRounds: existingRounds.length,
+                    pendingRounds: 0
+                })
+                return
+            }
+
+            // 计算批次
+            const batchRounds: typeof pendingRounds = []
+            let currentBatchSize = 0
+
+            for (const round of pendingRounds) {
+                const roundSize = round.userInput.length + round.aiMessages.join('').length + 200
+                if (currentBatchSize + roundSize > MAX_BATCH_CHARS && batchRounds.length >= MIN_ROUNDS_PER_BATCH) {
+                    break
+                }
+                batchRounds.push(round)
+                currentBatchSize += roundSize
+                if (batchRounds.length >= MAX_ROUNDS_PER_BATCH) {
+                    break
                 }
             }
+
+            // 构建同步 Prompt
+            let syncPrompt = `## 对话汇总任务\n\n请帮我汇总以下 ${batchRounds.length} 轮对话的内容。\n\n`
+
+            for (const round of batchRounds) {
+                syncPrompt += `### 第 ${round.roundNumber} 轮对话\n\n**用户输入：**\n${round.userInput}\n\n**AI 回复：**\n${round.aiMessages.join('\n\n---\n\n')}\n\n---\n\n`
+            }
+
+            syncPrompt += `### 要求\n\n请用 JSON 数组格式输出汇总结果，每轮对话一个 JSON 对象：\n\n\`\`\`json\n[\n${batchRounds.map(r => `  {\n    "round": ${r.roundNumber},\n    "summary": "用简洁的语言汇总 AI 在这一轮中做了什么，重点关注：执行了什么操作、修改了哪些文件、解决了什么问题。200-500字以内。"\n  }`).join(',\n')}\n]\n\`\`\`\n\n只输出 JSON 数组，不要输出其他内容。`
+
+            // 通知前端正在同步
+            this.broadcastSyncStatus(reviewSession, {
+                status: 'syncing',
+                totalRounds: allRounds.length,
+                summarizedRounds: existingRounds.length,
+                pendingRounds: pendingRounds.length,
+                syncingRounds: batchRounds.map(r => r.roundNumber)
+            })
+
+            console.log(`[ReviewSync] Session ${mainSessionId.slice(0, 8)}: syncing rounds ${batchRounds.map(r => r.roundNumber).join(', ')}`)
+
+            // 发送给 Review AI
+            await this.engine.sendMessage(reviewSession.reviewSessionId, {
+                text: syncPrompt,
+                sentFrom: 'webapp'
+            })
+
+            // 更新状态为 active
+            if (reviewSession.status === 'pending') {
+                await this.reviewStore.updateReviewSessionStatus(reviewId, 'active')
+            }
+        } finally {
+            this.syncingReviewIds.delete(reviewId)
+        }
+    }
+
+    /**
+     * 保存 Review AI 的汇总结果
+     */
+    private async saveSummary(reviewSession: StoredReviewSession): Promise<void> {
+        const reviewId = reviewSession.id
+        const mainSessionId = reviewSession.mainSessionId
+
+        try {
+            // 获取 Review Session 的最新消息
+            const messagesResult = await this.engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 10, beforeSeq: null })
+
+            // 提取汇总
+            let summaries: Array<{ round: number; summary: string }> = []
+
+            for (const m of messagesResult.messages.reverse()) {
+                const content = m.content as Record<string, unknown>
+                if (content?.role !== 'agent') continue
+
+                let payload: Record<string, unknown> | null = null
+                const rawContent = content?.content
+                if (typeof rawContent === 'string') {
+                    try {
+                        payload = JSON.parse(rawContent)
+                    } catch {
+                        payload = null
+                    }
+                } else if (typeof rawContent === 'object' && rawContent) {
+                    payload = rawContent as Record<string, unknown>
+                }
+
+                if (!payload) continue
+
+                const data = payload.data as Record<string, unknown>
+                if (!data || data.type !== 'assistant') continue
+
+                const message = data.message as Record<string, unknown>
+                if (message?.content) {
+                    const contentArr = message.content as Array<{ type?: string; text?: string }>
+                    for (const item of contentArr) {
+                        if (item.type === 'text' && item.text) {
+                            // 提取 JSON
+                            const jsonBlocks = [...item.text.matchAll(/```json\s*([\s\S]*?)\s*```/g)]
+                            const jsonMatch = jsonBlocks.length > 0 ? jsonBlocks[jsonBlocks.length - 1] : null
+                            if (jsonMatch) {
+                                let jsonContent = jsonMatch[1].trim()
+                                // 修复未转义的双引号
+                                const lines = jsonContent.split('\n')
+                                const fixedLines = lines.map(line => {
+                                    const summaryMatch = line.match(/^(\s*"summary":\s*")(.*)("(?:,)?)\s*$/)
+                                    if (summaryMatch) {
+                                        let content = summaryMatch[2]
+                                        content = content.replace(/(?<!\\)"/g, '\\"')
+                                        return summaryMatch[1] + content + summaryMatch[3]
+                                    }
+                                    return line
+                                })
+                                jsonContent = fixedLines.join('\n')
+
+                                try {
+                                    const parsed = JSON.parse(jsonContent)
+                                    if (Array.isArray(parsed)) {
+                                        summaries = parsed.filter(p => p.round && p.summary)
+                                    } else if (parsed.round && parsed.summary) {
+                                        summaries = [parsed]
+                                    }
+                                    if (summaries.length > 0) break
+                                } catch {
+                                    // 继续尝试
+                                }
+                            }
+                            // 直接解析
+                            try {
+                                const parsed = JSON.parse(item.text)
+                                if (Array.isArray(parsed)) {
+                                    summaries = parsed.filter(p => p.round && p.summary)
+                                } else if (parsed.round && parsed.summary) {
+                                    summaries = [parsed]
+                                }
+                                if (summaries.length > 0) break
+                            } catch {
+                                // 继续
+                            }
+                        }
+                    }
+                }
+                if (summaries.length > 0) break
+            }
+
+            if (summaries.length === 0) {
+                console.log(`[ReviewSync] Session ${mainSessionId.slice(0, 8)}: no summary found in AI response`)
+                return
+            }
+
+            // 获取主 Session 消息
+            const allMessages = await this.engine.getAllMessages(mainSessionId)
+            const allRounds = groupMessagesIntoRounds(allMessages)
+
+            // 获取已存在的轮次
+            const existingRounds = await this.reviewStore.getReviewRounds(reviewId)
+            const existingRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
+
+            // 保存
+            const savedRounds: number[] = []
+            for (const summary of summaries) {
+                if (existingRoundNumbers.has(summary.round)) {
+                    continue
+                }
+                const targetRound = allRounds.find(r => r.roundNumber === summary.round)
+                if (!targetRound) {
+                    continue
+                }
+                await this.reviewStore.createReviewRound({
+                    reviewSessionId: reviewId,
+                    roundNumber: summary.round,
+                    userInput: targetRound.userInput,
+                    aiSummary: summary.summary,
+                    originalMessageIds: targetRound.messageIds
+                })
+                savedRounds.push(summary.round)
+            }
+
+            if (savedRounds.length > 0) {
+                console.log(`[ReviewSync] Session ${mainSessionId.slice(0, 8)}: saved rounds ${savedRounds.join(', ')}`)
+            }
+
+            // 通知前端
+            const newExistingRounds = await this.reviewStore.getReviewRounds(reviewId)
+            const pendingCount = allRounds.length - newExistingRounds.length
+
+            this.broadcastSyncStatus(reviewSession, {
+                status: pendingCount > 0 ? 'syncing' : 'complete',
+                totalRounds: allRounds.length,
+                summarizedRounds: newExistingRounds.length,
+                pendingRounds: pendingCount,
+                savedRounds
+            })
         } catch (err) {
-            console.error('[ReviewSync] Failed to check pending rounds:', err)
+            console.error('[ReviewSync] Failed to save summary:', err)
+        }
+    }
+
+    /**
+     * 广播同步状态到前端
+     */
+    private broadcastSyncStatus(reviewSession: StoredReviewSession, data: {
+        status: 'checking' | 'syncing' | 'complete'
+        totalRounds: number
+        summarizedRounds: number
+        pendingRounds: number
+        syncingRounds?: number[]
+        savedRounds?: number[]
+    }): void {
+        if (!this.sseManager) return
+
+        const session = this.engine.getSession(reviewSession.mainSessionId)
+        if (!session) return
+
+        this.sseManager.broadcast({
+            type: 'review-sync-status',
+            namespace: session.namespace,
+            sessionId: reviewSession.mainSessionId,
+            data: {
+                reviewSessionId: reviewSession.id,
+                ...data
+            }
+        } as SyncEvent)
+    }
+
+    /**
+     * 手动触发同步（供 API 调用）
+     */
+    async triggerSync(mainSessionId: string): Promise<void> {
+        const reviewSession = await this.reviewStore.getActiveReviewSession(mainSessionId)
+        if (reviewSession) {
+            this.reviewToMainMap.set(reviewSession.reviewSessionId, mainSessionId)
+            await this.syncRounds(reviewSession)
         }
     }
 }

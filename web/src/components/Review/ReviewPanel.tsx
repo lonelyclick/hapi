@@ -85,7 +85,7 @@ export function ReviewPanel(props: {
         return () => window.removeEventListener('resize', checkMobile)
     }, [])
 
-    // 同步进度状态
+    // 同步进度状态（手动同步时使用）
     const [syncProgress, setSyncProgress] = useState<{
         isRunning: boolean
         totalRounds: number
@@ -163,6 +163,18 @@ export function ReviewPanel(props: {
 
     // 获取当前 Review Session 的 ID（用于检查未汇总轮次）
     const currentReviewForPending = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
+
+    // 从 SSE 推送获取的自动同步状态
+    const { data: autoSyncStatus } = useQuery<{
+        status?: 'checking' | 'syncing' | 'complete'
+        syncingRounds?: number[]
+        savedRounds?: number[]
+        updatedAt?: number
+    }>({
+        queryKey: ['review-sync-status', currentReviewForPending?.id],
+        enabled: Boolean(currentReviewForPending?.id),
+        staleTime: Infinity
+    })
 
     // 检查未汇总的轮次（pending 和 active 状态都需要查询）
     // 不需要轮询，只在用户点击同步或同步完成后手动刷新
@@ -582,66 +594,46 @@ export function ReviewPanel(props: {
                 {/* pending 或 active 状态 - 显示同步和 Review 按钮 */}
                 {(currentReview?.status === 'pending' || currentReview?.status === 'active') && (
                     <div className="flex flex-col gap-3">
-                        {/* 同步状态提示 */}
-                        {pendingRoundsData && !syncProgress && (
-                            <div className="text-sm text-center text-[var(--app-hint)]">
-                                {pendingRoundsData.hasPendingRounds ? (
-                                    <span>共 {pendingRoundsData.totalRounds} 轮对话，已汇总 {pendingRoundsData.summarizedRounds} 轮，待汇总 {pendingRoundsData.pendingRounds} 轮</span>
+                        {/* 同步状态提示 - 自动同步中显示进度，否则显示状态 */}
+                        {pendingRoundsData && (
+                            <div className="text-sm text-center">
+                                {autoSyncStatus?.status === 'syncing' ? (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-center gap-2 text-[var(--app-fg)]">
+                                            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                            </svg>
+                                            <span>正在自动同步{autoSyncStatus.syncingRounds?.length ? ` 第 ${autoSyncStatus.syncingRounds.join(', ')} 轮` : ''}...</span>
+                                        </div>
+                                        <div className="w-full h-2 bg-[var(--app-divider)] rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-300"
+                                                style={{ width: `${pendingRoundsData.totalRounds > 0 ? Math.round((pendingRoundsData.summarizedRounds / pendingRoundsData.totalRounds) * 100) : 0}%` }}
+                                            />
+                                        </div>
+                                        <div className="text-[var(--app-hint)]">
+                                            已汇总 {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds} 轮
+                                        </div>
+                                    </div>
+                                ) : autoSyncStatus?.status === 'checking' ? (
+                                    <div className="flex items-center justify-center gap-2 text-[var(--app-hint)]">
+                                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        <span>检查同步状态...</span>
+                                    </div>
+                                ) : pendingRoundsData.hasPendingRounds ? (
+                                    <span className="text-[var(--app-hint)]">共 {pendingRoundsData.totalRounds} 轮对话，已汇总 {pendingRoundsData.summarizedRounds} 轮，待汇总 {pendingRoundsData.pendingRounds} 轮</span>
                                 ) : (
                                     <span className="text-green-500">✓ 所有 {pendingRoundsData.totalRounds} 轮对话已汇总完成</span>
                                 )}
                             </div>
                         )}
 
-                        {/* 同步进度条 */}
-                        {syncProgress && (
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="text-[var(--app-fg)] font-medium flex items-center gap-2">
-                                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                        </svg>
-                                        正在同步...
-                                    </span>
-                                    <span className="text-[var(--app-hint)]">
-                                        已汇总 {syncProgress.summarizedRounds}/{syncProgress.totalRounds} 轮 (批次 {syncProgress.currentBatch})
-                                    </span>
-                                </div>
-                                <div className="w-full h-2 bg-[var(--app-divider)] rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-300"
-                                        style={{ width: `${syncProgress.totalRounds > 0 ? Math.round((syncProgress.summarizedRounds / syncProgress.totalRounds) * 100) : 0}%` }}
-                                    />
-                                </div>
-                                {session?.thinking && (
-                                    <div className="flex items-center justify-center gap-2 text-xs text-[var(--app-hint)]">
-                                        <div className="flex gap-1">
-                                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                        </div>
-                                        <span>AI 正在处理...</span>
-                                    </div>
-                                )}
-                                {/* 停止按钮 */}
-                                <button
-                                    type="button"
-                                    onClick={handleStopSync}
-                                    className="w-full px-4 py-2 text-sm font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
-                                >
-                                    <span className="flex items-center justify-center gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <rect x="6" y="6" width="12" height="12" rx="2" />
-                                        </svg>
-                                        停止同步
-                                    </span>
-                                </button>
-                            </div>
-                        )}
-
-                        {/* AI 正在思考时显示进度（非同步状态） */}
-                        {!syncProgress && session?.thinking && (
+                        {/* AI 正在思考时显示进度 */}
+                        {session?.thinking && autoSyncStatus?.status !== 'syncing' && (
                             <div className="flex items-center justify-center gap-3 py-2">
                                 <div className="flex gap-1">
                                     <span className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -652,52 +644,30 @@ export function ReviewPanel(props: {
                             </div>
                         )}
 
-                        {/* 同步数据按钮 - 同步进行中时隐藏 */}
-                        {!syncProgress && (
-                            <button
-                                type="button"
-                                onClick={() => syncRoundsMutation.mutate()}
-                                disabled={syncRoundsMutation.isPending || !pendingRoundsData?.hasPendingRounds || session?.thinking}
-                                className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-slate-500 to-slate-600 text-white shadow-lg hover:from-slate-600 hover:to-slate-700 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
-                            >
+                        {/* 执行 Review 按钮 - 自动同步进行中时禁用 */}
+                        <button
+                            type="button"
+                            onClick={() => startReviewMutation.mutate()}
+                            disabled={startReviewMutation.isPending || pendingRoundsData?.hasPendingRounds || session?.thinking || autoSyncStatus?.status === 'syncing'}
+                            className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            {startReviewMutation.isPending ? (
+                                <span className="flex items-center justify-center gap-3">
+                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    正在执行 Review...
+                                </span>
+                            ) : (
                                 <span className="flex items-center justify-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                        <path d="M3 3v5h5" />
-                                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                                        <path d="M16 16h5v5" />
+                                        <polygon points="5 3 19 12 5 21 5 3" />
                                     </svg>
-                                    {pendingRoundsData?.hasPendingRounds ? `同步数据 (${pendingRoundsData.pendingRounds} 轮待汇总)` : '同步数据'}
+                                    执行 Review
                                 </span>
-                            </button>
-                        )}
-
-                        {/* 执行 Review 按钮 - 同步进行中时隐藏 */}
-                        {!syncProgress && (
-                            <button
-                                type="button"
-                                onClick={() => startReviewMutation.mutate()}
-                                disabled={startReviewMutation.isPending || pendingRoundsData?.hasPendingRounds || session?.thinking}
-                                className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
-                            >
-                                {startReviewMutation.isPending ? (
-                                    <span className="flex items-center justify-center gap-3">
-                                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                        </svg>
-                                        正在执行 Review...
-                                    </span>
-                                ) : (
-                                    <span className="flex items-center justify-center gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <polygon points="5 3 19 12 5 21 5 3" />
-                                        </svg>
-                                        执行 Review
-                                    </span>
-                                )}
-                            </button>
-                        )}
+                            )}
+                        </button>
                     </div>
                 )}
 

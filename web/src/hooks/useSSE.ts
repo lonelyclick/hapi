@@ -215,12 +215,39 @@ export function useSSE(options: {
 
             // 处理 review-sync-status 事件，更新 Review 同步状态
             if (event.type === 'review-sync-status' && 'data' in event && event.data) {
-                const data = event.data as { reviewSessionId?: string }
+                const data = event.data as {
+                    reviewSessionId?: string
+                    status?: string
+                    totalRounds?: number
+                    summarizedRounds?: number
+                    pendingRounds?: number
+                    syncingRounds?: number[]
+                    savedRounds?: number[]
+                }
                 if (data.reviewSessionId) {
                     if (import.meta.env.DEV) {
                         console.log('[sse] review-sync-status', data)
                     }
-                    void queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', data.reviewSessionId] })
+                    // 直接更新 pending rounds 数据
+                    queryClient.setQueryData(
+                        ['review-pending-rounds', data.reviewSessionId],
+                        {
+                            totalRounds: data.totalRounds ?? 0,
+                            summarizedRounds: data.summarizedRounds ?? 0,
+                            pendingRounds: data.pendingRounds ?? 0,
+                            hasPendingRounds: (data.pendingRounds ?? 0) > 0
+                        }
+                    )
+                    // 同时存储同步状态（用于显示 "正在同步..." 等）
+                    queryClient.setQueryData(
+                        ['review-sync-status', data.reviewSessionId],
+                        {
+                            status: data.status,
+                            syncingRounds: data.syncingRounds,
+                            savedRounds: data.savedRounds,
+                            updatedAt: Date.now()
+                        }
+                    )
                 }
             }
 
