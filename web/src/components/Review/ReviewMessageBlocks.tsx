@@ -55,23 +55,58 @@ export function parseReviewSummaryTask(text: string): ParsedRound[] | null {
 }
 
 /**
+ * 尝试从文本中提取 JSON 内容
+ * 支持多种格式：```json 代码块、``` 代码块、直接 JSON
+ */
+function extractJsonFromText(text: string): string | null {
+    // 1. 尝试 ```json 代码块
+    const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
+    if (jsonBlockMatch) return jsonBlockMatch[1].trim()
+
+    // 2. 尝试普通 ``` 代码块
+    const codeBlockMatch = text.match(/```\s*([\s\S]*?)\s*```/)
+    if (codeBlockMatch) return codeBlockMatch[1].trim()
+
+    // 3. 尝试直接 JSON 数组（以 [ 开头，以 ] 结尾）
+    const arrayMatch = text.match(/(\[\s*\{[\s\S]*?\}\s*\])/)
+    if (arrayMatch) return arrayMatch[1].trim()
+
+    // 4. 尝试直接 JSON 对象（以 { 开头，以 } 结尾，包含 round 和 summary）
+    const objectMatch = text.match(/(\{\s*"round"\s*:[\s\S]*?"summary"\s*:[\s\S]*?\})/)
+    if (objectMatch) return objectMatch[1].trim()
+
+    return null
+}
+
+/**
+ * 验证解析后的 JSON 是否为汇总结果格式
+ */
+function isValidSummaryJson(parsed: unknown): parsed is Array<{ round: number; summary: string }> | { round: number; summary: string } {
+    if (Array.isArray(parsed)) {
+        return parsed.length > 0 && parsed.every(item =>
+            typeof item === 'object' && item !== null &&
+            typeof (item as Record<string, unknown>).round === 'number' &&
+            typeof (item as Record<string, unknown>).summary === 'string'
+        )
+    }
+    if (typeof parsed === 'object' && parsed !== null) {
+        const obj = parsed as Record<string, unknown>
+        return typeof obj.round === 'number' && typeof obj.summary === 'string'
+    }
+    return false
+}
+
+/**
  * 检测是否为 Review JSON 汇总结果
- * 支持单个对象或数组格式
+ * 支持单个对象或数组格式，多种文本格式
  */
 export function isReviewSummaryResult(text: string): boolean {
-    // 检查是否包含 ```json 代码块，且内容有 round 和 summary 字段
-    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
-    if (!jsonMatch) return false
+    const jsonStr = extractJsonFromText(text)
+    if (!jsonStr) return false
+
     try {
-        const parsed = JSON.parse(jsonMatch[1])
-        // 支持数组格式
-        if (Array.isArray(parsed)) {
-            return parsed.length > 0 && parsed.every(item =>
-                typeof item.round === 'number' && typeof item.summary === 'string'
-            )
-        }
-        // 支持单个对象格式
-        return typeof parsed.round === 'number' && typeof parsed.summary === 'string'
+        const parsed = JSON.parse(jsonStr)
+        return isValidSummaryJson(parsed)
     } catch {
         return false
     }
@@ -83,22 +118,25 @@ interface ParsedSummary {
 }
 
 /**
- * 从 JSON 汇总结果中提取信息（支持数组和单个对象）
+ * 从 JSON 汇总结果中提取信息（支持数组和单个对象，多种文本格式）
  */
 export function parseReviewSummaryResult(text: string): ParsedSummary[] | null {
-    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
-    if (!jsonMatch) return null
+    const jsonStr = extractJsonFromText(text)
+    if (!jsonStr) return null
+
     try {
-        const parsed = JSON.parse(jsonMatch[1])
+        const parsed = JSON.parse(jsonStr)
         // 支持数组格式
         if (Array.isArray(parsed)) {
             const items = parsed.filter(item =>
+                typeof item === 'object' && item !== null &&
                 typeof item.round === 'number' && typeof item.summary === 'string'
             )
             return items.length > 0 ? items : null
         }
         // 支持单个对象格式
-        if (typeof parsed.round === 'number' && typeof parsed.summary === 'string') {
+        if (typeof parsed === 'object' && parsed !== null &&
+            typeof parsed.round === 'number' && typeof parsed.summary === 'string') {
             return [{ round: parsed.round, summary: parsed.summary }]
         }
     } catch {
