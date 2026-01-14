@@ -426,11 +426,22 @@ export function ReviewPanel(props: {
                 {/* pending 状态 - 显示同步和开始 Review 两个按钮 */}
                 {currentReview?.status === 'pending' && (
                     <div className="flex flex-col gap-3">
-                        {/* 同步数据按钮 */}
+                        {/* 同步状态提示 */}
+                        {pendingRoundsData && (
+                            <div className="text-sm text-center text-[var(--app-hint)]">
+                                {pendingRoundsData.hasPendingRounds ? (
+                                    <span>共 {pendingRoundsData.totalRounds} 轮对话，已汇总 {pendingRoundsData.summarizedRounds} 轮，待汇总 {pendingRoundsData.pendingRounds} 轮</span>
+                                ) : (
+                                    <span className="text-green-500">✓ 所有 {pendingRoundsData.totalRounds} 轮对话已汇总完成</span>
+                                )}
+                            </div>
+                        )}
+
+                        {/* 同步数据按钮 - 只有有待汇总轮次时才启用 */}
                         <button
                             type="button"
                             onClick={() => syncRoundsMutation.mutate()}
-                            disabled={syncRoundsMutation.isPending}
+                            disabled={syncRoundsMutation.isPending || !pendingRoundsData?.hasPendingRounds}
                             className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-slate-500 to-slate-600 text-white shadow-lg hover:from-slate-600 hover:to-slate-700 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
                         >
                             {syncRoundsMutation.isPending ? (
@@ -449,7 +460,7 @@ export function ReviewPanel(props: {
                                         <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
                                         <path d="M16 16h5v5" />
                                     </svg>
-                                    同步数据
+                                    {pendingRoundsData?.hasPendingRounds ? `同步数据 (${pendingRoundsData.pendingRounds} 轮待汇总)` : '同步数据'}
                                 </span>
                             )}
                         </button>
@@ -458,7 +469,7 @@ export function ReviewPanel(props: {
                         <button
                             type="button"
                             onClick={() => startReviewMutation.mutate()}
-                            disabled={startReviewMutation.isPending}
+                            disabled={startReviewMutation.isPending || pendingRoundsData?.hasPendingRounds}
                             className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
                         >
                             {startReviewMutation.isPending ? (
