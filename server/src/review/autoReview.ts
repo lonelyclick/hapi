@@ -446,24 +446,34 @@ export class AutoReviewService {
 
             // 保存
             const savedRounds: number[] = []
+            console.log(`[ReviewSync] saveSummary - allRounds numbers:`, allRounds.map(r => r.roundNumber))
             for (const summary of summaries) {
+                console.log(`[ReviewSync] saveSummary - processing summary for round ${summary.round}`)
                 if (existingRoundNumbers.has(summary.round)) {
+                    console.log(`[ReviewSync] saveSummary - round ${summary.round} already exists, skipping`)
                     continue
                 }
                 const targetRound = allRounds.find(r => r.roundNumber === summary.round)
                 if (!targetRound) {
+                    console.log(`[ReviewSync] saveSummary - round ${summary.round} not found in allRounds, skipping`)
                     continue
                 }
-                await this.reviewStore.createReviewRound({
-                    reviewSessionId: reviewId,
-                    roundNumber: summary.round,
-                    userInput: targetRound.userInput,
-                    aiSummary: summary.summary,
-                    originalMessageIds: targetRound.messageIds,
-                    startedAt: targetRound.startedAt,
-                    endedAt: targetRound.endedAt
-                })
-                savedRounds.push(summary.round)
+                console.log(`[ReviewSync] saveSummary - saving round ${summary.round}`)
+                try {
+                    await this.reviewStore.createReviewRound({
+                        reviewSessionId: reviewId,
+                        roundNumber: summary.round,
+                        userInput: targetRound.userInput,
+                        aiSummary: summary.summary,
+                        originalMessageIds: targetRound.messageIds,
+                        startedAt: targetRound.startedAt,
+                        endedAt: targetRound.endedAt
+                    })
+                    console.log(`[ReviewSync] saveSummary - round ${summary.round} saved successfully`)
+                    savedRounds.push(summary.round)
+                } catch (saveErr) {
+                    console.error(`[ReviewSync] saveSummary - failed to save round ${summary.round}:`, saveErr)
+                }
             }
 
             if (savedRounds.length > 0) {
