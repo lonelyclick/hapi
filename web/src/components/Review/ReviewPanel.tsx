@@ -1,7 +1,9 @@
 /**
  * Review 面板组件
  *
- * 悬浮在右下角的 Review AI 面板
+ * 两种模式：
+ * 1. 气泡模式：右下角悬浮图标
+ * 2. 展开模式：全高度面板，可拖拽宽度，可拖动位置
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react'
@@ -71,12 +73,25 @@ function MinimizeIcon(props: { className?: string }) {
     )
 }
 
+function GripIcon(props: { className?: string }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <circle cx="9" cy="12" r="1" />
+            <circle cx="9" cy="5" r="1" />
+            <circle cx="9" cy="19" r="1" />
+            <circle cx="15" cy="12" r="1" />
+            <circle cx="15" cy="5" r="1" />
+            <circle cx="15" cy="19" r="1" />
+        </svg>
+    )
+}
+
 function getStatusBadge(status: ReviewSession['status']) {
     switch (status) {
         case 'pending':
             return <span className="px-1.5 py-0.5 rounded text-[10px] bg-yellow-500/20 text-yellow-600">等待</span>
         case 'active':
-            return <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-600 animate-pulse">进行中</span>
+            return <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/20 text-green-500 animate-pulse">进行中</span>
         case 'completed':
             return <span className="px-1.5 py-0.5 rounded text-[10px] bg-green-500/20 text-green-600">完成</span>
         case 'cancelled':
@@ -101,7 +116,6 @@ function parseMessages(messagesData: { messages: Array<{ id: string; content: un
         const role = content?.role
 
         if (role === 'user') {
-            // user 消息的 content 可能是 JSON 字符串
             let payload: Record<string, unknown> | null = null
             const rawContent = content?.content
             if (typeof rawContent === 'string') {
@@ -124,7 +138,6 @@ function parseMessages(messagesData: { messages: Array<{ id: string; content: un
                 })
             }
         } else if (role === 'agent') {
-            // agent 消息需要解析 Claude API 格式
             let payload: Record<string, unknown> | null = null
             const rawContent = content?.content
             if (typeof rawContent === 'string') {
@@ -171,26 +184,61 @@ export function ReviewPanel(props: {
     const { api } = useAppContext()
     const queryClient = useQueryClient()
     const messagesEndRef = useRef<HTMLDivElement>(null)
-    const [isExpanded, setIsExpanded] = useState(true)
-    const [panelHeight, setPanelHeight] = useState(400)
-    const [isDragging, setIsDragging] = useState(false)
+    const panelRef = useRef<HTMLDivElement>(null)
 
-    // 拖拽调整高度
-    const handleDragStart = useCallback((e: React.MouseEvent) => {
+    const [isExpanded, setIsExpanded] = useState(true)
+    const [panelWidth, setPanelWidth] = useState(380)
+    const [panelX, setPanelX] = useState<number | null>(null) // null = 靠右
+
+    // 拖拽状态
+    const [dragMode, setDragMode] = useState<'none' | 'resize' | 'move'>('none')
+    const dragStartRef = useRef({ x: 0, width: 0, panelX: 0 })
+
+    // 拖拽宽度
+    const handleResizeStart = useCallback((e: React.MouseEvent) => {
         e.preventDefault()
-        setIsDragging(true)
-    }, [])
+        e.stopPropagation()
+        setDragMode('resize')
+        dragStartRef.current = {
+            x: e.clientX,
+            width: panelWidth,
+            panelX: panelX ?? window.innerWidth - panelWidth - 20
+        }
+    }, [panelWidth, panelX])
+
+    // 拖拽移动
+    const handleMoveStart = useCallback((e: React.MouseEvent) => {
+        e.preventDefault()
+        setDragMode('move')
+        dragStartRef.current = {
+            x: e.clientX,
+            width: panelWidth,
+            panelX: panelX ?? window.innerWidth - panelWidth - 20
+        }
+    }, [panelWidth, panelX])
 
     useEffect(() => {
-        if (!isDragging) return
+        if (dragMode === 'none') return
 
         const handleMouseMove = (e: MouseEvent) => {
-            const newHeight = window.innerHeight - e.clientY - 20
-            setPanelHeight(Math.max(200, Math.min(600, newHeight)))
+            if (dragMode === 'resize') {
+                // 拖拽左边缘调整宽度
+                const delta = dragStartRef.current.x - e.clientX
+                const newWidth = Math.max(280, Math.min(800, dragStartRef.current.width + delta))
+                setPanelWidth(newWidth)
+                // 同时调整位置保持右边缘不动
+                const newX = dragStartRef.current.panelX - delta
+                setPanelX(Math.max(0, newX))
+            } else if (dragMode === 'move') {
+                // 拖拽移动整个面板
+                const delta = e.clientX - dragStartRef.current.x
+                const newX = dragStartRef.current.panelX + delta
+                setPanelX(Math.max(0, Math.min(window.innerWidth - panelWidth - 20, newX)))
+            }
         }
 
         const handleMouseUp = () => {
-            setIsDragging(false)
+            setDragMode('none')
         }
 
         document.addEventListener('mousemove', handleMouseMove)
@@ -200,7 +248,7 @@ export function ReviewPanel(props: {
             document.removeEventListener('mousemove', handleMouseMove)
             document.removeEventListener('mouseup', handleMouseUp)
         }
-    }, [isDragging])
+    }, [dragMode, panelWidth])
 
     // 获取 Review Session 详情
     const { data: reviewSessions, isLoading, refetch } = useQuery({
@@ -272,7 +320,7 @@ export function ReviewPanel(props: {
     const mainMessageCount = mainMessagesData?.messages?.length || 0
     const hasNewMessages = mainMessageCount > 0
 
-    // 未展开时显示悬浮图标
+    // 气泡模式：右下角悬浮图标
     if (!isExpanded) {
         return (
             <button
@@ -289,27 +337,41 @@ export function ReviewPanel(props: {
         )
     }
 
-    // 展开时显示完整面板
+    // 计算面板位置
+    const rightPos = panelX === null ? 0 : undefined
+    const leftPos = panelX !== null ? panelX : undefined
+
+    // 展开模式：全高度面板
     return (
         <div
-            className="fixed bottom-5 right-5 z-50 w-[360px] max-w-[calc(100vw-40px)] rounded-xl shadow-2xl border border-[var(--app-divider)] bg-[var(--app-bg)] flex flex-col overflow-hidden"
-            style={{ height: `${panelHeight}px` }}
+            ref={panelRef}
+            className="fixed top-0 bottom-0 z-50 shadow-2xl border-l border-[var(--app-divider)] bg-[var(--app-bg)] flex flex-col"
+            style={{
+                width: `${panelWidth}px`,
+                right: rightPos,
+                left: leftPos,
+                cursor: dragMode === 'move' ? 'grabbing' : undefined
+            }}
         >
-            {/* 拖拽调整高度的手柄 */}
+            {/* 左边缘拖拽调整宽度 */}
             <div
-                className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-500/20"
-                onMouseDown={handleDragStart}
-                style={{ backgroundColor: isDragging ? 'rgba(59, 130, 246, 0.2)' : undefined }}
+                className="absolute top-0 bottom-0 left-0 w-1 cursor-ew-resize hover:bg-[var(--app-divider)] z-10"
+                onMouseDown={handleResizeStart}
+                style={{ backgroundColor: dragMode === 'resize' ? 'var(--app-divider)' : undefined }}
             />
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--app-divider)] bg-[var(--app-subtle-bg)]">
+            {/* Header - 可拖动 */}
+            <div
+                className="flex items-center justify-between px-3 py-2 border-b border-[var(--app-divider)] bg-[var(--app-subtle-bg)] cursor-grab active:cursor-grabbing select-none"
+                onMouseDown={handleMoveStart}
+            >
                 <div className="flex items-center gap-2">
+                    <GripIcon className="w-4 h-4 text-[var(--app-hint)]" />
                     <ReviewIcon className="w-4 h-4 text-[var(--app-fg)]" />
                     <span className="text-sm font-medium">Review AI</span>
                     {currentReview && getStatusBadge(currentReview.status)}
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" onMouseDown={e => e.stopPropagation()}>
                     <button
                         type="button"
                         onClick={() => refetch()}
@@ -347,8 +409,8 @@ export function ReviewPanel(props: {
                 </div>
             </div>
 
-            {/* Messages - 与主 Session 样式一致 */}
-            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
                 {isLoading && (
                     <div className="text-center text-sm text-[var(--app-hint)] py-8">
                         加载中...
@@ -364,7 +426,7 @@ export function ReviewPanel(props: {
                 {chatMessages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div
-                            className={`max-w-[90%] rounded-xl px-3 py-2 text-sm shadow-sm ${
+                            className={`max-w-[85%] rounded-xl px-3 py-2 text-sm shadow-sm ${
                                 msg.role === 'user'
                                     ? 'bg-[var(--app-secondary-bg)] text-[var(--app-fg)]'
                                     : 'bg-[var(--app-subtle-bg)] text-[var(--app-fg)]'
@@ -382,7 +444,7 @@ export function ReviewPanel(props: {
 
             {/* Actions */}
             {currentReview && (
-                <div className="border-t border-[var(--app-divider)] p-2 space-y-2 bg-[var(--app-subtle-bg)]">
+                <div className="border-t border-[var(--app-divider)] p-3 space-y-2 bg-[var(--app-subtle-bg)]">
                     {currentReview.status === 'pending' && (
                         <div className="flex gap-2">
                             <button
