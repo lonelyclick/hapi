@@ -241,9 +241,18 @@ function buildReviewPrompt(
         const appliedSuggestions = previousSuggestions.filter(s => s.applied)
         // 用户删除的建议（不要再提类似问题）
         const deletedSuggestions = previousSuggestions.filter(s => s.deleted && !s.applied)
+        // 待处理的建议（保留到新列表中）
+        const pendingSuggestions = previousSuggestions.filter(s => !s.applied && !s.deleted)
+
+        if (pendingSuggestions.length > 0) {
+            previousSuggestionsInfo += '\n## 待处理的建议（需保留到新列表，去重合并）\n'
+            for (const s of pendingSuggestions) {
+                previousSuggestionsInfo += `- [${s.type}/${s.severity}] ${s.title}: ${s.detail}\n`
+            }
+        }
 
         if (appliedSuggestions.length > 0) {
-            previousSuggestionsInfo += '\n## 已发送给主AI的建议（检查是否已修复）\n'
+            previousSuggestionsInfo += '\n## 已发送给主AI的建议（检查是否已修复，已修复则不要再提）\n'
             for (const s of appliedSuggestions) {
                 previousSuggestionsInfo += `- [${s.type}/${s.severity}] ${s.title}: ${s.detail}\n`
             }
@@ -266,7 +275,14 @@ ${timeRangeInfo}${previousSuggestionsInfo}
 ${gitHint}
 鼓励读取相关文件。审查：正确性、安全、性能、需求、可维护性。
 
-## 输出JSON（完整覆盖之前的建议列表）
+## 输出要求
+**重要：你的输出是完整的建议列表，会覆盖之前所有建议。**
+- 保留"待处理的建议"中仍有效的项目（去重、合并类似问题）
+- 移除"已发送给主AI"中已修复的项目
+- 不要重复"用户删除的建议"中的问题
+- 新增本次发现的问题
+
+## 输出JSON
 \`\`\`json
 {"suggestions":[{"id":"1","type":"bug|security|performance|improvement","severity":"high|medium|low","title":"简短标题","detail":"详细描述和解决方案，发给主AI执行"}],"summary":"总体评价"}
 \`\`\`

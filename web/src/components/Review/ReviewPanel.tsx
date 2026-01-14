@@ -499,18 +499,20 @@ export function ReviewPanel(props: {
         }
     })
 
-    // 从已处理的 blocks 中提取所有包含 suggestions JSON 的文本（合并多次 review 结果）
+    // 从已处理的 blocks 中提取最后一个包含 suggestions JSON 的文本（覆盖而非累加）
     const allReviewTexts = useMemo(() => {
-        const texts: string[] = []
-        for (const block of reconciled.blocks) {
+        // 倒序查找第一个有效的 review 结果
+        for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
+            const block = reconciled.blocks[i]
             if (block.kind !== 'agent-text') continue
 
             const result = parseReviewResult(block.text)
             if (result && result.suggestions.length > 0) {
-                texts.push(block.text)
+                // 只返回最后一个 review 结果
+                return [block.text]
             }
         }
-        return texts
+        return []
     }, [reconciled.blocks])
 
     // 应用建议到主 Session
