@@ -229,15 +229,25 @@ export function ReviewPanel(props: {
     const currentReviewForPending = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
 
     // 检查未汇总的轮次（pending 和 active 状态都需要查询）
-    const { data: pendingRoundsData } = useQuery({
+    const { data: pendingRoundsData, isError: isPendingRoundsError, error: pendingRoundsError } = useQuery({
         queryKey: ['review-pending-rounds', currentReviewForPending?.id],
         queryFn: async () => {
             if (!currentReviewForPending?.id) throw new Error('No review ID')
-            return await api.getReviewPendingRounds(currentReviewForPending.id)
+            console.log('[ReviewPanel] Fetching pending rounds for:', currentReviewForPending.id)
+            const result = await api.getReviewPendingRounds(currentReviewForPending.id)
+            console.log('[ReviewPanel] Pending rounds result:', result)
+            return result
         },
         enabled: Boolean(currentReviewForPending?.id) && (currentReviewForPending?.status === 'pending' || currentReviewForPending?.status === 'active'),
         refetchInterval: 5000  // 每 5 秒检查一次
     })
+
+    // 调试 pending rounds 查询错误
+    useEffect(() => {
+        if (isPendingRoundsError) {
+            console.error('[ReviewPanel] Pending rounds error:', pendingRoundsError)
+        }
+    }, [isPendingRoundsError, pendingRoundsError])
 
     // 获取 Review Session 信息（更快刷新）
     const { data: reviewSession } = useQuery({
