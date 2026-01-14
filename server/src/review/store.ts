@@ -310,6 +310,23 @@ export class ReviewStore implements IReviewStore {
         }))
     }
 
+    /**
+     * 获取已 review 过的轮次号集合
+     * 只要有执行记录就算已 review（因为 prompt 已发给 Review AI）
+     */
+    async getReviewedRoundNumbers(reviewSessionId: string): Promise<Set<number>> {
+        const executions = await this.getReviewExecutions(reviewSessionId)
+        const reviewedRoundNumbers = new Set<number>()
+        for (const exec of executions) {
+            if (exec.reviewedRoundNumbers) {
+                for (const roundNum of exec.reviewedRoundNumbers) {
+                    reviewedRoundNumbers.add(roundNum)
+                }
+            }
+        }
+        return reviewedRoundNumbers
+    }
+
     async completeReviewExecution(id: string, result: string): Promise<boolean> {
         const now = Date.now()
         const queryResult = await this.pool.query(

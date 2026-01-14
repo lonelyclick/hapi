@@ -236,7 +236,6 @@ function buildReviewPrompt(
 
     // 构建之前建议的上下文
     let previousSuggestionsInfo = ''
-    console.log(`[Review Prompt] Building with ${previousSuggestions?.length ?? 0} previous suggestions`)
     if (previousSuggestions && previousSuggestions.length > 0) {
         // 已发送给主 AI 的建议（需要检查是否修复）
         const appliedSuggestions = previousSuggestions.filter(s => s.applied)
@@ -799,7 +798,6 @@ ${batchRounds.map(r => `  {
             previousSuggestions?: PreviousSuggestion[]
         } | null
         const previousSuggestions = body?.previousSuggestions
-        console.log(`[Review Start] previousSuggestions count: ${previousSuggestions?.length ?? 0}`)
 
         const reviewSession = await reviewStore.getReviewSession(id)
         if (!reviewSession) {
@@ -818,17 +816,8 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'No summarized rounds found. Please sync first.', noRounds: true }, 400)
         }
 
-        // 获取已经 review 过的轮次号（从执行记录中提取，不管状态）
-        const executions = await reviewStore.getReviewExecutions(id)
-        const reviewedRoundNumbers = new Set<number>()
-        for (const exec of executions) {
-            // 只要有执行记录就算已 review（因为 prompt 已发给 Review AI）
-            if (exec.reviewedRoundNumbers) {
-                for (const roundNum of exec.reviewedRoundNumbers) {
-                    reviewedRoundNumbers.add(roundNum)
-                }
-            }
-        }
+        // 获取已经 review 过的轮次号
+        const reviewedRoundNumbers = await reviewStore.getReviewedRoundNumbers(id)
 
         // 过滤出未 review 过的轮次
         const unreviewedRounds = allSummarizedRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber))
@@ -947,17 +936,8 @@ ${batchRounds.map(r => `  {
         // 找出未汇总的轮次
         const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
 
-        // 获取已经 review 过的轮次（从执行记录中提取，不管状态）
-        const executions = await reviewStore.getReviewExecutions(id)
-        const reviewedRoundNumbers = new Set<number>()
-        for (const exec of executions) {
-            // 只要有执行记录就算已 review（因为 prompt 已发给 Review AI）
-            if (exec.reviewedRoundNumbers) {
-                for (const roundNum of exec.reviewedRoundNumbers) {
-                    reviewedRoundNumbers.add(roundNum)
-                }
-            }
-        }
+        // 获取已经 review 过的轮次
+        const reviewedRoundNumbers = await reviewStore.getReviewedRoundNumbers(id)
 
         // 计算待 review 的轮次（已汇总但未 review）
         const unreviewedRounds = existingRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber))
