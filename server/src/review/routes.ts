@@ -425,9 +425,33 @@ export function createReviewRoutes(
             })
         }
 
-        // 批量处理：每次最多 3 轮
-        const BATCH_SIZE = 3
-        const batchRounds = pendingRounds.slice(0, BATCH_SIZE)
+        // 动态计算批量大小：根据消息体大小决定每批处理多少轮
+        // 目标：每批 prompt 大小控制在 50KB 左右，避免超过模型上下文限制
+        const MAX_BATCH_CHARS = 50000  // 50KB
+        const MAX_ROUNDS_PER_BATCH = 10  // 最多 10 轮
+        const MIN_ROUNDS_PER_BATCH = 1   // 最少 1 轮
+
+        const batchRounds: typeof pendingRounds = []
+        let currentBatchSize = 0
+        const basePromptSize = 500  // 基础 prompt 模板大小估算
+
+        for (const round of pendingRounds) {
+            // 计算这一轮的大小
+            const roundSize = round.userInput.length + round.aiMessages.join('').length + 200  // 200 是格式化开销
+
+            // 如果加入这一轮会超过限制，且已经有至少一轮，就停止
+            if (currentBatchSize + roundSize > MAX_BATCH_CHARS && batchRounds.length >= MIN_ROUNDS_PER_BATCH) {
+                break
+            }
+
+            batchRounds.push(round)
+            currentBatchSize += roundSize
+
+            // 达到最大轮数限制
+            if (batchRounds.length >= MAX_ROUNDS_PER_BATCH) {
+                break
+            }
+        }
 
         // 构建批量汇总请求 Prompt
         let syncPrompt = `## 对话汇总任务
@@ -480,10 +504,11 @@ ${batchRounds.map(r => `  {
             success: true,
             syncingRounds: batchRounds.map(r => r.roundNumber),
             batchSize: batchRounds.length,
+            batchChars: currentBatchSize,  // 本批次消息体大小
             totalRounds: allRounds.length,
             summarizedRounds: existingRounds.length,
             pendingRounds: pendingRounds.length,
-            message: `正在汇总第 ${batchRounds.map(r => r.roundNumber).join(', ')} 轮对话...`
+            message: `正在汇总第 ${batchRounds.map(r => r.roundNumber).join(', ')} 轮对话 (${Math.round(currentBatchSize / 1000)}KB)...`
         })
     })
 
