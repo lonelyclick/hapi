@@ -130,8 +130,9 @@ async function main() {
 
     syncEngine = new SyncEngine(store, socketServer.io, socketServer.rpcRegistry, sseManager)
 
-    // Initialize Auto Review Service
+    // Initialize Review Sync Service
     const autoReviewService = new AutoReviewService(syncEngine, reviewStore)
+    autoReviewService.setSseManager(sseManager)
     autoReviewService.start()
 
     // Initialize Telegram bot (optional)

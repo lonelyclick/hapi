@@ -1,32 +1,125 @@
 /**
- * 自动 Review 服务
+ * Review 同步检测服务
  *
- * 每 N 轮对话自动触发 Review AI 总结
+ * 主 Session 每轮对话结束后，检查是否有活跃的 Review Session 需要同步新数据
  */
 
-import type { SyncEngine, SyncEvent, DecryptedMessage } from '../sync/syncEngine'
+import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
+import type { SSEManager } from '../sse/sseManager'
 import type { ReviewStore } from './store'
 
-// 配置：每多少轮用户对话触发一次自动 Review
-const AUTO_REVIEW_INTERVAL = 5
+/**
+ * 从消息内容中提取用户文本
+ */
+function extractUserText(content: unknown): string | null {
+    if (!content || typeof content !== 'object') {
+        return null
+    }
+    const record = content as Record<string, unknown>
+    if (record.role !== 'user') {
+        return null
+    }
+    const body = record.content as Record<string, unknown> | string | undefined
+    if (!body) {
+        return null
+    }
+    if (typeof body === 'string') {
+        return body.trim() || null
+    }
+    if (typeof body === 'object' && body.type === 'text' && typeof body.text === 'string') {
+        return body.text.trim() || null
+    }
+    return null
+}
 
-// 默认 Review 模型
-const DEFAULT_REVIEW_MODEL = 'claude'
+/**
+ * 按轮次分组消息
+ */
+interface DialogueRound {
+    roundNumber: number
+    userInput: string
+    aiMessages: string[]
+    messageIds: string[]
+}
+
+function extractAIText(content: unknown): string | null {
+    if (!content || typeof content !== 'object') {
+        return null
+    }
+    const record = content as Record<string, unknown>
+    if (record.role !== 'agent') {
+        return null
+    }
+    let payload: Record<string, unknown> | null = null
+    const rawContent = record.content
+    if (typeof rawContent === 'string') {
+        try {
+            payload = JSON.parse(rawContent)
+        } catch {
+            return null
+        }
+    } else if (typeof rawContent === 'object' && rawContent) {
+        payload = rawContent as Record<string, unknown>
+    }
+    if (!payload) return null
+
+    const data = payload.data as Record<string, unknown>
+    if (!data || data.type !== 'assistant') return null
+
+    const message = data.message as Record<string, unknown>
+    if (!message?.content) return null
+
+    const contentArr = message.content as Array<{ type?: string; text?: string }>
+    const texts: string[] = []
+    for (const item of contentArr) {
+        if (item.type === 'text' && item.text) {
+            texts.push(item.text)
+        }
+    }
+
+    return texts.length > 0 ? texts.join('\n\n') : null
+}
+
+function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown }>): DialogueRound[] {
+    const rounds: DialogueRound[] = []
+    let currentRound: DialogueRound | null = null
+    let roundNumber = 0
+
+    for (const message of messages) {
+        const userText = extractUserText(message.content)
+        const aiText = extractAIText(message.content)
+
+        if (userText) {
+            // 用户输入开始新的一轮
+            if (currentRound) {
+                rounds.push(currentRound)
+            }
+            roundNumber++
+            currentRound = {
+                roundNumber,
+                userInput: userText,
+                aiMessages: [],
+                messageIds: [message.id]
+            }
+        } else if (aiText && currentRound) {
+            // AI 回复添加到当前轮
+            currentRound.aiMessages.push(aiText)
+            currentRound.messageIds.push(message.id)
+        }
+    }
+
+    // 添加最后一轮
+    if (currentRound) {
+        rounds.push(currentRound)
+    }
+
+    return rounds
+}
 
 export class AutoReviewService {
     private engine: SyncEngine
     private reviewStore: ReviewStore
-    // 记录每个 Session 的用户消息计数（从上次 Review 后开始计数）
-    private sessionMessageCounts: Map<string, number> = new Map()
-    // 正在进行 Review 的 Session（防止重复触发）
-    private reviewingSessionIds: Set<string> = new Set()
-    // Review Session 监听器（等待 Review AI 完成）
-    private reviewWatchers: Map<string, {
-        reviewSessionId: string
-        mainSessionId: string
-        reviewId: string
-        messageCountAtStart: number
-    }> = new Map()
+    private sseManager: SSEManager | null = null
 
     constructor(engine: SyncEngine, reviewStore: ReviewStore) {
         this.engine = engine
@@ -34,332 +127,87 @@ export class AutoReviewService {
     }
 
     /**
-     * 启动服务，监听消息事件
+     * 设置 SSE Manager（用于通知前端）
+     */
+    setSseManager(sseManager: SSEManager): void {
+        this.sseManager = sseManager
+    }
+
+    /**
+     * 启动服务，监听 session-updated 事件（AI 回复结束）
      */
     start(): void {
         this.engine.subscribe(this.handleEvent.bind(this))
-        console.log('[AutoReview] Service started, interval:', AUTO_REVIEW_INTERVAL)
+        console.log('[ReviewSync] Service started - monitoring session updates')
     }
 
     private async handleEvent(event: SyncEvent): Promise<void> {
-        if (event.type !== 'message-received') return
-        if (!event.sessionId || !event.message) return
+        // 监听 session-updated 事件，检查是否是 AI 回复结束
+        if (event.type !== 'session-updated') return
+        if (!event.sessionId) return
+
+        const data = event.data as { wasThinking?: boolean; thinking?: boolean } | undefined
+
+        // wasThinking: true 表示 AI 刚刚完成思考（从 thinking 变为非 thinking）
+        if (!data?.wasThinking) return
 
         const sessionId = event.sessionId
-        const content = event.message.content as Record<string, unknown>
-        const role = content?.role
 
-        // 检查是否是 Review Session 的消息
-        const watcher = this.reviewWatchers.get(sessionId)
-        if (watcher) {
-            // 这是 Review Session 的消息
-            if (role === 'agent') {
-                await this.handleReviewResponse(watcher, event.message)
-            }
-            return
-        }
-
-        // 只统计用户消息
-        if (role !== 'user') return
-
-        // 检查是否是 Review 产生的 Session（不要递归触发）
+        // 检查是否是 Review Session（不处理 Review Session 自己的事件）
         const session = this.engine.getSession(sessionId)
         if (session?.metadata?.source === 'review') return
 
-        // 增加计数
-        const currentCount = (this.sessionMessageCounts.get(sessionId) ?? 0) + 1
-        this.sessionMessageCounts.set(sessionId, currentCount)
+        // 检查是否有活跃的 Review Session
+        await this.checkAndNotifyPendingRounds(sessionId)
+    }
 
-        console.log(`[AutoReview] Session ${sessionId.slice(0, 8)} message count: ${currentCount}/${AUTO_REVIEW_INTERVAL}`)
-
-        // 检查是否达到阈值
-        if (currentCount >= AUTO_REVIEW_INTERVAL) {
-            // 防止重复触发
-            if (this.reviewingSessionIds.has(sessionId)) {
+    /**
+     * 检查是否有未同步的轮次，并通知前端
+     */
+    private async checkAndNotifyPendingRounds(mainSessionId: string): Promise<void> {
+        try {
+            // 获取活跃的 Review Session
+            const reviewSession = await this.reviewStore.getActiveReviewSession(mainSessionId)
+            if (!reviewSession) {
+                // 没有活跃的 Review Session，不需要处理
                 return
             }
 
-            this.reviewingSessionIds.add(sessionId)
-            // 重置计数
-            this.sessionMessageCounts.set(sessionId, 0)
+            // 获取主 Session 所有消息
+            const allMessages = await this.engine.getAllMessages(mainSessionId)
 
-            // 异步触发 Review
-            this.triggerAutoReview(sessionId).catch(err => {
-                console.error('[AutoReview] Failed to trigger review:', err)
-                this.reviewingSessionIds.delete(sessionId)
-            })
-        }
-    }
+            // 按轮次分组
+            const allRounds = groupMessagesIntoRounds(allMessages)
 
-    /**
-     * 触发自动 Review
-     */
-    private async triggerAutoReview(mainSessionId: string): Promise<void> {
-        console.log(`[AutoReview] Triggering review for session ${mainSessionId.slice(0, 8)}`)
+            // 获取已汇总的轮次
+            const existingRounds = await this.reviewStore.getReviewRounds(reviewSession.id)
+            const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
-        const session = this.engine.getSession(mainSessionId)
-        if (!session || !session.active) {
-            console.log('[AutoReview] Session not active, skipping')
-            this.reviewingSessionIds.delete(mainSessionId)
-            return
-        }
+            // 计算未汇总的轮次
+            const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
 
-        const machineId = session.metadata?.machineId?.trim()
-        if (!machineId) {
-            console.log('[AutoReview] Session has no machine, skipping')
-            this.reviewingSessionIds.delete(mainSessionId)
-            return
-        }
+            console.log(`[ReviewSync] Session ${mainSessionId.slice(0, 8)}: total=${allRounds.length}, summarized=${existingRounds.length}, pending=${pendingRounds.length}`)
 
-        const machine = this.engine.getMachine(machineId)
-        if (!machine || !machine.active) {
-            console.log('[AutoReview] Machine not active, skipping')
-            this.reviewingSessionIds.delete(mainSessionId)
-            return
-        }
-
-        const directory = session.metadata?.path
-        if (!directory) {
-            console.log('[AutoReview] Session has no directory, skipping')
-            this.reviewingSessionIds.delete(mainSessionId)
-            return
-        }
-
-        // 创建 Review Session
-        const spawnResult = await this.engine.spawnSession(
-            machineId,
-            directory,
-            DEFAULT_REVIEW_MODEL,
-            false,
-            'simple',
-            undefined,
-            {
-                source: 'review'
-            }
-        )
-
-        if (spawnResult.type !== 'success') {
-            console.error('[AutoReview] Failed to spawn review session:', spawnResult.message)
-            this.reviewingSessionIds.delete(mainSessionId)
-            return
-        }
-
-        const reviewSessionId = spawnResult.sessionId
-        console.log(`[AutoReview] Created review session ${reviewSessionId.slice(0, 8)}`)
-
-        // 等待 Session 上线
-        const isOnline = await this.waitForOnline(reviewSessionId, 60_000)
-        if (!isOnline) {
-            console.error('[AutoReview] Review session failed to come online')
-            this.reviewingSessionIds.delete(mainSessionId)
-            return
-        }
-
-        // 保存到数据库
-        const reviewRecord = await this.reviewStore.createReviewSession({
-            namespace: session.namespace,
-            mainSessionId,
-            reviewSessionId,
-            reviewModel: DEFAULT_REVIEW_MODEL,
-            contextSummary: '(auto-review)'
-        })
-
-        // 获取主 Session 的对话内容
-        const summary = await this.buildConversationSummary(mainSessionId)
-        if (!summary) {
-            console.error('[AutoReview] Failed to build conversation summary')
-            this.reviewingSessionIds.delete(mainSessionId)
-            return
-        }
-
-        // 设置 Watcher 监听 Review 回复
-        this.reviewWatchers.set(reviewSessionId, {
-            reviewSessionId,
-            mainSessionId,
-            reviewId: reviewRecord.id,
-            messageCountAtStart: 0
-        })
-
-        // 发送总结给 Review Session
-        await this.engine.sendMessage(reviewSessionId, {
-            text: summary,
-            sentFrom: 'webapp'
-        })
-
-        // 更新状态为 active
-        await this.reviewStore.updateReviewSessionStatus(reviewRecord.id, 'active')
-
-        console.log(`[AutoReview] Sent summary to review session ${reviewSessionId.slice(0, 8)}`)
-    }
-
-    /**
-     * 处理 Review Session 的回复
-     */
-    private async handleReviewResponse(
-        watcher: {
-            reviewSessionId: string
-            mainSessionId: string
-            reviewId: string
-            messageCountAtStart: number
-        },
-        message: DecryptedMessage
-    ): Promise<void> {
-        const content = message.content as Record<string, unknown>
-
-        // 解析 agent 消息
-        let payload: Record<string, unknown> | null = null
-        const rawContent = content?.content
-        if (typeof rawContent === 'string') {
-            try {
-                payload = JSON.parse(rawContent)
-            } catch {
-                return
-            }
-        } else if (typeof rawContent === 'object' && rawContent) {
-            payload = rawContent as Record<string, unknown>
-        }
-
-        if (!payload) return
-
-        const data = payload.data as Record<string, unknown>
-        if (!data || data.type !== 'assistant') return
-
-        // 提取 AI 回复文本
-        const msg = data.message as Record<string, unknown>
-        if (!msg?.content) return
-
-        const contentArr = msg.content as Array<{ type?: string; text?: string }>
-        const texts: string[] = []
-        for (const item of contentArr) {
-            if (item.type === 'text' && item.text) {
-                texts.push(item.text)
-            }
-        }
-
-        if (texts.length === 0) return
-
-        const reviewText = texts.join('\n\n')
-        console.log(`[AutoReview] Got review response for session ${watcher.mainSessionId.slice(0, 8)}`)
-
-        // 发送 Review 结果到主 Session
-        const reviewMessage = `## Auto Review 反馈
-
-以下是来自 Review AI 的自动反馈意见：
-
----
-
-${reviewText}
-
----
-
-*此消息由 Auto Review 自动生成*`
-
-        await this.engine.sendMessage(watcher.mainSessionId, {
-            text: reviewMessage,
-            sentFrom: 'webapp'
-        })
-
-        // 更新状态
-        await this.reviewStore.completeReviewSession(watcher.reviewId, reviewText)
-
-        // 清理
-        this.reviewWatchers.delete(watcher.reviewSessionId)
-        this.reviewingSessionIds.delete(watcher.mainSessionId)
-
-        console.log(`[AutoReview] Completed review for session ${watcher.mainSessionId.slice(0, 8)}`)
-    }
-
-    /**
-     * 构建对话摘要
-     */
-    private async buildConversationSummary(sessionId: string): Promise<string | null> {
-        const messagesResult = await this.engine.getMessagesPage(sessionId, { limit: 50, beforeSeq: null })
-        const dialogueMessages: Array<{ role: string; text: string }> = []
-
-        for (const m of messagesResult.messages) {
-            const content = m.content as Record<string, unknown>
-            const role = content?.role
-
-            if (role === 'user') {
-                let payload: Record<string, unknown> | null = null
-                const rawContent = content?.content
-                if (typeof rawContent === 'string') {
-                    try {
-                        payload = JSON.parse(rawContent)
-                    } catch {
-                        payload = null
-                    }
-                } else if (typeof rawContent === 'object' && rawContent) {
-                    payload = rawContent as Record<string, unknown>
-                }
-
-                const text = typeof payload?.text === 'string' ? payload.text : ''
-                if (text) {
-                    // 用户消息截断到 500 字符
-                    dialogueMessages.push({ role: 'U', text: text.slice(0, 500) + (text.length > 500 ? '...' : '') })
-                }
-            } else if (role === 'agent') {
-                let payload: Record<string, unknown> | null = null
-                const rawContent = content?.content
-                if (typeof rawContent === 'string') {
-                    try {
-                        payload = JSON.parse(rawContent)
-                    } catch {
-                        payload = null
-                    }
-                } else if (typeof rawContent === 'object' && rawContent) {
-                    payload = rawContent as Record<string, unknown>
-                }
-
-                if (!payload) continue
-
-                const data = payload.data as Record<string, unknown>
-                if (!data || data.type !== 'assistant') continue
-
-                const message = data.message as Record<string, unknown>
-                if (message?.content) {
-                    const contentArr = message.content as Array<{ type?: string; text?: string }>
-                    const texts: string[] = []
-                    for (const item of contentArr) {
-                        if (item.type === 'text' && item.text) {
-                            texts.push(item.text)
+            // 通过 SSE 通知前端
+            if (this.sseManager) {
+                const session = this.engine.getSession(mainSessionId)
+                if (session) {
+                    this.sseManager.broadcast({
+                        type: 'review-sync-status',
+                        namespace: session.namespace,
+                        sessionId: mainSessionId,
+                        data: {
+                            reviewSessionId: reviewSession.id,
+                            totalRounds: allRounds.length,
+                            summarizedRounds: existingRounds.length,
+                            pendingRounds: pendingRounds.length,
+                            hasPendingRounds: pendingRounds.length > 0
                         }
-                    }
-                    if (texts.length > 0) {
-                        // 合并所有文本，截断到 500 字符
-                        const combined = texts.join(' ').slice(0, 500)
-                        dialogueMessages.push({ role: 'A', text: combined + (texts.join(' ').length > 500 ? '...' : '') })
-                    }
+                    } as SyncEvent)
                 }
             }
+        } catch (err) {
+            console.error('[ReviewSync] Failed to check pending rounds:', err)
         }
-
-        if (dialogueMessages.length === 0) {
-            return null
-        }
-
-        // 取最近 15 条对话
-        const recentMessages = dialogueMessages.slice(-15)
-
-        return `Review 以下对话，指出问题和改进建议：
-
-${recentMessages.map((msg) => `[${msg.role}] ${msg.text}`).join('\n\n')}
-
-重点关注：代码质量、安全问题、遗漏点。简洁回复。`
-    }
-
-    /**
-     * 等待 Session 上线
-     */
-    private async waitForOnline(sessionId: string, timeoutMs: number): Promise<boolean> {
-        const start = Date.now()
-        while (Date.now() - start < timeoutMs) {
-            const session = this.engine.getSession(sessionId)
-            if (session?.active) {
-                return true
-            }
-            await new Promise(resolve => setTimeout(resolve, 500))
-        }
-        return false
     }
 }

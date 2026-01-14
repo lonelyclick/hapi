@@ -213,6 +213,17 @@ export function useSSE(options: {
                 )
             }
 
+            // 处理 review-sync-status 事件，更新 Review 同步状态
+            if (event.type === 'review-sync-status' && 'data' in event && event.data) {
+                const data = event.data as { reviewSessionId?: string }
+                if (data.reviewSessionId) {
+                    if (import.meta.env.DEV) {
+                        console.log('[sse] review-sync-status', data)
+                    }
+                    void queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', data.reviewSessionId] })
+                }
+            }
+
             onEventRef.current(event)
         }
 

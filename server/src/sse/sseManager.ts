@@ -175,6 +175,11 @@ export class SSEManager {
             }
         }
 
+        // Review 同步状态通知：发送给正在查看该主 Session 的用户
+        if (event.type === 'review-sync-status') {
+            return Boolean(event.sessionId && connection.sessionId === event.sessionId)
+        }
+
         if (connection.all) {
             return true
         }
