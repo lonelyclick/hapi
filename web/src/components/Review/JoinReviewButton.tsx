@@ -8,12 +8,12 @@ import { useState, useRef, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAppContext } from '@/lib/app-context'
 
-// 支持的 Review 模型选项
+// 支持的 Review 模型选项（直接选择，不需要子级变体）
 const REVIEW_MODELS = [
-    { value: 'claude', label: 'Claude', variants: ['opus', 'sonnet', 'haiku'] },
-    { value: 'codex', label: 'Codex', variants: ['gpt-5.2-codex', 'gpt-5.1-codex-max'] },
-    { value: 'gemini', label: 'Gemini', variants: [] },
-    { value: 'grok', label: 'Grok', variants: [] }
+    { value: 'claude', label: 'Claude' },
+    { value: 'codex', label: 'Codex' },
+    { value: 'gemini', label: 'Gemini' },
+    { value: 'grok', label: 'Grok' }
 ] as const
 
 function UsersIcon(props: { className?: string }) {
@@ -64,7 +64,6 @@ export function JoinReviewButton(props: {
     const { api } = useAppContext()
     const queryClient = useQueryClient()
     const [showMenu, setShowMenu] = useState(false)
-    const [selectedModel, setSelectedModel] = useState<string | null>(null)
     const menuRef = useRef<HTMLDivElement>(null)
 
     // 点击外部关闭菜单
@@ -72,7 +71,6 @@ export function JoinReviewButton(props: {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
                 setShowMenu(false)
-                setSelectedModel(null)
             }
         }
         if (showMenu) {
@@ -84,40 +82,22 @@ export function JoinReviewButton(props: {
     }, [showMenu])
 
     const createReviewMutation = useMutation({
-        mutationFn: async (data: { model: string; variant?: string }) => {
+        mutationFn: async (model: string) => {
             return await api.createReviewSession({
                 mainSessionId: props.sessionId,
-                reviewModel: data.model,
-                reviewModelVariant: data.variant
+                reviewModel: model
             })
         },
         onSuccess: (result) => {
             setShowMenu(false)
-            setSelectedModel(null)
             queryClient.invalidateQueries({ queryKey: ['review-sessions', props.sessionId] })
             props.onReviewCreated?.(result.reviewSessionId)
         }
     })
 
     const handleModelSelect = (model: string) => {
-        const modelConfig = REVIEW_MODELS.find(m => m.value === model)
-        if (modelConfig && modelConfig.variants.length > 0) {
-            setSelectedModel(model)
-        } else {
-            // 没有变体，直接创建
-            createReviewMutation.mutate({ model })
-        }
+        createReviewMutation.mutate(model)
     }
-
-    const handleVariantSelect = (variant: string) => {
-        if (selectedModel) {
-            createReviewMutation.mutate({ model: selectedModel, variant })
-        }
-    }
-
-    const currentModelConfig = selectedModel
-        ? REVIEW_MODELS.find(m => m.value === selectedModel)
-        : null
 
     return (
         <div className="relative" ref={menuRef}>
@@ -134,53 +114,24 @@ export function JoinReviewButton(props: {
             </button>
 
             {showMenu && (
-                <div className="absolute right-0 top-full z-30 mt-1 min-w-[180px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
-                    {!selectedModel ? (
-                        <>
-                            <div className="px-3 py-1.5 text-[10px] font-medium text-[var(--app-hint)] uppercase tracking-wider">
-                                选择 Review AI
-                            </div>
-                            {REVIEW_MODELS.map((model) => (
-                                <button
-                                    key={model.value}
-                                    type="button"
-                                    onClick={() => handleModelSelect(model.value)}
-                                    disabled={createReviewMutation.isPending}
-                                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-[var(--app-subtle-bg)] disabled:opacity-50"
-                                >
-                                    <span>{model.label}</span>
-                                    {model.variants.length > 0 && (
-                                        <ChevronDownIcon className="rotate-[-90deg]" />
-                                    )}
-                                </button>
-                            ))}
-                        </>
-                    ) : (
-                        <>
-                            <button
-                                type="button"
-                                onClick={() => setSelectedModel(null)}
-                                className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-[10px] font-medium text-[var(--app-hint)] uppercase tracking-wider hover:bg-[var(--app-subtle-bg)]"
-                            >
-                                <ChevronDownIcon className="rotate-90" />
-                                <span>{currentModelConfig?.label} - 选择变体</span>
-                            </button>
-                            {currentModelConfig?.variants.map((variant) => (
-                                <button
-                                    key={variant}
-                                    type="button"
-                                    onClick={() => handleVariantSelect(variant)}
-                                    disabled={createReviewMutation.isPending}
-                                    className="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-[var(--app-subtle-bg)] disabled:opacity-50"
-                                >
-                                    {variant}
-                                </button>
-                            ))}
-                        </>
-                    )}
+                <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
+                    <div className="px-3 py-1.5 text-[10px] font-medium text-[var(--app-hint)] uppercase tracking-wider">
+                        选择 Review AI
+                    </div>
+                    {REVIEW_MODELS.map((model) => (
+                        <button
+                            key={model.value}
+                            type="button"
+                            onClick={() => handleModelSelect(model.value)}
+                            disabled={createReviewMutation.isPending}
+                            className="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-[var(--app-subtle-bg)] disabled:opacity-50"
+                        >
+                            {model.label}
+                        </button>
+                    ))}
                     {createReviewMutation.isPending && (
                         <div className="px-3 py-2 text-xs text-[var(--app-hint)]">
-                            正在创建 Review Session...
+                            正在创建...
                         </div>
                     )}
                     {createReviewMutation.isError && (
