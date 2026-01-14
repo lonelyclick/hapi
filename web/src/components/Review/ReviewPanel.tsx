@@ -6,14 +6,11 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import { useAppContext } from '@/lib/app-context'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { reduceChatBlocks } from '@/chat/reducer'
 import { reconcileChatBlocks } from '@/chat/reconcile'
-import { useHappyRuntime } from '@/lib/assistant-runtime'
-import { HappyThread } from '@/components/AssistantChat/HappyThread'
-import type { DecryptedMessage, Session } from '@/types/api'
+import type { DecryptedMessage } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 
 // Icons
@@ -201,11 +198,12 @@ export function ReviewPanel(props: {
         return normalized
     }, [messages])
 
+    const session = reviewSession?.session
     const reduced = useMemo(() => {
-        const result = reduceChatBlocks(normalizedMessages, reviewSession?.agentState ?? null)
-        console.log('[ReviewPanel] Reduced blocks:', result.blocks.length, result.blocks.map(b => ({ id: b.id, type: b.type })))
+        const result = reduceChatBlocks(normalizedMessages, session?.agentState ?? null)
+        console.log('[ReviewPanel] Reduced blocks:', result.blocks.length, result.blocks.map(b => ({ id: b.id, kind: b.kind })))
         return result
-    }, [normalizedMessages, reviewSession?.agentState])
+    }, [normalizedMessages, session?.agentState])
 
     const reconciled = useMemo(
         () => reconcileChatBlocks(reduced.blocks, blocksByIdRef.current),
@@ -217,49 +215,10 @@ export function ReviewPanel(props: {
         blocksByIdRef.current = reconciled.byId
     }, [reconciled.byId])
 
-    // 创建一个虚拟的 Session 对象用于 Runtime
-    const virtualSession: Session = useMemo(() => ({
-        id: props.reviewSessionId,
-        active: reviewSession?.active ?? false,
-        thinking: reviewSession?.thinking ?? false,
-        agentState: reviewSession?.agentState ?? null,
-        permissionMode: reviewSession?.permissionMode ?? 'default',
-        modelMode: reviewSession?.modelMode ?? 'default',
-        modelReasoningEffort: reviewSession?.modelReasoningEffort ?? null,
-        metadata: reviewSession?.metadata ?? null,
-        createdAt: reviewSession?.createdAt ?? Date.now(),
-        namespace: reviewSession?.namespace ?? ''
-    }), [props.reviewSessionId, reviewSession])
-
     // 发送消息到 Review Session
     const handleSendMessage = useCallback((text: string) => {
-        api.sendMessage(props.reviewSessionId, { text })
+        api.sendMessage(props.reviewSessionId, text)
     }, [api, props.reviewSessionId])
-
-    // 中止 Review Session
-    const handleAbort = useCallback(async () => {
-        await api.abortSession(props.reviewSessionId)
-    }, [api, props.reviewSessionId])
-
-    // 创建运行时
-    const runtime = useHappyRuntime({
-        session: virtualSession,
-        blocks: reconciled.blocks,
-        isSending: false,
-        onSendMessage: handleSendMessage,
-        onAbort: handleAbort
-    })
-
-    // 调试 runtime
-    useEffect(() => {
-        console.log('[ReviewPanel] Runtime state:', {
-            blocksCount: reconciled.blocks.length,
-            blocks: reconciled.blocks.map(b => ({ id: b.id, kind: b.kind, type: b.type })),
-            sessionActive: virtualSession.active,
-            sessionThinking: virtualSession.thinking,
-            fullBlocks: reconciled.blocks
-        })
-    }, [reconciled.blocks, virtualSession.active, virtualSession.thinking])
 
     // 开始 Review
     const startReviewMutation = useMutation({
@@ -289,7 +248,7 @@ export function ReviewPanel(props: {
                 title="打开 Review AI"
             >
                 <ReviewIcon className="w-6 h-6" />
-                {(currentReview?.status === 'active' || reviewSession?.thinking) && (
+                {(currentReview?.status === 'active' || session?.thinking) && (
                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-pulse" />
                 )}
             </button>
@@ -326,7 +285,7 @@ export function ReviewPanel(props: {
                     <GripIcon className="w-4 h-4 text-[var(--app-hint)]" />
                     <ReviewIcon className="w-4 h-4 text-[var(--app-fg)]" />
                     <span className="text-sm font-medium">Review AI</span>
-                    {reviewSession?.thinking && (
+                    {session?.thinking && (
                         <LoadingIcon className="w-4 h-4 text-green-500" />
                     )}
                 </div>
@@ -390,28 +349,78 @@ export function ReviewPanel(props: {
                 )}
             </div>
 
-            {/* 对话界面 */}
-            <AssistantRuntimeProvider runtime={runtime}>
-                <div className="relative flex min-h-0 flex-1 flex-col">
-                    <HappyThread
-                        key={props.reviewSessionId}
-                        api={api}
-                        sessionId={props.reviewSessionId}
-                        metadata={reviewSession?.metadata ?? null}
-                        disabled={!reviewSession?.active}
-                        onRefresh={handleRefresh}
-                        onRetryMessage={undefined}
-                        isLoadingMessages={isLoadingMessages}
-                        messagesWarning={null}
-                        hasMoreMessages={false}
-                        isLoadingMoreMessages={false}
-                        onLoadMore={async () => {}}
-                        rawMessagesCount={messages.length}
-                        normalizedMessagesCount={normalizedMessages.length}
-                        renderedMessagesCount={reconciled.blocks.length}
+            {/* 对话界面 - 直接渲染消息用于调试 */}
+            <div className="flex-1 overflow-y-auto p-3">
+                {reconciled.blocks.length === 0 ? (
+                    <div className="text-center text-[var(--app-hint)] text-sm py-4">
+                        暂无消息
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {reconciled.blocks.map((block) => (
+                            <div
+                                key={block.id}
+                                className={`p-3 rounded-lg ${
+                                    block.kind === 'user-text'
+                                        ? 'bg-[var(--app-secondary-bg)] ml-auto max-w-[80%]'
+                                        : 'bg-[var(--app-subtle-bg)] max-w-[90%]'
+                                }`}
+                            >
+                                <div className="text-xs text-[var(--app-hint)] mb-1">
+                                    {block.kind}
+                                </div>
+                                <div className="text-sm whitespace-pre-wrap">
+                                    {block.kind === 'user-text' && block.text}
+                                    {block.kind === 'agent-text' && block.text}
+                                    {block.kind === 'agent-reasoning' && (
+                                        <span className="italic text-[var(--app-hint)]">{block.text}</span>
+                                    )}
+                                    {block.kind === 'tool-call' && (
+                                        <span className="font-mono text-xs">
+                                            Tool: {block.tool?.name}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* 输入框 */}
+            <div className="border-t border-[var(--app-divider)] p-3">
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        placeholder="发送消息..."
+                        className="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:border-[var(--app-hint)]"
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                const input = e.currentTarget
+                                const text = input.value.trim()
+                                if (text) {
+                                    handleSendMessage(text)
+                                    input.value = ''
+                                }
+                            }
+                        }}
                     />
+                    <button
+                        type="button"
+                        className="px-4 py-2 text-sm font-medium rounded-lg bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-divider)]"
+                        onClick={(e) => {
+                            const input = e.currentTarget.previousElementSibling as HTMLInputElement
+                            const text = input.value.trim()
+                            if (text) {
+                                handleSendMessage(text)
+                                input.value = ''
+                            }
+                        }}
+                    >
+                        发送
+                    </button>
                 </div>
-            </AssistantRuntimeProvider>
+            </div>
         </div>
     )
 }
