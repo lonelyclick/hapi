@@ -36,6 +36,18 @@ export class ReviewStore implements IReviewStore {
             CREATE INDEX IF NOT EXISTS idx_review_sessions_review ON review_sessions(review_session_id);
             CREATE INDEX IF NOT EXISTS idx_review_sessions_namespace ON review_sessions(namespace);
             CREATE INDEX IF NOT EXISTS idx_review_sessions_status ON review_sessions(status);
+
+            -- Review Rounds 表 - 存储每轮对话的汇总
+            CREATE TABLE IF NOT EXISTS review_rounds (
+                id TEXT PRIMARY KEY,
+                review_session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE,
+                round_number INTEGER NOT NULL,
+                user_input TEXT NOT NULL,
+                ai_summary TEXT NOT NULL,
+                original_message_ids TEXT[],
+                created_at BIGINT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_review_rounds_session ON review_rounds(review_session_id);
         `)
     }
 
@@ -151,6 +163,60 @@ export class ReviewStore implements IReviewStore {
         const result = await this.pool.query(
             `DELETE FROM review_sessions WHERE main_session_id = $1`,
             [mainSessionId]
+        )
+
+        return result.rowCount ?? 0
+    }
+
+    // ============ Review Rounds 相关方法 ============
+
+    async createReviewRound(data: {
+        reviewSessionId: string
+        roundNumber: number
+        userInput: string
+        aiSummary: string
+        originalMessageIds?: string[]
+    }): Promise<{ id: string }> {
+        const id = randomUUID()
+        const now = Date.now()
+
+        await this.pool.query(
+            `INSERT INTO review_rounds
+             (id, review_session_id, round_number, user_input, ai_summary, original_message_ids, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [id, data.reviewSessionId, data.roundNumber, data.userInput, data.aiSummary, data.originalMessageIds ?? [], now]
+        )
+
+        return { id }
+    }
+
+    async getReviewRounds(reviewSessionId: string): Promise<Array<{
+        id: string
+        roundNumber: number
+        userInput: string
+        aiSummary: string
+        originalMessageIds: string[]
+        createdAt: number
+    }>> {
+        const result = await this.pool.query(
+            `SELECT * FROM review_rounds WHERE review_session_id = $1 ORDER BY round_number ASC`,
+            [reviewSessionId]
+        )
+
+        return result.rows.map(row => ({
+            id: row.id as string,
+            roundNumber: row.round_number as number,
+            userInput: row.user_input as string,
+            aiSummary: row.ai_summary as string,
+            originalMessageIds: (row.original_message_ids as string[]) ?? [],
+            createdAt: Number(row.created_at)
+        }))
+    }
+
+    async deleteReviewRounds(reviewSessionId: string): Promise<number> {
+        const result = await this.pool.query(
+            `DELETE FROM review_rounds WHERE review_session_id = $1`,
+            [reviewSessionId]
         )
 
         return result.rowCount ?? 0

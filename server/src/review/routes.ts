@@ -70,14 +70,125 @@ function buildReviewContext(messages: DecryptedMessage[]): string {
 }
 
 /**
+ * 对话轮次类型
+ */
+interface DialogueRound {
+    roundNumber: number
+    userInput: string
+    aiMessages: string[]  // AI 在这一轮的所有消息
+    messageIds: string[]  // 原始消息 ID
+}
+
+/**
+ * 从消息中提取 AI 的文本内容
+ */
+function extractAIText(content: unknown): string | null {
+    if (!content || typeof content !== 'object') {
+        return null
+    }
+    const record = content as Record<string, unknown>
+    if (record.role !== 'agent') {
+        return null
+    }
+
+    let payload: Record<string, unknown> | null = null
+    const rawContent = record.content
+    if (typeof rawContent === 'string') {
+        try {
+            payload = JSON.parse(rawContent)
+        } catch {
+            payload = null
+        }
+    } else if (typeof rawContent === 'object' && rawContent) {
+        payload = rawContent as Record<string, unknown>
+    }
+
+    if (!payload) return null
+
+    const data = payload.data as Record<string, unknown>
+    if (!data || data.type !== 'assistant') return null
+
+    const message = data.message as Record<string, unknown>
+    if (message?.content) {
+        const contentArr = message.content as Array<{ type?: string; text?: string }>
+        const texts: string[] = []
+        for (const item of contentArr) {
+            if (item.type === 'text' && item.text) {
+                texts.push(item.text)
+            }
+        }
+        if (texts.length > 0) {
+            return texts.join('\n')
+        }
+    }
+    return null
+}
+
+/**
+ * 将消息按轮次分组
+ * 一轮 = 一个用户输入 + 后续所有 AI 回复（直到下一个用户输入）
+ */
+function groupMessagesIntoRounds(messages: DecryptedMessage[]): DialogueRound[] {
+    const rounds: DialogueRound[] = []
+    let currentRound: DialogueRound | null = null
+    let roundNumber = 0
+
+    for (const message of messages) {
+        const userText = extractUserText(message.content)
+        const aiText = extractAIText(message.content)
+
+        if (userText) {
+            // 用户输入开始新的一轮
+            if (currentRound) {
+                rounds.push(currentRound)
+            }
+            roundNumber++
+            currentRound = {
+                roundNumber,
+                userInput: userText,
+                aiMessages: [],
+                messageIds: [message.id]
+            }
+        } else if (aiText && currentRound) {
+            // AI 回复添加到当前轮
+            currentRound.aiMessages.push(aiText)
+            currentRound.messageIds.push(message.id)
+        }
+    }
+
+    // 添加最后一轮
+    if (currentRound) {
+        rounds.push(currentRound)
+    }
+
+    return rounds
+}
+
+/**
+ * 汇总 AI 消息为简洁摘要
+ */
+function summarizeAIMessages(aiMessages: string[]): string {
+    if (aiMessages.length === 0) {
+        return '(AI 无回复)'
+    }
+
+    // 合并所有 AI 消息，限制长度
+    const combined = aiMessages.join('\n\n')
+    const maxLength = 2000
+    if (combined.length > maxLength) {
+        return combined.slice(0, maxLength) + '...(已截断)'
+    }
+    return combined
+}
+
+/**
  * 构建 Review Prompt - 要求返回 JSON 格式的建议列表
  */
-function buildReviewPrompt(dialogueSummary: string): string {
+function buildReviewPrompt(roundsSummary: string): string {
     return `你是一个代码审查专家。请审查当前工作目录的代码变更。
 
 ## 最近的对话内容
-
-${dialogueSummary}
+${roundsSummary}
 
 ## 请执行以下操作
 
@@ -294,73 +405,39 @@ export function createReviewRoutes(
             return c.json({ error: 'Review session is not in pending status' }, 400)
         }
 
-        // 获取主 Session 最近 5 轮对话
-        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 50, beforeSeq: null })
+        // 获取主 Session 消息
+        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
 
-        const dialogueMessages: Array<{ role: string; text: string }> = []
+        // 按轮次分组消息
+        const rounds = groupMessagesIntoRounds(messagesResult.messages)
 
-        for (const m of messagesResult.messages) {
-            const content = m.content as Record<string, unknown>
-            const role = content?.role
+        // 取最近 5 轮
+        const recentRounds = rounds.slice(-5)
 
-            if (role === 'user') {
-                let payload: Record<string, unknown> | null = null
-                const rawContent = content?.content
-                if (typeof rawContent === 'string') {
-                    try {
-                        payload = JSON.parse(rawContent)
-                    } catch {
-                        payload = null
-                    }
-                } else if (typeof rawContent === 'object' && rawContent) {
-                    payload = rawContent as Record<string, unknown>
-                }
+        // 为每轮创建汇总并存储到数据库
+        const roundsSummaryParts: string[] = []
 
-                const text = typeof payload?.text === 'string' ? payload.text : ''
-                if (text) {
-                    dialogueMessages.push({ role: 'User', text: text.slice(0, 500) + (text.length > 500 ? '...' : '') })
-                }
-            } else if (role === 'agent') {
-                let payload: Record<string, unknown> | null = null
-                const rawContent = content?.content
-                if (typeof rawContent === 'string') {
-                    try {
-                        payload = JSON.parse(rawContent)
-                    } catch {
-                        payload = null
-                    }
-                } else if (typeof rawContent === 'object' && rawContent) {
-                    payload = rawContent as Record<string, unknown>
-                }
+        for (const round of recentRounds) {
+            const aiSummary = summarizeAIMessages(round.aiMessages)
 
-                if (!payload) continue
+            // 存储到数据库
+            await reviewStore.createReviewRound({
+                reviewSessionId: id,
+                roundNumber: round.roundNumber,
+                userInput: round.userInput,
+                aiSummary,
+                originalMessageIds: round.messageIds
+            })
 
-                const data = payload.data as Record<string, unknown>
-                if (!data || data.type !== 'assistant') continue
-
-                const message = data.message as Record<string, unknown>
-                if (message?.content) {
-                    const contentArr = message.content as Array<{ type?: string; text?: string }>
-                    const texts: string[] = []
-                    for (const item of contentArr) {
-                        if (item.type === 'text' && item.text) {
-                            texts.push(item.text)
-                        }
-                    }
-                    if (texts.length > 0) {
-                        const combined = texts.join(' ').slice(0, 500)
-                        dialogueMessages.push({ role: 'AI', text: combined + (texts.join(' ').length > 500 ? '...' : '') })
-                    }
-                }
-            }
+            // 构建汇总文本
+            roundsSummaryParts.push(`[用户] ${round.userInput}`)
+            roundsSummaryParts.push(`[AI] ${aiSummary}`)
         }
 
-        // 取最近 10 条（约 5 轮对话）
-        const recentMessages = dialogueMessages.slice(-10)
-        const dialogueSummary = recentMessages.map((msg) => `[${msg.role}] ${msg.text}`).join('\n\n')
+        const roundsSummary = roundsSummaryParts.join('\n\n')
 
         // 发送 Review Prompt 给 Review Session
-        const reviewPrompt = buildReviewPrompt(dialogueSummary)
+        const reviewPrompt = buildReviewPrompt(roundsSummary)
 
         await engine.sendMessage(reviewSession.reviewSessionId, {
             text: reviewPrompt,
