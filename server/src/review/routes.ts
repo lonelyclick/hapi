@@ -483,6 +483,8 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
         const id = c.req.param('id')
         const engine = getSyncEngine()
 
+        console.log('[save-summary] Request received for review:', id)
+
         if (!engine) {
             return c.json({ error: 'Sync engine not available' }, 503)
         }
@@ -492,14 +494,18 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
             return c.json({ error: 'Review session not found' }, 404)
         }
 
+        console.log('[save-summary] Review session found:', reviewSession.reviewSessionId)
+
         // 获取 Review Session 的最新消息
         const messagesResult = await engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 10, beforeSeq: null })
+        console.log('[save-summary] Messages count:', messagesResult.messages.length)
 
         // 提取最新的 AI 回复
         let latestSummary: { round: number; summary: string } | null = null
 
         for (const m of messagesResult.messages.reverse()) {
             const content = m.content as Record<string, unknown>
+            console.log('[save-summary] Checking message role:', content?.role)
             if (content?.role !== 'agent') continue
 
             // 解析消息内容
@@ -515,23 +521,33 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
                 payload = rawContent as Record<string, unknown>
             }
 
-            if (!payload) continue
+            if (!payload) {
+                console.log('[save-summary] No payload found')
+                continue
+            }
 
             const data = payload.data as Record<string, unknown>
-            if (!data || data.type !== 'assistant') continue
+            if (!data || data.type !== 'assistant') {
+                console.log('[save-summary] Not assistant type:', data?.type)
+                continue
+            }
 
             const message = data.message as Record<string, unknown>
             if (message?.content) {
                 const contentArr = message.content as Array<{ type?: string; text?: string }>
                 for (const item of contentArr) {
                     if (item.type === 'text' && item.text) {
+                        console.log('[save-summary] Found text content (first 200 chars):', item.text.slice(0, 200))
                         // 尝试从文本中提取 JSON
                         const jsonMatch = item.text.match(/```json\s*([\s\S]*?)\s*```/)
                         if (jsonMatch) {
+                            console.log('[save-summary] Found JSON block:', jsonMatch[1])
                             try {
                                 latestSummary = JSON.parse(jsonMatch[1])
+                                console.log('[save-summary] Parsed summary:', latestSummary)
                                 break
-                            } catch {
+                            } catch (e) {
+                                console.log('[save-summary] Failed to parse JSON block:', e)
                                 // 继续尝试
                             }
                         }
@@ -539,6 +555,7 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
                         try {
                             const parsed = JSON.parse(item.text)
                             if (parsed.round && parsed.summary) {
+                                console.log('[save-summary] Parsed direct JSON:', parsed)
                                 latestSummary = parsed
                                 break
                             }

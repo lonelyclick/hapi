@@ -284,10 +284,15 @@ export function ReviewPanel(props: {
             if (!currentReview) {
                 throw new Error('No current review found')
             }
+            console.log('[ReviewPanel] Calling saveReviewSummary for review:', currentReview.id)
             return await api.saveReviewSummary(currentReview.id)
         },
-        onSuccess: () => {
+        onSuccess: (data) => {
+            console.log('[ReviewPanel] saveReviewSummary success:', data)
             queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
+        },
+        onError: (error) => {
+            console.error('[ReviewPanel] saveReviewSummary error:', error)
         }
     })
 
@@ -298,14 +303,18 @@ export function ReviewPanel(props: {
         const isThinking = session?.thinking
         prevThinkingRef.current = isThinking
 
+        console.log('[ReviewPanel] Thinking state changed:', { wasThinking, isThinking, status: currentReview?.status })
+
         // 从思考中变为不思考 -> AI 刚完成回复
         if (wasThinking === true && isThinking === false && currentReview?.status === 'active') {
+            console.log('[ReviewPanel] AI finished thinking, will save summary in 1s...')
             // 延迟一下再保存，确保消息已经同步
             setTimeout(() => {
+                console.log('[ReviewPanel] Triggering saveSummaryMutation...')
                 saveSummaryMutation.mutate()
             }, 1000)
         }
-    }, [session?.thinking, currentReview?.status])
+    }, [session?.thinking, currentReview?.status, saveSummaryMutation])
 
     // 开始 Review（发送给 Review AI）
     const startReviewMutation = useMutation({
@@ -516,6 +525,33 @@ export function ReviewPanel(props: {
                                 )}
                             </button>
                         )}
+
+                        {/* 保存汇总按钮 - 手动触发 */}
+                        <button
+                            type="button"
+                            onClick={() => saveSummaryMutation.mutate()}
+                            disabled={saveSummaryMutation.isPending}
+                            className="w-full px-5 py-2 text-sm font-medium rounded-xl bg-[var(--app-subtle-bg)] text-[var(--app-fg)] border border-[var(--app-divider)] hover:bg-[var(--app-secondary-bg)] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                        >
+                            {saveSummaryMutation.isPending ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    保存汇总中...
+                                </span>
+                            ) : (
+                                <span className="flex items-center justify-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                        <polyline points="17 21 17 13 7 13 7 21" />
+                                        <polyline points="7 3 7 8 15 8" />
+                                    </svg>
+                                    保存 AI 汇总
+                                </span>
+                            )}
+                        </button>
 
                         {/* 继续 Review 按钮（同步完成后可点击） */}
                         <button
