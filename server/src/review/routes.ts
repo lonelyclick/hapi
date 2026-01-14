@@ -185,29 +185,36 @@ function summarizeAIMessages(aiMessages: string[]): string {
  * 构建 Review Prompt - 要求返回 JSON 格式的建议列表
  */
 function buildReviewPrompt(roundsSummary: string): string {
-    return `你是一个代码审查专家。请审查当前工作目录的代码变更。
+    return `你是一个代码审查专家。
 
-## 最近的对话内容
+## 背景
+以下是最近的开发对话汇总：
 ${roundsSummary}
 
-## 请执行以下操作
+## 审查步骤
 
-1. 首先运行 \`git diff\` 查看当前的代码变更
-2. 分析代码变更，从以下角度进行审查：
+1. 运行 \`git log --oneline -5\` 查看最近的提交
+2. 运行 \`git diff HEAD~3\` 或适当范围查看代码变更（如果变更已提交）
+3. 如果 diff 为空，说明代码已提交，请查看最近 commit 的内容
+4. 如果需要，读取相关文件了解完整上下文
+5. 从以下角度审查：
    - 代码正确性和潜在 bug
-   - 安全问题
+   - 安全问题（注入、XSS、敏感信息泄露等）
    - 性能问题
    - 是否满足用户需求
+   - 代码风格和可维护性
 
-3. **重要**：请以 JSON 格式输出审查结果，格式如下：
+## 输出要求
+
+先简要说明你的分析过程，然后用以下 JSON 格式给出建议：
 
 \`\`\`json
 {
   "suggestions": [
     {
       "id": "1",
-      "type": "bug" | "security" | "performance" | "improvement" | "question",
-      "severity": "high" | "medium" | "low",
+      "type": "bug | security | performance | improvement | question",
+      "severity": "high | medium | low",
       "title": "简短标题",
       "description": "详细描述问题和建议的解决方案",
       "action": "具体的行动指令（用户选择后会发送给主 AI 执行）"
@@ -217,7 +224,7 @@ ${roundsSummary}
 }
 \`\`\`
 
-只输出 JSON，不要输出其他内容。如果没有问题，suggestions 数组可以为空。
+如果没有问题，suggestions 数组可以为空。
 `
 }
 
@@ -1010,28 +1017,14 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         // 获取最新的 Review 输出
         const latestReview = agentMessages[agentMessages.length - 1]
 
-        // 发送到主 Session
-        const reviewMessage = `## Review AI 反馈
-
-以下是来自 Review AI (${reviewSession.reviewModel}) 的反馈意见：
-
----
-
-${latestReview}
-
----
-
-*此消息由 Review AI 自动生成*`
-
-        await engine.sendMessage(reviewSession.mainSessionId, {
-            text: reviewMessage,
-            sentFrom: 'webapp'
-        })
-
         // 标记 Review 为完成
         await reviewStore.updateReviewSessionStatus(id, 'completed')
 
-        return c.json({ success: true })
+        // 只返回结果，不自动发送到主 Session
+        return c.json({
+            success: true,
+            reviewResult: latestReview
+        })
     })
 
     // 发送用户选择的建议到主 Session
