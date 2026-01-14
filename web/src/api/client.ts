@@ -1007,10 +1007,16 @@ export class ApiClient {
         )
     }
 
-    async startReviewSession(reviewId: string): Promise<{ success: boolean; status: string }> {
-        return await this.request<{ success: boolean; status: string }>(
+    async startReviewSession(reviewId: string): Promise<{ success: boolean; status: string; newRoundsProcessed?: number; totalRounds?: number }> {
+        return await this.request<{ success: boolean; status: string; newRoundsProcessed?: number; totalRounds?: number }>(
             `/api/review/sessions/${encodeURIComponent(reviewId)}/start`,
             { method: 'POST' }
+        )
+    }
+
+    async getReviewPendingRounds(reviewId: string): Promise<{ totalRounds: number; summarizedRounds: number; pendingRounds: number; hasPendingRounds: boolean }> {
+        return await this.request<{ totalRounds: number; summarizedRounds: number; pendingRounds: number; hasPendingRounds: boolean }>(
+            `/api/review/sessions/${encodeURIComponent(reviewId)}/pending-rounds`
         )
     }
 

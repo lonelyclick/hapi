@@ -388,6 +388,7 @@ export function createReviewRoutes(
     })
 
     // 触发 Review（发送 prompt 开始 Review）
+    // 支持 pending 状态（首次 Review）和 active 状态（继续 Review）
     app.post('/review/sessions/:id/start', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
@@ -401,23 +402,34 @@ export function createReviewRoutes(
             return c.json({ error: 'Review session not found' }, 404)
         }
 
-        if (reviewSession.status !== 'pending') {
-            return c.json({ error: 'Review session is not in pending status' }, 400)
+        // 只允许 pending 或 active 状态
+        if (reviewSession.status !== 'pending' && reviewSession.status !== 'active') {
+            return c.json({ error: 'Review session is not in pending or active status' }, 400)
         }
+
+        const isFirstReview = reviewSession.status === 'pending'
 
         // 获取主 Session 消息
         const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
 
         // 按轮次分组消息
-        const rounds = groupMessagesIntoRounds(messagesResult.messages)
+        const allRounds = groupMessagesIntoRounds(messagesResult.messages)
 
-        // 取最近 5 轮
-        const recentRounds = rounds.slice(-5)
+        // 获取已汇总的轮次
+        const existingRounds = await reviewStore.getReviewRounds(id)
+        const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
-        // 为每轮创建汇总并存储到数据库
-        const roundsSummaryParts: string[] = []
+        // 找出未汇总的轮次
+        const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
 
-        for (const round of recentRounds) {
+        if (pendingRounds.length === 0) {
+            return c.json({ error: 'No new rounds to review', noNewRounds: true }, 400)
+        }
+
+        // 为新轮次创建汇总并存储到数据库
+        const newRoundsSummaryParts: string[] = []
+
+        for (const round of pendingRounds) {
             const aiSummary = summarizeAIMessages(round.aiMessages)
 
             // 存储到数据库
@@ -430,24 +442,43 @@ export function createReviewRoutes(
             })
 
             // 构建汇总文本
-            roundsSummaryParts.push(`[用户] ${round.userInput}`)
-            roundsSummaryParts.push(`[AI] ${aiSummary}`)
+            newRoundsSummaryParts.push(`[用户] ${round.userInput}`)
+            newRoundsSummaryParts.push(`[AI] ${aiSummary}`)
         }
 
-        const roundsSummary = roundsSummaryParts.join('\n\n')
+        const newRoundsSummary = newRoundsSummaryParts.join('\n\n')
 
-        // 发送 Review Prompt 给 Review Session
-        const reviewPrompt = buildReviewPrompt(roundsSummary)
+        // 根据是首次还是继续 Review，使用不同的 prompt
+        let reviewPrompt: string
+        if (isFirstReview) {
+            reviewPrompt = buildReviewPrompt(newRoundsSummary)
+        } else {
+            // 继续 Review：发送新轮次的摘要
+            reviewPrompt = `## 新增对话内容
+
+以下是自上次 Review 以来新增的 ${pendingRounds.length} 轮对话：
+
+${newRoundsSummary}
+
+请基于新增的对话内容，结合之前的 Review 结果，继续分析并给出建议。仍然以 JSON 格式输出。`
+        }
 
         await engine.sendMessage(reviewSession.reviewSessionId, {
             text: reviewPrompt,
             sentFrom: 'webapp'
         })
 
-        // 更新状态为 active
-        await reviewStore.updateReviewSessionStatus(id, 'active')
+        // 首次 Review 时更新状态为 active
+        if (isFirstReview) {
+            await reviewStore.updateReviewSessionStatus(id, 'active')
+        }
 
-        return c.json({ success: true, status: 'active' })
+        return c.json({
+            success: true,
+            status: 'active',
+            newRoundsProcessed: pendingRounds.length,
+            totalRounds: allRounds.length
+        })
     })
 
     // 取消 Review Session
@@ -474,6 +505,41 @@ export function createReviewRoutes(
         }
 
         return c.json({ success: true })
+    })
+
+    // 检查未汇总的轮次
+    app.get('/review/sessions/:id/pending-rounds', async (c) => {
+        const id = c.req.param('id')
+        const engine = getSyncEngine()
+
+        if (!engine) {
+            return c.json({ error: 'Sync engine not available' }, 503)
+        }
+
+        const reviewSession = await reviewStore.getReviewSession(id)
+        if (!reviewSession) {
+            return c.json({ error: 'Review session not found' }, 404)
+        }
+
+        // 获取主 Session 消息
+        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
+
+        // 按轮次分组消息
+        const allRounds = groupMessagesIntoRounds(messagesResult.messages)
+
+        // 获取已汇总的轮次
+        const existingRounds = await reviewStore.getReviewRounds(id)
+        const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
+
+        // 找出未汇总的轮次
+        const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
+
+        return c.json({
+            totalRounds: allRounds.length,
+            summarizedRounds: existingRounds.length,
+            pendingRounds: pendingRounds.length,
+            hasPendingRounds: pendingRounds.length > 0
+        })
     })
 
     // 发送对话摘要给 Review AI
