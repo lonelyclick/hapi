@@ -236,6 +236,7 @@ function buildReviewPrompt(
 
     // 构建之前建议的上下文
     let previousSuggestionsInfo = ''
+    console.log(`[Review Prompt] Building with ${previousSuggestions?.length ?? 0} previous suggestions`)
     if (previousSuggestions && previousSuggestions.length > 0) {
         // 已发送给主 AI 的建议（需要检查是否修复）
         const appliedSuggestions = previousSuggestions.filter(s => s.applied)
@@ -798,6 +799,7 @@ ${batchRounds.map(r => `  {
             previousSuggestions?: PreviousSuggestion[]
         } | null
         const previousSuggestions = body?.previousSuggestions
+        console.log(`[Review Start] previousSuggestions count: ${previousSuggestions?.length ?? 0}`)
 
         const reviewSession = await reviewStore.getReviewSession(id)
         if (!reviewSession) {
