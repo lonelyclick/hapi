@@ -701,6 +701,7 @@ export function ReviewPanel(props: {
                 )}
 
                 {/* completed 状态 */}
+                {console.log('[ReviewPanel] currentReview status:', currentReview?.status, 'latestReviewText:', !!latestReviewText)}
                 {currentReview?.status === 'completed' && (
                     <div className="space-y-3">
                         <div className="flex items-center justify-center gap-2 text-green-500">
