@@ -1027,6 +1027,20 @@ export class ApiClient {
             { method: 'DELETE' }
         )
     }
+
+    async sendReviewSummary(reviewId: string): Promise<{ success: boolean }> {
+        return await this.request<{ success: boolean }>(
+            `/api/review/sessions/${encodeURIComponent(reviewId)}/summarize`,
+            { method: 'POST' }
+        )
+    }
+
+    async executeReview(reviewId: string): Promise<{ success: boolean }> {
+        return await this.request<{ success: boolean }>(
+            `/api/review/sessions/${encodeURIComponent(reviewId)}/execute`,
+            { method: 'POST' }
+        )
+    }
 }
 
 // Types for Review (试验性功能)

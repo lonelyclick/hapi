@@ -325,5 +325,135 @@ export function createReviewRoutes(
         return c.json({ success: true })
     })
 
+    // 发送对话摘要给 Review AI
+    app.post('/review/sessions/:id/summarize', async (c) => {
+        const id = c.req.param('id')
+        const engine = getSyncEngine()
+
+        if (!engine) {
+            return c.json({ error: 'Sync engine not available' }, 503)
+        }
+
+        const reviewSession = await reviewStore.getReviewSession(id)
+        if (!reviewSession) {
+            return c.json({ error: 'Review session not found' }, 404)
+        }
+
+        // 获取主 Session 的最近消息
+        const mainSession = engine.getSession(reviewSession.mainSessionId)
+        if (!mainSession) {
+            return c.json({ error: 'Main session not found' }, 404)
+        }
+
+        // 从 store 获取消息
+        const store = engine.getStore()
+        const messagesResult = await store.getMessages(reviewSession.mainSessionId, { limit: 30 })
+
+        // 提取用户消息作为摘要
+        const userMessages = messagesResult.messages
+            .filter((m) => {
+                const content = m.content as Record<string, unknown>
+                return content?.role === 'user'
+            })
+            .map((m) => {
+                const content = m.content as Record<string, unknown>
+                const payload = content?.content as Record<string, unknown>
+                return typeof payload?.text === 'string' ? payload.text : ''
+            })
+            .filter(Boolean)
+            .slice(-10)  // 最近 10 条
+
+        if (userMessages.length === 0) {
+            return c.json({ error: 'No user messages found' }, 400)
+        }
+
+        const summary = `以下是主 Session 中用户的最新对话内容，请基于这些内容进行 Review：
+
+${userMessages.map((msg, i) => `[${i + 1}] ${msg}`).join('\n\n')}
+
+请分析上述对话内容，并给出你的 Review 意见。`
+
+        // 发送给 Review Session
+        await engine.sendMessage(reviewSession.reviewSessionId, {
+            text: summary,
+            sentFrom: 'webapp'
+        })
+
+        // 如果是 pending 状态，更新为 active
+        if (reviewSession.status === 'pending') {
+            await reviewStore.updateReviewSessionStatus(id, 'active')
+        }
+
+        return c.json({ success: true })
+    })
+
+    // 执行 Review 并发送结果到主 Session
+    app.post('/review/sessions/:id/execute', async (c) => {
+        const id = c.req.param('id')
+        const engine = getSyncEngine()
+
+        if (!engine) {
+            return c.json({ error: 'Sync engine not available' }, 503)
+        }
+
+        const reviewSession = await reviewStore.getReviewSession(id)
+        if (!reviewSession) {
+            return c.json({ error: 'Review session not found' }, 404)
+        }
+
+        // 获取 Review Session 的最新 AI 回复
+        const store = engine.getStore()
+        const messagesResult = await store.getMessages(reviewSession.reviewSessionId, { limit: 50 })
+
+        // 提取最新的 AI 回复
+        const agentMessages = messagesResult.messages
+            .filter((m) => {
+                const content = m.content as Record<string, unknown>
+                return content?.role === 'agent'
+            })
+            .map((m) => {
+                const content = m.content as Record<string, unknown>
+                const payload = content?.content as Record<string, unknown>
+                const data = payload?.data
+                if (typeof data === 'string') return data
+                if (typeof data === 'object' && data) {
+                    const d = data as Record<string, unknown>
+                    if (typeof d.message === 'string') return d.message
+                }
+                return ''
+            })
+            .filter(Boolean)
+
+        if (agentMessages.length === 0) {
+            return c.json({ error: 'No review output found' }, 400)
+        }
+
+        // 获取最新的 Review 输出
+        const latestReview = agentMessages[agentMessages.length - 1]
+
+        // 发送到主 Session
+        const reviewMessage = `## Review AI 反馈
+
+以下是来自 Review AI (${reviewSession.reviewModel}) 的反馈意见：
+
+---
+
+${latestReview}
+
+---
+
+*此消息由 Review AI 自动生成*`
+
+        await engine.sendMessage(reviewSession.mainSessionId, {
+            text: reviewMessage,
+            sentFrom: 'webapp'
+        })
+
+        // 标记 Review 为完成
+        await reviewStore.updateReviewSessionStatus(id, 'completed')
+
+        return c.json({ success: true })
+    })
+
     return app
 }
