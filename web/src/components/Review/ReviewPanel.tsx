@@ -489,45 +489,25 @@ export function ReviewPanel(props: {
         }
     })
 
-    // 从消息中提取最新的 AI 回复文本
+    // 从已处理的 blocks 中提取最新的包含 suggestions JSON 的文本
     const latestReviewText = useMemo(() => {
-        // 从后往前找最新的 agent 消息
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const msg = messages[i]
-            const content = msg.content as Record<string, unknown>
-            if (content?.role !== 'agent') continue
+        // 从后往前遍历 blocks，找包含 suggestions 的 assistant 消息
+        for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
+            const block = reconciled.blocks[i]
+            if (block.type !== 'assistant') continue
 
-            let payload: Record<string, unknown> | null = null
-            const rawContent = content?.content
-            if (typeof rawContent === 'string') {
-                try {
-                    payload = JSON.parse(rawContent)
-                } catch {
-                    continue
-                }
-            } else if (typeof rawContent === 'object' && rawContent) {
-                payload = rawContent as Record<string, unknown>
-            }
-
-            if (!payload) continue
-            const data = payload.data as Record<string, unknown>
-            if (!data || data.type !== 'assistant') continue
-
-            const message = data.message as Record<string, unknown>
-            if (message?.content) {
-                const contentArr = message.content as Array<{ type?: string; text?: string }>
-                for (const item of contentArr) {
-                    if (item.type === 'text' && item.text) {
-                        // 检查是否包含 suggestions JSON
-                        if (parseReviewResult(item.text)) {
-                            return item.text
-                        }
+            // 遍历 block 中的所有 part
+            for (const part of block.parts) {
+                if (part.type === 'text' && part.text) {
+                    const result = parseReviewResult(part.text)
+                    if (result && result.suggestions.length > 0) {
+                        return part.text
                     }
                 }
             }
         }
         return null
-    }, [messages])
+    }, [reconciled.blocks])
 
     // 应用建议到主 Session
     const applySuggestionsMutation = useMutation({
