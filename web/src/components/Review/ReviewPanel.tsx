@@ -162,6 +162,19 @@ export function ReviewPanel(props: {
     const currentReview = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
     const messages = (reviewMessagesData?.messages ?? []) as DecryptedMessage[]
 
+    // 调试日志
+    useEffect(() => {
+        console.log('[ReviewPanel] Debug:', {
+            reviewSessionId: props.reviewSessionId,
+            messagesCount: messages.length,
+            messages: messages.map(m => ({
+                id: m.id,
+                role: (m.content as Record<string, unknown>)?.role,
+                contentKeys: Object.keys(m.content as Record<string, unknown> || {})
+            }))
+        })
+    }, [messages, props.reviewSessionId])
+
     // 消息规范化管道
     const normalizedMessages: NormalizedMessage[] = useMemo(() => {
         const cache = normalizedCacheRef.current
@@ -175,6 +188,7 @@ export function ReviewPanel(props: {
                 continue
             }
             const next = normalizeDecryptedMessage(message)
+            console.log('[ReviewPanel] Normalize:', { messageId: message.id, result: next ? 'OK' : 'NULL', next })
             cache.set(message.id, { source: message, normalized: next })
             if (next) normalized.push(next)
         }
@@ -183,13 +197,15 @@ export function ReviewPanel(props: {
                 cache.delete(id)
             }
         }
+        console.log('[ReviewPanel] Normalized messages:', normalizedMessages.length)
         return normalized
     }, [messages])
 
-    const reduced = useMemo(
-        () => reduceChatBlocks(normalizedMessages, reviewSession?.agentState ?? null),
-        [normalizedMessages, reviewSession?.agentState]
-    )
+    const reduced = useMemo(() => {
+        const result = reduceChatBlocks(normalizedMessages, reviewSession?.agentState ?? null)
+        console.log('[ReviewPanel] Reduced blocks:', result.blocks.length, result.blocks.map(b => ({ id: b.id, type: b.type })))
+        return result
+    }, [normalizedMessages, reviewSession?.agentState])
 
     const reconciled = useMemo(
         () => reconcileChatBlocks(reduced.blocks, blocksByIdRef.current),
@@ -197,6 +213,7 @@ export function ReviewPanel(props: {
     )
 
     useEffect(() => {
+        console.log('[ReviewPanel] Reconciled blocks:', reconciled.blocks.length)
         blocksByIdRef.current = reconciled.byId
     }, [reconciled.byId])
 
