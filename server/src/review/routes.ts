@@ -339,32 +339,59 @@ export function createReviewRoutes(
             return c.json({ error: 'Review session not found' }, 404)
         }
 
-        // 获取主 Session 的最近消息
-        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 30, beforeSeq: null })
+        // 获取主 Session 的消息（获取更多以确保完整上下文）
+        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
 
-        // 提取用户消息作为摘要
-        const userMessages = messagesResult.messages
-            .filter((m) => {
-                const content = m.content as Record<string, unknown>
-                return content?.role === 'user'
-            })
-            .map((m) => {
-                const content = m.content as Record<string, unknown>
+        // 提取完整对话（用户和 AI 的消息都要）
+        const dialogueMessages: Array<{ role: string; text: string }> = []
+
+        for (const m of messagesResult.messages) {
+            const content = m.content as Record<string, unknown>
+            const role = content?.role
+
+            if (role === 'user') {
                 const payload = content?.content as Record<string, unknown>
-                return typeof payload?.text === 'string' ? payload.text : ''
-            })
-            .filter(Boolean)
-            .slice(-10)  // 最近 10 条
-
-        if (userMessages.length === 0) {
-            return c.json({ error: 'No user messages found' }, 400)
+                const text = typeof payload?.text === 'string' ? payload.text : ''
+                if (text) {
+                    dialogueMessages.push({ role: 'User', text })
+                }
+            } else if (role === 'agent') {
+                const payload = content?.content as Record<string, unknown>
+                const data = payload?.data
+                let text = ''
+                if (typeof data === 'string') {
+                    text = data
+                } else if (typeof data === 'object' && data) {
+                    const d = data as Record<string, unknown>
+                    if (typeof d.message === 'string') text = d.message
+                }
+                // AI 消息可能很长，截取前 2000 字符
+                if (text) {
+                    dialogueMessages.push({ role: 'AI', text: text.slice(0, 2000) + (text.length > 2000 ? '...(truncated)' : '') })
+                }
+            }
         }
 
-        const summary = `以下是主 Session 中用户的最新对话内容，请基于这些内容进行 Review：
+        if (dialogueMessages.length === 0) {
+            return c.json({ error: 'No messages found' }, 400)
+        }
 
-${userMessages.map((msg, i) => `[${i + 1}] ${msg}`).join('\n\n')}
+        // 只取最近的对话（最多 20 轮）
+        const recentMessages = dialogueMessages.slice(-40)
 
-请分析上述对话内容，并给出你的 Review 意见。`
+        const summary = `以下是主 Session 中的对话内容，请基于这些内容进行 Review：
+
+---
+
+${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n')}
+
+---
+
+请分析上述对话内容，关注：
+1. 用户的需求是否被正确理解
+2. AI 的回复是否准确、完整
+3. 代码实现是否有问题或可以改进
+4. 有什么遗漏或需要注意的地方`
 
         // 发送给 Review Session
         await engine.sendMessage(reviewSession.reviewSessionId, {
