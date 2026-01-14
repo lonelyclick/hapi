@@ -32,6 +32,12 @@ export function HappyAssistantMessage() {
         const parts = message.content
         return parts.length > 0 && parts.every((part) => part.type === 'tool-call')
     })
+    const reviewSummaryText = useAssistantState(({ message }) => {
+        if (message.role !== 'assistant') return null
+        const textPart = message.content.find((part) => part.type === 'text')
+        if (!textPart || textPart.type !== 'text') return null
+        return isReviewSummaryResult(textPart.text) ? textPart.text : null
+    })
     const rootClass = toolOnly
         ? 'py-1 min-w-0 max-w-full overflow-x-hidden'
         : 'px-1 min-w-0 max-w-full overflow-x-hidden'
@@ -40,6 +46,14 @@ export function HappyAssistantMessage() {
         return (
             <MessagePrimitive.Root className="px-1 min-w-0 max-w-full overflow-x-hidden">
                 <CliOutputBlock text={cliText} />
+            </MessagePrimitive.Root>
+        )
+    }
+
+    if (reviewSummaryText) {
+        return (
+            <MessagePrimitive.Root className="px-1 min-w-0 max-w-full overflow-x-hidden">
+                <ReviewSummaryResultBlock text={reviewSummaryText} />
             </MessagePrimitive.Root>
         )
     }
