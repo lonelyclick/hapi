@@ -1041,6 +1041,16 @@ export class ApiClient {
             { method: 'POST' }
         )
     }
+
+    async applyReviewSuggestion(reviewId: string, action: string): Promise<{ success: boolean }> {
+        return await this.request<{ success: boolean }>(
+            `/api/review/sessions/${encodeURIComponent(reviewId)}/apply`,
+            {
+                method: 'POST',
+                body: JSON.stringify({ action })
+            }
+        )
+    }
 }
 
 // Types for Review (试验性功能)

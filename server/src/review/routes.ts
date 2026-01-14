@@ -70,14 +70,14 @@ function buildReviewContext(messages: DecryptedMessage[]): string {
 }
 
 /**
- * 构建 Review Prompt
+ * 构建 Review Prompt - 要求返回 JSON 格式的建议列表
  */
-function buildReviewPrompt(contextSummary: string): string {
+function buildReviewPrompt(dialogueSummary: string): string {
     return `你是一个代码审查专家。请审查当前工作目录的代码变更。
 
-## 任务背景（用户的需求描述）
+## 最近的对话内容
 
-${contextSummary}
+${dialogueSummary}
 
 ## 请执行以下操作
 
@@ -86,22 +86,27 @@ ${contextSummary}
    - 代码正确性和潜在 bug
    - 安全问题
    - 性能问题
-   - 代码风格和可维护性
-   - 是否满足任务需求
+   - 是否满足用户需求
 
-3. 请用以下格式输出审查结果：
+3. **重要**：请以 JSON 格式输出审查结果，格式如下：
 
-### 严重问题
-（如有）
+\`\`\`json
+{
+  "suggestions": [
+    {
+      "id": "1",
+      "type": "bug" | "security" | "performance" | "improvement" | "question",
+      "severity": "high" | "medium" | "low",
+      "title": "简短标题",
+      "description": "详细描述问题和建议的解决方案",
+      "action": "具体的行动指令（用户选择后会发送给主 AI 执行）"
+    }
+  ],
+  "summary": "总体评价（一句话）"
+}
+\`\`\`
 
-### 建议改进
-（如有）
-
-### 做得好的地方
-（如有）
-
-### 总结
-（总体评价和建议）
+只输出 JSON，不要输出其他内容。如果没有问题，suggestions 数组可以为空。
 `
 }
 
@@ -289,8 +294,73 @@ export function createReviewRoutes(
             return c.json({ error: 'Review session is not in pending status' }, 400)
         }
 
+        // 获取主 Session 最近 5 轮对话
+        const messagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 50, beforeSeq: null })
+
+        const dialogueMessages: Array<{ role: string; text: string }> = []
+
+        for (const m of messagesResult.messages) {
+            const content = m.content as Record<string, unknown>
+            const role = content?.role
+
+            if (role === 'user') {
+                let payload: Record<string, unknown> | null = null
+                const rawContent = content?.content
+                if (typeof rawContent === 'string') {
+                    try {
+                        payload = JSON.parse(rawContent)
+                    } catch {
+                        payload = null
+                    }
+                } else if (typeof rawContent === 'object' && rawContent) {
+                    payload = rawContent as Record<string, unknown>
+                }
+
+                const text = typeof payload?.text === 'string' ? payload.text : ''
+                if (text) {
+                    dialogueMessages.push({ role: 'User', text: text.slice(0, 500) + (text.length > 500 ? '...' : '') })
+                }
+            } else if (role === 'agent') {
+                let payload: Record<string, unknown> | null = null
+                const rawContent = content?.content
+                if (typeof rawContent === 'string') {
+                    try {
+                        payload = JSON.parse(rawContent)
+                    } catch {
+                        payload = null
+                    }
+                } else if (typeof rawContent === 'object' && rawContent) {
+                    payload = rawContent as Record<string, unknown>
+                }
+
+                if (!payload) continue
+
+                const data = payload.data as Record<string, unknown>
+                if (!data || data.type !== 'assistant') continue
+
+                const message = data.message as Record<string, unknown>
+                if (message?.content) {
+                    const contentArr = message.content as Array<{ type?: string; text?: string }>
+                    const texts: string[] = []
+                    for (const item of contentArr) {
+                        if (item.type === 'text' && item.text) {
+                            texts.push(item.text)
+                        }
+                    }
+                    if (texts.length > 0) {
+                        const combined = texts.join(' ').slice(0, 500)
+                        dialogueMessages.push({ role: 'AI', text: combined + (texts.join(' ').length > 500 ? '...' : '') })
+                    }
+                }
+            }
+        }
+
+        // 取最近 10 条（约 5 轮对话）
+        const recentMessages = dialogueMessages.slice(-10)
+        const dialogueSummary = recentMessages.map((msg) => `[${msg.role}] ${msg.text}`).join('\n\n')
+
         // 发送 Review Prompt 给 Review Session
-        const reviewPrompt = buildReviewPrompt(reviewSession.contextSummary)
+        const reviewPrompt = buildReviewPrompt(dialogueSummary)
 
         await engine.sendMessage(reviewSession.reviewSessionId, {
             text: reviewPrompt,
@@ -536,6 +606,34 @@ ${latestReview}
 
         // 标记 Review 为完成
         await reviewStore.updateReviewSessionStatus(id, 'completed')
+
+        return c.json({ success: true })
+    })
+
+    // 发送用户选择的建议到主 Session
+    app.post('/review/sessions/:id/apply', async (c) => {
+        const id = c.req.param('id')
+        const engine = getSyncEngine()
+
+        if (!engine) {
+            return c.json({ error: 'Sync engine not available' }, 503)
+        }
+
+        const body = await c.req.json().catch(() => null) as { action?: string } | null
+        if (!body?.action) {
+            return c.json({ error: 'action is required' }, 400)
+        }
+
+        const reviewSession = await reviewStore.getReviewSession(id)
+        if (!reviewSession) {
+            return c.json({ error: 'Review session not found' }, 404)
+        }
+
+        // 发送建议的 action 到主 Session
+        await engine.sendMessage(reviewSession.mainSessionId, {
+            text: body.action,
+            sentFrom: 'webapp'
+        })
 
         return c.json({ success: true })
     })
