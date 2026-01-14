@@ -580,12 +580,15 @@ ${batchRounds.map(r => `  {
                 for (const item of contentArr) {
                     if (item.type === 'text' && item.text) {
                         console.log('[save-summary] Found text, length:', item.text.length, 'preview:', item.text.slice(0, 200))
-                        // 尝试从文本中提取 JSON
-                        // 使用贪婪模式匹配最后一个 ``` 结束符
-                        const jsonMatch = item.text.match(/```json\s*([\s\S]*)\s*```/)
+                        // 尝试从文本中提取 JSON - 找到最后一个 ```json 块
+                        // 先找到所有 ```json ... ``` 块，取最后一个
+                        const jsonBlocks = [...item.text.matchAll(/```json\s*([\s\S]*?)\s*```/g)]
+                        console.log('[save-summary] Found', jsonBlocks.length, 'json blocks in text')
+                        const jsonMatch = jsonBlocks.length > 0 ? jsonBlocks[jsonBlocks.length - 1] : null
                         if (jsonMatch) {
-                            console.log('[save-summary] Found json block, raw content length:', jsonMatch[1].length)
-                            console.log('[save-summary] JSON block last 200 chars:', jsonMatch[1].slice(-200))
+                            console.log('[save-summary] Using last json block, content length:', jsonMatch[1].length)
+                            console.log('[save-summary] JSON block first 300 chars:', jsonMatch[1].slice(0, 300))
+                            console.log('[save-summary] JSON block last 300 chars:', jsonMatch[1].slice(-300))
                             try {
                                 const parsed = JSON.parse(jsonMatch[1])
                                 // 支持数组格式
