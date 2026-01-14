@@ -117,6 +117,16 @@ export function ReviewPanel(props: {
         refetchInterval: 5000  // 每 5 秒刷新一次
     })
 
+    // 开始 Review
+    const startMutation = useMutation({
+        mutationFn: async (reviewId: string) => {
+            return await api.startReviewSession(reviewId)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['review-sessions', props.mainSessionId] })
+        }
+    })
+
     // 取消 Review
     const cancelMutation = useMutation({
         mutationFn: async (reviewId: string) => {
@@ -242,7 +252,27 @@ export function ReviewPanel(props: {
                         </div>
 
                         {/* Actions */}
-                        {(currentReview.status === 'pending' || currentReview.status === 'active') && (
+                        {currentReview.status === 'pending' && (
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => startMutation.mutate(currentReview.id)}
+                                    disabled={startMutation.isPending}
+                                    className="flex-1 px-3 py-1.5 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
+                                >
+                                    {startMutation.isPending ? '启动中...' : '开始 Review'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => cancelMutation.mutate(currentReview.id)}
+                                    disabled={cancelMutation.isPending}
+                                    className="px-3 py-1.5 text-xs rounded bg-red-500/10 text-red-600 hover:bg-red-500/20 disabled:opacity-50"
+                                >
+                                    取消
+                                </button>
+                            </div>
+                        )}
+                        {currentReview.status === 'active' && (
                             <div className="flex gap-2">
                                 <button
                                     type="button"

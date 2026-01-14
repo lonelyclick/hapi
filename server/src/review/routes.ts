@@ -200,7 +200,7 @@ export function createReviewRoutes(
             return c.json({ error: 'Review session failed to come online' }, 500)
         }
 
-        // 保存 Review Session 记录
+        // 保存 Review Session 记录（状态为 pending，等待用户手动触发）
         const reviewSession = await reviewStore.createReviewSession({
             namespace,
             mainSessionId,
@@ -210,27 +210,13 @@ export function createReviewRoutes(
             contextSummary
         })
 
-        // 发送 Review Prompt 给 Review Session
-        const reviewPrompt = buildReviewPrompt(contextSummary)
-
-        // 等待一小段时间让 socket 连接建立
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        await engine.sendMessage(reviewSessionId, {
-            text: reviewPrompt,
-            sentFrom: 'webapp'
-        })
-
-        // 更新状态为 active
-        await reviewStore.updateReviewSessionStatus(reviewSession.id, 'active')
-
         return c.json({
             id: reviewSession.id,
             reviewSessionId,
             mainSessionId,
             reviewModel,
             reviewModelVariant,
-            status: 'active'
+            status: 'pending'
         })
     })
 
@@ -283,6 +269,34 @@ export function createReviewRoutes(
         }
 
         return c.json({ success: true })
+    })
+
+    // 触发 Review（发送 prompt 开始 Review）
+    app.post('/review/sessions/:id/start', async (c) => {
+        const id = c.req.param('id')
+        const engine = getSyncEngine()
+
+        const reviewSession = await reviewStore.getReviewSession(id)
+        if (!reviewSession) {
+            return c.json({ error: 'Review session not found' }, 404)
+        }
+
+        if (reviewSession.status !== 'pending') {
+            return c.json({ error: 'Review session is not in pending status' }, 400)
+        }
+
+        // 发送 Review Prompt 给 Review Session
+        const reviewPrompt = buildReviewPrompt(reviewSession.contextSummary)
+
+        await engine.sendMessage(reviewSession.reviewSessionId, {
+            text: reviewPrompt,
+            sentFrom: 'webapp'
+        })
+
+        // 更新状态为 active
+        await reviewStore.updateReviewSessionStatus(id, 'active')
+
+        return c.json({ success: true, status: 'active' })
     })
 
     // 取消 Review Session

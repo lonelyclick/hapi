@@ -1007,6 +1007,13 @@ export class ApiClient {
         )
     }
 
+    async startReviewSession(reviewId: string): Promise<{ success: boolean; status: string }> {
+        return await this.request<{ success: boolean; status: string }>(
+            `/api/review/sessions/${encodeURIComponent(reviewId)}/start`,
+            { method: 'POST' }
+        )
+    }
+
     async cancelReviewSession(reviewId: string): Promise<{ success: boolean }> {
         return await this.request<{ success: boolean }>(
             `/api/review/sessions/${encodeURIComponent(reviewId)}/cancel`,
