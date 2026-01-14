@@ -95,12 +95,13 @@ function parseReviewResult(text: string): ReviewResult | null {
     return null
 }
 
-// 从消息中提取 AI 回复文本
+// 从消息中提取所有 AI 回复文本
 function extractAIResponse(messagesData: { messages: Array<{ id: string; content: unknown }> } | undefined): string | null {
     if (!messagesData?.messages) return null
 
-    for (let i = messagesData.messages.length - 1; i >= 0; i--) {
-        const m = messagesData.messages[i]
+    const allTexts: string[] = []
+
+    for (const m of messagesData.messages) {
         const content = m.content as Record<string, unknown>
         const role = content?.role
 
@@ -120,21 +121,24 @@ function extractAIResponse(messagesData: { messages: Array<{ id: string; content
             if (!payload) continue
 
             const data = payload.data as Record<string, unknown>
-            if (!data || data.type !== 'assistant') continue
+            if (!data) continue
 
-            const message = data.message as Record<string, unknown>
-            if (message?.content) {
-                const contentArr = message.content as Array<{ type?: string; text?: string }>
-                for (const item of contentArr) {
-                    if (item.type === 'text' && item.text) {
-                        return item.text
+            // 检查 assistant 类型
+            if (data.type === 'assistant') {
+                const message = data.message as Record<string, unknown>
+                if (message?.content) {
+                    const contentArr = message.content as Array<{ type?: string; text?: string }>
+                    for (const item of contentArr) {
+                        if (item.type === 'text' && item.text) {
+                            allTexts.push(item.text)
+                        }
                     }
                 }
             }
         }
     }
 
-    return null
+    return allTexts.length > 0 ? allTexts.join('\n\n---\n\n') : null
 }
 
 function getSeverityColor(severity: string) {
@@ -259,9 +263,11 @@ export function ReviewPanel(props: {
 
     // Debug log
     console.log('[ReviewPanel] reviewSessions:', reviewSessions?.length, 'currentReview:', currentReview?.status, 'reviewSessionId:', props.reviewSessionId)
+    console.log('[ReviewPanel] reviewMessagesData:', reviewMessagesData?.messages?.length, 'messages')
 
     // 解析 AI 回复中的建议
     const aiResponse = extractAIResponse(reviewMessagesData)
+    console.log('[ReviewPanel] aiResponse:', aiResponse ? aiResponse.slice(0, 200) + '...' : null)
     const reviewResult = aiResponse ? parseReviewResult(aiResponse) : null
 
     // 开始 Review
