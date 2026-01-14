@@ -593,24 +593,36 @@ export function ReviewPanel(props: {
 
             {/* 对话界面 - 复用 HappyThread */}
             <AssistantRuntimeProvider runtime={runtime}>
-                <div className="relative flex min-h-0 flex-1 flex-col">
-                    <HappyThread
-                        key={props.reviewSessionId}
-                        api={api}
-                        sessionId={props.reviewSessionId}
-                        metadata={session?.metadata ?? null}
-                        disabled={false}
-                        onRefresh={handleRefresh}
-                        onRetryMessage={undefined}
-                        isLoadingMessages={isLoadingMessages}
-                        messagesWarning={null}
-                        hasMoreMessages={false}
-                        isLoadingMoreMessages={false}
-                        onLoadMore={async () => {}}
-                        rawMessagesCount={messages.length}
-                        normalizedMessagesCount={normalizedMessages.length}
-                        renderedMessagesCount={reconciled.blocks.length}
-                    />
+                <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto">
+                        <HappyThread
+                            key={props.reviewSessionId}
+                            api={api}
+                            sessionId={props.reviewSessionId}
+                            metadata={session?.metadata ?? null}
+                            disabled={false}
+                            onRefresh={handleRefresh}
+                            onRetryMessage={undefined}
+                            isLoadingMessages={isLoadingMessages}
+                            messagesWarning={null}
+                            hasMoreMessages={false}
+                            isLoadingMoreMessages={false}
+                            onLoadMore={async () => {}}
+                            rawMessagesCount={messages.length}
+                            normalizedMessagesCount={normalizedMessages.length}
+                            renderedMessagesCount={reconciled.blocks.length}
+                        />
+                        {/* 建议卡片 - 显示在对话区域内 */}
+                        {latestReviewText && (
+                            <div className="px-4 pb-4">
+                                <ReviewSuggestions
+                                    reviewText={latestReviewText}
+                                    onApply={(details) => applySuggestionsMutation.mutate(details)}
+                                    isApplying={applySuggestionsMutation.isPending}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </div>
             </AssistantRuntimeProvider>
 
@@ -693,17 +705,6 @@ export function ReviewPanel(props: {
                                 </span>
                             )}
                         </button>
-                    </div>
-                )}
-
-                {/* 建议卡片 - 只要有建议 JSON 就显示，不管状态 */}
-                {latestReviewText && (
-                    <div className="space-y-3">
-                        <ReviewSuggestions
-                            reviewText={latestReviewText}
-                            onApply={(details) => applySuggestionsMutation.mutate(details)}
-                            isApplying={applySuggestionsMutation.isPending}
-                        />
                     </div>
                 )}
 
