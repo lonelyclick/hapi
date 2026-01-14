@@ -537,6 +537,7 @@ export function SessionChat(props: {
                 <ReviewPanel
                     mainSessionId={props.session.id}
                     reviewSessionId={reviewSessionId}
+                    onClose={() => setReviewSessionId(null)}
                 />
             )}
         </div>
