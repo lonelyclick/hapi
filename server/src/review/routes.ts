@@ -602,6 +602,12 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
             originalMessageIds: targetRound.messageIds
         })
 
+        // 发送确认消息到 Review Session
+        await engine.sendMessage(reviewSession.reviewSessionId, {
+            text: `✅ 第 ${latestSummary.round} 轮汇总已保存到数据库。`,
+            sentFrom: 'webapp'
+        })
+
         return c.json({
             success: true,
             savedRound: latestSummary.round,
