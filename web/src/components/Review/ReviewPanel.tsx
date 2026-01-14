@@ -334,8 +334,8 @@ export function ReviewPanel(props: {
 
             {/* 状态栏 */}
             <div className="border-b border-[var(--app-divider)] p-3 bg-[var(--app-subtle-bg)]">
-                {/* pending 状态 - 显示开始按钮 */}
-                {currentReview?.status === 'pending' && (
+                {/* pending 状态 或 active但AI不在思考 - 显示开始/继续按钮 */}
+                {(currentReview?.status === 'pending' || (currentReview?.status === 'active' && !session?.thinking)) && (
                     <button
                         type="button"
                         onClick={() => startReviewMutation.mutate()}
@@ -348,17 +348,16 @@ export function ReviewPanel(props: {
                                 启动中...
                             </span>
                         ) : (
-                            '开始 Review'
+                            currentReview?.status === 'pending' ? '开始 Review' : '继续 Review'
                         )}
                     </button>
                 )}
 
-                {/* active 状态 - 显示正在进行 */}
-                {currentReview?.status === 'active' && (
+                {/* active 状态且 AI 正在思考 - 显示进行中 */}
+                {currentReview?.status === 'active' && session?.thinking && (
                     <div className="flex items-center justify-center gap-2 text-sm text-[var(--app-hint)]">
                         <LoadingIcon className="text-green-500" />
                         <span>Review 进行中...</span>
-                        <span className="text-xs">({messages.length} 条消息)</span>
                     </div>
                 )}
 
