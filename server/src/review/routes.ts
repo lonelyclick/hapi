@@ -340,14 +340,7 @@ export function createReviewRoutes(
         }
 
         // 获取主 Session 的最近消息
-        const mainSession = engine.getSession(reviewSession.mainSessionId)
-        if (!mainSession) {
-            return c.json({ error: 'Main session not found' }, 404)
-        }
-
-        // 从 store 获取消息
-        const store = engine.getStore()
-        const messagesResult = await store.getMessages(reviewSession.mainSessionId, { limit: 30 })
+        const messagesResult = await engine.getMessages(reviewSession.mainSessionId, { limit: 30 })
 
         // 提取用户消息作为摘要
         const userMessages = messagesResult.messages
@@ -402,8 +395,7 @@ ${userMessages.map((msg, i) => `[${i + 1}] ${msg}`).join('\n\n')}
         }
 
         // 获取 Review Session 的最新 AI 回复
-        const store = engine.getStore()
-        const messagesResult = await store.getMessages(reviewSession.reviewSessionId, { limit: 50 })
+        const messagesResult = await engine.getMessages(reviewSession.reviewSessionId, { limit: 50 })
 
         // 提取最新的 AI 回复
         const agentMessages = messagesResult.messages
