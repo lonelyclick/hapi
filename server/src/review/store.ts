@@ -45,9 +45,41 @@ export class ReviewStore implements IReviewStore {
                 user_input TEXT NOT NULL,
                 ai_summary TEXT NOT NULL,
                 original_message_ids TEXT[],
+                started_at BIGINT,
+                ended_at BIGINT,
                 created_at BIGINT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_review_rounds_session ON review_rounds(review_session_id);
+
+            -- Review Executions 表 - 存储每次执行 review 的记录
+            CREATE TABLE IF NOT EXISTS review_executions (
+                id TEXT PRIMARY KEY,
+                review_session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE,
+                rounds_reviewed INTEGER NOT NULL,
+                time_range_start BIGINT NOT NULL,
+                time_range_end BIGINT NOT NULL,
+                prompt TEXT NOT NULL,
+                result TEXT,
+                status TEXT DEFAULT 'pending',
+                created_at BIGINT NOT NULL,
+                completed_at BIGINT
+            );
+            CREATE INDEX IF NOT EXISTS idx_review_executions_session ON review_executions(review_session_id);
+        `)
+
+        // 添加新字段（如果表已存在）
+        await this.pool.query(`
+            DO $$
+            BEGIN
+                -- 添加 started_at 字段
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_rounds' AND column_name = 'started_at') THEN
+                    ALTER TABLE review_rounds ADD COLUMN started_at BIGINT;
+                END IF;
+                -- 添加 ended_at 字段
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_rounds' AND column_name = 'ended_at') THEN
+                    ALTER TABLE review_rounds ADD COLUMN ended_at BIGINT;
+                END IF;
+            END $$;
         `)
     }
 
@@ -176,15 +208,17 @@ export class ReviewStore implements IReviewStore {
         userInput: string
         aiSummary: string
         originalMessageIds?: string[]
+        startedAt?: number
+        endedAt?: number
     }): Promise<{ id: string }> {
         const id = randomUUID()
         const now = Date.now()
 
         await this.pool.query(
             `INSERT INTO review_rounds
-             (id, review_session_id, round_number, user_input, ai_summary, original_message_ids, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [id, data.reviewSessionId, data.roundNumber, data.userInput, data.aiSummary, data.originalMessageIds ?? [], now]
+             (id, review_session_id, round_number, user_input, ai_summary, original_message_ids, started_at, ended_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [id, data.reviewSessionId, data.roundNumber, data.userInput, data.aiSummary, data.originalMessageIds ?? [], data.startedAt ?? null, data.endedAt ?? null, now]
         )
 
         return { id }
@@ -196,6 +230,8 @@ export class ReviewStore implements IReviewStore {
         userInput: string
         aiSummary: string
         originalMessageIds: string[]
+        startedAt?: number
+        endedAt?: number
         createdAt: number
     }>> {
         const result = await this.pool.query(
@@ -209,8 +245,81 @@ export class ReviewStore implements IReviewStore {
             userInput: row.user_input as string,
             aiSummary: row.ai_summary as string,
             originalMessageIds: (row.original_message_ids as string[]) ?? [],
+            startedAt: row.started_at ? Number(row.started_at) : undefined,
+            endedAt: row.ended_at ? Number(row.ended_at) : undefined,
             createdAt: Number(row.created_at)
         }))
+    }
+
+    // ============ Review Executions 相关方法 ============
+
+    async createReviewExecution(data: {
+        reviewSessionId: string
+        roundsReviewed: number
+        timeRangeStart: number
+        timeRangeEnd: number
+        prompt: string
+    }): Promise<{ id: string }> {
+        const id = randomUUID()
+        const now = Date.now()
+
+        await this.pool.query(
+            `INSERT INTO review_executions
+             (id, review_session_id, rounds_reviewed, time_range_start, time_range_end, prompt, status, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)`,
+            [id, data.reviewSessionId, data.roundsReviewed, data.timeRangeStart, data.timeRangeEnd, data.prompt, now]
+        )
+
+        return { id }
+    }
+
+    async getReviewExecutions(reviewSessionId: string): Promise<Array<{
+        id: string
+        roundsReviewed: number
+        timeRangeStart: number
+        timeRangeEnd: number
+        prompt: string
+        result?: string
+        status: string
+        createdAt: number
+        completedAt?: number
+    }>> {
+        const result = await this.pool.query(
+            `SELECT * FROM review_executions WHERE review_session_id = $1 ORDER BY created_at DESC`,
+            [reviewSessionId]
+        )
+
+        return result.rows.map(row => ({
+            id: row.id as string,
+            roundsReviewed: row.rounds_reviewed as number,
+            timeRangeStart: Number(row.time_range_start),
+            timeRangeEnd: Number(row.time_range_end),
+            prompt: row.prompt as string,
+            result: row.result as string | undefined,
+            status: row.status as string,
+            createdAt: Number(row.created_at),
+            completedAt: row.completed_at ? Number(row.completed_at) : undefined
+        }))
+    }
+
+    async completeReviewExecution(id: string, result: string): Promise<boolean> {
+        const now = Date.now()
+        const queryResult = await this.pool.query(
+            `UPDATE review_executions SET status = 'completed', result = $1, completed_at = $2 WHERE id = $3`,
+            [result, now, id]
+        )
+
+        return (queryResult.rowCount ?? 0) > 0
+    }
+
+    async failReviewExecution(id: string, error: string): Promise<boolean> {
+        const now = Date.now()
+        const queryResult = await this.pool.query(
+            `UPDATE review_executions SET status = 'failed', result = $1, completed_at = $2 WHERE id = $3`,
+            [error, now, id]
+        )
+
+        return (queryResult.rowCount ?? 0) > 0
     }
 
     async deleteReviewRounds(reviewSessionId: string): Promise<number> {

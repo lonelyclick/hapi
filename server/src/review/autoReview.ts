@@ -8,7 +8,8 @@
 
 import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { SSEManager } from '../sse/sseManager'
-import type { ReviewStore, StoredReviewSession } from './store'
+import type { ReviewStore } from './store'
+import type { StoredReviewSession } from './types'
 
 // 同步配置
 const MAX_BATCH_CHARS = 50000  // 每批最大字符数
@@ -47,6 +48,8 @@ interface DialogueRound {
     userInput: string
     aiMessages: string[]
     messageIds: string[]
+    startedAt: number   // 轮次开始时间（用户消息时间）
+    endedAt: number     // 轮次结束时间（最后一条 AI 消息时间）
 }
 
 function extractAIText(content: unknown): string | null {
@@ -87,7 +90,7 @@ function extractAIText(content: unknown): string | null {
     return texts.length > 0 ? texts.join('\n\n') : null
 }
 
-function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown }>): DialogueRound[] {
+function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown; createdAt: number }>): DialogueRound[] {
     const rounds: DialogueRound[] = []
     let currentRound: DialogueRound | null = null
     let roundNumber = 0
@@ -105,11 +108,14 @@ function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown 
                 roundNumber,
                 userInput: userText,
                 aiMessages: [],
-                messageIds: [message.id]
+                messageIds: [message.id],
+                startedAt: message.createdAt,
+                endedAt: message.createdAt
             }
         } else if (aiText && currentRound) {
             currentRound.aiMessages.push(aiText)
             currentRound.messageIds.push(message.id)
+            currentRound.endedAt = message.createdAt
         }
     }
 
@@ -426,7 +432,9 @@ export class AutoReviewService {
                     roundNumber: summary.round,
                     userInput: targetRound.userInput,
                     aiSummary: summary.summary,
-                    originalMessageIds: targetRound.messageIds
+                    originalMessageIds: targetRound.messageIds,
+                    startedAt: targetRound.startedAt,
+                    endedAt: targetRound.endedAt
                 })
                 savedRounds.push(summary.round)
             }

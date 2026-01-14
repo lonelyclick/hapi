@@ -183,49 +183,53 @@ function summarizeAIMessages(aiMessages: string[]): string {
 }
 
 /**
+ * 格式化时间戳为可读字符串
+ */
+function formatTimestamp(ts: number): string {
+    const date = new Date(ts)
+    return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    })
+}
+
+/**
+ * 格式化时间戳为 git 命令可用的格式
+ */
+function formatGitTimestamp(ts: number): string {
+    const date = new Date(ts)
+    return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '')
+}
+
+/**
  * 构建 Review Prompt - 要求返回 JSON 格式的建议列表
  */
-function buildReviewPrompt(roundsSummary: string): string {
-    return `你是一个代码审查专家。
+function buildReviewPrompt(roundsSummary: string, timeRange?: { start: number; end: number }): string {
+    const timeRangeInfo = timeRange
+        ? `\n## 时间范围\n\n开发时间：${formatTimestamp(timeRange.start)} ~ ${formatTimestamp(timeRange.end)}\n`
+        : ''
+
+    const gitHint = timeRange
+        ? `用 git log/diff --after="${formatGitTimestamp(timeRange.start)}" --before="${formatGitTimestamp(timeRange.end + 60000)}" 查看时间段内改动，或 git diff HEAD 查看未提交改动`
+        : `用 git log -5 和 git diff HEAD~3 查看最近改动`
+
+    return `你是代码审查专家。请使用 plan 模式。**只能查看代码，禁止修改文件。**
 
 ## 背景
-以下是最近的开发对话汇总：
 ${roundsSummary}
+${timeRangeInfo}
+## 审查
+${gitHint}
+鼓励读取相关文件。审查：正确性、安全、性能、需求、可维护性。
 
-## 审查步骤
-
-1. 运行 \`git log --oneline -5\` 查看最近的提交
-2. 运行 \`git diff HEAD~3\` 或适当范围查看代码变更（如果变更已提交）
-3. 如果 diff 为空，说明代码已提交，请查看最近 commit 的内容
-4. 如果需要，读取相关文件了解完整上下文
-5. 从以下角度审查：
-   - 代码正确性和潜在 bug
-   - 安全问题（注入、XSS、敏感信息泄露等）
-   - 性能问题
-   - 是否满足用户需求
-   - 代码风格和可维护性
-
-## 输出要求
-
-先简要说明你的分析过程，然后用以下 JSON 格式给出建议：
-
+## 输出JSON
 \`\`\`json
-{
-  "suggestions": [
-    {
-      "id": "1",
-      "type": "bug | security | performance | improvement | question",
-      "severity": "high | medium | low",
-      "title": "简短标题",
-      "description": "详细描述问题和建议的解决方案",
-      "action": "具体的行动指令（用户选择后会发送给主 AI 执行）"
-    }
-  ],
-  "summary": "总体评价（一句话）"
-}
+{"suggestions":[{"id":"1","type":"bug|security|performance|improvement","severity":"high|medium|low","title":"简短标题","detail":"详细描述和解决方案，发给主AI执行"}],"summary":"总体评价"}
 \`\`\`
-
-如果没有问题，suggestions 数组可以为空。
 `
 }
 
@@ -750,17 +754,34 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'No summarized rounds found. Please sync first.', noRounds: true }, 400)
         }
 
-        // 构建完整的对话汇总
-        const roundsSummaryParts: string[] = []
-        for (const round of allSummarizedRounds) {
-            roundsSummaryParts.push(`[用户] ${round.userInput}`)
-            roundsSummaryParts.push(`[AI] ${round.aiSummary}`)
+        // 构建完整的对话汇总（直接使用已汇总的内容，每行一轮）
+        const roundsSummary = allSummarizedRounds.map(r => r.aiSummary).join('\n')
+
+        // 计算时间范围
+        let timeRange: { start: number; end: number } | undefined
+        const roundsWithTime = allSummarizedRounds.filter(r => r.startedAt && r.endedAt)
+        if (roundsWithTime.length > 0) {
+            const startTimes = roundsWithTime.map(r => r.startedAt!).filter(t => t > 0)
+            const endTimes = roundsWithTime.map(r => r.endedAt!).filter(t => t > 0)
+            if (startTimes.length > 0 && endTimes.length > 0) {
+                timeRange = {
+                    start: Math.min(...startTimes),
+                    end: Math.max(...endTimes)
+                }
+            }
         }
 
-        const roundsSummary = roundsSummaryParts.join('\n\n')
-
         // 发送 Review Prompt
-        const reviewPrompt = buildReviewPrompt(roundsSummary)
+        const reviewPrompt = buildReviewPrompt(roundsSummary, timeRange)
+
+        // 创建执行记录
+        const execution = await reviewStore.createReviewExecution({
+            reviewSessionId: id,
+            roundsReviewed: allSummarizedRounds.length,
+            timeRangeStart: timeRange?.start ?? Date.now(),
+            timeRangeEnd: timeRange?.end ?? Date.now(),
+            prompt: reviewPrompt
+        })
 
         await engine.sendMessage(reviewSession.reviewSessionId, {
             text: reviewPrompt,
@@ -775,7 +796,9 @@ ${batchRounds.map(r => `  {
         return c.json({
             success: true,
             status: 'active',
-            roundsReviewed: allSummarizedRounds.length
+            roundsReviewed: allSummarizedRounds.length,
+            executionId: execution.id,
+            timeRange
         })
     })
 
@@ -1029,6 +1052,15 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
 
         // 标记 Review 为完成
         await reviewStore.updateReviewSessionStatus(id, 'completed')
+
+        // 更新最近的执行记录
+        const executions = await reviewStore.getReviewExecutions(id)
+        if (executions.length > 0) {
+            const latestExecution = executions[0]  // 已按 created_at DESC 排序
+            if (latestExecution.status === 'pending') {
+                await reviewStore.completeReviewExecution(latestExecution.id, latestReview)
+            }
+        }
 
         // 只返回结果，不自动发送到主 Session
         return c.json({
