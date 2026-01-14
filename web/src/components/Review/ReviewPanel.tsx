@@ -165,25 +165,15 @@ export function ReviewPanel(props: {
     const currentReviewForPending = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
 
     // 检查未汇总的轮次（pending 和 active 状态都需要查询）
-    const { data: pendingRoundsData, isError: isPendingRoundsError, error: pendingRoundsError } = useQuery({
+    const { data: pendingRoundsData } = useQuery({
         queryKey: ['review-pending-rounds', currentReviewForPending?.id],
         queryFn: async () => {
             if (!currentReviewForPending?.id) throw new Error('No review ID')
-            console.log('[ReviewPanel] Fetching pending rounds for:', currentReviewForPending.id)
-            const result = await api.getReviewPendingRounds(currentReviewForPending.id)
-            console.log('[ReviewPanel] Pending rounds result:', result)
-            return result
+            return await api.getReviewPendingRounds(currentReviewForPending.id)
         },
         enabled: Boolean(currentReviewForPending?.id) && (currentReviewForPending?.status === 'pending' || currentReviewForPending?.status === 'active'),
-        refetchInterval: 5000  // 每 5 秒检查一次
+        refetchInterval: 10000  // 每 10 秒检查一次
     })
-
-    // 调试 pending rounds 查询错误
-    useEffect(() => {
-        if (isPendingRoundsError) {
-            console.error('[ReviewPanel] Pending rounds error:', pendingRoundsError)
-        }
-    }, [isPendingRoundsError, pendingRoundsError])
 
     // 获取 Review Session 信息（更快刷新）
     const { data: reviewSession } = useQuery({
@@ -208,30 +198,6 @@ export function ReviewPanel(props: {
     const currentReview = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
     const messages = (reviewMessagesData?.messages ?? []) as DecryptedMessage[]
 
-    // 调试日志
-    useEffect(() => {
-        console.log('[ReviewPanel] Review status:', {
-            reviewSessionId: props.reviewSessionId,
-            reviewSessionsCount: reviewSessions?.length,
-            currentReview: currentReview ? { id: currentReview.id, status: currentReview.status } : null,
-            currentReviewForPending: currentReviewForPending ? { id: currentReviewForPending.id, status: currentReviewForPending.status } : null,
-            pendingRoundsData,
-            allReviews: reviewSessions?.map(r => ({ id: r.id, reviewSessionId: r.reviewSessionId, status: r.status }))
-        })
-    }, [props.reviewSessionId, reviewSessions, currentReview, currentReviewForPending, pendingRoundsData])
-
-    useEffect(() => {
-        console.log('[ReviewPanel] Debug:', {
-            reviewSessionId: props.reviewSessionId,
-            messagesCount: messages.length,
-            messages: messages.map(m => ({
-                id: m.id,
-                role: (m.content as Record<string, unknown>)?.role,
-                contentKeys: Object.keys(m.content as Record<string, unknown> || {})
-            }))
-        })
-    }, [messages, props.reviewSessionId])
-
     // 消息规范化管道
     const normalizedMessages: NormalizedMessage[] = useMemo(() => {
         const cache = normalizedCacheRef.current
@@ -245,7 +211,6 @@ export function ReviewPanel(props: {
                 continue
             }
             const next = normalizeDecryptedMessage(message)
-            console.log('[ReviewPanel] Normalize:', { messageId: message.id, result: next ? 'OK' : 'NULL', next })
             cache.set(message.id, { source: message, normalized: next })
             if (next) normalized.push(next)
         }
@@ -254,15 +219,12 @@ export function ReviewPanel(props: {
                 cache.delete(id)
             }
         }
-        console.log('[ReviewPanel] Normalized messages:', normalized.length)
         return normalized
     }, [messages])
 
     const session = reviewSession?.session
     const reduced = useMemo(() => {
-        const result = reduceChatBlocks(normalizedMessages, session?.agentState ?? null)
-        console.log('[ReviewPanel] Reduced blocks:', result.blocks.length, result.blocks.map(b => ({ id: b.id, kind: b.kind })))
-        return result
+        return reduceChatBlocks(normalizedMessages, session?.agentState ?? null)
     }, [normalizedMessages, session?.agentState])
 
     const reconciled = useMemo(
@@ -271,7 +233,6 @@ export function ReviewPanel(props: {
     )
 
     useEffect(() => {
-        console.log('[ReviewPanel] Reconciled blocks:', reconciled.blocks.length)
         blocksByIdRef.current = reconciled.byId
     }, [reconciled.byId])
 
@@ -348,11 +309,9 @@ export function ReviewPanel(props: {
 
                 // 执行一次同步
                 const result = await api.syncReviewRounds(currentReview.id)
-                console.log('[ReviewPanel] Sync result:', result)
 
                 // 如果 AI 正忙，等待后重试
                 if (result.error === 'busy') {
-                    console.log('[ReviewPanel] AI busy, waiting...')
                     await new Promise(resolve => setTimeout(resolve, 2000))
                     continue
                 }
@@ -381,9 +340,8 @@ export function ReviewPanel(props: {
                 // 尝试保存汇总结果
                 try {
                     await api.saveReviewSummary(currentReview.id)
-                } catch (e) {
+                } catch {
                     // 忽略保存错误，可能是 AI 还没回复完
-                    console.log('[ReviewPanel] Save summary during sync loop:', e)
                 }
 
                 // 刷新 pending rounds 数据
@@ -391,7 +349,6 @@ export function ReviewPanel(props: {
 
                 // 检查是否还有待汇总的轮次
                 const status = await api.getReviewPendingRounds(currentReview.id)
-                console.log('[ReviewPanel] Updated status:', status)
 
                 // 更新进度
                 setSyncProgress(prev => prev ? {
