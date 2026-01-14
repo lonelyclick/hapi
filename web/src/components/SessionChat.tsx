@@ -355,11 +355,6 @@ export function SessionChat(props: {
         setReviewSessionId(newReviewSessionId)
     }, [])
 
-    // 处理打开 Review Session（在新窗口）
-    const handleOpenReviewSession = useCallback((sessionId: string) => {
-        navigate({ to: '/sessions/$sessionId', params: { sessionId } })
-    }, [navigate])
-
     return (
         <div className="flex h-full">
             {/* 主聊天区域 */}
@@ -537,28 +532,12 @@ export function SessionChat(props: {
             </AssistantRuntimeProvider>
             </div>
 
-            {/* Review 面板 (试验性功能) - 移动端全屏覆盖，桌面端侧边栏 */}
+            {/* Review 面板 */}
             {reviewSessionId && (
-                <>
-                    {/* 移动端全屏覆盖 */}
-                    <div className="fixed inset-0 z-40 bg-[var(--app-bg)] sm:hidden">
-                        <ReviewPanel
-                            mainSessionId={props.session.id}
-                            reviewSessionId={reviewSessionId}
-                            onClose={() => setReviewSessionId(null)}
-                            onOpenReviewSession={handleOpenReviewSession}
-                        />
-                    </div>
-                    {/* 桌面端侧边栏 */}
-                    <div className="hidden sm:block">
-                        <ReviewPanel
-                            mainSessionId={props.session.id}
-                            reviewSessionId={reviewSessionId}
-                            onClose={() => setReviewSessionId(null)}
-                            onOpenReviewSession={handleOpenReviewSession}
-                        />
-                    </div>
-                </>
+                <ReviewPanel
+                    mainSessionId={props.session.id}
+                    reviewSessionId={reviewSessionId}
+                />
             )}
         </div>
     )
