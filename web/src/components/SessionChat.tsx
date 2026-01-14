@@ -78,6 +78,8 @@ export function SessionChat(props: {
     const [resumeError, setResumeError] = useState<string | null>(null)
     // Review 面板状态 (试验性功能)
     const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
+    // 用户手动关闭的标记，防止 activeReviewSession 重新设置 reviewSessionId
+    const userClosedReviewRef = useRef(false)
     const pendingMessageRef = useRef<string | null>(null)
     const composerSetTextRef = useRef<((text: string) => void) | null>(null)
 
@@ -96,6 +98,8 @@ export function SessionChat(props: {
 
     // 如果有活跃的 Review Session，自动显示面板
     useEffect(() => {
+        // 用户手动关闭后，不再自动恢复
+        if (userClosedReviewRef.current) return
         if (activeReviewSession?.reviewSessionId && !reviewSessionId) {
             setReviewSessionId(activeReviewSession.reviewSessionId)
         }
@@ -108,6 +112,7 @@ export function SessionChat(props: {
         setResumeError(null)
         setClearSuggestionDismissed(false)
         setReviewSessionId(null)
+        userClosedReviewRef.current = false  // 切换 session 时重置
         pendingMessageRef.current = null
     }, [props.session.id])
 
@@ -537,7 +542,10 @@ export function SessionChat(props: {
                 <ReviewPanel
                     mainSessionId={props.session.id}
                     reviewSessionId={reviewSessionId}
-                    onClose={() => setReviewSessionId(null)}
+                    onClose={() => {
+                        userClosedReviewRef.current = true
+                        setReviewSessionId(null)
+                    }}
                 />
             )}
         </div>
