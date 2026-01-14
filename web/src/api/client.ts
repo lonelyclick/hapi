@@ -1044,8 +1044,24 @@ export class ApiClient {
         )
     }
 
-    async getReviewPendingRounds(reviewId: string): Promise<{ totalRounds: number; summarizedRounds: number; pendingRounds: number; hasPendingRounds: boolean }> {
-        return await this.request<{ totalRounds: number; summarizedRounds: number; pendingRounds: number; hasPendingRounds: boolean }>(
+    async getReviewPendingRounds(reviewId: string): Promise<{
+        totalRounds: number
+        summarizedRounds: number
+        pendingRounds: number
+        hasPendingRounds: boolean
+        reviewedRounds: number
+        unreviewedRounds: number
+        hasUnreviewedRounds: boolean
+    }> {
+        return await this.request<{
+            totalRounds: number
+            summarizedRounds: number
+            pendingRounds: number
+            hasPendingRounds: boolean
+            reviewedRounds: number
+            unreviewedRounds: number
+            hasUnreviewedRounds: boolean
+        }>(
             `/api/review/sessions/${encodeURIComponent(reviewId)}/pending-rounds`
         )
     }

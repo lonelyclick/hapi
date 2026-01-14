@@ -883,11 +883,29 @@ ${batchRounds.map(r => `  {
         // 找出未汇总的轮次
         const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
 
+        // 获取已经 review 过的轮次（从已完成的执行记录中提取）
+        const executions = await reviewStore.getReviewExecutions(id)
+        const reviewedRoundNumbers = new Set<number>()
+        for (const exec of executions) {
+            if (exec.status === 'completed' && exec.reviewedRoundNumbers) {
+                for (const roundNum of exec.reviewedRoundNumbers) {
+                    reviewedRoundNumbers.add(roundNum)
+                }
+            }
+        }
+
+        // 计算待 review 的轮次（已汇总但未 review）
+        const unreviewedRounds = existingRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber))
+
         return c.json({
             totalRounds: allRounds.length,
             summarizedRounds: existingRounds.length,
             pendingRounds: pendingRounds.length,
-            hasPendingRounds: pendingRounds.length > 0
+            hasPendingRounds: pendingRounds.length > 0,
+            // 新增：review 相关统计
+            reviewedRounds: reviewedRoundNumbers.size,
+            unreviewedRounds: unreviewedRounds.length,
+            hasUnreviewedRounds: unreviewedRounds.length > 0
         })
     })
 
