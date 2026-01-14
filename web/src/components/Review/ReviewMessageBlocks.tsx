@@ -61,20 +61,33 @@ export function parseReviewSummaryTask(text: string): ParsedRound[] | null {
 function extractJsonFromText(text: string): string | null {
     // 1. 尝试 ```json 代码块
     const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
-    if (jsonBlockMatch) return jsonBlockMatch[1].trim()
+    if (jsonBlockMatch) {
+        console.log('[extractJsonFromText] Found json block')
+        return jsonBlockMatch[1].trim()
+    }
 
     // 2. 尝试普通 ``` 代码块
     const codeBlockMatch = text.match(/```\s*([\s\S]*?)\s*```/)
-    if (codeBlockMatch) return codeBlockMatch[1].trim()
+    if (codeBlockMatch) {
+        console.log('[extractJsonFromText] Found code block')
+        return codeBlockMatch[1].trim()
+    }
 
-    // 3. 尝试直接 JSON 数组（以 [ 开头，以 ] 结尾）
-    const arrayMatch = text.match(/(\[\s*\{[\s\S]*?\}\s*\])/)
-    if (arrayMatch) return arrayMatch[1].trim()
+    // 3. 尝试直接 JSON 数组（以 [ 开头，以 ] 结尾）- 贪婪匹配
+    const arrayMatch = text.match(/(\[\s*\{[\s\S]*\}\s*\])/)
+    if (arrayMatch) {
+        console.log('[extractJsonFromText] Found array')
+        return arrayMatch[1].trim()
+    }
 
     // 4. 尝试直接 JSON 对象（以 { 开头，以 } 结尾，包含 round 和 summary）
     const objectMatch = text.match(/(\{\s*"round"\s*:[\s\S]*?"summary"\s*:[\s\S]*?\})/)
-    if (objectMatch) return objectMatch[1].trim()
+    if (objectMatch) {
+        console.log('[extractJsonFromText] Found object')
+        return objectMatch[1].trim()
+    }
 
+    console.log('[extractJsonFromText] No match found, text preview:', text.slice(0, 300))
     return null
 }
 

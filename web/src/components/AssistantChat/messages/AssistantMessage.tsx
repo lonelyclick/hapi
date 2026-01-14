@@ -36,7 +36,13 @@ export function HappyAssistantMessage() {
         if (message.role !== 'assistant') return null
         const textPart = message.content.find((part) => part.type === 'text')
         if (!textPart || textPart.type !== 'text') return null
-        return isReviewSummaryResult(textPart.text) ? textPart.text : null
+        const text = textPart.text
+        const isReview = isReviewSummaryResult(text)
+        // Debug log
+        if (text.includes('round') || text.includes('summary')) {
+            console.log('[AssistantMessage] Check review summary:', { isReview, textLength: text.length, textPreview: text.slice(0, 200) })
+        }
+        return isReview ? text : null
     })
     const rootClass = toolOnly
         ? 'py-1 min-w-0 max-w-full overflow-x-hidden'
