@@ -211,6 +211,10 @@ export class AutoReviewService {
                 return
             }
 
+            // 等待消息同步到数据库
+            console.log('[ReviewSync] Waiting for message to sync to DB...')
+            await new Promise(resolve => setTimeout(resolve, 2000))
+
             // 保存汇总结果
             console.log('[ReviewSync] Saving summary...')
             const savedCount = await this.saveSummary(reviewSession)
