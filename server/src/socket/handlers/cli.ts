@@ -144,11 +144,14 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
     // This ensures session-alive events are only processed after the socket can receive messages
     let sessionJoinPromise: Promise<boolean> | null = null
     if (sessionId) {
+        const joinStartTime = Date.now()
         sessionJoinPromise = resolveSessionAccess(sessionId).then((result) => {
             if (result.ok) {
                 socket.join(`session:${sessionId}`)
+                console.log(`[cli-socket] Socket joined session room ${sessionId} in ${Date.now() - joinStartTime}ms`)
                 return true
             }
+            console.log(`[cli-socket] Socket failed to join session room ${sessionId}: access denied`)
             return false
         })
     }

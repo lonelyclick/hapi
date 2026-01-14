@@ -4,6 +4,7 @@ import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { HappyToolMessage } from '@/components/AssistantChat/messages/ToolMessage'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
 import type { HappyChatMessageMetadata } from '@/lib/assistant-runtime'
+import { isReviewSummaryResult, ReviewSummaryResultBlock } from '@/components/Review/ReviewMessageBlocks'
 
 const TOOL_COMPONENTS = {
     Fallback: HappyToolMessage
