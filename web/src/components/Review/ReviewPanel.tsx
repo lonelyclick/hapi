@@ -164,9 +164,12 @@ export function ReviewPanel(props: {
     const [syncProgress, setSyncProgress] = useState<{
         isRunning: boolean
         totalRounds: number
-        completedRounds: number
+        summarizedRounds: number
         currentBatch: number
     } | null>(null)
+
+    // 停止同步标志
+    const stopSyncRef = useRef(false)
 
     // 拖拽状态
     const [dragMode, setDragMode] = useState<'none' | 'resize' | 'move'>('none')
@@ -380,6 +383,11 @@ export function ReviewPanel(props: {
         onAbort: handleAbort
     })
 
+    // 停止同步
+    const handleStopSync = useCallback(() => {
+        stopSyncRef.current = true
+    }, [])
+
     // 同步数据（发送给 Review AI 做汇总）- 自动循环直到完成
     const syncRoundsMutation = useMutation({
         mutationFn: async () => {
@@ -387,26 +395,27 @@ export function ReviewPanel(props: {
                 throw new Error('No current review found')
             }
 
+            // 重置停止标志
+            stopSyncRef.current = false
+
             // 获取初始状态
             const initialStatus = await api.getReviewPendingRounds(currentReview.id)
             if (!initialStatus.hasPendingRounds) {
                 return { success: true, message: '没有待汇总的轮次' }
             }
 
-            const totalPending = initialStatus.pendingRounds
-            let completedInThisRun = 0
             let batchCount = 0
 
             // 初始化进度
             setSyncProgress({
                 isRunning: true,
-                totalRounds: totalPending,
-                completedRounds: 0,
+                totalRounds: initialStatus.totalRounds,
+                summarizedRounds: initialStatus.summarizedRounds,
                 currentBatch: 1
             })
 
             // 循环执行直到所有轮次都同步完成
-            while (true) {
+            while (!stopSyncRef.current) {
                 batchCount++
 
                 // 更新当前批次
@@ -414,16 +423,14 @@ export function ReviewPanel(props: {
 
                 // 执行一次同步（每次最多 3 轮）
                 const result = await api.syncReviewRounds(currentReview.id)
+                console.log('[ReviewPanel] Sync result:', result)
 
-                if (result.newRoundsSynced > 0) {
-                    completedInThisRun += result.newRoundsSynced
-                    setSyncProgress(prev => prev ? { ...prev, completedRounds: completedInThisRun } : null)
-                }
+                if (stopSyncRef.current) break
 
                 // 等待 AI 思考完成
                 let waitCount = 0
                 const maxWait = 120 // 最多等待 2 分钟
-                while (waitCount < maxWait) {
+                while (waitCount < maxWait && !stopSyncRef.current) {
                     await new Promise(resolve => setTimeout(resolve, 1000))
                     const sessionStatus = await api.getSession(props.reviewSessionId)
                     if (!sessionStatus?.thinking) {
@@ -432,8 +439,12 @@ export function ReviewPanel(props: {
                     waitCount++
                 }
 
+                if (stopSyncRef.current) break
+
                 // 等待 AI 回复被保存（额外等待 3 秒）
                 await new Promise(resolve => setTimeout(resolve, 3000))
+
+                if (stopSyncRef.current) break
 
                 // 尝试保存汇总结果
                 try {
@@ -448,6 +459,15 @@ export function ReviewPanel(props: {
 
                 // 检查是否还有待汇总的轮次
                 const status = await api.getReviewPendingRounds(currentReview.id)
+                console.log('[ReviewPanel] Updated status:', status)
+
+                // 更新进度
+                setSyncProgress(prev => prev ? {
+                    ...prev,
+                    totalRounds: status.totalRounds,
+                    summarizedRounds: status.summarizedRounds
+                } : null)
+
                 if (!status.hasPendingRounds) {
                     // 全部完成
                     break
@@ -457,14 +477,16 @@ export function ReviewPanel(props: {
                 await new Promise(resolve => setTimeout(resolve, 1000))
             }
 
-            return { success: true, completedRounds: completedInThisRun, batches: batchCount }
+            return { success: true, stopped: stopSyncRef.current, batches: batchCount }
         },
         onSuccess: () => {
             setSyncProgress(null)
+            stopSyncRef.current = false
             queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
         },
         onError: () => {
             setSyncProgress(null)
+            stopSyncRef.current = false
         }
     })
 
@@ -640,13 +662,13 @@ export function ReviewPanel(props: {
                                         正在同步...
                                     </span>
                                     <span className="text-[var(--app-hint)]">
-                                        {syncProgress.completedRounds}/{syncProgress.totalRounds} 轮 (批次 {syncProgress.currentBatch})
+                                        已汇总 {syncProgress.summarizedRounds}/{syncProgress.totalRounds} 轮 (批次 {syncProgress.currentBatch})
                                     </span>
                                 </div>
                                 <div className="w-full h-2 bg-[var(--app-divider)] rounded-full overflow-hidden">
                                     <div
                                         className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-300"
-                                        style={{ width: `${Math.round((syncProgress.completedRounds / syncProgress.totalRounds) * 100)}%` }}
+                                        style={{ width: `${syncProgress.totalRounds > 0 ? Math.round((syncProgress.summarizedRounds / syncProgress.totalRounds) * 100) : 0}%` }}
                                     />
                                 </div>
                                 {session?.thinking && (
@@ -659,6 +681,19 @@ export function ReviewPanel(props: {
                                         <span>AI 正在处理...</span>
                                     </div>
                                 )}
+                                {/* 停止按钮 */}
+                                <button
+                                    type="button"
+                                    onClick={handleStopSync}
+                                    className="w-full px-4 py-2 text-sm font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+                                >
+                                    <span className="flex items-center justify-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect x="6" y="6" width="12" height="12" rx="2" />
+                                        </svg>
+                                        停止同步
+                                    </span>
+                                </button>
                             </div>
                         )}
 
