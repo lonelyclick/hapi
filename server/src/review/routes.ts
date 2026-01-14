@@ -583,7 +583,8 @@ ${batchRounds.map(r => `  {
                         // 尝试从文本中提取 JSON
                         const jsonMatch = item.text.match(/```json\s*([\s\S]*?)\s*```/)
                         if (jsonMatch) {
-                            console.log('[save-summary] Found json block')
+                            console.log('[save-summary] Found json block, raw content length:', jsonMatch[1].length)
+                            console.log('[save-summary] JSON block preview:', jsonMatch[1].slice(0, 500))
                             try {
                                 const parsed = JSON.parse(jsonMatch[1])
                                 // 支持数组格式
