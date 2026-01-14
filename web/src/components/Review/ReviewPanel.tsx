@@ -268,9 +268,11 @@ export function ReviewPanel(props: {
             reviewSessionId: props.reviewSessionId,
             reviewSessionsCount: reviewSessions?.length,
             currentReview: currentReview ? { id: currentReview.id, status: currentReview.status } : null,
+            currentReviewForPending: currentReviewForPending ? { id: currentReviewForPending.id, status: currentReviewForPending.status } : null,
+            pendingRoundsData,
             allReviews: reviewSessions?.map(r => ({ id: r.id, reviewSessionId: r.reviewSessionId, status: r.status }))
         })
-    }, [props.reviewSessionId, reviewSessions, currentReview])
+    }, [props.reviewSessionId, reviewSessions, currentReview, currentReviewForPending, pendingRoundsData])
 
     useEffect(() => {
         console.log('[ReviewPanel] Debug:', {
