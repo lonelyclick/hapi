@@ -278,7 +278,7 @@ export function ReviewPanel(props: {
             <button
                 type="button"
                 onClick={() => setIsExpanded(true)}
-                className="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-blue-500 text-white shadow-lg hover:bg-blue-600 hover:scale-105 transition-all flex items-center justify-center"
+                className="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-[var(--app-secondary-bg)] text-[var(--app-fg)] shadow-lg border border-[var(--app-divider)] hover:bg-[var(--app-subtle-bg)] hover:scale-105 transition-all flex items-center justify-center"
                 title="打开 Review AI"
             >
                 <ReviewIcon className="w-6 h-6" />
@@ -305,7 +305,7 @@ export function ReviewPanel(props: {
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--app-divider)] bg-[var(--app-subtle-bg)]">
                 <div className="flex items-center gap-2">
-                    <ReviewIcon className="w-4 h-4 text-blue-500" />
+                    <ReviewIcon className="w-4 h-4 text-[var(--app-fg)]" />
                     <span className="text-sm font-medium">Review AI</span>
                     {currentReview && getStatusBadge(currentReview.status)}
                 </div>
@@ -364,10 +364,10 @@ export function ReviewPanel(props: {
                 {chatMessages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div
-                            className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm ${
+                            className={`max-w-[90%] rounded-xl px-3 py-2 text-sm shadow-sm ${
                                 msg.role === 'user'
-                                    ? 'bg-[var(--app-button)] text-[var(--app-button-text)] rounded-br-md'
-                                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-fg)] rounded-bl-md'
+                                    ? 'bg-[var(--app-secondary-bg)] text-[var(--app-fg)]'
+                                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-fg)]'
                             }`}
                         >
                             <div className="whitespace-pre-wrap break-words leading-relaxed">
@@ -389,7 +389,7 @@ export function ReviewPanel(props: {
                                 type="button"
                                 onClick={() => summarizeMutation.mutate()}
                                 disabled={summarizeMutation.isPending || !hasNewMessages}
-                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-divider)] disabled:opacity-50 transition-colors"
                             >
                                 <SendIcon />
                                 {summarizeMutation.isPending ? '发送中...' : '开始 Review'}
@@ -398,7 +398,7 @@ export function ReviewPanel(props: {
                                 type="button"
                                 onClick={() => cancelMutation.mutate(currentReview.id)}
                                 disabled={cancelMutation.isPending}
-                                className="px-3 py-2 text-xs rounded-lg text-red-500 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+                                className="px-3 py-2 text-xs rounded-lg text-[var(--app-hint)] hover:bg-[var(--app-divider)] disabled:opacity-50 transition-colors"
                             >
                                 取消
                             </button>
@@ -420,7 +420,7 @@ export function ReviewPanel(props: {
                                 type="button"
                                 onClick={() => executeReviewMutation.mutate()}
                                 disabled={executeReviewMutation.isPending || chatMessages.length === 0}
-                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 transition-colors"
+                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-divider)] disabled:opacity-50 transition-colors"
                             >
                                 <SendIcon />
                                 {executeReviewMutation.isPending ? '发送中...' : '发送反馈'}
@@ -433,7 +433,7 @@ export function ReviewPanel(props: {
                             type="button"
                             onClick={() => cancelMutation.mutate(currentReview.id)}
                             disabled={cancelMutation.isPending}
-                            className="w-full px-3 py-1.5 text-xs rounded-lg text-red-500 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+                            className="w-full px-3 py-1.5 text-xs rounded-lg text-[var(--app-hint)] hover:bg-[var(--app-divider)] disabled:opacity-50 transition-colors"
                         >
                             取消 Review
                         </button>
