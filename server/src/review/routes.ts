@@ -350,24 +350,53 @@ export function createReviewRoutes(
             const role = content?.role
 
             if (role === 'user') {
-                const payload = content?.content as Record<string, unknown>
+                // user 消息的 content 可能是 JSON 字符串
+                let payload: Record<string, unknown> | null = null
+                const rawContent = content?.content
+                if (typeof rawContent === 'string') {
+                    try {
+                        payload = JSON.parse(rawContent)
+                    } catch {
+                        payload = null
+                    }
+                } else if (typeof rawContent === 'object' && rawContent) {
+                    payload = rawContent as Record<string, unknown>
+                }
+
                 const text = typeof payload?.text === 'string' ? payload.text : ''
                 if (text) {
                     dialogueMessages.push({ role: 'User', text })
                 }
             } else if (role === 'agent') {
-                const payload = content?.content as Record<string, unknown>
-                const data = payload?.data
-                let text = ''
-                if (typeof data === 'string') {
-                    text = data
-                } else if (typeof data === 'object' && data) {
-                    const d = data as Record<string, unknown>
-                    if (typeof d.message === 'string') text = d.message
+                // agent 消息的 content 可能是 JSON 字符串
+                let payload: Record<string, unknown> | null = null
+                const rawContent = content?.content
+                if (typeof rawContent === 'string') {
+                    try {
+                        payload = JSON.parse(rawContent)
+                    } catch {
+                        payload = null
+                    }
+                } else if (typeof rawContent === 'object' && rawContent) {
+                    payload = rawContent as Record<string, unknown>
                 }
-                // AI 消息可能很长，截取前 2000 字符
-                if (text) {
-                    dialogueMessages.push({ role: 'AI', text: text.slice(0, 2000) + (text.length > 2000 ? '...(truncated)' : '') })
+
+                if (!payload) continue
+
+                const data = payload.data as Record<string, unknown>
+                if (!data || data.type !== 'assistant') continue
+
+                // data.message 是 Claude API 格式的消息对象
+                const message = data.message as Record<string, unknown>
+                if (message?.content) {
+                    const contentArr = message.content as Array<{ type?: string; text?: string }>
+                    for (const item of contentArr) {
+                        if (item.type === 'text' && item.text) {
+                            // AI 消息可能很长，截取前 2000 字符
+                            const text = item.text
+                            dialogueMessages.push({ role: 'AI', text: text.slice(0, 2000) + (text.length > 2000 ? '...(truncated)' : '') })
+                        }
+                    }
                 }
             }
         }
@@ -433,24 +462,39 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         for (const m of messagesResult.messages) {
             const content = m.content as Record<string, unknown>
             const role = content?.role
-            const type = content?.type
 
-            // 打印每条消息的关键信息
-            console.log('[Review Execute] Msg:', { role, type, hasContent: !!content?.content })
-
-            // agent 消息的 type 可能是 'text' 或其他
             if (role === 'agent') {
-                const payload = content?.content as Record<string, unknown>
-                const data = payload?.data
-                let text = ''
-                if (typeof data === 'string') {
-                    text = data
-                } else if (typeof data === 'object' && data) {
-                    const d = data as Record<string, unknown>
-                    if (typeof d.message === 'string') text = d.message
+                // content.content 可能是 JSON 字符串
+                let payload: Record<string, unknown> | null = null
+                const rawContent = content?.content
+                if (typeof rawContent === 'string') {
+                    try {
+                        payload = JSON.parse(rawContent)
+                    } catch {
+                        payload = null
+                    }
+                } else if (typeof rawContent === 'object' && rawContent) {
+                    payload = rawContent as Record<string, unknown>
                 }
-                if (text) {
-                    agentMessages.push(text)
+
+                if (!payload) continue
+
+                const data = payload.data as Record<string, unknown>
+                if (!data) continue
+
+                // data.type === 'assistant' 是 AI 回复
+                if (data.type === 'assistant') {
+                    // data.message 是 Claude API 格式的消息对象
+                    const message = data.message as Record<string, unknown>
+                    if (message?.content) {
+                        // content 是数组，每个元素可能有 text
+                        const contentArr = message.content as Array<{ type?: string; text?: string }>
+                        for (const item of contentArr) {
+                            if (item.type === 'text' && item.text) {
+                                agentMessages.push(item.text)
+                            }
+                        }
+                    }
                 }
             }
         }
