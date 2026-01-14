@@ -537,11 +537,12 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
                 const contentArr = message.content as Array<{ type?: string; text?: string }>
                 for (const item of contentArr) {
                     if (item.type === 'text' && item.text) {
-                        console.log('[save-summary] Found text content, length:', item.text.length, 'first 500 chars:', item.text.slice(0, 500))
+                        console.log('[save-summary] Found text content, length:', item.text.length)
+                        console.log('[save-summary] Full text:', JSON.stringify(item.text))
                         // 尝试从文本中提取 JSON
                         const jsonMatch = item.text.match(/```json\s*([\s\S]*?)\s*```/)
                         if (jsonMatch) {
-                            console.log('[save-summary] Found JSON block:', jsonMatch[1])
+                            console.log('[save-summary] JSON match groups:', jsonMatch.length, 'group[1]:', JSON.stringify(jsonMatch[1]))
                             try {
                                 latestSummary = JSON.parse(jsonMatch[1])
                                 console.log('[save-summary] Parsed summary:', latestSummary)
