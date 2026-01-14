@@ -151,20 +151,21 @@ export function ReviewPanel(props: {
         }
     }, [dragMode, panelWidth])
 
-    // 获取 Review Session 详情
+    // 获取 Review Session 详情（不需要频繁轮询）
     const { data: reviewSessions } = useQuery({
         queryKey: ['review-sessions', props.mainSessionId],
         queryFn: async () => {
             const result = await api.getReviewSessions(props.mainSessionId)
             return result.reviewSessions
         },
-        refetchInterval: 2000
+        staleTime: 30000  // 30 秒内不重新获取
     })
 
     // 获取当前 Review Session 的 ID（用于检查未汇总轮次）
     const currentReviewForPending = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
 
     // 检查未汇总的轮次（pending 和 active 状态都需要查询）
+    // 不需要轮询，只在用户点击同步或同步完成后手动刷新
     const { data: pendingRoundsData } = useQuery({
         queryKey: ['review-pending-rounds', currentReviewForPending?.id],
         queryFn: async () => {
@@ -172,27 +173,35 @@ export function ReviewPanel(props: {
             return await api.getReviewPendingRounds(currentReviewForPending.id)
         },
         enabled: Boolean(currentReviewForPending?.id) && (currentReviewForPending?.status === 'pending' || currentReviewForPending?.status === 'active'),
-        refetchInterval: 10000  // 每 10 秒检查一次
+        staleTime: Infinity  // 数据不会自动过期
     })
 
-    // 获取 Review Session 信息（更快刷新）
+    // 获取 Review Session 信息
     const { data: reviewSession } = useQuery({
         queryKey: ['session', props.reviewSessionId],
         queryFn: async () => {
             return await api.getSession(props.reviewSessionId)
         },
         enabled: Boolean(props.reviewSessionId),
-        refetchInterval: 1000
+        refetchInterval: (query) => {
+            // 只在 AI 思考时快速轮询
+            const thinking = query.state.data?.thinking
+            return thinking ? 1000 : 5000
+        }
     })
 
-    // 获取 Review Session 的消息（更快刷新）
+    // 获取 Review Session 的消息
     const { data: reviewMessagesData, isLoading: isLoadingMessages } = useQuery({
         queryKey: ['messages', props.reviewSessionId],
         queryFn: async () => {
             return await api.getMessages(props.reviewSessionId, { limit: 100 })
         },
         enabled: Boolean(props.reviewSessionId),
-        refetchInterval: 1000
+        refetchInterval: (query) => {
+            // 只在 AI 思考时快速轮询
+            const thinking = reviewSession?.thinking
+            return thinking ? 1000 : 5000
+        }
     })
 
     const currentReview = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
