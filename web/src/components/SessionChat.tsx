@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
 import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session, SessionViewer, TypingUser } from '@/types/api'
@@ -80,6 +80,26 @@ export function SessionChat(props: {
     const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
     const pendingMessageRef = useRef<string | null>(null)
     const composerSetTextRef = useRef<((text: string) => void) | null>(null)
+
+    // 查询当前 Session 的活跃 Review Session（试验性功能）
+    const { data: activeReviewSession } = useQuery({
+        queryKey: ['review-sessions', 'active', props.session.id],
+        queryFn: async () => {
+            try {
+                return await props.api.getActiveReviewSession(props.session.id)
+            } catch {
+                return null
+            }
+        },
+        staleTime: 30000
+    })
+
+    // 如果有活跃的 Review Session，自动显示面板
+    useEffect(() => {
+        if (activeReviewSession?.reviewSessionId && !reviewSessionId) {
+            setReviewSessionId(activeReviewSession.reviewSessionId)
+        }
+    }, [activeReviewSession, reviewSessionId])
 
     useEffect(() => {
         normalizedCacheRef.current.clear()
