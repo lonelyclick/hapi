@@ -586,11 +586,28 @@ ${batchRounds.map(r => `  {
                         console.log('[save-summary] Found', jsonBlocks.length, 'json blocks in text')
                         const jsonMatch = jsonBlocks.length > 0 ? jsonBlocks[jsonBlocks.length - 1] : null
                         if (jsonMatch) {
-                            // 直接打印完整 JSON 内容
-                            const jsonContent = jsonMatch[1].trim()
-                            console.log('[save-summary] ===== FULL JSON START =====')
-                            console.log(jsonContent)
-                            console.log('[save-summary] ===== FULL JSON END =====')
+                            let jsonContent = jsonMatch[1].trim()
+
+                            // 修复 AI 可能在 summary 文本中使用的未转义双引号
+                            // 简单方法：将文本中的 ASCII 双引号替换为中文引号，然后恢复 JSON 结构的引号
+                            // Step 1: 将所有 " 替换为特殊占位符
+                            // Step 2: 恢复 JSON 结构需要的引号
+                            // Step 3: 将剩余的占位符替换为中文引号
+
+                            // 更简单的方法：直接用 JSON5 或手动修复
+                            // 检测并修复未转义的双引号：在字符串值中，如果 " 后面不是 , } ] 或换行，说明是文本中的引号
+                            const lines = jsonContent.split('\n')
+                            const fixedLines = lines.map(line => {
+                                // 匹配 "summary": "..." 行
+                                const summaryMatch = line.match(/^(\s*"summary":\s*")(.*)("(?:,)?)\s*$/)
+                                if (summaryMatch) {
+                                    // 替换 summary 值中的双引号为中文引号
+                                    const fixed = summaryMatch[2].replace(/"/g, '「').replace(/"/g, '」')
+                                    return summaryMatch[1] + fixed + summaryMatch[3]
+                                }
+                                return line
+                            })
+                            jsonContent = fixedLines.join('\n')
 
                             try {
                                 const parsed = JSON.parse(jsonContent)
