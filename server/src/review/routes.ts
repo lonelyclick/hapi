@@ -581,10 +581,11 @@ ${batchRounds.map(r => `  {
                     if (item.type === 'text' && item.text) {
                         console.log('[save-summary] Found text, length:', item.text.length, 'preview:', item.text.slice(0, 200))
                         // 尝试从文本中提取 JSON
-                        const jsonMatch = item.text.match(/```json\s*([\s\S]*?)\s*```/)
+                        // 使用贪婪模式匹配最后一个 ``` 结束符
+                        const jsonMatch = item.text.match(/```json\s*([\s\S]*)\s*```/)
                         if (jsonMatch) {
                             console.log('[save-summary] Found json block, raw content length:', jsonMatch[1].length)
-                            console.log('[save-summary] JSON block preview:', jsonMatch[1].slice(0, 500))
+                            console.log('[save-summary] JSON block last 200 chars:', jsonMatch[1].slice(-200))
                             try {
                                 const parsed = JSON.parse(jsonMatch[1])
                                 // 支持数组格式
