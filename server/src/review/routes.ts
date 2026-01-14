@@ -505,7 +505,7 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
 
         for (const m of messagesResult.messages.reverse()) {
             const content = m.content as Record<string, unknown>
-            console.log('[save-summary] Checking message role:', content?.role)
+            console.log('[save-summary] Checking message id:', m.id, 'role:', content?.role)
             if (content?.role !== 'agent') continue
 
             // 解析消息内容
@@ -537,7 +537,7 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
                 const contentArr = message.content as Array<{ type?: string; text?: string }>
                 for (const item of contentArr) {
                     if (item.type === 'text' && item.text) {
-                        console.log('[save-summary] Found text content (first 200 chars):', item.text.slice(0, 200))
+                        console.log('[save-summary] Found text content, length:', item.text.length, 'first 500 chars:', item.text.slice(0, 500))
                         // 尝试从文本中提取 JSON
                         const jsonMatch = item.text.match(/```json\s*([\s\S]*?)\s*```/)
                         if (jsonMatch) {

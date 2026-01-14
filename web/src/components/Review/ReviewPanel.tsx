@@ -292,7 +292,13 @@ export function ReviewPanel(props: {
             queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
         },
         onError: (error) => {
-            console.error('[ReviewPanel] saveReviewSummary error:', error)
+            // noSummary 错误通常是因为消息还没同步完成，静默忽略
+            const errMsg = String(error)
+            if (errMsg.includes('noSummary')) {
+                console.log('[ReviewPanel] No summary found yet, will retry later')
+            } else {
+                console.error('[ReviewPanel] saveReviewSummary error:', error)
+            }
         }
     })
 
@@ -307,12 +313,12 @@ export function ReviewPanel(props: {
 
         // 从思考中变为不思考 -> AI 刚完成回复
         if (wasThinking === true && isThinking === false && currentReview?.status === 'active') {
-            console.log('[ReviewPanel] AI finished thinking, will save summary in 1s...')
-            // 延迟一下再保存，确保消息已经同步
+            console.log('[ReviewPanel] AI finished thinking, will save summary in 3s...')
+            // 延迟 3 秒再保存，确保消息已经完全同步到服务器
             setTimeout(() => {
                 console.log('[ReviewPanel] Triggering saveSummaryMutation...')
                 saveSummaryMutation.mutate()
-            }, 1000)
+            }, 3000)
         }
     }, [session?.thinking, currentReview?.status, saveSummaryMutation])
 
