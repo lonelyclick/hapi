@@ -250,6 +250,16 @@ export function ReviewPanel(props: {
         onAbort: handleAbort
     })
 
+    // 调试 runtime
+    useEffect(() => {
+        console.log('[ReviewPanel] Runtime state:', {
+            blocksCount: reconciled.blocks.length,
+            blocks: reconciled.blocks.map(b => ({ id: b.id, kind: b.kind })),
+            sessionActive: virtualSession.active,
+            sessionThinking: virtualSession.thinking
+        })
+    }, [reconciled.blocks, virtualSession.active, virtualSession.thinking])
+
     // 开始 Review
     const startReviewMutation = useMutation({
         mutationFn: async () => {
