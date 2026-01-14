@@ -356,7 +356,7 @@ export function ReviewPanel(props: {
                 while (waitCount < maxWait && !stopSyncRef.current) {
                     if (!await interruptibleWait(1000)) break
                     const sessionStatus = await api.getSession(props.reviewSessionId)
-                    if (!sessionStatus?.thinking) {
+                    if (!sessionStatus?.session?.thinking) {
                         break
                     }
                     waitCount++
