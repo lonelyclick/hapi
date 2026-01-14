@@ -31,25 +31,18 @@ interface ParsedRound {
 export function parseReviewSummaryTask(text: string): ParsedRound[] | null {
     const rounds: ParsedRound[] = []
 
-    // 只解析 "### 要求" 之前的内容，避免 JSON 示例或 AI 回复中的轮次号被误解析
+    // 只解析 "### 要求" 之前的内容
     const mainContent = text.split(/### 要求/)[0] || text
 
-    // 匹配所有轮次块
-    const roundBlocks = mainContent.split(/(?=### 第 \d+ 轮对话)/).filter(block => block.includes('### 第'))
+    // 使用正则直接匹配完整的轮次结构，避免嵌套内容被误解析
+    // 匹配：### 第 X 轮对话\n\n**用户输入：**\n...\n\n**AI 回复：**\n...
+    const roundPattern = /### 第 (\d+) 轮对话\n\n\*\*用户输入：\*\*\n([\s\S]*?)\n\n\*\*AI 回复：\*\*\n([\s\S]*?)(?=\n---\n|### 第 \d+ 轮对话\n\n\*\*用户输入：\*\*|$)/g
 
-    for (const block of roundBlocks) {
-        // 提取轮次号
-        const roundMatch = block.match(/### 第 (\d+) 轮对话/)
-        if (!roundMatch) continue
-        const roundNumber = parseInt(roundMatch[1], 10)
-
-        // 提取用户输入
-        const userInputMatch = block.match(/\*\*用户输入：\*\*\n([\s\S]*?)\n\n\*\*AI 回复：\*\*/)
-        const userInput = userInputMatch ? userInputMatch[1].trim() : ''
-
-        // 提取 AI 回复 - 到下一个分隔符或 ### 要求
-        const aiReplyMatch = block.match(/\*\*AI 回复：\*\*\n([\s\S]*?)(?:\n---\n|\n\n### 要求|$)/)
-        const aiReply = aiReplyMatch ? aiReplyMatch[1].trim() : ''
+    let match
+    while ((match = roundPattern.exec(mainContent)) !== null) {
+        const roundNumber = parseInt(match[1], 10)
+        const userInput = match[2].trim()
+        const aiReply = match[3].trim()
 
         rounds.push({ roundNumber, userInput, aiReply })
     }
