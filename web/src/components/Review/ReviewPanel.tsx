@@ -491,16 +491,12 @@ export function ReviewPanel(props: {
 
     // 从已处理的 blocks 中提取最新的包含 suggestions JSON 的文本
     const latestReviewText = useMemo(() => {
-        console.log('[ReviewPanel] Looking for suggestions in blocks:', reconciled.blocks.length)
         // 从后往前遍历 blocks，找包含 suggestions 的 agent-text 消息
         for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
             const block = reconciled.blocks[i]
-            console.log('[ReviewPanel] Block', i, 'kind:', block.kind)
             if (block.kind !== 'agent-text') continue
 
-            console.log('[ReviewPanel] agent-text block text preview:', block.text.slice(0, 200))
             const result = parseReviewResult(block.text)
-            console.log('[ReviewPanel] parseReviewResult:', result)
             if (result && result.suggestions.length > 0) {
                 return block.text
             }
@@ -700,25 +696,14 @@ export function ReviewPanel(props: {
                     </div>
                 )}
 
-                {/* completed 状态 */}
-                {console.log('[ReviewPanel] currentReview status:', currentReview?.status, 'latestReviewText:', !!latestReviewText)}
-                {currentReview?.status === 'completed' && (
+                {/* 建议卡片 - 只要有建议 JSON 就显示，不管状态 */}
+                {latestReviewText && (
                     <div className="space-y-3">
-                        <div className="flex items-center justify-center gap-2 text-green-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                <polyline points="22 4 12 14.01 9 11.01" />
-                            </svg>
-                            <span className="text-sm font-medium">Review 已完成</span>
-                        </div>
-                        {/* 建议卡片 */}
-                        {latestReviewText && (
-                            <ReviewSuggestions
-                                reviewText={latestReviewText}
-                                onApply={(details) => applySuggestionsMutation.mutate(details)}
-                                isApplying={applySuggestionsMutation.isPending}
-                            />
-                        )}
+                        <ReviewSuggestions
+                            reviewText={latestReviewText}
+                            onApply={(details) => applySuggestionsMutation.mutate(details)}
+                            isApplying={applySuggestionsMutation.isPending}
+                        />
                     </div>
                 )}
 
