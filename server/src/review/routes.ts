@@ -610,6 +610,13 @@ ${batchRounds.map(r => `  {
                             }
 
                             try {
+                                // Debug: 查找 '开' 字符在 JSON 中的位置
+                                const kaiIndex = jsonContent.indexOf('开')
+                                if (kaiIndex >= 0) {
+                                    console.log('[save-summary] Found 开 at index:', kaiIndex)
+                                    console.log('[save-summary] Context around 开:', JSON.stringify(jsonContent.slice(Math.max(0, kaiIndex - 20), kaiIndex + 20)))
+                                }
+
                                 const parsed = JSON.parse(jsonContent)
                                 // 支持数组格式
                                 if (Array.isArray(parsed)) {
@@ -620,6 +627,12 @@ ${batchRounds.map(r => `  {
                                 if (summaries.length > 0) break
                             } catch (e) {
                                 console.log('[save-summary] JSON parse error:', (e as Error).message)
+                                // 尝试找到错误位置
+                                const errorMatch = (e as Error).message.match(/position (\d+)/)
+                                if (errorMatch) {
+                                    const pos = parseInt(errorMatch[1])
+                                    console.log('[save-summary] Error context at position', pos, ':', JSON.stringify(jsonContent.slice(Math.max(0, pos - 30), pos + 30)))
+                                }
                             }
                         }
                         // 也尝试直接解析整个文本
