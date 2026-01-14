@@ -197,7 +197,7 @@ export function ReviewPanel(props: {
                 cache.delete(id)
             }
         }
-        console.log('[ReviewPanel] Normalized messages:', normalizedMessages.length)
+        console.log('[ReviewPanel] Normalized messages:', normalized.length)
         return normalized
     }, [messages])
 
