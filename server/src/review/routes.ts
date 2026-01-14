@@ -387,8 +387,8 @@ export function createReviewRoutes(
         return c.json({ success: true })
     })
 
-    // 同步汇总（只存数据库，不发 Review）
-    // 将主 Session 中未汇总的轮次提取并存储到数据库
+    // 同步汇总 - 发送每一轮对话给 Review AI 做汇总
+    // 每次只处理一轮，AI 汇总后通过 /sync-complete 接口存储结果
     app.post('/review/sessions/:id/sync', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
@@ -420,29 +420,63 @@ export function createReviewRoutes(
                 success: true,
                 newRoundsSynced: 0,
                 totalRounds: allRounds.length,
-                summarizedRounds: existingRounds.length
+                summarizedRounds: existingRounds.length,
+                message: '所有轮次已汇总完毕'
             })
         }
 
-        // 为新轮次创建汇总并存储到数据库
-        for (const round of pendingRounds) {
-            const aiSummary = summarizeAIMessages(round.aiMessages)
+        // 只处理第一个未汇总的轮次
+        const nextRound = pendingRounds[0]
 
-            // 存储到数据库
-            await reviewStore.createReviewRound({
-                reviewSessionId: id,
-                roundNumber: round.roundNumber,
-                userInput: round.userInput,
-                aiSummary,
-                originalMessageIds: round.messageIds
-            })
+        // 构建汇总请求 Prompt
+        const syncPrompt = `## 对话汇总任务
+
+请帮我汇总以下这一轮对话的内容。
+
+### 第 ${nextRound.roundNumber} 轮对话
+
+**用户输入：**
+${nextRound.userInput}
+
+**AI 回复：**
+${nextRound.aiMessages.join('\n\n---\n\n')}
+
+### 要求
+
+1. 请用简洁的语言汇总 AI 在这一轮中做了什么
+2. 重点关注：执行了什么操作、修改了哪些文件、解决了什么问题
+3. 汇总长度控制在 200-500 字以内
+4. 只输出汇总内容，不要输出其他内容
+
+请直接输出汇总结果：`
+
+        // 发送给 Review AI
+        await engine.sendMessage(reviewSession.reviewSessionId, {
+            text: syncPrompt,
+            sentFrom: 'webapp'
+        })
+
+        // 先在数据库中创建一个待填充的记录（AI 汇总后再更新）
+        await reviewStore.createReviewRound({
+            reviewSessionId: id,
+            roundNumber: nextRound.roundNumber,
+            userInput: nextRound.userInput,
+            aiSummary: '(等待 AI 汇总...)',  // 占位符
+            originalMessageIds: nextRound.messageIds
+        })
+
+        // 更新状态为 active（如果是 pending）
+        if (reviewSession.status === 'pending') {
+            await reviewStore.updateReviewSessionStatus(id, 'active')
         }
 
         return c.json({
             success: true,
-            newRoundsSynced: pendingRounds.length,
+            syncingRound: nextRound.roundNumber,
             totalRounds: allRounds.length,
-            summarizedRounds: existingRounds.length + pendingRounds.length
+            summarizedRounds: existingRounds.length,
+            pendingRounds: pendingRounds.length,
+            message: `正在汇总第 ${nextRound.roundNumber} 轮对话...`
         })
     })
 
