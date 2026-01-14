@@ -159,8 +159,11 @@ export class AutoReviewService {
         const sessionId = event.sessionId
         const session = this.engine.getSession(sessionId)
 
+        console.log('[ReviewSync] AI response ended:', sessionId, 'source:', session?.metadata?.source)
+
         // 检查是否是 Review Session 的 AI 回复结束
         if (session?.metadata?.source === 'review') {
+            console.log('[ReviewSync] Review AI response, triggering save')
             await this.handleReviewAIResponse(sessionId)
             return
         }
@@ -194,17 +197,22 @@ export class AutoReviewService {
      */
     private async handleReviewAIResponse(reviewSessionId: string): Promise<void> {
         const mainSessionId = this.reviewToMainMap.get(reviewSessionId)
+        console.log('[ReviewSync] handleReviewAIResponse:', reviewSessionId, 'mainSessionId:', mainSessionId)
         if (!mainSessionId) {
+            console.log('[ReviewSync] No main session mapping found')
             return
         }
 
         try {
             const reviewSession = await this.reviewStore.getActiveReviewSession(mainSessionId)
+            console.log('[ReviewSync] Active review session:', reviewSession?.id)
             if (!reviewSession || reviewSession.reviewSessionId !== reviewSessionId) {
+                console.log('[ReviewSync] Review session mismatch or not found')
                 return
             }
 
             // 保存汇总结果
+            console.log('[ReviewSync] Saving summary...')
             await this.saveSummary(reviewSession)
 
             // 检查是否还有待同步的轮次
@@ -220,15 +228,18 @@ export class AutoReviewService {
     private async syncRounds(reviewSession: StoredReviewSession): Promise<void> {
         const reviewId = reviewSession.id
         const mainSessionId = reviewSession.mainSessionId
+        console.log('[ReviewSync] syncRounds called:', reviewId, mainSessionId)
 
         // 防止重复同步
         if (this.syncingReviewIds.has(reviewId)) {
+            console.log('[ReviewSync] syncRounds - already syncing, skip')
             return
         }
 
         // 检查 Review AI 是否正在处理中
         const reviewAISession = this.engine.getSession(reviewSession.reviewSessionId)
         if (reviewAISession?.thinking) {
+            console.log('[ReviewSync] syncRounds - Review AI thinking, skip')
             return
         }
 
@@ -401,7 +412,9 @@ export class AutoReviewService {
                 if (summaries.length > 0) break
             }
 
+            console.log('[ReviewSync] Parsed summaries:', summaries.length, summaries.map(s => s.round))
             if (summaries.length === 0) {
+                console.log('[ReviewSync] No summaries parsed from AI response')
                 return
             }
 
@@ -415,12 +428,15 @@ export class AutoReviewService {
 
             // 保存
             const savedRounds: number[] = []
+            console.log('[ReviewSync] Existing rounds:', [...existingRoundNumbers])
             for (const summary of summaries) {
                 if (existingRoundNumbers.has(summary.round)) {
+                    console.log('[ReviewSync] Round', summary.round, 'already exists, skipping')
                     continue
                 }
                 const targetRound = allRounds.find(r => r.roundNumber === summary.round)
                 if (!targetRound) {
+                    console.log('[ReviewSync] Round', summary.round, 'not found in main session')
                     continue
                 }
                 try {
@@ -434,8 +450,9 @@ export class AutoReviewService {
                         endedAt: targetRound.endedAt
                     })
                     savedRounds.push(summary.round)
-                } catch {
-                    // 保存失败，跳过
+                    console.log('[ReviewSync] Saved round', summary.round)
+                } catch (e) {
+                    console.error('[ReviewSync] Failed to save round', summary.round, e)
                 }
             }
 
@@ -492,7 +509,9 @@ export class AutoReviewService {
      * 手动触发同步（供 API 调用）
      */
     async triggerSync(mainSessionId: string): Promise<void> {
+        console.log('[ReviewSync] triggerSync called:', mainSessionId)
         const reviewSession = await this.reviewStore.getActiveReviewSession(mainSessionId)
+        console.log('[ReviewSync] triggerSync reviewSession:', reviewSession?.id ?? 'null')
         if (reviewSession) {
             this.reviewToMainMap.set(reviewSession.reviewSessionId, mainSessionId)
             await this.syncRounds(reviewSession)
