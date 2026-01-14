@@ -10,37 +10,53 @@ import { useState } from 'react'
 
 /**
  * 检测是否为 Review 汇总任务消息
+ * 支持批量格式（多轮）和单轮格式
  */
 export function isReviewSummaryTask(text: string): boolean {
-    return text.includes('## 对话汇总任务') && text.includes('请帮我汇总以下这一轮对话的内容')
+    if (!text.includes('## 对话汇总任务')) return false
+    // 批量格式: "请帮我汇总以下 X 轮对话的内容"
+    // 单轮格式: "请帮我汇总以下这一轮对话的内容"
+    return /请帮我汇总以下\s*(\d+\s*轮|这一轮)\s*对话/.test(text)
 }
 
-/**
- * 从汇总任务消息中提取信息
- */
-export function parseReviewSummaryTask(text: string): {
+interface ParsedRound {
     roundNumber: number
     userInput: string
     aiReply: string
-} | null {
-    // 提取轮次号
-    const roundMatch = text.match(/### 第 (\d+) 轮对话/)
-    if (!roundMatch) return null
-    const roundNumber = parseInt(roundMatch[1], 10)
+}
 
-    // 提取用户输入
-    const userInputMatch = text.match(/\*\*用户输入：\*\*\n([\s\S]*?)\n\n\*\*AI 回复：\*\*/)
-    const userInput = userInputMatch ? userInputMatch[1].trim() : ''
+/**
+ * 从汇总任务消息中提取信息（支持多轮）
+ */
+export function parseReviewSummaryTask(text: string): ParsedRound[] | null {
+    const rounds: ParsedRound[] = []
 
-    // 提取 AI 回复
-    const aiReplyMatch = text.match(/\*\*AI 回复：\*\*\n([\s\S]*?)\n\n### 要求/)
-    const aiReply = aiReplyMatch ? aiReplyMatch[1].trim() : ''
+    // 匹配所有轮次块
+    const roundBlocks = text.split(/(?=### 第 \d+ 轮对话)/).filter(block => block.includes('### 第'))
 
-    return { roundNumber, userInput, aiReply }
+    for (const block of roundBlocks) {
+        // 提取轮次号
+        const roundMatch = block.match(/### 第 (\d+) 轮对话/)
+        if (!roundMatch) continue
+        const roundNumber = parseInt(roundMatch[1], 10)
+
+        // 提取用户输入
+        const userInputMatch = block.match(/\*\*用户输入：\*\*\n([\s\S]*?)\n\n\*\*AI 回复：\*\*/)
+        const userInput = userInputMatch ? userInputMatch[1].trim() : ''
+
+        // 提取 AI 回复 - 到下一个分隔符或 ### 要求
+        const aiReplyMatch = block.match(/\*\*AI 回复：\*\*\n([\s\S]*?)(?:\n---\n|\n\n### 要求|$)/)
+        const aiReply = aiReplyMatch ? aiReplyMatch[1].trim() : ''
+
+        rounds.push({ roundNumber, userInput, aiReply })
+    }
+
+    return rounds.length > 0 ? rounds : null
 }
 
 /**
  * 检测是否为 Review JSON 汇总结果
+ * 支持单个对象或数组格式
  */
 export function isReviewSummaryResult(text: string): boolean {
     // 检查是否包含 ```json 代码块，且内容有 round 和 summary 字段
@@ -48,25 +64,42 @@ export function isReviewSummaryResult(text: string): boolean {
     if (!jsonMatch) return false
     try {
         const parsed = JSON.parse(jsonMatch[1])
+        // 支持数组格式
+        if (Array.isArray(parsed)) {
+            return parsed.length > 0 && parsed.every(item =>
+                typeof item.round === 'number' && typeof item.summary === 'string'
+            )
+        }
+        // 支持单个对象格式
         return typeof parsed.round === 'number' && typeof parsed.summary === 'string'
     } catch {
         return false
     }
 }
 
-/**
- * 从 JSON 汇总结果中提取信息
- */
-export function parseReviewSummaryResult(text: string): {
+interface ParsedSummary {
     round: number
     summary: string
-} | null {
+}
+
+/**
+ * 从 JSON 汇总结果中提取信息（支持数组和单个对象）
+ */
+export function parseReviewSummaryResult(text: string): ParsedSummary[] | null {
     const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
     if (!jsonMatch) return null
     try {
         const parsed = JSON.parse(jsonMatch[1])
+        // 支持数组格式
+        if (Array.isArray(parsed)) {
+            const items = parsed.filter(item =>
+                typeof item.round === 'number' && typeof item.summary === 'string'
+            )
+            return items.length > 0 ? items : null
+        }
+        // 支持单个对象格式
         if (typeof parsed.round === 'number' && typeof parsed.summary === 'string') {
-            return { round: parsed.round, summary: parsed.summary }
+            return [{ round: parsed.round, summary: parsed.summary }]
         }
     } catch {
         // ignore
@@ -75,100 +108,170 @@ export function parseReviewSummaryResult(text: string): {
 }
 
 /**
- * Review 汇总任务消息组件（用户消息样式）
+ * 单轮汇总任务卡片
+ */
+function SingleRoundTaskCard(props: { round: ParsedRound; expanded: boolean; onToggle: () => void }) {
+    const { round, expanded, onToggle } = props
+
+    return (
+        <div className="rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 overflow-hidden">
+            <div
+                className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                onClick={onToggle}
+            >
+                <div className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">
+                    {round.roundNumber}
+                </div>
+                <div className="flex-1 min-w-0 text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {round.userInput.slice(0, 40)}{round.userInput.length > 40 ? '...' : ''}
+                </div>
+                <svg
+                    className={`w-3.5 h-3.5 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </div>
+            {expanded && (
+                <div className="px-3 pb-2 space-y-2 border-t border-slate-100 dark:border-slate-700">
+                    <div className="pt-2">
+                        <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">用户输入</div>
+                        <div className="text-xs text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-900 rounded p-2 max-h-24 overflow-y-auto">
+                            {round.userInput}
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">AI 回复</div>
+                        <div className="text-xs text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-900 rounded p-2 max-h-32 overflow-y-auto whitespace-pre-wrap">
+                            {round.aiReply.slice(0, 400)}{round.aiReply.length > 400 ? '...' : ''}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+/**
+ * Review 汇总任务消息组件（支持多轮）
  */
 export function ReviewSummaryTaskBlock(props: { text: string }) {
-    const [expanded, setExpanded] = useState(false)
+    const [expandedRounds, setExpandedRounds] = useState<Set<number>>(new Set())
     const parsed = parseReviewSummaryTask(props.text)
 
-    if (!parsed) {
+    if (!parsed || parsed.length === 0) {
         return <div className="text-sm text-[var(--app-hint)]">无法解析汇总任务</div>
     }
+
+    const toggleRound = (roundNumber: number) => {
+        setExpandedRounds(prev => {
+            const next = new Set(prev)
+            if (next.has(roundNumber)) {
+                next.delete(roundNumber)
+            } else {
+                next.add(roundNumber)
+            }
+            return next
+        })
+    }
+
+    const roundNumbers = parsed.map(r => r.roundNumber)
+    const headerText = parsed.length === 1
+        ? `第 ${roundNumbers[0]} 轮`
+        : `第 ${roundNumbers.join(', ')} 轮`
 
     return (
         <div className="w-fit min-w-0 max-w-[92%] ml-auto">
             <div className="rounded-xl bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-700 border border-slate-200 dark:border-slate-600 shadow-sm overflow-hidden">
                 {/* 头部 */}
-                <div
-                    className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors"
-                    onClick={() => setExpanded(!expanded)}
-                >
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">
-                        {parsed.roundNumber}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                            对话汇总任务
-                        </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                            {parsed.userInput.slice(0, 50)}{parsed.userInput.length > 50 ? '...' : ''}
-                        </div>
-                    </div>
-                    <svg
-                        className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <div className="flex items-center gap-2 px-3 py-2">
+                    <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                        对话汇总任务
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                        ({headerText})
+                    </span>
                 </div>
 
-                {/* 展开内容 */}
-                {expanded && (
-                    <div className="px-3 pb-3 space-y-2 border-t border-slate-200 dark:border-slate-600">
-                        <div className="pt-2">
-                            <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">用户输入</div>
-                            <div className="text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 rounded-lg p-2 max-h-32 overflow-y-auto">
-                                {parsed.userInput}
-                            </div>
-                        </div>
-                        <div>
-                            <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">AI 回复摘要</div>
-                            <div className="text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 rounded-lg p-2 max-h-48 overflow-y-auto whitespace-pre-wrap">
-                                {parsed.aiReply.slice(0, 500)}{parsed.aiReply.length > 500 ? '...' : ''}
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {/* 轮次列表 */}
+                <div className="px-2 pb-2 space-y-1">
+                    {parsed.map(round => (
+                        <SingleRoundTaskCard
+                            key={round.roundNumber}
+                            round={round}
+                            expanded={expandedRounds.has(round.roundNumber)}
+                            onToggle={() => toggleRound(round.roundNumber)}
+                        />
+                    ))}
+                </div>
             </div>
         </div>
     )
 }
 
 /**
- * Review JSON 汇总结果组件（AI 消息样式）
+ * 单轮汇总结果卡片
+ */
+function SingleSummaryResultCard(props: { summary: ParsedSummary }) {
+    const { summary } = props
+
+    return (
+        <div className="rounded-lg bg-white dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-800/30 border-b border-green-100 dark:border-green-700/50">
+                <div className="flex items-center justify-center w-5 h-5 rounded-full bg-green-500 text-white text-xs font-bold shrink-0">
+                    {summary.round}
+                </div>
+                <span className="text-xs font-medium text-green-700 dark:text-green-300">
+                    第 {summary.round} 轮
+                </span>
+            </div>
+            <div className="px-3 py-2">
+                <div className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
+                    {summary.summary}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/**
+ * Review JSON 汇总结果组件（支持多轮）
  */
 export function ReviewSummaryResultBlock(props: { text: string }) {
     const parsed = parseReviewSummaryResult(props.text)
 
-    if (!parsed) {
+    if (!parsed || parsed.length === 0) {
         return <div className="text-sm text-[var(--app-hint)]">无法解析汇总结果</div>
     }
+
+    const roundNumbers = parsed.map(s => s.round)
+    const headerText = parsed.length === 1
+        ? `第 ${roundNumbers[0]} 轮汇总完成`
+        : `${parsed.length} 轮汇总完成 (第 ${roundNumbers.join(', ')} 轮)`
 
     return (
         <div className="w-full">
             <div className="rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border border-green-200 dark:border-green-700 shadow-sm overflow-hidden">
                 {/* 头部 */}
                 <div className="flex items-center gap-2 px-3 py-2 bg-green-100/50 dark:bg-green-800/30 border-b border-green-200 dark:border-green-700">
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-green-500 text-white text-xs font-bold shrink-0">
-                        {parsed.round}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="text-sm font-medium text-green-700 dark:text-green-300">
-                            第 {parsed.round} 轮汇总完成
-                        </span>
-                    </div>
+                    <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                        {headerText}
+                    </span>
                 </div>
 
                 {/* 汇总内容 */}
-                <div className="px-3 py-2">
-                    <div className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
-                        {parsed.summary}
-                    </div>
+                <div className="p-2 space-y-2">
+                    {parsed.map(summary => (
+                        <SingleSummaryResultCard key={summary.round} summary={summary} />
+                    ))}
                 </div>
             </div>
         </div>
