@@ -589,8 +589,28 @@ ${batchRounds.map(r => `  {
                             console.log('[save-summary] Using last json block, content length:', jsonMatch[1].length)
                             console.log('[save-summary] JSON block first 300 chars:', jsonMatch[1].slice(0, 300))
                             console.log('[save-summary] JSON block last 300 chars:', jsonMatch[1].slice(-300))
+
+                            // 尝试修复不完整的 JSON 数组
+                            let jsonContent = jsonMatch[1].trim()
+
+                            // 如果 JSON 以 [ 开头但没有以 ] 结尾，尝试修复
+                            if (jsonContent.startsWith('[') && !jsonContent.endsWith(']')) {
+                                console.log('[save-summary] JSON array is incomplete, attempting to fix...')
+                                // 找到最后一个完整的对象（以 } 结尾）
+                                const lastCompleteObjectEnd = jsonContent.lastIndexOf('}')
+                                if (lastCompleteObjectEnd > 0) {
+                                    jsonContent = jsonContent.slice(0, lastCompleteObjectEnd + 1)
+                                    // 移除末尾的逗号（如果有）
+                                    jsonContent = jsonContent.replace(/,\s*$/, '')
+                                    // 添加闭合括号
+                                    jsonContent = jsonContent + '\n]'
+                                    console.log('[save-summary] Fixed JSON, new length:', jsonContent.length)
+                                    console.log('[save-summary] Fixed JSON last 100 chars:', jsonContent.slice(-100))
+                                }
+                            }
+
                             try {
-                                const parsed = JSON.parse(jsonMatch[1])
+                                const parsed = JSON.parse(jsonContent)
                                 // 支持数组格式
                                 if (Array.isArray(parsed)) {
                                     summaries = parsed.filter(p => p.round && p.summary)
