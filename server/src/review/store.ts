@@ -56,6 +56,7 @@ export class ReviewStore implements IReviewStore {
                 id TEXT PRIMARY KEY,
                 review_session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE,
                 rounds_reviewed INTEGER NOT NULL,
+                reviewed_round_numbers INTEGER[],
                 time_range_start BIGINT NOT NULL,
                 time_range_end BIGINT NOT NULL,
                 prompt TEXT NOT NULL,
@@ -78,6 +79,10 @@ export class ReviewStore implements IReviewStore {
                 -- 添加 ended_at 字段
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_rounds' AND column_name = 'ended_at') THEN
                     ALTER TABLE review_rounds ADD COLUMN ended_at BIGINT;
+                END IF;
+                -- 添加 reviewed_round_numbers 字段到 review_executions
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_executions' AND column_name = 'reviewed_round_numbers') THEN
+                    ALTER TABLE review_executions ADD COLUMN reviewed_round_numbers INTEGER[];
                 END IF;
             END $$;
         `)
@@ -256,6 +261,7 @@ export class ReviewStore implements IReviewStore {
     async createReviewExecution(data: {
         reviewSessionId: string
         roundsReviewed: number
+        reviewedRoundNumbers: number[]
         timeRangeStart: number
         timeRangeEnd: number
         prompt: string
@@ -265,9 +271,9 @@ export class ReviewStore implements IReviewStore {
 
         await this.pool.query(
             `INSERT INTO review_executions
-             (id, review_session_id, rounds_reviewed, time_range_start, time_range_end, prompt, status, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)`,
-            [id, data.reviewSessionId, data.roundsReviewed, data.timeRangeStart, data.timeRangeEnd, data.prompt, now]
+             (id, review_session_id, rounds_reviewed, reviewed_round_numbers, time_range_start, time_range_end, prompt, status, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)`,
+            [id, data.reviewSessionId, data.roundsReviewed, data.reviewedRoundNumbers, data.timeRangeStart, data.timeRangeEnd, data.prompt, now]
         )
 
         return { id }
@@ -276,6 +282,7 @@ export class ReviewStore implements IReviewStore {
     async getReviewExecutions(reviewSessionId: string): Promise<Array<{
         id: string
         roundsReviewed: number
+        reviewedRoundNumbers: number[]
         timeRangeStart: number
         timeRangeEnd: number
         prompt: string
@@ -292,6 +299,7 @@ export class ReviewStore implements IReviewStore {
         return result.rows.map(row => ({
             id: row.id as string,
             roundsReviewed: row.rounds_reviewed as number,
+            reviewedRoundNumbers: (row.reviewed_round_numbers as number[]) ?? [],
             timeRangeStart: Number(row.time_range_start),
             timeRangeEnd: Number(row.time_range_end),
             prompt: row.prompt as string,

@@ -89,9 +89,10 @@ interface SuggestionCardProps {
     expanded: boolean
     onToggle: () => void
     onExpand: () => void
+    onDelete: () => void
 }
 
-function SuggestionCard({ suggestion, selected, expanded, onToggle, onExpand }: SuggestionCardProps) {
+function SuggestionCard({ suggestion, selected, expanded, onToggle, onExpand, onDelete }: SuggestionCardProps) {
     const colors = typeColors[suggestion.type] || typeColors.improvement
 
     return (
@@ -133,6 +134,32 @@ function SuggestionCard({ suggestion, selected, expanded, onToggle, onExpand }: 
                     {suggestion.title}
                 </span>
 
+                {/* 删除按钮 */}
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        onDelete()
+                    }}
+                    className="flex-shrink-0 p-0.5 text-[var(--app-hint)] hover:text-red-500 transition-colors"
+                    title="删除"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+
                 {/* 展开/收起按钮 */}
                 <button
                     type="button"
@@ -173,17 +200,39 @@ function SuggestionCard({ suggestion, selected, expanded, onToggle, onExpand }: 
 }
 
 interface ReviewSuggestionsProps {
-    reviewText: string
+    reviewTexts: string[]  // 支持多个 review 文本
     onApply: (details: string[]) => void
     isApplying?: boolean
 }
 
-export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSuggestionsProps) {
+export function ReviewSuggestions({ reviewTexts, onApply, isApplying }: ReviewSuggestionsProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+    const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
 
-    // 解析 JSON
-    const result = useMemo(() => parseReviewResult(reviewText), [reviewText])
+    // 合并多个 review 结果，为每个建议生成唯一 ID
+    const mergedSuggestions = useMemo(() => {
+        const allSuggestions: ReviewSuggestion[] = []
+        for (let i = 0; i < reviewTexts.length; i++) {
+            const result = parseReviewResult(reviewTexts[i])
+            if (result) {
+                for (const suggestion of result.suggestions) {
+                    // 生成唯一 ID：review索引_原始ID
+                    const uniqueId = `${i}_${suggestion.id}`
+                    allSuggestions.push({
+                        ...suggestion,
+                        id: uniqueId
+                    })
+                }
+            }
+        }
+        return allSuggestions
+    }, [reviewTexts])
+
+    // 过滤掉已删除的建议
+    const visibleSuggestions = useMemo(() => {
+        return mergedSuggestions.filter(s => !deletedIds.has(s.id))
+    }, [mergedSuggestions, deletedIds])
 
     // 切换选中状态
     const toggleSelection = useCallback((id: string) => {
@@ -211,52 +260,63 @@ export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSug
         })
     }, [])
 
+    // 删除建议
+    const deleteSuggestion = useCallback((id: string) => {
+        setDeletedIds(prev => new Set(prev).add(id))
+        // 同时从选中列表中移除
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            next.delete(id)
+            return next
+        })
+    }, [])
+
     // 全选/取消全选
     const toggleAll = useCallback(() => {
-        if (!result) return
-        if (selectedIds.size === result.suggestions.length) {
+        if (visibleSuggestions.length === 0) return
+        const visibleIds = visibleSuggestions.map(s => s.id)
+        const allVisibleSelected = visibleIds.every(id => selectedIds.has(id))
+        if (allVisibleSelected) {
             setSelectedIds(new Set())
         } else {
-            setSelectedIds(new Set(result.suggestions.map(s => s.id)))
+            setSelectedIds(new Set(visibleIds))
         }
-    }, [result, selectedIds.size])
+    }, [visibleSuggestions, selectedIds])
 
     // 全部展开/收起
     const toggleExpandAll = useCallback(() => {
-        if (!result) return
-        if (expandedIds.size === result.suggestions.length) {
+        if (visibleSuggestions.length === 0) return
+        const visibleIds = visibleSuggestions.map(s => s.id)
+        const allVisibleExpanded = visibleIds.every(id => expandedIds.has(id))
+        if (allVisibleExpanded) {
             setExpandedIds(new Set())
         } else {
-            setExpandedIds(new Set(result.suggestions.map(s => s.id)))
+            setExpandedIds(new Set(visibleIds))
         }
-    }, [result, expandedIds.size])
+    }, [visibleSuggestions, expandedIds])
 
     // 应用选中的建议
     const handleApply = useCallback(() => {
-        if (!result) return
-        const selected = result.suggestions.filter(s => selectedIds.has(s.id))
+        if (visibleSuggestions.length === 0) return
+        const selected = visibleSuggestions.filter(s => selectedIds.has(s.id))
         const details = selected.map(s => s.detail)
         onApply(details)
-    }, [result, selectedIds, onApply])
+    }, [visibleSuggestions, selectedIds, onApply])
 
-    // 没有解析出结果
-    if (!result || result.suggestions.length === 0) {
+    // 没有可见的建议
+    if (visibleSuggestions.length === 0) {
         return null
     }
 
-    const allSelected = selectedIds.size === result.suggestions.length
-    const allExpanded = expandedIds.size === result.suggestions.length
-    const someSelected = selectedIds.size > 0
+    const visibleIds = visibleSuggestions.map(s => s.id)
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id))
+    const allExpanded = visibleIds.length > 0 && visibleIds.every(id => expandedIds.has(id))
+    const someSelected = visibleIds.some(id => selectedIds.has(id))
+
+    const selectedCount = visibleIds.filter(id => selectedIds.has(id)).length
 
     return (
         <div className="space-y-2">
-            {/* 总结 */}
-            {result.summary && (
-                <div className="p-2 rounded-md bg-[var(--app-subtle-bg)] border border-[var(--app-divider)]">
-                    <p className="text-[11px] text-[var(--app-hint)]">{result.summary}</p>
-                </div>
-            )}
-
             {/* 操作栏 */}
             <div className="flex items-center justify-between text-[11px]">
                 <div className="flex items-center gap-3">
@@ -276,13 +336,13 @@ export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSug
                     </button>
                 </div>
                 <span className="text-[var(--app-hint)]">
-                    已选 {selectedIds.size}/{result.suggestions.length}
+                    已选 {selectedCount}/{visibleSuggestions.length}
                 </span>
             </div>
 
             {/* 建议列表 */}
             <div className="space-y-1">
-                {result.suggestions.map(suggestion => (
+                {visibleSuggestions.map(suggestion => (
                     <SuggestionCard
                         key={suggestion.id}
                         suggestion={suggestion}
@@ -290,6 +350,7 @@ export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSug
                         expanded={expandedIds.has(suggestion.id)}
                         onToggle={() => toggleSelection(suggestion.id)}
                         onExpand={() => toggleExpand(suggestion.id)}
+                        onDelete={() => deleteSuggestion(suggestion.id)}
                     />
                 ))}
             </div>
@@ -310,7 +371,7 @@ export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSug
                         发送中...
                     </span>
                 ) : (
-                    `发送 ${selectedIds.size} 条建议给主 AI`
+                    `发送 ${selectedCount} 条建议给主 AI`
                 )}
             </button>
         </div>

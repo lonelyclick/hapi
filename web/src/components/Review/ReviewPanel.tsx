@@ -489,19 +489,18 @@ export function ReviewPanel(props: {
         }
     })
 
-    // 从已处理的 blocks 中提取最新的包含 suggestions JSON 的文本
-    const latestReviewText = useMemo(() => {
-        // 从后往前遍历 blocks，找包含 suggestions 的 agent-text 消息
-        for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
-            const block = reconciled.blocks[i]
+    // 从已处理的 blocks 中提取所有包含 suggestions JSON 的文本（合并多次 review 结果）
+    const allReviewTexts = useMemo(() => {
+        const texts: string[] = []
+        for (const block of reconciled.blocks) {
             if (block.kind !== 'agent-text') continue
 
             const result = parseReviewResult(block.text)
             if (result && result.suggestions.length > 0) {
-                return block.text
+                texts.push(block.text)
             }
         }
-        return null
+        return texts
     }, [reconciled.blocks])
 
     // 应用建议到主 Session
@@ -612,11 +611,11 @@ export function ReviewPanel(props: {
                             normalizedMessagesCount={normalizedMessages.length}
                             renderedMessagesCount={reconciled.blocks.length}
                         />
-                        {/* 建议卡片 - 显示在对话列表下方 */}
-                        {latestReviewText && (
+                        {/* 建议卡片 - 显示在对话列表下方（合并所有 review 结果） */}
+                        {allReviewTexts.length > 0 && (
                             <div className="mx-auto w-full max-w-content min-w-0 px-3 pb-4">
                                 <ReviewSuggestions
-                                    reviewText={latestReviewText}
+                                    reviewTexts={allReviewTexts}
                                     onApply={(details) => applySuggestionsMutation.mutate(details)}
                                     isApplying={applySuggestionsMutation.isPending}
                                 />

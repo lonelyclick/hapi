@@ -754,12 +754,37 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'No summarized rounds found. Please sync first.', noRounds: true }, 400)
         }
 
-        // 构建完整的对话汇总（直接使用已汇总的内容，每行一轮）
-        const roundsSummary = allSummarizedRounds.map(r => r.aiSummary).join('\n')
+        // 获取已经 review 过的轮次号（从已完成的执行记录中提取）
+        const executions = await reviewStore.getReviewExecutions(id)
+        const reviewedRoundNumbers = new Set<number>()
+        for (const exec of executions) {
+            // 只计算已完成的执行记录
+            if (exec.status === 'completed' && exec.reviewedRoundNumbers) {
+                for (const roundNum of exec.reviewedRoundNumbers) {
+                    reviewedRoundNumbers.add(roundNum)
+                }
+            }
+        }
 
-        // 计算时间范围
+        // 过滤出未 review 过的轮次
+        const unreviewedRounds = allSummarizedRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber))
+
+        if (unreviewedRounds.length === 0) {
+            return c.json({
+                error: '所有轮次都已经 review 过了',
+                allReviewed: true,
+                totalRounds: allSummarizedRounds.length,
+                reviewedRounds: reviewedRoundNumbers.size
+            }, 400)
+        }
+
+        // 构建对话汇总（只包含未 review 过的轮次）
+        const roundsSummary = unreviewedRounds.map(r => r.aiSummary).join('\n')
+        const unreviewedRoundNumbers = unreviewedRounds.map(r => r.roundNumber)
+
+        // 计算时间范围（只针对未 review 过的轮次）
         let timeRange: { start: number; end: number } | undefined
-        const roundsWithTime = allSummarizedRounds.filter(r => r.startedAt && r.endedAt)
+        const roundsWithTime = unreviewedRounds.filter(r => r.startedAt && r.endedAt)
         if (roundsWithTime.length > 0) {
             const startTimes = roundsWithTime.map(r => r.startedAt!).filter(t => t > 0)
             const endTimes = roundsWithTime.map(r => r.endedAt!).filter(t => t > 0)
@@ -774,10 +799,11 @@ ${batchRounds.map(r => `  {
         // 发送 Review Prompt
         const reviewPrompt = buildReviewPrompt(roundsSummary, timeRange)
 
-        // 创建执行记录
+        // 创建执行记录（记录本次 review 的轮次号）
         const execution = await reviewStore.createReviewExecution({
             reviewSessionId: id,
-            roundsReviewed: allSummarizedRounds.length,
+            roundsReviewed: unreviewedRounds.length,
+            reviewedRoundNumbers: unreviewedRoundNumbers,
             timeRangeStart: timeRange?.start ?? Date.now(),
             timeRangeEnd: timeRange?.end ?? Date.now(),
             prompt: reviewPrompt
@@ -796,7 +822,9 @@ ${batchRounds.map(r => `  {
         return c.json({
             success: true,
             status: 'active',
-            roundsReviewed: allSummarizedRounds.length,
+            roundsReviewed: unreviewedRounds.length,
+            reviewedRoundNumbers: unreviewedRoundNumbers,
+            skippedRounds: Array.from(reviewedRoundNumbers),
             executionId: execution.id,
             timeRange
         })
