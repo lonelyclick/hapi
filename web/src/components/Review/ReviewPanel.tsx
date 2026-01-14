@@ -15,6 +15,7 @@ import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import type { DecryptedMessage, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
+import { ReviewSuggestions, parseReviewResult } from './ReviewSuggestions'
 
 // Icons
 function ReviewIcon(props: { className?: string }) {
@@ -488,6 +489,55 @@ export function ReviewPanel(props: {
         }
     })
 
+    // 从消息中提取最新的 AI 回复文本
+    const latestReviewText = useMemo(() => {
+        // 从后往前找最新的 agent 消息
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const msg = messages[i]
+            const content = msg.content as Record<string, unknown>
+            if (content?.role !== 'agent') continue
+
+            let payload: Record<string, unknown> | null = null
+            const rawContent = content?.content
+            if (typeof rawContent === 'string') {
+                try {
+                    payload = JSON.parse(rawContent)
+                } catch {
+                    continue
+                }
+            } else if (typeof rawContent === 'object' && rawContent) {
+                payload = rawContent as Record<string, unknown>
+            }
+
+            if (!payload) continue
+            const data = payload.data as Record<string, unknown>
+            if (!data || data.type !== 'assistant') continue
+
+            const message = data.message as Record<string, unknown>
+            if (message?.content) {
+                const contentArr = message.content as Array<{ type?: string; text?: string }>
+                for (const item of contentArr) {
+                    if (item.type === 'text' && item.text) {
+                        // 检查是否包含 suggestions JSON
+                        if (parseReviewResult(item.text)) {
+                            return item.text
+                        }
+                    }
+                }
+            }
+        }
+        return null
+    }, [messages])
+
+    // 应用建议到主 Session
+    const applySuggestionsMutation = useMutation({
+        mutationFn: async (details: string[]) => {
+            // 合并所有选中的建议详情
+            const combined = details.join('\n\n---\n\n')
+            await api.sendMessage(props.mainSessionId, combined)
+        }
+    })
+
     // 刷新
     const handleRefresh = useCallback(() => {
         queryClient.invalidateQueries({ queryKey: ['messages', props.reviewSessionId] })
@@ -673,12 +723,22 @@ export function ReviewPanel(props: {
 
                 {/* completed 状态 */}
                 {currentReview?.status === 'completed' && (
-                    <div className="flex items-center justify-center gap-2 py-2 text-green-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                            <polyline points="22 4 12 14.01 9 11.01" />
-                        </svg>
-                        <span className="font-medium">Review 已完成</span>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-center gap-2 text-green-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                <polyline points="22 4 12 14.01 9 11.01" />
+                            </svg>
+                            <span className="text-sm font-medium">Review 已完成</span>
+                        </div>
+                        {/* 建议卡片 */}
+                        {latestReviewText && (
+                            <ReviewSuggestions
+                                reviewText={latestReviewText}
+                                onApply={(details) => applySuggestionsMutation.mutate(details)}
+                                isApplying={applySuggestionsMutation.isPending}
+                            />
+                        )}
                     </div>
                 )}
 
