@@ -86,56 +86,88 @@ const severityLabels: Record<string, string> = {
 interface SuggestionCardProps {
     suggestion: ReviewSuggestion
     selected: boolean
+    expanded: boolean
     onToggle: () => void
+    onExpand: () => void
 }
 
-function SuggestionCard({ suggestion, selected, onToggle }: SuggestionCardProps) {
+function SuggestionCard({ suggestion, selected, expanded, onToggle, onExpand }: SuggestionCardProps) {
     const colors = typeColors[suggestion.type] || typeColors.improvement
 
     return (
         <div
-            className={`relative p-3 rounded-lg border cursor-pointer transition-all ${
+            className={`relative rounded-md border transition-all ${
                 selected
-                    ? `${colors.bg} ${colors.border} ring-2 ring-offset-1 ring-offset-[var(--app-bg)]`
+                    ? `${colors.bg} ${colors.border}`
                     : 'border-[var(--app-divider)] hover:border-[var(--app-hint)]'
             }`}
-            style={{ ['--tw-ring-color' as string]: colors.text.replace('text-', 'rgb(var(--') + ')' }}
-            onClick={onToggle}
         >
-            {/* 选择框 */}
-            <div className="absolute top-3 right-3">
-                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+            {/* 主行：可点击选择 */}
+            <div
+                className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer"
+                onClick={onToggle}
+            >
+                {/* 选择框 */}
+                <div className={`flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
                     selected
                         ? `${colors.bg} ${colors.border}`
                         : 'border-[var(--app-hint)]'
                 }`}>
                     {selected && (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={colors.text}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={colors.text}>
                             <polyline points="20 6 9 17 4 12" />
                         </svg>
                     )}
                 </div>
-            </div>
 
-            {/* 标签 */}
-            <div className="flex items-center gap-2 mb-2 pr-8">
-                <span className={`px-2 py-0.5 text-xs font-medium rounded ${colors.bg} ${colors.text}`}>
+                {/* 标签 */}
+                <span className={`flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded ${colors.bg} ${colors.text}`}>
                     {typeLabels[suggestion.type] || suggestion.type}
                 </span>
-                <span className={`text-xs font-medium ${severityColors[suggestion.severity] || 'text-gray-500'}`}>
+                <span className={`flex-shrink-0 text-[10px] font-medium ${severityColors[suggestion.severity] || 'text-gray-500'}`}>
                     {severityLabels[suggestion.severity] || suggestion.severity}
                 </span>
+
+                {/* 标题 */}
+                <span className="flex-1 text-xs text-[var(--app-fg)] truncate">
+                    {suggestion.title}
+                </span>
+
+                {/* 展开/收起按钮 */}
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        onExpand()
+                    }}
+                    className="flex-shrink-0 p-0.5 text-[var(--app-hint)] hover:text-[var(--app-fg)] transition-colors"
+                    title={expanded ? '收起' : '展开'}
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
+                    >
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </button>
             </div>
 
-            {/* 标题 */}
-            <h4 className="font-medium text-[var(--app-fg)] mb-1">
-                {suggestion.title}
-            </h4>
-
-            {/* 详情预览 */}
-            <p className="text-sm text-[var(--app-hint)] line-clamp-2">
-                {suggestion.detail}
-            </p>
+            {/* 详情区域：可展开 */}
+            {expanded && (
+                <div className="px-2.5 pb-2 pt-1 border-t border-[var(--app-divider)]">
+                    <p className="text-[11px] text-[var(--app-hint)] leading-relaxed whitespace-pre-wrap">
+                        {suggestion.detail}
+                    </p>
+                </div>
+            )}
         </div>
     )
 }
@@ -148,6 +180,7 @@ interface ReviewSuggestionsProps {
 
 export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSuggestionsProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
     // 解析 JSON
     const result = useMemo(() => parseReviewResult(reviewText), [reviewText])
@@ -155,6 +188,19 @@ export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSug
     // 切换选中状态
     const toggleSelection = useCallback((id: string) => {
         setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) {
+                next.delete(id)
+            } else {
+                next.add(id)
+            }
+            return next
+        })
+    }, [])
+
+    // 切换展开状态
+    const toggleExpand = useCallback((id: string) => {
+        setExpandedIds(prev => {
             const next = new Set(prev)
             if (next.has(id)) {
                 next.delete(id)
@@ -175,6 +221,16 @@ export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSug
         }
     }, [result, selectedIds.size])
 
+    // 全部展开/收起
+    const toggleExpandAll = useCallback(() => {
+        if (!result) return
+        if (expandedIds.size === result.suggestions.length) {
+            setExpandedIds(new Set())
+        } else {
+            setExpandedIds(new Set(result.suggestions.map(s => s.id)))
+        }
+    }, [result, expandedIds.size])
+
     // 应用选中的建议
     const handleApply = useCallback(() => {
         if (!result) return
@@ -189,40 +245,51 @@ export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSug
     }
 
     const allSelected = selectedIds.size === result.suggestions.length
+    const allExpanded = expandedIds.size === result.suggestions.length
     const someSelected = selectedIds.size > 0
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-2">
             {/* 总结 */}
             {result.summary && (
-                <div className="p-3 rounded-lg bg-[var(--app-subtle-bg)] border border-[var(--app-divider)]">
-                    <div className="text-sm font-medium text-[var(--app-fg)] mb-1">总体评价</div>
-                    <p className="text-sm text-[var(--app-hint)]">{result.summary}</p>
+                <div className="p-2 rounded-md bg-[var(--app-subtle-bg)] border border-[var(--app-divider)]">
+                    <p className="text-[11px] text-[var(--app-hint)]">{result.summary}</p>
                 </div>
             )}
 
             {/* 操作栏 */}
-            <div className="flex items-center justify-between">
-                <button
-                    type="button"
-                    onClick={toggleAll}
-                    className="text-sm text-[var(--app-hint)] hover:text-[var(--app-fg)] transition-colors"
-                >
-                    {allSelected ? '取消全选' : '全选'}
-                </button>
-                <span className="text-sm text-[var(--app-hint)]">
+            <div className="flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={toggleAll}
+                        className="text-[var(--app-hint)] hover:text-[var(--app-fg)] transition-colors"
+                    >
+                        {allSelected ? '取消全选' : '全选'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={toggleExpandAll}
+                        className="text-[var(--app-hint)] hover:text-[var(--app-fg)] transition-colors"
+                    >
+                        {allExpanded ? '全部收起' : '全部展开'}
+                    </button>
+                </div>
+                <span className="text-[var(--app-hint)]">
                     已选 {selectedIds.size}/{result.suggestions.length}
                 </span>
             </div>
 
             {/* 建议列表 */}
-            <div className="space-y-2">
+            <div className="space-y-1">
                 {result.suggestions.map(suggestion => (
                     <SuggestionCard
                         key={suggestion.id}
                         suggestion={suggestion}
                         selected={selectedIds.has(suggestion.id)}
+                        expanded={expandedIds.has(suggestion.id)}
                         onToggle={() => toggleSelection(suggestion.id)}
+                        onExpand={() => toggleExpand(suggestion.id)}
                     />
                 ))}
             </div>
@@ -232,11 +299,11 @@ export function ReviewSuggestions({ reviewText, onApply, isApplying }: ReviewSug
                 type="button"
                 onClick={handleApply}
                 disabled={!someSelected || isApplying}
-                className="w-full px-4 py-2.5 text-sm font-medium rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="w-full px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-sm hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
                 {isApplying ? (
-                    <span className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <span className="flex items-center justify-center gap-1.5">
+                        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                         </svg>
