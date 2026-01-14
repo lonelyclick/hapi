@@ -358,7 +358,9 @@ export function registerCliHandlers(socket: SocketWithData, deps: CliHandlersDep
         // This ensures the socket can receive messages when session becomes "online"
         // Only proceed if the socket successfully joined the session room
         if (sessionJoinPromise && data.sid === sessionId) {
+            console.log(`[cli-socket] session-alive received for ${data.sid}, waiting for socket.join()...`)
             const joined = await sessionJoinPromise
+            console.log(`[cli-socket] session-alive for ${data.sid}: socket.join() completed, joined=${joined}`)
             if (!joined) {
                 // Socket failed to join the room during connection, skip processing
                 return
