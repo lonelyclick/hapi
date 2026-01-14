@@ -436,8 +436,8 @@ export function createSessionsRoutes(
                     return
                 }
                 console.log(`[spawnSession] Session ${result.sessionId} is online, waiting for socket to join room...`)
-                // Give CLI socket time to join the session room (socket.join is async)
-                await new Promise(resolve => setTimeout(resolve, 500))
+                // Give CLI socket time to join the session room (socket.join takes ~2-80ms based on measurements)
+                await new Promise(resolve => setTimeout(resolve, 100))
                 console.log(`[spawnSession] Sending init prompt to session ${result.sessionId}`)
                 // Set createdBy after session is confirmed online (exists in DB)
                 if (email) {
