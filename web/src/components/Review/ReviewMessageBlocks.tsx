@@ -119,8 +119,13 @@ export function isReviewSummaryResult(text: string): boolean {
 
     try {
         const parsed = JSON.parse(jsonStr)
-        return isValidSummaryJson(parsed)
-    } catch {
+        const isValid = isValidSummaryJson(parsed)
+        if (!isValid) {
+            console.log('[isReviewSummaryResult] JSON valid but not summary format:', typeof parsed, Array.isArray(parsed) ? `array[${parsed.length}]` : 'object')
+        }
+        return isValid
+    } catch (e) {
+        console.log('[isReviewSummaryResult] JSON parse error:', (e as Error).message, 'jsonStr preview:', jsonStr.slice(0, 100))
         return false
     }
 }
