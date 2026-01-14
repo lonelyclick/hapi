@@ -1007,9 +1007,16 @@ export class ApiClient {
         )
     }
 
-    async syncReviewRounds(reviewId: string): Promise<{ success: boolean; newRoundsSynced: number; totalRounds: number; summarizedRounds: number }> {
-        return await this.request<{ success: boolean; newRoundsSynced: number; totalRounds: number; summarizedRounds: number }>(
+    async syncReviewRounds(reviewId: string): Promise<{ success: boolean; syncingRound?: number; totalRounds: number; summarizedRounds: number; pendingRounds: number; message: string }> {
+        return await this.request<{ success: boolean; syncingRound?: number; totalRounds: number; summarizedRounds: number; pendingRounds: number; message: string }>(
             `/api/review/sessions/${encodeURIComponent(reviewId)}/sync`,
+            { method: 'POST' }
+        )
+    }
+
+    async saveReviewSummary(reviewId: string): Promise<{ success: boolean; savedRound?: number; summary?: string; message: string; alreadyExists?: boolean; noSummary?: boolean }> {
+        return await this.request<{ success: boolean; savedRound?: number; summary?: string; message: string; alreadyExists?: boolean; noSummary?: boolean }>(
+            `/api/review/sessions/${encodeURIComponent(reviewId)}/save-summary`,
             { method: 'POST' }
         )
     }

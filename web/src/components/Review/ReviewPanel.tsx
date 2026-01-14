@@ -265,7 +265,7 @@ export function ReviewPanel(props: {
         onAbort: handleAbort
     })
 
-    // 同步数据（汇总到数据库）
+    // 同步数据（发送给 Review AI 做汇总）
     const syncRoundsMutation = useMutation({
         mutationFn: async () => {
             if (!currentReview) {
@@ -277,6 +277,35 @@ export function ReviewPanel(props: {
             queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
         }
     })
+
+    // 保存 AI 的汇总结果
+    const saveSummaryMutation = useMutation({
+        mutationFn: async () => {
+            if (!currentReview) {
+                throw new Error('No current review found')
+            }
+            return await api.saveReviewSummary(currentReview.id)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
+        }
+    })
+
+    // 当 AI 完成思考后自动尝试保存汇总
+    const prevThinkingRef = useRef<boolean | undefined>(undefined)
+    useEffect(() => {
+        const wasThinking = prevThinkingRef.current
+        const isThinking = session?.thinking
+        prevThinkingRef.current = isThinking
+
+        // 从思考中变为不思考 -> AI 刚完成回复
+        if (wasThinking === true && isThinking === false && currentReview?.status === 'active') {
+            // 延迟一下再保存，确保消息已经同步
+            setTimeout(() => {
+                saveSummaryMutation.mutate()
+            }, 1000)
+        }
+    }, [session?.thinking, currentReview?.status])
 
     // 开始 Review（发送给 Review AI）
     const startReviewMutation = useMutation({

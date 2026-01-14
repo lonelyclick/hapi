@@ -428,7 +428,7 @@ export function createReviewRoutes(
         // 只处理第一个未汇总的轮次
         const nextRound = pendingRounds[0]
 
-        // 构建汇总请求 Prompt
+        // 构建汇总请求 Prompt - 要求 AI 输出 JSON 格式
         const syncPrompt = `## 对话汇总任务
 
 请帮我汇总以下这一轮对话的内容。
@@ -443,26 +443,21 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
 
 ### 要求
 
-1. 请用简洁的语言汇总 AI 在这一轮中做了什么
-2. 重点关注：执行了什么操作、修改了哪些文件、解决了什么问题
-3. 汇总长度控制在 200-500 字以内
-4. 只输出汇总内容，不要输出其他内容
+请用 JSON 格式输出汇总结果，格式如下：
 
-请直接输出汇总结果：`
+\`\`\`json
+{
+  "round": ${nextRound.roundNumber},
+  "summary": "用简洁的语言汇总 AI 在这一轮中做了什么，重点关注：执行了什么操作、修改了哪些文件、解决了什么问题。200-500字以内。"
+}
+\`\`\`
+
+只输出 JSON，不要输出其他内容。`
 
         // 发送给 Review AI
         await engine.sendMessage(reviewSession.reviewSessionId, {
             text: syncPrompt,
             sentFrom: 'webapp'
-        })
-
-        // 先在数据库中创建一个待填充的记录（AI 汇总后再更新）
-        await reviewStore.createReviewRound({
-            reviewSessionId: id,
-            roundNumber: nextRound.roundNumber,
-            userInput: nextRound.userInput,
-            aiSummary: '(等待 AI 汇总...)',  // 占位符
-            originalMessageIds: nextRound.messageIds
         })
 
         // 更新状态为 active（如果是 pending）
@@ -476,7 +471,125 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
             totalRounds: allRounds.length,
             summarizedRounds: existingRounds.length,
             pendingRounds: pendingRounds.length,
+            userInput: nextRound.userInput,
+            originalMessageIds: nextRound.messageIds,
             message: `正在汇总第 ${nextRound.roundNumber} 轮对话...`
+        })
+    })
+
+    // 保存 AI 的汇总结果
+    // 从 Review Session 的最新消息中提取汇总并保存到数据库
+    app.post('/review/sessions/:id/save-summary', async (c) => {
+        const id = c.req.param('id')
+        const engine = getSyncEngine()
+
+        if (!engine) {
+            return c.json({ error: 'Sync engine not available' }, 503)
+        }
+
+        const reviewSession = await reviewStore.getReviewSession(id)
+        if (!reviewSession) {
+            return c.json({ error: 'Review session not found' }, 404)
+        }
+
+        // 获取 Review Session 的最新消息
+        const messagesResult = await engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 10, beforeSeq: null })
+
+        // 提取最新的 AI 回复
+        let latestSummary: { round: number; summary: string } | null = null
+
+        for (const m of messagesResult.messages.reverse()) {
+            const content = m.content as Record<string, unknown>
+            if (content?.role !== 'agent') continue
+
+            // 解析消息内容
+            let payload: Record<string, unknown> | null = null
+            const rawContent = content?.content
+            if (typeof rawContent === 'string') {
+                try {
+                    payload = JSON.parse(rawContent)
+                } catch {
+                    payload = null
+                }
+            } else if (typeof rawContent === 'object' && rawContent) {
+                payload = rawContent as Record<string, unknown>
+            }
+
+            if (!payload) continue
+
+            const data = payload.data as Record<string, unknown>
+            if (!data || data.type !== 'assistant') continue
+
+            const message = data.message as Record<string, unknown>
+            if (message?.content) {
+                const contentArr = message.content as Array<{ type?: string; text?: string }>
+                for (const item of contentArr) {
+                    if (item.type === 'text' && item.text) {
+                        // 尝试从文本中提取 JSON
+                        const jsonMatch = item.text.match(/```json\s*([\s\S]*?)\s*```/)
+                        if (jsonMatch) {
+                            try {
+                                latestSummary = JSON.parse(jsonMatch[1])
+                                break
+                            } catch {
+                                // 继续尝试
+                            }
+                        }
+                        // 也尝试直接解析整个文本
+                        try {
+                            const parsed = JSON.parse(item.text)
+                            if (parsed.round && parsed.summary) {
+                                latestSummary = parsed
+                                break
+                            }
+                        } catch {
+                            // 继续
+                        }
+                    }
+                }
+            }
+            if (latestSummary) break
+        }
+
+        if (!latestSummary) {
+            return c.json({ error: 'No summary found in AI response', noSummary: true }, 400)
+        }
+
+        // 获取主 Session 消息以获取原始数据
+        const mainMessagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
+        const allRounds = groupMessagesIntoRounds(mainMessagesResult.messages)
+        const targetRound = allRounds.find(r => r.roundNumber === latestSummary!.round)
+
+        if (!targetRound) {
+            return c.json({ error: `Round ${latestSummary.round} not found` }, 400)
+        }
+
+        // 检查是否已存在
+        const existingRounds = await reviewStore.getReviewRounds(id)
+        const alreadyExists = existingRounds.some(r => r.roundNumber === latestSummary!.round)
+
+        if (alreadyExists) {
+            return c.json({
+                success: true,
+                message: `第 ${latestSummary.round} 轮已保存`,
+                alreadyExists: true
+            })
+        }
+
+        // 保存到数据库
+        await reviewStore.createReviewRound({
+            reviewSessionId: id,
+            roundNumber: latestSummary.round,
+            userInput: targetRound.userInput,
+            aiSummary: latestSummary.summary,
+            originalMessageIds: targetRound.messageIds
+        })
+
+        return c.json({
+            success: true,
+            savedRound: latestSummary.round,
+            summary: latestSummary.summary,
+            message: `第 ${latestSummary.round} 轮汇总已保存`
         })
     })
 
