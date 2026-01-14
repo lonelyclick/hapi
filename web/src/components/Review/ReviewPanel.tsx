@@ -491,12 +491,16 @@ export function ReviewPanel(props: {
 
     // 从已处理的 blocks 中提取最新的包含 suggestions JSON 的文本
     const latestReviewText = useMemo(() => {
+        console.log('[ReviewPanel] Looking for suggestions in blocks:', reconciled.blocks.length)
         // 从后往前遍历 blocks，找包含 suggestions 的 agent-text 消息
         for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
             const block = reconciled.blocks[i]
+            console.log('[ReviewPanel] Block', i, 'kind:', block.kind)
             if (block.kind !== 'agent-text') continue
 
+            console.log('[ReviewPanel] agent-text block text preview:', block.text.slice(0, 200))
             const result = parseReviewResult(block.text)
+            console.log('[ReviewPanel] parseReviewResult:', result)
             if (result && result.suggestions.length > 0) {
                 return block.text
             }
