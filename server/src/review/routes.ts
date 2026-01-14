@@ -388,7 +388,7 @@ export function createReviewRoutes(
     })
 
     // 同步汇总 - 发送每一轮对话给 Review AI 做汇总
-    // 每次只处理一轮，AI 汇总后通过 /sync-complete 接口存储结果
+    // 每次最多处理 3 轮，批量发送给 AI 汇总
     app.post('/review/sessions/:id/sync', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
@@ -425,34 +425,45 @@ export function createReviewRoutes(
             })
         }
 
-        // 只处理第一个未汇总的轮次
-        const nextRound = pendingRounds[0]
+        // 批量处理：每次最多 3 轮
+        const BATCH_SIZE = 3
+        const batchRounds = pendingRounds.slice(0, BATCH_SIZE)
 
-        // 构建汇总请求 Prompt - 要求 AI 输出 JSON 格式
-        const syncPrompt = `## 对话汇总任务
+        // 构建批量汇总请求 Prompt
+        let syncPrompt = `## 对话汇总任务
 
-请帮我汇总以下这一轮对话的内容。
+请帮我汇总以下 ${batchRounds.length} 轮对话的内容。
 
-### 第 ${nextRound.roundNumber} 轮对话
+`
+
+        for (const round of batchRounds) {
+            syncPrompt += `### 第 ${round.roundNumber} 轮对话
 
 **用户输入：**
-${nextRound.userInput}
+${round.userInput}
 
 **AI 回复：**
-${nextRound.aiMessages.join('\n\n---\n\n')}
+${round.aiMessages.join('\n\n---\n\n')}
 
-### 要求
+---
 
-请用 JSON 格式输出汇总结果，格式如下：
+`
+        }
+
+        syncPrompt += `### 要求
+
+请用 JSON 数组格式输出汇总结果，每轮对话一个 JSON 对象：
 
 \`\`\`json
-{
-  "round": ${nextRound.roundNumber},
-  "summary": "用简洁的语言汇总 AI 在这一轮中做了什么，重点关注：执行了什么操作、修改了哪些文件、解决了什么问题。200-500字以内。"
-}
+[
+${batchRounds.map(r => `  {
+    "round": ${r.roundNumber},
+    "summary": "用简洁的语言汇总 AI 在这一轮中做了什么，重点关注：执行了什么操作、修改了哪些文件、解决了什么问题。200-500字以内。"
+  }`).join(',\n')}
+]
 \`\`\`
 
-只输出 JSON，不要输出其他内容。`
+只输出 JSON 数组，不要输出其他内容。`
 
         // 发送给 Review AI
         await engine.sendMessage(reviewSession.reviewSessionId, {
@@ -467,18 +478,18 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
 
         return c.json({
             success: true,
-            syncingRound: nextRound.roundNumber,
+            syncingRounds: batchRounds.map(r => r.roundNumber),
+            batchSize: batchRounds.length,
             totalRounds: allRounds.length,
             summarizedRounds: existingRounds.length,
             pendingRounds: pendingRounds.length,
-            userInput: nextRound.userInput,
-            originalMessageIds: nextRound.messageIds,
-            message: `正在汇总第 ${nextRound.roundNumber} 轮对话...`
+            message: `正在汇总第 ${batchRounds.map(r => r.roundNumber).join(', ')} 轮对话...`
         })
     })
 
     // 保存 AI 的汇总结果
     // 从 Review Session 的最新消息中提取汇总并保存到数据库
+    // 支持单个 JSON 对象或 JSON 数组（批量汇总）
     app.post('/review/sessions/:id/save-summary', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
@@ -495,8 +506,8 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
         // 获取 Review Session 的最新消息
         const messagesResult = await engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 10, beforeSeq: null })
 
-        // 提取最新的 AI 回复
-        let latestSummary: { round: number; summary: string } | null = null
+        // 提取最新的 AI 回复 - 支持单个对象或数组
+        let summaries: Array<{ round: number; summary: string }> = []
 
         for (const m of messagesResult.messages.reverse()) {
             const content = m.content as Record<string, unknown>
@@ -529,8 +540,14 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
                         const jsonMatch = item.text.match(/```json\s*([\s\S]*?)\s*```/)
                         if (jsonMatch) {
                             try {
-                                latestSummary = JSON.parse(jsonMatch[1])
-                                break
+                                const parsed = JSON.parse(jsonMatch[1])
+                                // 支持数组格式
+                                if (Array.isArray(parsed)) {
+                                    summaries = parsed.filter(p => p.round && p.summary)
+                                } else if (parsed.round && parsed.summary) {
+                                    summaries = [parsed]
+                                }
+                                if (summaries.length > 0) break
                             } catch {
                                 // 继续尝试
                             }
@@ -538,58 +555,79 @@ ${nextRound.aiMessages.join('\n\n---\n\n')}
                         // 也尝试直接解析整个文本
                         try {
                             const parsed = JSON.parse(item.text)
-                            if (parsed.round && parsed.summary) {
-                                latestSummary = parsed
-                                break
+                            if (Array.isArray(parsed)) {
+                                summaries = parsed.filter(p => p.round && p.summary)
+                            } else if (parsed.round && parsed.summary) {
+                                summaries = [parsed]
                             }
+                            if (summaries.length > 0) break
                         } catch {
                             // 继续
                         }
                     }
                 }
             }
-            if (latestSummary) break
+            if (summaries.length > 0) break
         }
 
-        if (!latestSummary) {
+        if (summaries.length === 0) {
             return c.json({ error: 'No summary found in AI response', noSummary: true }, 400)
         }
 
         // 获取主 Session 消息以获取原始数据
         const mainMessagesResult = await engine.getMessagesPage(reviewSession.mainSessionId, { limit: 100, beforeSeq: null })
         const allRounds = groupMessagesIntoRounds(mainMessagesResult.messages)
-        const targetRound = allRounds.find(r => r.roundNumber === latestSummary!.round)
 
-        if (!targetRound) {
-            return c.json({ error: `Round ${latestSummary.round} not found` }, 400)
+        // 获取已存在的轮次
+        const existingRounds = await reviewStore.getReviewRounds(id)
+        const existingRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
+
+        // 批量保存
+        const savedRounds: number[] = []
+        const skippedRounds: number[] = []
+
+        for (const summary of summaries) {
+            // 跳过已存在的
+            if (existingRoundNumbers.has(summary.round)) {
+                skippedRounds.push(summary.round)
+                continue
+            }
+
+            const targetRound = allRounds.find(r => r.roundNumber === summary.round)
+            if (!targetRound) {
+                console.warn(`[save-summary] Round ${summary.round} not found in main session`)
+                continue
+            }
+
+            // 保存到数据库
+            await reviewStore.createReviewRound({
+                reviewSessionId: id,
+                roundNumber: summary.round,
+                userInput: targetRound.userInput,
+                aiSummary: summary.summary,
+                originalMessageIds: targetRound.messageIds
+            })
+
+            savedRounds.push(summary.round)
         }
 
-        // 检查是否已存在
-        const existingRounds = await reviewStore.getReviewRounds(id)
-        const alreadyExists = existingRounds.some(r => r.roundNumber === latestSummary!.round)
-
-        if (alreadyExists) {
+        if (savedRounds.length === 0 && skippedRounds.length > 0) {
             return c.json({
                 success: true,
-                message: `第 ${latestSummary.round} 轮已保存`,
-                alreadyExists: true
+                message: `第 ${skippedRounds.join(', ')} 轮已保存`,
+                alreadyExists: true,
+                skippedRounds
             })
         }
 
-        // 保存到数据库
-        await reviewStore.createReviewRound({
-            reviewSessionId: id,
-            roundNumber: latestSummary.round,
-            userInput: targetRound.userInput,
-            aiSummary: latestSummary.summary,
-            originalMessageIds: targetRound.messageIds
-        })
-
         return c.json({
             success: true,
-            savedRound: latestSummary.round,
-            summary: latestSummary.summary,
-            message: `第 ${latestSummary.round} 轮汇总已保存`
+            savedRounds,
+            skippedRounds,
+            totalSaved: savedRounds.length,
+            message: savedRounds.length > 0
+                ? `第 ${savedRounds.join(', ')} 轮汇总已保存`
+                : '没有新的汇总需要保存'
         })
     })
 
