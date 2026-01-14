@@ -322,7 +322,7 @@ export function ReviewSummaryResultBlock(props: { text: string }) {
                         <svg className="w-3 h-3 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span className="text-xs text-green-700 dark:text-green-300">{summary.round}</span>
+                        <span className="text-xs text-green-700 dark:text-green-300">第 {summary.round} 轮汇总完成</span>
                     </div>
                     <div className="px-2 py-1.5">
                         <div className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed">
@@ -343,7 +343,7 @@ export function ReviewSummaryResultBlock(props: { text: string }) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     <span className="text-xs text-green-700 dark:text-green-300">
-                        {parsed.map(s => s.round).join(', ')}
+                        第 {parsed.map(s => s.round).join(', ')} 轮汇总完成
                     </span>
                 </div>
                 <div className="p-2 space-y-2">
