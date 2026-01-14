@@ -213,10 +213,16 @@ export class AutoReviewService {
 
             // 保存汇总结果
             console.log('[ReviewSync] Saving summary...')
-            await this.saveSummary(reviewSession)
+            const savedCount = await this.saveSummary(reviewSession)
 
-            // 检查是否还有待同步的轮次
-            await this.syncRounds(reviewSession)
+            // 只有成功保存了汇总结果，才继续检查是否有更多待同步的轮次
+            // 这样可以避免无限循环：如果 AI 回复中没有有效的汇总，就不要再触发同步
+            if (savedCount > 0) {
+                console.log('[ReviewSync] Saved', savedCount, 'rounds, checking for more...')
+                await this.syncRounds(reviewSession)
+            } else {
+                console.log('[ReviewSync] No new rounds saved, not triggering more syncs')
+            }
         } catch (err) {
             console.error('[ReviewSync] Failed to handle review AI response:', err)
         }
@@ -326,8 +332,9 @@ export class AutoReviewService {
 
     /**
      * 保存 Review AI 的汇总结果
+     * @returns 成功保存的轮次数量
      */
-    private async saveSummary(reviewSession: StoredReviewSession): Promise<void> {
+    private async saveSummary(reviewSession: StoredReviewSession): Promise<number> {
         const reviewId = reviewSession.id
         const mainSessionId = reviewSession.mainSessionId
 
@@ -415,7 +422,7 @@ export class AutoReviewService {
             console.log('[ReviewSync] Parsed summaries:', summaries.length, summaries.map(s => s.round))
             if (summaries.length === 0) {
                 console.log('[ReviewSync] No summaries parsed from AI response')
-                return
+                return 0
             }
 
             // 获取主 Session 消息
@@ -472,8 +479,11 @@ export class AutoReviewService {
                 savedRounds,
                 unreviewedRounds: unreviewedCount
             })
+
+            return savedRounds.length
         } catch (err) {
             console.error('[ReviewSync] Failed to save summary:', err)
+            return 0
         }
     }
 
