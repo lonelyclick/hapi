@@ -284,19 +284,19 @@ export function ReviewPanel(props: {
             if (!currentReview) {
                 throw new Error('No current review found')
             }
-            console.log('[ReviewPanel] Calling saveReviewSummary for review:', currentReview.id)
             return await api.saveReviewSummary(currentReview.id)
         },
         onSuccess: (data) => {
-            console.log('[ReviewPanel] saveReviewSummary success:', data)
             queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
+            // 保存成功后，发送确认消息到 Review Session
+            if (data.savedRound && !data.alreadyExists) {
+                api.sendMessage(props.reviewSessionId, `✅ 第 ${data.savedRound} 轮汇总已保存`)
+            }
         },
         onError: (error) => {
             // noSummary 错误通常是因为消息还没同步完成，静默忽略
             const errMsg = String(error)
-            if (errMsg.includes('noSummary')) {
-                console.log('[ReviewPanel] No summary found yet, will retry later')
-            } else {
+            if (!errMsg.includes('noSummary')) {
                 console.error('[ReviewPanel] saveReviewSummary error:', error)
             }
         }
@@ -309,14 +309,10 @@ export function ReviewPanel(props: {
         const isThinking = session?.thinking
         prevThinkingRef.current = isThinking
 
-        console.log('[ReviewPanel] Thinking state changed:', { wasThinking, isThinking, status: currentReview?.status })
-
         // 从思考中变为不思考 -> AI 刚完成回复
         if (wasThinking === true && isThinking === false && currentReview?.status === 'active') {
-            console.log('[ReviewPanel] AI finished thinking, will save summary in 3s...')
             // 延迟 3 秒再保存，确保消息已经完全同步到服务器
             setTimeout(() => {
-                console.log('[ReviewPanel] Triggering saveSummaryMutation...')
                 saveSummaryMutation.mutate()
             }, 3000)
         }
@@ -443,11 +439,11 @@ export function ReviewPanel(props: {
                             </div>
                         )}
 
-                        {/* 同步数据按钮 - 只有有待汇总轮次时才启用 */}
+                        {/* 同步数据按钮 - 只有有待汇总轮次且 AI 不在思考时才启用 */}
                         <button
                             type="button"
                             onClick={() => syncRoundsMutation.mutate()}
-                            disabled={syncRoundsMutation.isPending || !pendingRoundsData?.hasPendingRounds}
+                            disabled={syncRoundsMutation.isPending || !pendingRoundsData?.hasPendingRounds || session?.thinking}
                             className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-slate-500 to-slate-600 text-white shadow-lg hover:from-slate-600 hover:to-slate-700 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
                         >
                             {syncRoundsMutation.isPending ? (
