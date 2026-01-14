@@ -424,26 +424,32 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         // 获取 Review Session 的最新 AI 回复
         const messagesResult = await engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 50, beforeSeq: null })
 
+        console.log('[Review] Execute - messages count:', messagesResult.messages.length)
+
         // 提取最新的 AI 回复
-        const agentMessages = messagesResult.messages
-            .filter((m) => {
-                const content = m.content as Record<string, unknown>
-                return content?.role === 'agent'
-            })
-            .map((m) => {
-                const content = m.content as Record<string, unknown>
+        const agentMessages: string[] = []
+        for (const m of messagesResult.messages) {
+            const content = m.content as Record<string, unknown>
+            console.log('[Review] Message role:', content?.role, 'type:', content?.type)
+
+            if (content?.role === 'agent') {
                 const payload = content?.content as Record<string, unknown>
                 const data = payload?.data
-                if (typeof data === 'string') return data
-                if (typeof data === 'object' && data) {
+                let text = ''
+                if (typeof data === 'string') {
+                    text = data
+                } else if (typeof data === 'object' && data) {
                     const d = data as Record<string, unknown>
-                    if (typeof d.message === 'string') return d.message
+                    if (typeof d.message === 'string') text = d.message
                 }
-                return ''
-            })
-            .filter(Boolean)
+                if (text) {
+                    agentMessages.push(text)
+                }
+            }
+        }
 
         if (agentMessages.length === 0) {
+            console.log('[Review] No agent messages found, raw messages:', JSON.stringify(messagesResult.messages.slice(0, 3), null, 2))
             return c.json({ error: 'No review output found' }, 400)
         }
 
