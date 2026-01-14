@@ -278,10 +278,32 @@ export function ReviewPanel(props: {
         onAbort: handleAbort
     })
 
-    // 停止同步
-    const handleStopSync = useCallback(() => {
-        stopSyncRef.current = true
+    // 可中断的等待函数
+    const interruptibleWait = useCallback((ms: number): Promise<boolean> => {
+        return new Promise(resolve => {
+            const checkInterval = 100 // 每 100ms 检查一次停止标志
+            let elapsed = 0
+            const timer = setInterval(() => {
+                elapsed += checkInterval
+                if (stopSyncRef.current || elapsed >= ms) {
+                    clearInterval(timer)
+                    resolve(!stopSyncRef.current) // 返回 true 表示正常完成，false 表示被中断
+                }
+            }, checkInterval)
+        })
     }, [])
+
+    // 停止同步
+    const handleStopSync = useCallback(async () => {
+        stopSyncRef.current = true
+        // 同时中止正在进行的 AI 请求
+        try {
+            await api.abortSession(props.reviewSessionId)
+        } catch {
+            // 忽略中止错误
+        }
+        setSyncProgress(null)
+    }, [api, props.reviewSessionId])
 
     // 同步数据（发送给 Review AI 做汇总）- 自动循环直到完成
     const syncRoundsMutation = useMutation({
@@ -319,19 +341,20 @@ export function ReviewPanel(props: {
                 // 执行一次同步
                 const result = await api.syncReviewRounds(currentReview.id)
 
+                // 检查是否被停止
+                if (stopSyncRef.current) break
+
                 // 如果 AI 正忙，等待后重试
                 if (result.error === 'busy') {
-                    await new Promise(resolve => setTimeout(resolve, 2000))
+                    if (!await interruptibleWait(2000)) break
                     continue
                 }
-
-                if (stopSyncRef.current) break
 
                 // 等待 AI 思考完成
                 let waitCount = 0
                 const maxWait = 120 // 最多等待 2 分钟
                 while (waitCount < maxWait && !stopSyncRef.current) {
-                    await new Promise(resolve => setTimeout(resolve, 1000))
+                    if (!await interruptibleWait(1000)) break
                     const sessionStatus = await api.getSession(props.reviewSessionId)
                     if (!sessionStatus?.thinking) {
                         break
@@ -341,10 +364,8 @@ export function ReviewPanel(props: {
 
                 if (stopSyncRef.current) break
 
-                // 等待 AI 回复被保存（额外等待 3 秒）
-                await new Promise(resolve => setTimeout(resolve, 3000))
-
-                if (stopSyncRef.current) break
+                // 等待 AI 回复被保存（额外等待 2 秒，可中断）
+                if (!await interruptibleWait(2000)) break
 
                 // 尝试保存汇总结果
                 try {
@@ -352,6 +373,8 @@ export function ReviewPanel(props: {
                 } catch {
                     // 忽略保存错误，可能是 AI 还没回复完
                 }
+
+                if (stopSyncRef.current) break
 
                 // 刷新 pending rounds 数据
                 queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
@@ -371,8 +394,8 @@ export function ReviewPanel(props: {
                     break
                 }
 
-                // 短暂延迟后继续下一批
-                await new Promise(resolve => setTimeout(resolve, 1000))
+                // 短暂延迟后继续下一批（可中断）
+                if (!await interruptibleWait(1000)) break
             }
 
             return { success: true, stopped: stopSyncRef.current, batches: batchCount }
