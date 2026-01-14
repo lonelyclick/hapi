@@ -332,53 +332,6 @@ export function ReviewPanel(props: {
                 </div>
             </div>
 
-            {/* 状态栏 */}
-            <div className="border-b border-[var(--app-divider)] p-3 bg-[var(--app-subtle-bg)]">
-                {/* pending 状态 或 active但AI不在思考 - 显示开始/继续按钮 */}
-                {(currentReview?.status === 'pending' || (currentReview?.status === 'active' && !session?.thinking)) && (
-                    <button
-                        type="button"
-                        onClick={() => startReviewMutation.mutate()}
-                        disabled={startReviewMutation.isPending}
-                        className="w-full px-4 py-2 text-sm font-medium rounded-lg bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-divider)] disabled:opacity-50 transition-colors"
-                    >
-                        {startReviewMutation.isPending ? (
-                            <span className="flex items-center justify-center gap-2">
-                                <LoadingIcon />
-                                启动中...
-                            </span>
-                        ) : (
-                            currentReview?.status === 'pending' ? '开始 Review' : '继续 Review'
-                        )}
-                    </button>
-                )}
-
-                {/* active 状态且 AI 正在思考 - 显示进行中 */}
-                {currentReview?.status === 'active' && session?.thinking && (
-                    <div className="flex items-center justify-center gap-2 text-sm text-[var(--app-hint)]">
-                        <LoadingIcon className="text-green-500" />
-                        <span>Review 进行中...</span>
-                    </div>
-                )}
-
-                {/* completed 状态 */}
-                {currentReview?.status === 'completed' && (
-                    <div className="flex items-center justify-center gap-2 text-sm text-green-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        <span>Review 完成</span>
-                    </div>
-                )}
-
-                {/* 没有找到 currentReview */}
-                {!currentReview && reviewSessions !== undefined && (
-                    <div className="text-sm text-[var(--app-hint)] text-center">
-                        等待 Review 数据加载...
-                    </div>
-                )}
-            </div>
-
             {/* 对话界面 - 复用 HappyThread */}
             <AssistantRuntimeProvider runtime={runtime}>
                 <div className="relative flex min-h-0 flex-1 flex-col">
@@ -401,6 +354,95 @@ export function ReviewPanel(props: {
                     />
                 </div>
             </AssistantRuntimeProvider>
+
+            {/* 底部操作栏 */}
+            <div className="border-t border-[var(--app-divider)] p-4 bg-[var(--app-subtle-bg)]">
+                {/* pending 状态 - 显示开始按钮 */}
+                {currentReview?.status === 'pending' && (
+                    <button
+                        type="button"
+                        onClick={() => startReviewMutation.mutate()}
+                        disabled={startReviewMutation.isPending}
+                        className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:from-blue-600 hover:to-indigo-600 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                        {startReviewMutation.isPending ? (
+                            <span className="flex items-center justify-center gap-3">
+                                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                正在启动 Review...
+                            </span>
+                        ) : (
+                            <span className="flex items-center justify-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polygon points="5 3 19 12 5 21 5 3" />
+                                </svg>
+                                开始 Review
+                            </span>
+                        )}
+                    </button>
+                )}
+
+                {/* active 状态且 AI 正在思考 - 显示进行中 */}
+                {currentReview?.status === 'active' && session?.thinking && (
+                    <div className="flex items-center justify-center gap-3 py-2">
+                        <div className="flex gap-1">
+                            <span className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <span className="text-sm font-medium text-[var(--app-fg)]">AI 正在分析...</span>
+                    </div>
+                )}
+
+                {/* active 状态但 AI 不在思考 - 显示继续按钮 */}
+                {currentReview?.status === 'active' && !session?.thinking && (
+                    <button
+                        type="button"
+                        onClick={() => startReviewMutation.mutate()}
+                        disabled={startReviewMutation.isPending}
+                        className="w-full px-5 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg hover:from-emerald-600 hover:to-teal-600 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                        {startReviewMutation.isPending ? (
+                            <span className="flex items-center justify-center gap-3">
+                                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                正在继续...
+                            </span>
+                        ) : (
+                            <span className="flex items-center justify-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="13 17 18 12 13 7" />
+                                    <polyline points="6 17 11 12 6 7" />
+                                </svg>
+                                继续 Review
+                            </span>
+                        )}
+                    </button>
+                )}
+
+                {/* completed 状态 */}
+                {currentReview?.status === 'completed' && (
+                    <div className="flex items-center justify-center gap-2 py-2 text-green-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                            <polyline points="22 4 12 14.01 9 11.01" />
+                        </svg>
+                        <span className="font-medium">Review 已完成</span>
+                    </div>
+                )}
+
+                {/* 加载中 */}
+                {!currentReview && reviewSessions === undefined && (
+                    <div className="flex items-center justify-center gap-2 py-2 text-[var(--app-hint)]">
+                        <LoadingIcon />
+                        <span className="text-sm">加载中...</span>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
