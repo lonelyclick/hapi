@@ -236,10 +236,10 @@ export function ReviewPanel(props: {
         agentState: session?.agentState ?? null,
         permissionMode: session?.permissionMode ?? 'default',
         modelMode: session?.modelMode ?? 'default',
-        modelReasoningEffort: session?.modelReasoningEffort ?? null,
+        modelReasoningEffort: session?.modelReasoningEffort ?? undefined,
         metadata: session?.metadata ?? null,
         createdAt: session?.createdAt ?? Date.now(),
-        namespace: session?.namespace ?? ''
+        updatedAt: session?.updatedAt ?? Date.now()
     }), [props.reviewSessionId, session])
 
     // 创建 runtime
