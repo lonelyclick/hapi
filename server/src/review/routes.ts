@@ -402,6 +402,16 @@ export function createReviewRoutes(
             return c.json({ error: 'Review session not found' }, 404)
         }
 
+        // 检查 Review AI 是否正在处理中，避免重复发送
+        const reviewAISession = await engine.getSession(reviewSession.reviewSessionId)
+        if (reviewAISession?.thinking) {
+            return c.json({
+                success: false,
+                error: 'busy',
+                message: 'Review AI 正在处理中，请等待完成后再同步'
+            }, 409)
+        }
+
         // 获取主 Session 所有消息
         const allMessages = await engine.getAllMessages(reviewSession.mainSessionId)
 

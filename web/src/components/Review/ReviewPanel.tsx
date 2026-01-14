@@ -346,9 +346,16 @@ export function ReviewPanel(props: {
                 // 更新当前批次
                 setSyncProgress(prev => prev ? { ...prev, currentBatch: batchCount } : null)
 
-                // 执行一次同步（每次最多 3 轮）
+                // 执行一次同步
                 const result = await api.syncReviewRounds(currentReview.id)
                 console.log('[ReviewPanel] Sync result:', result)
+
+                // 如果 AI 正忙，等待后重试
+                if (result.error === 'busy') {
+                    console.log('[ReviewPanel] AI busy, waiting...')
+                    await new Promise(resolve => setTimeout(resolve, 2000))
+                    continue
+                }
 
                 if (stopSyncRef.current) break
 
