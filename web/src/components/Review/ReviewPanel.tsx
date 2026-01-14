@@ -364,17 +364,30 @@ export function ReviewPanel(props: {
 
                 if (stopSyncRef.current) break
 
-                // 等待 AI 回复被保存（额外等待 2 秒，可中断）
-                if (!await interruptibleWait(2000)) break
+                // 等待 AI 回复被保存，然后尝试保存汇总结果
+                // 最多重试 10 次，每次等待 2 秒
+                let saveSuccess = false
+                for (let saveAttempt = 0; saveAttempt < 10 && !stopSyncRef.current; saveAttempt++) {
+                    if (!await interruptibleWait(2000)) break
 
-                // 尝试保存汇总结果
-                try {
-                    await api.saveReviewSummary(currentReview.id)
-                } catch {
-                    // 忽略保存错误，可能是 AI 还没回复完
+                    try {
+                        const saveResult = await api.saveReviewSummary(currentReview.id)
+                        if (saveResult.success || saveResult.alreadyExists) {
+                            saveSuccess = true
+                            break
+                        }
+                        // noSummary 错误表示 AI 回复还没准备好，继续等待重试
+                    } catch {
+                        // 网络错误，继续重试
+                    }
                 }
 
                 if (stopSyncRef.current) break
+
+                // 如果保存失败，不继续下一批（避免重复发送相同轮次）
+                if (!saveSuccess) {
+                    break
+                }
 
                 // 刷新 pending rounds 数据
                 queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })

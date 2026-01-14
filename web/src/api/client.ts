@@ -1022,11 +1022,19 @@ export class ApiClient {
         }
     }
 
-    async saveReviewSummary(reviewId: string): Promise<{ success: boolean; savedRound?: number; summary?: string; message: string; alreadyExists?: boolean; noSummary?: boolean }> {
-        return await this.request<{ success: boolean; savedRound?: number; summary?: string; message: string; alreadyExists?: boolean; noSummary?: boolean }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}/save-summary`,
-            { method: 'POST' }
-        )
+    async saveReviewSummary(reviewId: string): Promise<{ success: boolean; savedRound?: number; summary?: string; message?: string; alreadyExists?: boolean; noSummary?: boolean; error?: string }> {
+        try {
+            return await this.request<{ success: boolean; savedRound?: number; summary?: string; message: string; alreadyExists?: boolean; noSummary?: boolean }>(
+                `/api/review/sessions/${encodeURIComponent(reviewId)}/save-summary`,
+                { method: 'POST' }
+            )
+        } catch (e) {
+            // 400 Bad Request 通常是 noSummary 错误，返回状态而不是抛出异常
+            if (e instanceof ApiError && e.status === 400) {
+                return { success: false, noSummary: true, error: 'No summary found' }
+            }
+            throw e
+        }
     }
 
     async startReviewSession(reviewId: string): Promise<{ success: boolean; status: string; roundsReviewed?: number }> {
