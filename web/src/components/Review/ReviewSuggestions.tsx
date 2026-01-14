@@ -203,9 +203,14 @@ interface ReviewSuggestionsProps {
     reviewTexts: string[]  // 支持多个 review 文本
     onApply: (details: string[]) => void
     isApplying?: boolean
+    // Review 按钮相关
+    onReview?: () => void
+    isReviewing?: boolean
+    reviewDisabled?: boolean
+    unreviewedRounds?: number
 }
 
-export function ReviewSuggestions({ reviewTexts, onApply, isApplying }: ReviewSuggestionsProps) {
+export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, isReviewing, reviewDisabled, unreviewedRounds }: ReviewSuggestionsProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
     const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
@@ -271,6 +276,19 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying }: ReviewSu
         })
     }, [])
 
+    // 删除选中的建议
+    const deleteSelected = useCallback(() => {
+        if (selectedIds.size === 0) return
+        setDeletedIds(prev => {
+            const next = new Set(prev)
+            for (const id of selectedIds) {
+                next.add(id)
+            }
+            return next
+        })
+        setSelectedIds(new Set())
+    }, [selectedIds])
+
     // 全选/取消全选
     const toggleAll = useCallback(() => {
         if (visibleSuggestions.length === 0) return
@@ -334,9 +352,18 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying }: ReviewSu
                     >
                         {allExpanded ? '全部收起' : '全部展开'}
                     </button>
+                    {someSelected && (
+                        <button
+                            type="button"
+                            onClick={deleteSelected}
+                            className="text-red-500 hover:text-red-600 transition-colors"
+                        >
+                            删除 {selectedCount}
+                        </button>
+                    )}
                 </div>
                 <span className="text-[var(--app-hint)]">
-                    已选 {selectedCount}/{visibleSuggestions.length}
+                    {selectedCount}/{visibleSuggestions.length}
                 </span>
             </div>
 
@@ -355,25 +382,52 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying }: ReviewSu
                 ))}
             </div>
 
-            {/* 应用按钮 */}
-            <button
-                type="button"
-                onClick={handleApply}
-                disabled={!someSelected || isApplying}
-                className="w-full px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-sm hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-                {isApplying ? (
-                    <span className="flex items-center justify-center gap-1.5">
-                        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        发送中...
-                    </span>
-                ) : (
-                    `发送 ${selectedCount} 条建议给主 AI`
+            {/* 按钮行 */}
+            <div className="flex gap-2">
+                {/* 发送按钮 */}
+                <button
+                    type="button"
+                    onClick={handleApply}
+                    disabled={!someSelected || isApplying}
+                    className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-sm hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                    {isApplying ? (
+                        <span className="flex items-center justify-center gap-1.5">
+                            <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            发送中...
+                        </span>
+                    ) : (
+                        `发送 ${selectedCount} 条`
+                    )}
+                </button>
+
+                {/* Review 按钮 */}
+                {onReview && (
+                    <button
+                        type="button"
+                        onClick={onReview}
+                        disabled={reviewDisabled || isReviewing}
+                        className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                        {isReviewing ? (
+                            <span className="flex items-center justify-center gap-1.5">
+                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                执行中...
+                            </span>
+                        ) : unreviewedRounds && unreviewedRounds > 0 ? (
+                            `Review ${unreviewedRounds} 轮`
+                        ) : (
+                            '全部已 Review'
+                        )}
+                    </button>
                 )}
-            </button>
+            </div>
         </div>
     )
 }
