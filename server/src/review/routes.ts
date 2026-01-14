@@ -800,12 +800,12 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'No summarized rounds found. Please sync first.', noRounds: true }, 400)
         }
 
-        // 获取已经 review 过的轮次号（从已完成的执行记录中提取）
+        // 获取已经 review 过的轮次号（从执行记录中提取，不管状态）
         const executions = await reviewStore.getReviewExecutions(id)
         const reviewedRoundNumbers = new Set<number>()
         for (const exec of executions) {
-            // 只计算已完成的执行记录
-            if (exec.status === 'completed' && exec.reviewedRoundNumbers) {
+            // 只要有执行记录就算已 review（因为 prompt 已发给 Review AI）
+            if (exec.reviewedRoundNumbers) {
                 for (const roundNum of exec.reviewedRoundNumbers) {
                     reviewedRoundNumbers.add(roundNum)
                 }
@@ -929,11 +929,12 @@ ${batchRounds.map(r => `  {
         // 找出未汇总的轮次
         const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
 
-        // 获取已经 review 过的轮次（从已完成的执行记录中提取）
+        // 获取已经 review 过的轮次（从执行记录中提取，不管状态）
         const executions = await reviewStore.getReviewExecutions(id)
         const reviewedRoundNumbers = new Set<number>()
         for (const exec of executions) {
-            if (exec.status === 'completed' && exec.reviewedRoundNumbers) {
+            // 只要有执行记录就算已 review（因为 prompt 已发给 Review AI）
+            if (exec.reviewedRoundNumbers) {
                 for (const roundNum of exec.reviewedRoundNumbers) {
                     reviewedRoundNumbers.add(roundNum)
                 }

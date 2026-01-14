@@ -484,11 +484,12 @@ export class AutoReviewService {
             const newExistingRounds = await this.reviewStore.getReviewRounds(reviewId)
             const pendingCount = allRounds.length - newExistingRounds.length
 
-            // 计算未 review 的轮次数
+            // 计算未 review 的轮次数（从执行记录中提取，不管状态）
             const executions = await this.reviewStore.getReviewExecutions(reviewId)
             const reviewedRoundNumbers = new Set<number>()
             for (const exec of executions) {
-                if (exec.status === 'completed' && exec.reviewedRoundNumbers) {
+                // 只要有执行记录就算已 review（因为 prompt 已发给 Review AI）
+                if (exec.reviewedRoundNumbers) {
                     for (const roundNum of exec.reviewedRoundNumbers) {
                         reviewedRoundNumbers.add(roundNum)
                     }
