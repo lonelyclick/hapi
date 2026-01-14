@@ -31,8 +31,11 @@ interface ParsedRound {
 export function parseReviewSummaryTask(text: string): ParsedRound[] | null {
     const rounds: ParsedRound[] = []
 
+    // 只解析 "### 要求" 之前的内容，避免 JSON 示例或 AI 回复中的轮次号被误解析
+    const mainContent = text.split(/### 要求/)[0] || text
+
     // 匹配所有轮次块
-    const roundBlocks = text.split(/(?=### 第 \d+ 轮对话)/).filter(block => block.includes('### 第'))
+    const roundBlocks = mainContent.split(/(?=### 第 \d+ 轮对话)/).filter(block => block.includes('### 第'))
 
     for (const block of roundBlocks) {
         // 提取轮次号
