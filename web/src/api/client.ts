@@ -1037,10 +1037,21 @@ export class ApiClient {
         }
     }
 
-    async startReviewSession(reviewId: string): Promise<{ success: boolean; status: string; roundsReviewed?: number }> {
+    async startReviewSession(reviewId: string, previousSuggestions?: Array<{
+        id: string
+        type: string
+        severity: string
+        title: string
+        detail: string
+        applied: boolean
+        deleted?: boolean
+    }>): Promise<{ success: boolean; status: string; roundsReviewed?: number }> {
         return await this.request<{ success: boolean; status: string; roundsReviewed?: number }>(
             `/api/review/sessions/${encodeURIComponent(reviewId)}/start`,
-            { method: 'POST' }
+            {
+                method: 'POST',
+                body: JSON.stringify({ previousSuggestions })
+            }
         )
     }
 

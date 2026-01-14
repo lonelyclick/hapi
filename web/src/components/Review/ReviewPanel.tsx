@@ -15,7 +15,7 @@ import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import type { DecryptedMessage, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
-import { ReviewSuggestions, parseReviewResult } from './ReviewSuggestions'
+import { ReviewSuggestions, parseReviewResult, type SuggestionWithStatus } from './ReviewSuggestions'
 
 // Icons
 function ReviewIcon(props: { className?: string }) {
@@ -477,11 +477,21 @@ export function ReviewPanel(props: {
 
     // 开始 Review（发送给 Review AI）
     const startReviewMutation = useMutation({
-        mutationFn: async () => {
+        mutationFn: async (previousSuggestions?: SuggestionWithStatus[]) => {
             if (!currentReview) {
                 throw new Error('No current review found')
             }
-            return await api.startReviewSession(currentReview.id)
+            // 转换 previousSuggestions 格式
+            const formattedSuggestions = previousSuggestions?.map(s => ({
+                id: s.id,
+                type: s.type,
+                severity: s.severity,
+                title: s.title,
+                detail: s.detail,
+                applied: s.applied,
+                deleted: s.deleted
+            }))
+            return await api.startReviewSession(currentReview.id, formattedSuggestions)
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['review-sessions', props.mainSessionId] })
@@ -618,7 +628,7 @@ export function ReviewPanel(props: {
                                     reviewTexts={allReviewTexts}
                                     onApply={(details) => applySuggestionsMutation.mutate(details)}
                                     isApplying={applySuggestionsMutation.isPending}
-                                    onReview={() => startReviewMutation.mutate()}
+                                    onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
                                     isReviewing={startReviewMutation.isPending}
                                     reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || autoSyncStatus?.status === 'syncing'}
                                     unreviewedRounds={pendingRoundsData?.unreviewedRounds}

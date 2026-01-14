@@ -199,12 +199,23 @@ function SuggestionCard({ suggestion, selected, expanded, onToggle, onExpand, on
     )
 }
 
+// 带状态的建议
+export interface SuggestionWithStatus {
+    id: string
+    type: string
+    severity: string
+    title: string
+    detail: string
+    applied: boolean  // 是否已发送给主 AI
+    deleted?: boolean // 是否被用户删除（不想采纳）
+}
+
 interface ReviewSuggestionsProps {
     reviewTexts: string[]  // 支持多个 review 文本
     onApply: (details: string[]) => void
     isApplying?: boolean
     // Review 按钮相关
-    onReview?: () => void
+    onReview?: (previousSuggestions: SuggestionWithStatus[]) => void
     isReviewing?: boolean
     reviewDisabled?: boolean
     unreviewedRounds?: number
@@ -214,6 +225,7 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
     const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
+    const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())  // 已发送给主 AI 的建议
 
     // 合并多个 review 结果，为每个建议生成唯一 ID
     const mergedSuggestions = useMemo(() => {
@@ -319,7 +331,31 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
         const selected = visibleSuggestions.filter(s => selectedIds.has(s.id))
         const details = selected.map(s => s.detail)
         onApply(details)
+        // 记录已发送的建议 ID
+        setAppliedIds(prev => {
+            const next = new Set(prev)
+            for (const s of selected) {
+                next.add(s.id)
+            }
+            return next
+        })
     }, [visibleSuggestions, selectedIds, onApply])
+
+    // 点击 Review 按钮时，收集所有建议的状态
+    const handleReview = useCallback(() => {
+        if (!onReview) return
+        // 收集所有建议（包括已删除的，用于告诉 AI 不要重复）
+        const allSuggestionsWithStatus: SuggestionWithStatus[] = mergedSuggestions.map(s => ({
+            id: s.id,
+            type: s.type,
+            severity: s.severity,
+            title: s.title,
+            detail: s.detail,
+            applied: appliedIds.has(s.id),
+            deleted: deletedIds.has(s.id)
+        }))
+        onReview(allSuggestionsWithStatus)
+    }, [onReview, mergedSuggestions, appliedIds, deletedIds])
 
     // 没有可见的建议
     if (visibleSuggestions.length === 0) {
@@ -408,7 +444,7 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
                 {onReview && (
                     <button
                         type="button"
-                        onClick={onReview}
+                        onClick={handleReview}
                         disabled={reviewDisabled || isReviewing}
                         className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >

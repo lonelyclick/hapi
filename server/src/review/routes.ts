@@ -206,9 +206,26 @@ function formatGitTimestamp(ts: number): string {
 }
 
 /**
+ * 之前的建议项
+ */
+interface PreviousSuggestion {
+    id: string
+    type: string
+    severity: string
+    title: string
+    detail: string
+    applied: boolean   // 是否已发送给主 AI
+    deleted?: boolean  // 是否被用户删除（不采纳）
+}
+
+/**
  * 构建 Review Prompt - 要求返回 JSON 格式的建议列表
  */
-function buildReviewPrompt(roundsSummary: string, timeRange?: { start: number; end: number }): string {
+function buildReviewPrompt(
+    roundsSummary: string,
+    timeRange?: { start: number; end: number },
+    previousSuggestions?: PreviousSuggestion[]
+): string {
     const timeRangeInfo = timeRange
         ? `\n## 时间范围\n\n开发时间：${formatTimestamp(timeRange.start)} ~ ${formatTimestamp(timeRange.end)}\n`
         : ''
@@ -217,16 +234,39 @@ function buildReviewPrompt(roundsSummary: string, timeRange?: { start: number; e
         ? `用 git log/diff --after="${formatGitTimestamp(timeRange.start)}" --before="${formatGitTimestamp(timeRange.end + 60000)}" 查看时间段内改动，或 git diff HEAD 查看未提交改动`
         : `用 git log -5 和 git diff HEAD~3 查看最近改动`
 
+    // 构建之前建议的上下文
+    let previousSuggestionsInfo = ''
+    if (previousSuggestions && previousSuggestions.length > 0) {
+        // 已发送给主 AI 的建议（需要检查是否修复）
+        const appliedSuggestions = previousSuggestions.filter(s => s.applied)
+        // 用户删除的建议（不要再提类似问题）
+        const deletedSuggestions = previousSuggestions.filter(s => s.deleted && !s.applied)
+
+        if (appliedSuggestions.length > 0) {
+            previousSuggestionsInfo += '\n## 已发送给主AI的建议（检查是否已修复）\n'
+            for (const s of appliedSuggestions) {
+                previousSuggestionsInfo += `- [${s.type}/${s.severity}] ${s.title}: ${s.detail}\n`
+            }
+        }
+
+        if (deletedSuggestions.length > 0) {
+            previousSuggestionsInfo += '\n## 用户删除的建议（不要再提类似问题）\n'
+            for (const s of deletedSuggestions) {
+                previousSuggestionsInfo += `- [${s.type}/${s.severity}] ${s.title}\n`
+            }
+        }
+    }
+
     return `你是代码审查专家。请使用 plan 模式。**只能查看代码，禁止修改文件。**
 
 ## 背景
 ${roundsSummary}
-${timeRangeInfo}
+${timeRangeInfo}${previousSuggestionsInfo}
 ## 审查
 ${gitHint}
 鼓励读取相关文件。审查：正确性、安全、性能、需求、可维护性。
 
-## 输出JSON
+## 输出JSON（完整覆盖之前的建议列表）
 \`\`\`json
 {"suggestions":[{"id":"1","type":"bug|security|performance|improvement","severity":"high|medium|low","title":"简短标题","detail":"详细描述和解决方案，发给主AI执行"}],"summary":"总体评价"}
 \`\`\`
@@ -737,6 +777,12 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'Sync engine not available' }, 503)
         }
 
+        // 解析请求体，获取之前的建议
+        const body = await c.req.json().catch(() => null) as {
+            previousSuggestions?: PreviousSuggestion[]
+        } | null
+        const previousSuggestions = body?.previousSuggestions
+
         const reviewSession = await reviewStore.getReviewSession(id)
         if (!reviewSession) {
             return c.json({ error: 'Review session not found' }, 404)
@@ -796,8 +842,8 @@ ${batchRounds.map(r => `  {
             }
         }
 
-        // 发送 Review Prompt
-        const reviewPrompt = buildReviewPrompt(roundsSummary, timeRange)
+        // 发送 Review Prompt（包含之前的建议上下文）
+        const reviewPrompt = buildReviewPrompt(roundsSummary, timeRange, previousSuggestions)
 
         // 创建执行记录（记录本次 review 的轮次号）
         const execution = await reviewStore.createReviewExecution({
