@@ -244,6 +244,7 @@ export class AutoReviewService {
 
         // 检查 Review AI 是否正在处理中
         const reviewAISession = this.engine.getSession(reviewSession.reviewSessionId)
+        console.log('[ReviewSync] Review AI session:', reviewAISession?.id, 'thinking:', reviewAISession?.thinking)
         if (reviewAISession?.thinking) {
             console.log('[ReviewSync] syncRounds - Review AI thinking, skip')
             return
@@ -251,10 +252,13 @@ export class AutoReviewService {
 
         try {
             this.syncingReviewIds.add(reviewId)
+            console.log('[ReviewSync] Getting all messages for main session...')
 
             // 获取主 Session 所有消息
             const allMessages = await this.engine.getAllMessages(mainSessionId)
+            console.log('[ReviewSync] Got', allMessages.length, 'messages')
             const allRounds = groupMessagesIntoRounds(allMessages)
+            console.log('[ReviewSync] Grouped into', allRounds.length, 'rounds')
 
             // 获取已汇总的轮次
             const existingRounds = await this.reviewStore.getReviewRounds(reviewId)
@@ -262,6 +266,7 @@ export class AutoReviewService {
 
             // 找出未汇总的轮次
             const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
+            console.log('[ReviewSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size)
 
             // 通知前端当前状态
             this.broadcastSyncStatus(reviewSession, {
@@ -316,10 +321,12 @@ export class AutoReviewService {
             })
 
             // 发送给 Review AI
+            console.log('[ReviewSync] Sending prompt to Review AI, length:', syncPrompt.length)
             await this.engine.sendMessage(reviewSession.reviewSessionId, {
                 text: syncPrompt,
                 sentFrom: 'webapp'
             })
+            console.log('[ReviewSync] Message sent to Review AI')
 
             // 更新状态为 active
             if (reviewSession.status === 'pending') {
