@@ -257,6 +257,9 @@ export function ReviewPanel(props: {
 
     const currentReview = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
 
+    // Debug log
+    console.log('[ReviewPanel] reviewSessions:', reviewSessions?.length, 'currentReview:', currentReview?.status, 'reviewSessionId:', props.reviewSessionId)
+
     // 解析 AI 回复中的建议
     const aiResponse = extractAIResponse(reviewMessagesData)
     const reviewResult = aiResponse ? parseReviewResult(aiResponse) : null
@@ -264,7 +267,10 @@ export function ReviewPanel(props: {
     // 开始 Review
     const startReviewMutation = useMutation({
         mutationFn: async () => {
-            return await api.startReviewSession(currentReview!.id)
+            if (!currentReview) {
+                throw new Error('No current review found')
+            }
+            return await api.startReviewSession(currentReview.id)
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['review-sessions', props.mainSessionId] })
@@ -343,16 +349,18 @@ export function ReviewPanel(props: {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {/* 开始 Review 按钮 - pending 状态或没有 currentReview 时显示 */}
-                {(currentReview?.status === 'pending' || !currentReview) && (
-                    <div className="text-center py-8">
-                        <p className="text-sm text-[var(--app-hint)] mb-4">
-                            点击下方按钮开始 Review
-                        </p>
+                {/* 状态栏 */}
+                <div className="text-xs text-[var(--app-hint)] px-2">
+                    状态: {currentReview?.status ?? '加载中...'}
+                </div>
+
+                {/* 开始 Review 按钮 - pending 状态时显示 */}
+                {currentReview?.status === 'pending' && (
+                    <div className="text-center py-6">
                         <button
                             type="button"
                             onClick={() => startReviewMutation.mutate()}
-                            disabled={startReviewMutation.isPending || !currentReview}
+                            disabled={startReviewMutation.isPending}
                             className="px-6 py-2.5 text-sm font-medium rounded-lg bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-divider)] disabled:opacity-50 transition-colors"
                         >
                             {startReviewMutation.isPending ? (
@@ -364,11 +372,16 @@ export function ReviewPanel(props: {
                                 '开始 Review'
                             )}
                         </button>
-                        {!currentReview && (
-                            <p className="text-xs text-[var(--app-hint)] mt-2">
-                                正在加载 Review Session...
-                            </p>
-                        )}
+                    </div>
+                )}
+
+                {/* 加载中 */}
+                {!currentReview && (
+                    <div className="text-center py-8">
+                        <LoadingIcon className="w-6 h-6 mx-auto mb-2 text-[var(--app-hint)]" />
+                        <p className="text-sm text-[var(--app-hint)]">
+                            正在加载 Review Session...
+                        </p>
                     </div>
                 )}
 
