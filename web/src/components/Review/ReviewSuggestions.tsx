@@ -274,13 +274,13 @@ interface ReviewSuggestionsProps {
     onAppliedIdsChange: (ids: Set<string>) => void
 }
 
-export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, isReviewing, reviewDisabled, unreviewedRounds, selectedIds, onSelectedIdsChange }: ReviewSuggestionsProps) {
+export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, isReviewing, reviewDisabled, unreviewedRounds, selectedIds, onSelectedIdsChange, appliedIds, onAppliedIdsChange }: ReviewSuggestionsProps) {
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
     const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
-    const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())  // 已发送给主 AI 的建议
 
-    // 使用外部传入的 selectedIds 和 setter
+    // 使用外部传入的 selectedIds 和 appliedIds
     const setSelectedIds = onSelectedIdsChange
+    const setAppliedIds = onAppliedIdsChange
 
     // 合并多个 review 结果，为每个建议生成唯一 ID，同时提取统计和总结
     const { mergedSuggestions, latestStats, latestSummary } = useMemo(() => {

@@ -227,6 +227,7 @@ export function ReviewPanel(props: {
     const [panelX, setPanelX] = useState<number | null>(null)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())
 
     // 移动端检测
     const [isMobile, setIsMobile] = useState(false)
@@ -732,6 +733,18 @@ export function ReviewPanel(props: {
             // 合并所有选中的建议详情
             const combined = details.join('\n\n---\n\n')
             await api.sendMessage(props.mainSessionId, combined)
+        },
+        onSuccess: () => {
+            // 将已选中的 ID 加入已发送集合
+            setAppliedIds(prev => {
+                const next = new Set(prev)
+                for (const id of selectedIds) {
+                    next.add(id)
+                }
+                return next
+            })
+            // 清空选中状态
+            setSelectedIds(new Set())
         }
     })
 
@@ -889,6 +902,8 @@ export function ReviewPanel(props: {
                             unreviewedRounds={pendingRoundsData?.unreviewedRounds}
                             selectedIds={selectedIds}
                             onSelectedIdsChange={setSelectedIds}
+                            appliedIds={appliedIds}
+                            onAppliedIdsChange={setAppliedIds}
                         />
                     </div>
                 </div>

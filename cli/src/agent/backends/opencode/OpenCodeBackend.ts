@@ -484,16 +484,16 @@ export class OpenCodeBackend implements AgentBackend {
     private emitPartUpdate(part: OpencodePart, delta: string | undefined, onUpdate: (msg: AgentMessage) => void): void {
         switch (part.type) {
             case 'text': {
-                // Use delta for incremental updates if available
-                if (delta !== undefined) {
+                // Use delta for incremental updates if available, skip empty deltas
+                if (delta) {
                     onUpdate({ type: 'text', text: delta });
                 }
                 // Don't emit full text - it would cause duplicates
                 break;
             }
             case 'reasoning': {
-                // Use delta for incremental updates if available
-                if (delta !== undefined) {
+                // Use delta for incremental updates if available, skip empty deltas
+                if (delta) {
                     onUpdate({ type: 'reasoning', text: delta });
                 }
                 break;
