@@ -308,14 +308,14 @@ export function ReviewPanel(props: {
         }
     }, [dragMode, panelWidth])
 
-    // 获取 Review Session 详情（不需要频繁轮询）
+    // 获取 Review Session 详情
     const { data: reviewSessions } = useQuery({
         queryKey: ['review-sessions', props.mainSessionId],
         queryFn: async () => {
             const result = await api.getReviewSessions(props.mainSessionId)
             return result.reviewSessions
         },
-        staleTime: 30000  // 30 秒内不重新获取
+        staleTime: 0  // 总是立即获取，确保从 session 列表点进来时能正确显示
     })
 
     // 获取当前 Review Session 的 ID（用于检查未汇总轮次）
