@@ -363,8 +363,22 @@ export function SessionChat(props: {
 
     // 处理 Review 创建
     const handleReviewCreated = useCallback((newReviewSessionId: string) => {
+        userClosedReviewRef.current = false  // 创建新 Review 时重置关闭标记
         setReviewSessionId(newReviewSessionId)
     }, [])
+
+    // 切换 Review 面板
+    const handleToggleReviewPanel = useCallback(() => {
+        if (reviewSessionId) {
+            // 有面板打开，关闭它
+            userClosedReviewRef.current = true
+            setReviewSessionId(null)
+        } else if (activeReviewSession?.reviewSessionId) {
+            // 有活跃 Review Session，打开面板
+            userClosedReviewRef.current = false
+            setReviewSessionId(activeReviewSession.reviewSessionId)
+        }
+    }, [reviewSessionId, activeReviewSession?.reviewSessionId])
 
     return (
         <div className="flex h-full">
@@ -379,6 +393,8 @@ export function SessionChat(props: {
                     onDelete={handleDeleteClick}
                     onRefreshAccount={props.session.metadata?.flavor === 'claude' ? handleRefreshAccount : undefined}
                     onReviewCreated={handleReviewCreated}
+                    isReviewPanelOpen={Boolean(reviewSessionId)}
+                    onToggleReviewPanel={handleToggleReviewPanel}
                     clearDisabled={isPending}
                     deleteDisabled={isPending}
                     refreshAccountDisabled={isPending}

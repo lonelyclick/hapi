@@ -215,6 +215,10 @@ export function SessionHeader(props: {
     onDelete?: () => void
     onRefreshAccount?: () => void
     onReviewCreated?: (reviewSessionId: string) => void
+    /** 是否已打开 Review 面板 */
+    isReviewPanelOpen?: boolean
+    /** 切换 Review 面板 */
+    onToggleReviewPanel?: () => void
     clearDisabled?: boolean
     deleteDisabled?: boolean
     refreshAccountDisabled?: boolean
@@ -412,6 +416,8 @@ export function SessionHeader(props: {
                     {props.session.active && (
                         <JoinReviewButton
                             sessionId={props.session.id}
+                            isReviewPanelOpen={props.isReviewPanelOpen}
+                            onToggleReviewPanel={props.onToggleReviewPanel}
                             onReviewCreated={props.onReviewCreated}
                         />
                     )}
