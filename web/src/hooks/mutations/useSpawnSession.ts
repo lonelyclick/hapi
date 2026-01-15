@@ -11,6 +11,7 @@ type SpawnInput = {
     sessionType?: 'simple' | 'worktree'
     worktreeName?: string
     claudeAgent?: string
+    codexModel?: string
     openrouterModel?: string
     opencodeModel?: string
 }
@@ -35,6 +36,7 @@ export function useSpawnSession(api: ApiClient | null): {
                 input.sessionType,
                 input.worktreeName,
                 input.claudeAgent,
+                input.codexModel,
                 input.openrouterModel,
                 input.opencodeModel
             )

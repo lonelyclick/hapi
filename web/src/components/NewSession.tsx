@@ -9,6 +9,18 @@ import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 
 type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli' | 'opencode'
 
+// OpenAI Codex CLI models (gpt-5.x series)
+const CODEX_MODELS = [
+    { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex (Recommended)' },
+    { value: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
+    { value: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini' },
+    { value: 'gpt-5.2', label: 'GPT-5.2 (General)' },
+    { value: 'gpt-5.1', label: 'GPT-5.1' },
+    { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
+    { value: 'gpt-5-codex-mini', label: 'GPT-5 Codex Mini' },
+    { value: 'gpt-5', label: 'GPT-5' },
+]
+
 // Popular OpenRouter models
 const OPENROUTER_MODELS = [
     { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
@@ -154,6 +166,7 @@ export function NewSession(props: {
     const [projectPath, setProjectPath] = useState('')
     const [agent, setAgent] = useState<AgentType>('claude')
     const [claudeAgent, setClaudeAgent] = useState('')
+    const [codexModel, setCodexModel] = useState(CODEX_MODELS[0].value)
     const [openrouterModel, setOpenrouterModel] = useState(OPENROUTER_MODELS[0].value)
     const [opencodeModel, setOpencodeModel] = useState(OPENCODE_MODELS[0].value)
     const [error, setError] = useState<string | null>(null)
@@ -227,6 +240,7 @@ export function NewSession(props: {
                 yolo: true,
                 sessionType: 'simple',
                 claudeAgent: agent === 'claude' ? (claudeAgent.trim() || undefined) : undefined,
+                codexModel: agent === 'codex' ? codexModel : undefined,
                 openrouterModel: agent === 'openrouter' ? openrouterModel : undefined,
                 opencodeModel: agent === 'opencode' ? opencodeModel : undefined
             })
@@ -402,6 +416,28 @@ export function NewSession(props: {
                     />
                     <div className="text-[11px] text-[var(--app-hint)]">
                         Matches the name from Claude Code (--agent).
+                    </div>
+                </div>
+            ) : null}
+            {agent === 'codex' ? (
+                <div className="flex flex-col gap-1.5 px-3 pb-3">
+                    <label className="text-xs font-medium text-[var(--app-hint)]">
+                        Model (OpenAI Codex)
+                    </label>
+                    <select
+                        value={codexModel}
+                        onChange={(e) => setCodexModel(e.target.value)}
+                        disabled={isFormDisabled}
+                        className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
+                    >
+                        {CODEX_MODELS.map((model) => (
+                            <option key={model.value} value={model.value}>
+                                {model.label}
+                            </option>
+                        ))}
+                    </select>
+                    <div className="text-[11px] text-[var(--app-hint)]">
+                        GPT-5.2-Codex is the most advanced model for agentic coding.
                     </div>
                 </div>
             ) : null}
