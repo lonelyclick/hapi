@@ -10,7 +10,7 @@ import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { SSEManager } from '../sse/sseManager'
 import type { ReviewStore } from './store'
 import type { StoredReviewSession } from './types'
-import { generateSummariesWithMinimax } from './minimaxSync'
+import { generateSummariesWithMinimax, parseReviewResultWithMinimax, type ReviewResult } from './minimaxSync'
 
 // 同步配置
 const MAX_BATCH_CHARS = 50000  // 每批最大字符数
@@ -194,7 +194,7 @@ export class AutoReviewService {
     }
 
     /**
-     * Review Session AI 回复结束后，保存汇总结果并继续同步
+     * Review Session AI 回复结束后，用 MiniMax 解析结果并注入到 Review Session
      */
     private async handleReviewAIResponse(reviewSessionId: string): Promise<void> {
         const mainSessionId = this.reviewToMainMap.get(reviewSessionId)
@@ -216,21 +216,117 @@ export class AutoReviewService {
             console.log('[ReviewSync] Waiting for message to sync to DB...')
             await new Promise(resolve => setTimeout(resolve, 2000))
 
-            // 保存汇总结果
-            console.log('[ReviewSync] Saving summary...')
-            const savedCount = await this.saveSummary(reviewSession)
-
-            // 只有成功保存了汇总结果，才继续检查是否有更多待同步的轮次
-            // 这样可以避免无限循环：如果 AI 回复中没有有效的汇总，就不要再触发同步
-            if (savedCount > 0) {
-                console.log('[ReviewSync] Saved', savedCount, 'rounds, checking for more...')
-                await this.syncRounds(reviewSession)
-            } else {
-                console.log('[ReviewSync] No new rounds saved, not triggering more syncs')
+            // 提取 Review AI 的文本内容
+            const reviewText = await this.extractReviewAIText(reviewSessionId)
+            if (!reviewText) {
+                console.log('[ReviewSync] No review text found')
+                return
             }
+            console.log('[ReviewSync] Got review text, length:', reviewText.length)
+
+            // 用 MiniMax 解析为结构化 JSON
+            const apiKey = process.env.MINIMAX_API_KEY
+            if (!apiKey) {
+                console.error('[ReviewSync] MINIMAX_API_KEY not set')
+                return
+            }
+
+            console.log('[ReviewSync] Parsing review result with MiniMax...')
+            const result = await parseReviewResultWithMinimax(apiKey, reviewText)
+            if (!result) {
+                console.log('[ReviewSync] Failed to parse review result')
+                return
+            }
+
+            console.log('[ReviewSync] Parsed review result:', result.suggestions.length, 'suggestions')
+
+            // 将解析后的 JSON 结果注入到 Review Session 中
+            await this.injectParsedResultToSession(reviewSessionId, result)
         } catch (err) {
             console.error('[ReviewSync] Failed to handle review AI response:', err)
         }
+    }
+
+    /**
+     * 将解析后的 Review 结果注入到 Review Session 中
+     */
+    private async injectParsedResultToSession(reviewSessionId: string, result: ReviewResult): Promise<void> {
+        try {
+            // 构造 JSON 格式的消息内容
+            const jsonContent = JSON.stringify({
+                suggestions: result.suggestions,
+                summary: result.summary
+            }, null, 2)
+
+            const messageText = `## 结构化审查结果\n\n\`\`\`json\n${jsonContent}\n\`\`\``
+
+            // 构造符合 Claude Agent SDK 格式的消息
+            const agentMessage = {
+                role: 'agent',
+                content: JSON.stringify({
+                    data: {
+                        type: 'assistant',
+                        message: {
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: messageText
+                                }
+                            ]
+                        }
+                    }
+                })
+            }
+
+            // 注入消息到 Review Session
+            await this.engine.addMessage(reviewSessionId, agentMessage)
+            console.log('[ReviewSync] Injected parsed result to Review Session')
+        } catch (err) {
+            console.error('[ReviewSync] Failed to inject parsed result:', err)
+        }
+    }
+
+    /**
+     * 提取 Review AI 的文本回复
+     */
+    private async extractReviewAIText(reviewSessionId: string): Promise<string | null> {
+        const messagesResult = await this.engine.getMessagesPage(reviewSessionId, { limit: 10, beforeSeq: null })
+
+        // 从最新消息开始找 AI 回复
+        for (let i = messagesResult.messages.length - 1; i >= 0; i--) {
+            const m = messagesResult.messages[i]
+            const content = m.content as Record<string, unknown>
+            if (content?.role !== 'agent') continue
+
+            let payload: Record<string, unknown> | null = null
+            const rawContent = content?.content
+            if (typeof rawContent === 'string') {
+                try {
+                    payload = JSON.parse(rawContent)
+                } catch {
+                    payload = null
+                }
+            } else if (typeof rawContent === 'object' && rawContent) {
+                payload = rawContent as Record<string, unknown>
+            }
+
+            if (!payload) continue
+
+            const data = payload.data as Record<string, unknown>
+            if (!data || data.type !== 'assistant') continue
+
+            const message = data.message as Record<string, unknown>
+            if (message?.content) {
+                const contentArr = message.content as Array<{ type?: string; text?: string }>
+                for (const item of contentArr) {
+                    if (item.type === 'text' && item.text) {
+                        return item.text
+                    }
+                }
+            }
+        }
+
+        return null
     }
 
     /**

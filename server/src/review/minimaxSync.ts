@@ -166,6 +166,171 @@ export async function generateSummariesWithMinimax(
     return []
 }
 
+// Review 建议类型
+export interface ReviewSuggestion {
+    id: string
+    type: 'bug' | 'security' | 'performance' | 'improvement'
+    severity: 'high' | 'medium' | 'low'
+    title: string
+    detail: string
+}
+
+export interface ReviewResult {
+    suggestions: ReviewSuggestion[]
+    summary: string
+}
+
+// Function calling 的 tool 定义 - 解析 Review 结果
+const PARSE_REVIEW_RESULT_TOOL = {
+    type: 'function' as const,
+    function: {
+        name: 'save_review_result',
+        description: '保存代码审查结果',
+        parameters: {
+            type: 'object',
+            properties: {
+                suggestions: {
+                    type: 'array',
+                    description: '审查建议列表',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: {
+                                type: 'string',
+                                description: '建议的唯一ID，如 bug-1, security-1, perf-1, improve-1'
+                            },
+                            type: {
+                                type: 'string',
+                                enum: ['bug', 'security', 'performance', 'improvement'],
+                                description: '建议类型：bug(缺陷), security(安全), performance(性能), improvement(改进)'
+                            },
+                            severity: {
+                                type: 'string',
+                                enum: ['high', 'medium', 'low'],
+                                description: '严重程度：high(高), medium(中), low(低)'
+                            },
+                            title: {
+                                type: 'string',
+                                description: '建议标题，简短描述问题'
+                            },
+                            detail: {
+                                type: 'string',
+                                description: '详细说明，包括问题描述、影响范围、修复建议'
+                            }
+                        },
+                        required: ['id', 'type', 'severity', 'title', 'detail']
+                    }
+                },
+                summary: {
+                    type: 'string',
+                    description: '整体审查总结，简要说明代码质量和主要问题'
+                }
+            },
+            required: ['suggestions', 'summary']
+        }
+    }
+}
+
+/**
+ * 使用 MiniMax function calling 解析 Review AI 的输出为结构化 JSON
+ */
+export async function parseReviewResultWithMinimax(
+    apiKey: string,
+    reviewText: string
+): Promise<ReviewResult | null> {
+    const prompt = `## 代码审查结果解析任务
+
+请分析以下代码审查内容，提取出所有的建议和问题，并调用 save_review_result 函数保存结构化结果。
+
+### 审查内容
+
+${reviewText}
+
+### 要求
+
+1. 仔细阅读审查内容，识别所有提到的问题、建议或改进点
+2. 为每个建议分类：bug(缺陷)、security(安全)、performance(性能)、improvement(改进)
+3. 评估严重程度：high(高)、medium(中)、low(低)
+4. 如果审查结论是"代码质量良好，没有问题"，则 suggestions 为空数组
+5. 调用 save_review_result 函数保存结果`
+
+    try {
+        const response = await fetch(MINIMAX_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: MINIMAX_MODEL,
+                messages: [
+                    {
+                        role: 'user',
+                        content: prompt
+                    }
+                ],
+                tools: [PARSE_REVIEW_RESULT_TOOL],
+                tool_choice: {
+                    type: 'function',
+                    function: { name: 'save_review_result' }
+                },
+                temperature: 0.3,
+                max_tokens: 8000
+            })
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            console.error('[MinimaxSync] parseReviewResult API error:', response.status, errorText)
+            return null
+        }
+
+        const result = await response.json() as {
+            choices?: Array<{
+                message?: {
+                    content?: string
+                    tool_calls?: Array<{
+                        function?: {
+                            name?: string
+                            arguments?: string
+                        }
+                    }>
+                }
+            }>
+        }
+        console.log('[MinimaxSync] parseReviewResult response:', JSON.stringify(result, null, 2))
+
+        const message = result.choices?.[0]?.message
+        if (!message) {
+            console.error('[MinimaxSync] No message in parseReviewResult response')
+            return null
+        }
+
+        // 检查 tool_calls
+        const toolCalls = message.tool_calls
+        if (toolCalls && toolCalls.length > 0) {
+            for (const call of toolCalls) {
+                if (call.function?.name === 'save_review_result' && call.function.arguments) {
+                    try {
+                        const args = JSON.parse(call.function.arguments)
+                        return {
+                            suggestions: args.suggestions || [],
+                            summary: args.summary || ''
+                        }
+                    } catch (e) {
+                        console.error('[MinimaxSync] Failed to parse review result arguments:', e)
+                    }
+                }
+            }
+        }
+
+        return null
+    } catch (err) {
+        console.error('[MinimaxSync] parseReviewResultWithMinimax error:', err)
+        return null
+    }
+}
+
 /**
  * 从 content 中解析汇总（兼容不返回 tool_calls 的情况）
  */
