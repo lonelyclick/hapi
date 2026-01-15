@@ -852,9 +852,9 @@ export function ReviewPanel(props: {
                 </div>
             </AssistantRuntimeProvider>
 
-            {/* 固定在底部的建议列表 */}
+            {/* 固定在底部的建议列表 - 无高度限制，向上扩展 */}
             {allReviewTexts.length > 0 && (
-                <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)] max-h-64 overflow-y-auto">
+                <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
                     <div className="px-3 py-2">
                         <ReviewSuggestions
                             reviewTexts={allReviewTexts}
