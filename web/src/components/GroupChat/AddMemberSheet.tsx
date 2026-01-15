@@ -14,6 +14,7 @@ const SPAWN_AGENT_TYPES: { value: SpawnAgentType; label: string; color: string }
     { value: 'claude', label: 'Claude', color: 'bg-purple-500' },
     { value: 'codex', label: 'Codex', color: 'bg-green-500' },
     { value: 'gemini', label: 'Gemini', color: 'bg-blue-500' },
+    { value: 'opencode', label: 'OpenCode', color: 'bg-teal-500' },
     { value: 'grok', label: 'Grok', color: 'bg-orange-500' },
     { value: 'glm', label: 'GLM', color: 'bg-cyan-500' },
     { value: 'minimax', label: 'Minimax', color: 'bg-pink-500' },
@@ -24,6 +25,7 @@ const AGENT_TYPE_COLORS: Record<string, string> = {
     claude: 'bg-purple-500',
     codex: 'bg-green-500',
     gemini: 'bg-blue-500',
+    opencode: 'bg-teal-500',
     grok: 'bg-orange-500',
     glm: 'bg-cyan-500',
     minimax: 'bg-pink-500',
@@ -34,10 +36,11 @@ const AGENT_TYPE_ICONS: Record<string, string> = {
     claude: 'C',
     codex: 'X',
     gemini: 'G',
+    opencode: 'O',
     grok: 'K',
     glm: 'Z',
     minimax: 'M',
-    openrouter: 'O'
+    openrouter: 'R'
 }
 
 function getAgentFromSession(session: SessionSummary): string | null {

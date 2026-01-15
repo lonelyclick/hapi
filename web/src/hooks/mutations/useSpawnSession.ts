@@ -6,12 +6,13 @@ import { queryKeys } from '@/lib/query-keys'
 type SpawnInput = {
     machineId: string
     directory: string
-    agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli'
+    agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli' | 'opencode'
     yolo?: boolean
     sessionType?: 'simple' | 'worktree'
     worktreeName?: string
     claudeAgent?: string
     openrouterModel?: string
+    opencodeModel?: string
 }
 
 export function useSpawnSession(api: ApiClient | null): {
@@ -34,7 +35,8 @@ export function useSpawnSession(api: ApiClient | null): {
                 input.sessionType,
                 input.worktreeName,
                 input.claudeAgent,
-                input.openrouterModel
+                input.openrouterModel,
+                input.opencodeModel
             )
         },
         onSuccess: () => {

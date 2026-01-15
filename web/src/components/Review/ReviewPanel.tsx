@@ -318,7 +318,7 @@ export function ReviewPanel(props: {
         staleTime: Infinity  // 数据不会自动过期
     })
 
-    console.log('[ReviewPanel] pendingRoundsData:', pendingRoundsData, 'autoSyncStatus:', autoSyncStatus)
+    console.log('[ReviewPanel] pendingRoundsData:', pendingRoundsData, 'savedSummaries in pendingRoundsData:', pendingRoundsData?.savedSummaries?.length, 'autoSyncStatus:', autoSyncStatus)
 
     // 合并 savedSummaries：API 初始数据 + SSE 实时推送的新数据
     const savedSummaries = useMemo(() => {
