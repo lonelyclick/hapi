@@ -796,8 +796,60 @@ export function ReviewPanel(props: {
                 </div>
             </div>
 
-            {/* 顶部状态栏 - 固定显示同步状态 */}
-            <div className="flex-shrink-0 px-3 py-1.5 border-b border-[var(--app-divider)] bg-[var(--app-subtle-bg)]">
+            {/* 已完成汇总的结果卡片 - 固定在顶部 */}
+            {savedSummaries.length > 0 && (
+                <div className="flex-shrink-0 border-b border-[var(--app-divider)] max-h-48 overflow-y-auto">
+                    <SummaryCards summaries={savedSummaries} />
+                </div>
+            )}
+
+            {/* 对话界面 - 复用 HappyThread */}
+            <AssistantRuntimeProvider runtime={runtime}>
+                <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                    {/* 可滚动的对话区域 */}
+                    <div className="flex-1 overflow-y-auto">
+                        <HappyThread
+                            key={props.reviewSessionId}
+                            api={api}
+                            sessionId={props.reviewSessionId}
+                            metadata={session?.metadata ?? null}
+                            disabled={false}
+                            onRefresh={handleRefresh}
+                            onRetryMessage={undefined}
+                            isLoadingMessages={isLoadingMessages}
+                            messagesWarning={null}
+                            hasMoreMessages={false}
+                            isLoadingMoreMessages={false}
+                            onLoadMore={async () => {}}
+                            rawMessagesCount={messages.length}
+                            normalizedMessagesCount={normalizedMessages.length}
+                            renderedMessagesCount={reconciled.blocks.length}
+                        />
+                    </div>
+
+                    {/* 固定在底部的建议列表 */}
+                    {allReviewTexts.length > 0 && (
+                        <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
+                            <div className="max-h-64 overflow-y-auto">
+                                <div className="px-3 py-2">
+                                    <ReviewSuggestions
+                                        reviewTexts={allReviewTexts}
+                                        onApply={(details) => applySuggestionsMutation.mutate(details)}
+                                        isApplying={applySuggestionsMutation.isPending}
+                                        onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
+                                        isReviewing={startReviewMutation.isPending}
+                                        reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
+                                        unreviewedRounds={pendingRoundsData?.unreviewedRounds}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </AssistantRuntimeProvider>
+
+            {/* 底部状态栏 - 固定显示同步状态 */}
+            <div className="flex-shrink-0 px-3 py-1.5 border-t border-[var(--app-divider)] bg-[var(--app-subtle-bg)]">
                 {/* 加载中 */}
                 {!currentReview && reviewSessions === undefined && (
                     <div className="flex items-center justify-center gap-2 text-[var(--app-hint)]">
@@ -882,58 +934,6 @@ export function ReviewPanel(props: {
                     </div>
                 )}
             </div>
-
-            {/* 已完成汇总的结果卡片 - 固定在顶部状态栏下方 */}
-            {savedSummaries.length > 0 && (
-                <div className="flex-shrink-0 border-b border-[var(--app-divider)] max-h-48 overflow-y-auto">
-                    <SummaryCards summaries={savedSummaries} />
-                </div>
-            )}
-
-            {/* 对话界面 - 复用 HappyThread */}
-            <AssistantRuntimeProvider runtime={runtime}>
-                <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-                    {/* 可滚动的对话区域 */}
-                    <div className="flex-1 overflow-y-auto">
-                        <HappyThread
-                            key={props.reviewSessionId}
-                            api={api}
-                            sessionId={props.reviewSessionId}
-                            metadata={session?.metadata ?? null}
-                            disabled={false}
-                            onRefresh={handleRefresh}
-                            onRetryMessage={undefined}
-                            isLoadingMessages={isLoadingMessages}
-                            messagesWarning={null}
-                            hasMoreMessages={false}
-                            isLoadingMoreMessages={false}
-                            onLoadMore={async () => {}}
-                            rawMessagesCount={messages.length}
-                            normalizedMessagesCount={normalizedMessages.length}
-                            renderedMessagesCount={reconciled.blocks.length}
-                        />
-                    </div>
-
-                    {/* 固定在底部的建议列表 */}
-                    {allReviewTexts.length > 0 && (
-                        <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
-                            <div className="max-h-64 overflow-y-auto">
-                                <div className="px-3 py-2">
-                                    <ReviewSuggestions
-                                        reviewTexts={allReviewTexts}
-                                        onApply={(details) => applySuggestionsMutation.mutate(details)}
-                                        isApplying={applySuggestionsMutation.isPending}
-                                        onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
-                                        isReviewing={startReviewMutation.isPending}
-                                        reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
-                                        unreviewedRounds={pendingRoundsData?.unreviewedRounds}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </AssistantRuntimeProvider>
         </div>
     )
 }
