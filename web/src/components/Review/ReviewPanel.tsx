@@ -728,6 +728,17 @@ export function ReviewPanel(props: {
         return []
     }, [reconciled.blocks])
 
+    // 页面加载时，如果 AI 正在思考，自动设置 isReviewing 为 true
+    // 这样刷新页面后可以恢复"正在 Review"状态
+    const hasInitializedReviewingRef = useRef(false)
+    useEffect(() => {
+        if (hasInitializedReviewingRef.current) return
+        if (session?.thinking && !isReviewing) {
+            hasInitializedReviewingRef.current = true
+            setIsReviewing(true)
+        }
+    }, [session?.thinking, isReviewing])
+
     // 追踪 Review 开始时的 allReviewTexts 长度（用于判断 MiniMax 是否处理完成）
     const reviewStartTextsLengthRef = useRef<number | null>(null)
 
