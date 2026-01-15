@@ -72,10 +72,6 @@ function CloseIcon(props: { className?: string }) {
 }
 
 function TrashIcon(props: { className?: string }) {
-    // 故意的语法错误：未使用的变量
-    const unusedVariable = "this is never used"
-    // 故意的类型错误：字符串赋值给数字
-    const wrongType: number = "should be number" as any
     return (
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
             <polyline points="3 6 5 6 21 6" />
