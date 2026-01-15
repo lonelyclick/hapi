@@ -378,6 +378,25 @@ export function ReviewPanel(props: {
         return merged
     }, [autoSyncStatus?.savedSummaries, pendingRoundsData?.savedSummaries])
 
+    // 页面加载后，如果有 pendingRounds 且不在同步中，自动触发同步
+    const autoSyncTriggeredRef = useRef(false)
+    useEffect(() => {
+        // 只触发一次
+        if (autoSyncTriggeredRef.current) return
+        // 需要有 review session 和 pending rounds 数据
+        if (!currentReviewForPending?.id || !pendingRoundsData) return
+        // 有待同步的轮次
+        if (!pendingRoundsData.hasPendingRounds) return
+        // 不在同步中
+        if (autoSyncStatus?.status === 'syncing' || autoSyncStatus?.status === 'checking') return
+
+        autoSyncTriggeredRef.current = true
+        console.log('[ReviewPanel] Auto triggering sync for pending rounds:', pendingRoundsData.pendingRounds)
+        api.syncReviewRounds(currentReviewForPending.id).catch(err => {
+            console.error('[ReviewPanel] Auto sync failed:', err)
+        })
+    }, [currentReviewForPending?.id, pendingRoundsData, autoSyncStatus?.status, api])
+
     // 获取 Review Session 信息
     const { data: reviewSession } = useQuery({
         queryKey: ['session', props.reviewSessionId],
@@ -932,12 +951,12 @@ export function ReviewPanel(props: {
                             )}
                         </div>
 
-                        {/* 右侧：Review 按钮 */}
+                        {/* 右侧：Review 按钮 - 允许 Review 已汇总的轮次，即使还有待同步轮次 */}
                         {allReviewTexts.length === 0 && pendingRoundsData?.hasUnreviewedRounds && (
                             <button
                                 type="button"
                                 onClick={() => startReviewMutation.mutate()}
-                                disabled={startReviewMutation.isPending || pendingRoundsData?.hasPendingRounds || session?.thinking || autoSyncStatus?.status === 'syncing'}
+                                disabled={startReviewMutation.isPending || session?.thinking || autoSyncStatus?.status === 'syncing'}
                                 className="px-2.5 py-0.5 text-xs font-medium rounded bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                             >
                                 {startReviewMutation.isPending ? '执行中...' : `Review ${pendingRoundsData.unreviewedRounds} 轮`}
