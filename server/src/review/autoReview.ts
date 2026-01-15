@@ -363,8 +363,9 @@ export class AutoReviewService {
             // 提取汇总 - 从最新消息开始找，确保取到最新的回复
             let summaries: Array<{ round: number; summary: string }> = []
 
-            // messagesResult.messages 已经是按时间倒序（最新在前），直接遍历即可
-            for (const m of messagesResult.messages) {
+            // messagesResult.messages 是按时间正序（最旧在前），需要倒序遍历找最新的
+            for (let i = messagesResult.messages.length - 1; i >= 0; i--) {
+                const m = messagesResult.messages[i]
                 const content = m.content as Record<string, unknown>
                 if (content?.role !== 'agent') continue
 
