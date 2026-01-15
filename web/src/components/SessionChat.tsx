@@ -100,9 +100,14 @@ export function SessionChat(props: {
     useEffect(() => {
         // 用户手动关闭后，不再自动恢复
         if (userClosedReviewRef.current) return
+        // 当 activeReviewSession 数据返回时，设置或清除 reviewSessionId
         if (activeReviewSession?.reviewSessionId) {
             setReviewSessionId(activeReviewSession.reviewSessionId)
+        } else if (activeReviewSession === null) {
+            // 明确没有活跃的 Review Session 时清除
+            setReviewSessionId(null)
         }
+        // 注意：activeReviewSession 为 undefined 时（加载中）不做任何操作
     }, [activeReviewSession])
 
     useEffect(() => {
@@ -111,7 +116,8 @@ export function SessionChat(props: {
         setIsResuming(false)
         setResumeError(null)
         setClearSuggestionDismissed(false)
-        setReviewSessionId(null)
+        // 不在这里清除 reviewSessionId，让它由 activeReviewSession 数据控制
+        // setReviewSessionId(null)
         userClosedReviewRef.current = false  // 切换 session 时重置
         pendingMessageRef.current = null
     }, [props.session.id])
