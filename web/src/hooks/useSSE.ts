@@ -232,10 +232,10 @@ export function useSSE(options: {
                     if (import.meta.env.DEV) {
                         console.log('[sse] review-sync-status', data, 'mainSessionId:', mainSessionId)
                     }
-                    // 直接更新 pending rounds 数据
+                    // 直接更新 pending rounds 数据（保留 savedSummaries）
                     queryClient.setQueryData(
                         ['review-pending-rounds', data.reviewSessionId],
-                        (old: { unreviewedRounds?: number; hasUnreviewedRounds?: boolean; reviewedRounds?: number } | undefined) => ({
+                        (old: { unreviewedRounds?: number; hasUnreviewedRounds?: boolean; reviewedRounds?: number; savedSummaries?: Array<{ round: number; summary: string }> } | undefined) => ({
                             ...old,
                             totalRounds: data.totalRounds ?? 0,
                             summarizedRounds: data.summarizedRounds ?? 0,
@@ -245,7 +245,9 @@ export function useSSE(options: {
                             ...(data.unreviewedRounds !== undefined ? {
                                 unreviewedRounds: data.unreviewedRounds,
                                 hasUnreviewedRounds: data.unreviewedRounds > 0
-                            } : {})
+                            } : {}),
+                            // 保留原有的 savedSummaries（从 API 加载的）
+                            savedSummaries: old?.savedSummaries
                         })
                     )
                     // 同时存储同步状态（用于显示 "正在同步..." 等）
