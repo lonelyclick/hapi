@@ -83,6 +83,15 @@ export function SessionChat(props: {
     const pendingMessageRef = useRef<string | null>(null)
     const composerSetTextRef = useRef<((text: string) => void) | null>(null)
 
+    // 移动端检测
+    const [isMobile, setIsMobile] = useState(false)
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 768)
+        checkMobile()
+        window.addEventListener('resize', checkMobile)
+        return () => window.removeEventListener('resize', checkMobile)
+    }, [])
+
     // 查询当前 Session 的活跃 Review Session（试验性功能）
     const { data: activeReviewSession } = useQuery({
         queryKey: ['review-sessions', 'active', props.session.id],
@@ -96,8 +105,10 @@ export function SessionChat(props: {
         staleTime: 0  // 每次都重新获取，确保从列表进入时能拿到最新数据
     })
 
-    // 如果有活跃的 Review Session，自动显示面板
+    // 如果有活跃的 Review Session，自动显示面板（移动端不自动打开）
     useEffect(() => {
+        // 移动端不自动打开 Review 面板
+        if (isMobile) return
         // 用户手动关闭后，不再自动恢复
         if (userClosedReviewRef.current) return
         // 当 activeReviewSession 数据返回时，设置或清除 reviewSessionId
@@ -108,7 +119,7 @@ export function SessionChat(props: {
             setReviewSessionId(null)
         }
         // 注意：activeReviewSession 为 undefined 时（加载中）不做任何操作
-    }, [activeReviewSession])
+    }, [activeReviewSession, isMobile])
 
     useEffect(() => {
         normalizedCacheRef.current.clear()
