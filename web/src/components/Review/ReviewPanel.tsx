@@ -107,9 +107,12 @@ function ChevronIcon(props: { className?: string; expanded?: boolean }) {
 }
 
 /**
- * 汇总卡片组件 - 可折叠展开，支持全选/全不选
+ * 汇总卡片组件 - 默认折叠成一行，展开后显示轮次列表
  */
 function SummaryCards(props: { summaries: Array<{ round: number; summary: string }> }) {
+    // 整体是否展开（默认折叠）
+    const [isListExpanded, setIsListExpanded] = useState(false)
+    // 单个轮次是否展开
     const [expandedRounds, setExpandedRounds] = useState<Set<number>>(new Set())
 
     const toggleRound = (round: number) => {
@@ -138,8 +141,11 @@ function SummaryCards(props: { summaries: Array<{ round: number; summary: string
     return (
         <div className="px-3 py-2">
             <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border border-green-200 dark:border-green-700 shadow-sm overflow-hidden">
-                {/* 头部 */}
-                <div className="flex items-center justify-between px-2 py-1.5 bg-green-100/50 dark:bg-green-800/30 border-b border-green-200 dark:border-green-700">
+                {/* 头部 - 点击展开/折叠整个列表 */}
+                <div
+                    className={`flex items-center justify-between px-2 py-1.5 bg-green-100/50 dark:bg-green-800/30 cursor-pointer hover:bg-green-100 dark:hover:bg-green-800/50 transition-colors ${isListExpanded ? 'border-b border-green-200 dark:border-green-700' : ''}`}
+                    onClick={() => setIsListExpanded(!isListExpanded)}
+                >
                     <div className="flex items-center gap-1.5">
                         <svg className="w-3.5 h-3.5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -148,55 +154,61 @@ function SummaryCards(props: { summaries: Array<{ round: number; summary: string
                             已汇总 {props.summaries.length} 轮
                         </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={expandAll}
-                            disabled={allExpanded}
-                            className="text-[10px] text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                            全部展开
-                        </button>
-                        <span className="text-green-300 dark:text-green-600">|</span>
-                        <button
-                            type="button"
-                            onClick={collapseAll}
-                            disabled={noneExpanded}
-                            className="text-[10px] text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                            全部收起
-                        </button>
-                    </div>
+                    <ChevronIcon expanded={isListExpanded} className="text-green-500" />
                 </div>
-                {/* 汇总列表 */}
-                <div className="p-1.5 space-y-1">
-                    {props.summaries.map(summary => {
-                        const expanded = expandedRounds.has(summary.round)
-                        return (
-                            <div key={summary.round} className="rounded bg-white dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 overflow-hidden">
-                                <div
-                                    className="flex items-center gap-1.5 px-2 py-1 bg-green-50 dark:bg-green-800/30 cursor-pointer hover:bg-green-100 dark:hover:bg-green-800/50 transition-colors"
-                                    onClick={() => toggleRound(summary.round)}
-                                >
-                                    <div className="flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-white text-[9px] font-bold shrink-0">
-                                        {summary.round}
-                                    </div>
-                                    <span className="flex-1 text-[11px] text-slate-600 dark:text-slate-300 truncate">
-                                        {summary.summary.slice(0, 60)}{summary.summary.length > 60 ? '...' : ''}
-                                    </span>
-                                    <ChevronIcon expanded={expanded} className="text-green-500 shrink-0" />
-                                </div>
-                                {expanded && (
-                                    <div className="px-2 py-1.5 border-t border-green-100 dark:border-green-700/50">
-                                        <div className="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
-                                            {summary.summary}
+                {/* 汇总列表 - 仅在展开时显示 */}
+                {isListExpanded && (
+                    <>
+                        {/* 展开/收起全部按钮 */}
+                        <div className="flex items-center justify-end gap-2 px-2 py-1 bg-green-50/50 dark:bg-green-800/20 border-b border-green-100 dark:border-green-700/50">
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); expandAll() }}
+                                disabled={allExpanded}
+                                className="text-[10px] text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                全部展开
+                            </button>
+                            <span className="text-green-300 dark:text-green-600">|</span>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); collapseAll() }}
+                                disabled={noneExpanded}
+                                className="text-[10px] text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                全部收起
+                            </button>
+                        </div>
+                        <div className="p-1.5 space-y-1">
+                            {props.summaries.map(summary => {
+                                const expanded = expandedRounds.has(summary.round)
+                                return (
+                                    <div key={summary.round} className="rounded bg-white dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 overflow-hidden">
+                                        <div
+                                            className="flex items-center gap-1.5 px-2 py-1 bg-green-50 dark:bg-green-800/30 cursor-pointer hover:bg-green-100 dark:hover:bg-green-800/50 transition-colors"
+                                            onClick={() => toggleRound(summary.round)}
+                                        >
+                                            <div className="flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-white text-[9px] font-bold shrink-0">
+                                                {summary.round}
+                                            </div>
+                                            <span className="flex-1 text-[11px] text-slate-600 dark:text-slate-300 truncate">
+                                                {summary.summary.slice(0, 60)}{summary.summary.length > 60 ? '...' : ''}
+                                            </span>
+                                            <ChevronIcon expanded={expanded} className="text-green-500 shrink-0" />
                                         </div>
+                                        {expanded && (
+                                            <div className="px-2 py-1.5 border-t border-green-100 dark:border-green-700/50">
+                                                <div className="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                                                    {summary.summary}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                        )
-                    })}
-                </div>
+                                )
+                            })}
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     )
