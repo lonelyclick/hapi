@@ -1353,6 +1353,7 @@ export class SyncEngine {
             resumeSessionId?: string
             token?: string
             claudeAgent?: string
+            codexModel?: string
             openrouterModel?: string
             opencodeModel?: string
             permissionMode?: Session['permissionMode']
@@ -1376,6 +1377,7 @@ export class SyncEngine {
                     resumeSessionId: options?.resumeSessionId,
                     token: options?.token,
                     claudeAgent: options?.claudeAgent,
+                    codexModel: options?.codexModel,
                     openrouterModel: options?.openrouterModel,
                     opencodeModel: options?.opencodeModel,
                     permissionMode: options?.permissionMode,
