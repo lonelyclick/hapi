@@ -229,6 +229,7 @@ export function ReviewPanel(props: {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())
     const [appliedIdsInitialized, setAppliedIdsInitialized] = useState(false)
+    const [isReviewing, setIsReviewing] = useState(false)  // 追踪是否正在执行 Review
 
     // 移动端检测
     const [isMobile, setIsMobile] = useState(false)
@@ -684,6 +685,8 @@ export function ReviewPanel(props: {
             if (!currentReview) {
                 throw new Error('No current review found')
             }
+            // 标记正在 Review
+            setIsReviewing(true)
             // 转换 previousSuggestions 格式
             const formattedSuggestions = previousSuggestions?.map(s => ({
                 id: s.id,
@@ -701,8 +704,19 @@ export function ReviewPanel(props: {
             queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
             // 执行 review 时滚动到底部
             scrollToBottom()
+        },
+        onError: () => {
+            // 出错时重置状态
+            setIsReviewing(false)
         }
     })
+
+    // 当 AI 完成思考时，重置 isReviewing 状态
+    useEffect(() => {
+        if (!session?.thinking && isReviewing) {
+            setIsReviewing(false)
+        }
+    }, [session?.thinking, isReviewing])
 
     // 从已处理的 blocks 中提取最后一个包含 suggestions JSON 的文本（覆盖而非累加）
     const allReviewTexts = useMemo(() => {
@@ -997,8 +1011,8 @@ export function ReviewPanel(props: {
                             <span>未找到 Review 会话</span>
                         )}
 
-                        {/* 同步/检查状态 - 优先显示同步进度 */}
-                        {currentReview && (autoSyncStatus?.status === 'syncing' || (session?.thinking && pendingRoundsData?.hasPendingRounds)) && pendingRoundsData && (
+                        {/* 同步/检查状态 - 优先显示同步进度，排除 Review 执行中 */}
+                        {currentReview && !isReviewing && (autoSyncStatus?.status === 'syncing' || (session?.thinking && pendingRoundsData?.hasPendingRounds)) && pendingRoundsData && (
                             <span className="flex items-center gap-1 text-blue-500">
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1007,7 +1021,7 @@ export function ReviewPanel(props: {
                                 同步 {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds}
                             </span>
                         )}
-                        {currentReview && autoSyncStatus?.status === 'checking' && !session?.thinking && (
+                        {currentReview && !isReviewing && autoSyncStatus?.status === 'checking' && !session?.thinking && (
                             <span className="flex items-center gap-1 text-blue-500">
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1016,19 +1030,19 @@ export function ReviewPanel(props: {
                                 检查中
                             </span>
                         )}
-                        {/* AI 思考状态 - 仅在不是同步时显示，区分 Review 和其他处理 */}
-                        {currentReview && session?.thinking && !pendingRoundsData?.hasPendingRounds && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && (
+                        {/* Review 执行中状态 - 仅在 isReviewing 为 true 时显示 */}
+                        {currentReview && isReviewing && (
                             <span className="flex items-center gap-1 text-green-500">
                                 <div className="flex gap-0.5">
                                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                                 </div>
-                                {pendingRoundsData?.hasUnreviewedRounds ? '正在 Review' : 'AI 处理中'}
+                                正在 Review
                             </span>
                         )}
                         {/* 空闲状态：显示轮次信息 */}
-                        {currentReview && !session?.thinking && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && pendingRoundsData && (
+                        {currentReview && !session?.thinking && !isReviewing && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && pendingRoundsData && (
                             <span>
                                 {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds} 轮汇总
                                 {pendingRoundsData.hasUnreviewedRounds && (
