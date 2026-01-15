@@ -83,11 +83,13 @@ export function SessionChat(props: {
     const pendingMessageRef = useRef<string | null>(null)
     const composerSetTextRef = useRef<((text: string) => void) | null>(null)
 
-    // 移动端检测
-    const [isMobile, setIsMobile] = useState(false)
+    // 移动端检测 - 初始值使用 window.innerWidth 检测（SSR 安全）
+    const [isMobile, setIsMobile] = useState(() => {
+        if (typeof window === 'undefined') return false
+        return window.innerWidth < 768
+    })
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 768)
-        checkMobile()
         window.addEventListener('resize', checkMobile)
         return () => window.removeEventListener('resize', checkMobile)
     }, [])
