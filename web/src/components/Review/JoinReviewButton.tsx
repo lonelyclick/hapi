@@ -137,6 +137,8 @@ export function JoinReviewButton(props: {
 
     // 如果已有 Review Session，显示图标 + 数量按钮
     if (activeReviewSession?.reviewSessionId) {
+        // 只有当有待审轮次或正在同步时才显示数量
+        const showCount = unreviewedCount > 0 || hasPending
         return (
             <button
                 type="button"
@@ -149,7 +151,7 @@ export function JoinReviewButton(props: {
                 title={props.isReviewPanelOpen ? '关闭 Review 面板' : '打开 Review 面板'}
             >
                 <ReviewIcon />
-                {(unreviewedCount > 0 || hasPending) && (
+                {showCount && (
                     <span className={`text-xs font-medium ${hasPending ? 'text-amber-500' : ''}`}>
                         {hasPending ? '...' : unreviewedCount}
                     </span>

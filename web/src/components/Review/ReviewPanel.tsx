@@ -1003,19 +1003,19 @@ export function ReviewPanel(props: {
                 <div className="flex items-center justify-between gap-2 text-xs">
                     {/* 左侧：Review 按钮 */}
                     <div className="flex items-center gap-2">
-                        {/* Review 按钮：有待审轮次或正在同步时都显示 */}
-                        {currentReview && (pendingRoundsData?.hasUnreviewedRounds || pendingRoundsData?.hasPendingRounds || session?.thinking) && (
+                        {/* Review 按钮：有待审轮次时显示 */}
+                        {currentReview && pendingRoundsData?.hasUnreviewedRounds && (
                             <button
                                 type="button"
                                 onClick={() => startReviewMutation.mutate()}
-                                disabled={startReviewMutation.isPending || session?.thinking || autoSyncStatus?.status === 'syncing' || pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds}
+                                disabled={startReviewMutation.isPending || session?.thinking || autoSyncStatus?.status === 'syncing' || pendingRoundsData?.hasPendingRounds}
                                 className="px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
-                                {startReviewMutation.isPending ? '执行中...' : `Review (${pendingRoundsData?.unreviewedRounds ?? 0})`}
+                                {startReviewMutation.isPending ? '执行中...' : `Review (${pendingRoundsData.unreviewedRounds})`}
                             </button>
                         )}
-                        {/* 完成状态：没有待审轮次且没有待同步轮次且不在思考 */}
-                        {currentReview && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && !session?.thinking && (
+                        {/* 完成状态：有对话轮次、没有待审轮次、没有待同步轮次、不在思考 */}
+                        {currentReview && pendingRoundsData && pendingRoundsData.totalRounds > 0 && !pendingRoundsData.hasUnreviewedRounds && !pendingRoundsData.hasPendingRounds && !session?.thinking && (
                             <span className="text-green-500 flex items-center gap-1">
                                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
