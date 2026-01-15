@@ -144,11 +144,18 @@ export class OpenCodeBackend implements AgentBackend {
             throw new Error('OpenCode transport not initialized');
         }
 
+        const sessionParams: Record<string, unknown> = {
+            cwd: config.cwd,
+            mcpServers: config.mcpServers,
+            model: this.currentModel
+        };
+        if (this.currentVariant) {
+            sessionParams.variant = this.currentVariant;
+        }
+        logger.debug(`[OpenCode] Creating session with model: ${this.currentModel}, variant: ${this.currentVariant ?? 'default'}`);
+
         const response = await withTimeout(
-            this.transport.sendRequest('session/new', {
-                cwd: config.cwd,
-                mcpServers: config.mcpServers
-            }),
+            this.transport.sendRequest('session/new', sessionParams),
             this.initTimeoutMs,
             `OpenCode session/new timed out after ${this.initTimeoutMs}ms`
         );
