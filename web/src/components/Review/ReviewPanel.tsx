@@ -740,17 +740,60 @@ export function ReviewPanel(props: {
 
     // 当 MiniMax 处理完成（allReviewTexts 有新内容）且 AI 不再思考时，重置 isReviewing
     // 这确保了整个流程（Review AI 回复 + MiniMax 解析）都完成后才重置状态
+    // 如果 AI 完成思考后 5 秒内 allReviewTexts 没有新内容，也重置（处理 MiniMax 失败的情况）
+    const thinkingEndTimeRef = useRef<number | null>(null)
     useEffect(() => {
-        if (!isReviewing) return
+        if (!isReviewing) {
+            thinkingEndTimeRef.current = null
+            return
+        }
         if (reviewStartTextsLengthRef.current === null) return
-        // AI 还在思考，不重置
-        if (session?.thinking) return
+
         // allReviewTexts 有新内容，说明 MiniMax 已处理完成
         if (allReviewTexts.length > reviewStartTextsLengthRef.current) {
             setIsReviewing(false)
             reviewStartTextsLengthRef.current = null
+            thinkingEndTimeRef.current = null
+            return
+        }
+
+        // AI 还在思考，记录结束时间为 null
+        if (session?.thinking) {
+            thinkingEndTimeRef.current = null
+            return
+        }
+
+        // AI 刚完成思考，记录结束时间
+        if (thinkingEndTimeRef.current === null) {
+            thinkingEndTimeRef.current = Date.now()
+        }
+
+        // 如果 AI 完成思考后 5 秒内 allReviewTexts 没有新内容，重置状态
+        const elapsed = Date.now() - thinkingEndTimeRef.current
+        if (elapsed >= 5000) {
+            setIsReviewing(false)
+            reviewStartTextsLengthRef.current = null
+            thinkingEndTimeRef.current = null
         }
     }, [isReviewing, allReviewTexts.length, session?.thinking])
+
+    // 定时检查是否需要重置 isReviewing（处理 MiniMax 失败的情况）
+    useEffect(() => {
+        if (!isReviewing || session?.thinking) return
+
+        const timer = setInterval(() => {
+            if (thinkingEndTimeRef.current !== null) {
+                const elapsed = Date.now() - thinkingEndTimeRef.current
+                if (elapsed >= 5000) {
+                    setIsReviewing(false)
+                    reviewStartTextsLengthRef.current = null
+                    thinkingEndTimeRef.current = null
+                }
+            }
+        }, 1000)
+
+        return () => clearInterval(timer)
+    }, [isReviewing, session?.thinking])
 
     // 计算选中的建议数量和详情
     const { selectedCount, selectedDetails } = useMemo(() => {
