@@ -9,6 +9,9 @@ function loadOpenCodeConfig(): OpenCodeBackendOptions {
     if (process.env.OPENCODE_MODEL) {
         options.defaultModel = process.env.OPENCODE_MODEL;
     }
+    if (process.env.OPENCODE_VARIANT) {
+        options.variant = process.env.OPENCODE_VARIANT;
+    }
 
     logger.debug('[OpenCode] Loaded config:', options);
     return options;

@@ -1356,6 +1356,7 @@ export class SyncEngine {
             codexModel?: string
             openrouterModel?: string
             opencodeModel?: string
+            opencodeVariant?: string
             permissionMode?: Session['permissionMode']
             modelMode?: Session['modelMode']
             modelReasoningEffort?: Session['modelReasoningEffort']
@@ -1380,6 +1381,7 @@ export class SyncEngine {
                     codexModel: options?.codexModel,
                     openrouterModel: options?.openrouterModel,
                     opencodeModel: options?.opencodeModel,
+                    opencodeVariant: options?.opencodeVariant,
                     permissionMode: options?.permissionMode,
                     modelMode: options?.modelMode,
                     modelReasoningEffort: options?.modelReasoningEffort,

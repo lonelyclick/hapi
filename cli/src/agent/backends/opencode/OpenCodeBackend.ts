@@ -12,6 +12,8 @@ type PendingPermission = {
 export type OpenCodeBackendOptions = {
     /** Default model to use (e.g., 'anthropic/claude-sonnet-4') */
     defaultModel?: string;
+    /** Model variant/reasoning effort (e.g., 'high', 'max', 'minimal') */
+    variant?: string;
     /** Timeout for initialization in ms (default: 30000) */
     initTimeoutMs?: number;
 };
@@ -44,10 +46,12 @@ export class OpenCodeBackend implements AgentBackend {
     private activeSessionId: string | null = null;
     private readonly initTimeoutMs: number;
     private currentModel: string;
+    private currentVariant: string | undefined;
 
     constructor(private readonly options: OpenCodeBackendOptions = {}) {
         this.initTimeoutMs = options.initTimeoutMs ?? 30_000;
         this.currentModel = options.defaultModel ?? 'anthropic.claude-sonnet-4-20250514';
+        this.currentVariant = options.variant;
     }
 
     async initialize(): Promise<void> {
@@ -65,8 +69,11 @@ export class OpenCodeBackend implements AgentBackend {
             ...process.env as Record<string, string>,
             OPENCODE_MODEL: this.currentModel,
         };
+        if (this.currentVariant) {
+            env.OPENCODE_VARIANT = this.currentVariant;
+        }
 
-        logger.debug(`[OpenCode] Starting ACP with model: ${this.currentModel}`);
+        logger.debug(`[OpenCode] Starting ACP with model: ${this.currentModel}, variant: ${this.currentVariant ?? 'default'}`);
 
         // Use opencode acp mode via stdio
         this.transport = new AcpStdioTransport({

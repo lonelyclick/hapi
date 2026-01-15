@@ -409,6 +409,10 @@ export async function startDaemon(): Promise<void> {
         if (agent === 'opencode' && opencodeModel) {
           args.push('--model', opencodeModel);
         }
+        // Always use highest reasoning effort for OpenCode
+        if (agent === 'opencode') {
+          extraEnv = { ...extraEnv, OPENCODE_VARIANT: 'max' };
+        }
         if (options.sessionId) {
           args.push('--hapi-session-id', options.sessionId);
         }
