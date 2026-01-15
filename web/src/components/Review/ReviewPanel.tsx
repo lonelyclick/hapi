@@ -72,6 +72,10 @@ function CloseIcon(props: { className?: string }) {
 }
 
 function TrashIcon(props: { className?: string }) {
+    // 故意的语法错误：未使用的变量
+    const unusedVariable = "this is never used"
+    // 故意的类型错误：字符串赋值给数字
+    const wrongType: number = "should be number" as any
     return (
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
             <polyline points="3 6 5 6 21 6" />
@@ -208,6 +212,7 @@ export function ReviewPanel(props: {
     const panelRef = useRef<HTMLDivElement>(null)
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
+    const threadContainerRef = useRef<HTMLDivElement>(null)
 
     const [isExpanded, setIsExpanded] = useState(true)
     const [panelWidth, setPanelWidth] = useState(500)
@@ -658,6 +663,23 @@ export function ReviewPanel(props: {
         return []
     }, [reconciled.blocks])
 
+    // 自动滚动到底部：当消息数量变化或 AI 正在思考时
+    const prevMessagesCountRef = useRef(messages.length)
+    useEffect(() => {
+        const container = threadContainerRef.current
+        if (!container) return
+
+        const shouldScroll = messages.length !== prevMessagesCountRef.current || session?.thinking
+        prevMessagesCountRef.current = messages.length
+
+        if (shouldScroll) {
+            // 使用 requestAnimationFrame 确保 DOM 更新后再滚动
+            requestAnimationFrame(() => {
+                container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+            })
+        }
+    }, [messages.length, session?.thinking])
+
     // 应用建议到主 Session
     const applySuggestionsMutation = useMutation({
         mutationFn: async (details: string[]) => {
@@ -786,7 +808,7 @@ export function ReviewPanel(props: {
             <AssistantRuntimeProvider runtime={runtime}>
                 <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                     {/* 可滚动的对话区域 */}
-                    <div className="flex-1 overflow-y-auto">
+                    <div ref={threadContainerRef} className="flex-1 overflow-y-auto">
                         <HappyThread
                             key={props.reviewSessionId}
                             api={api}
