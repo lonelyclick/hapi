@@ -364,9 +364,11 @@ export class AutoReviewService {
             let summaries: Array<{ round: number; summary: string }> = []
 
             // messagesResult.messages 是按时间正序（最旧在前），需要倒序遍历找最新的
+            console.log('[ReviewSync] Messages count:', messagesResult.messages.length)
             for (let i = messagesResult.messages.length - 1; i >= 0; i--) {
                 const m = messagesResult.messages[i]
                 const content = m.content as Record<string, unknown>
+                console.log('[ReviewSync] Message', i, 'role:', content?.role)
                 if (content?.role !== 'agent') continue
 
                 let payload: Record<string, unknown> | null = null
