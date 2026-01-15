@@ -15,7 +15,7 @@ import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import type { DecryptedMessage, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
-import { ReviewSuggestions, parseReviewResult, type SuggestionWithStatus } from './ReviewSuggestions'
+import { ReviewSuggestions, parseReviewResult, getMergedSuggestions, type SuggestionWithStatus } from './ReviewSuggestions'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
 // Icons
@@ -226,6 +226,7 @@ export function ReviewPanel(props: {
     const [panelWidth, setPanelWidth] = useState(500)
     const [panelX, setPanelX] = useState<number | null>(null)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
     // 移动端检测
     const [isMobile, setIsMobile] = useState(false)
@@ -697,6 +698,17 @@ export function ReviewPanel(props: {
         return []
     }, [reconciled.blocks])
 
+    // 计算选中的建议数量和详情
+    const { selectedCount, selectedDetails } = useMemo(() => {
+        if (allReviewTexts.length === 0) return { selectedCount: 0, selectedDetails: [] }
+        const suggestions = getMergedSuggestions(allReviewTexts)
+        const selected = suggestions.filter(s => selectedIds.has(s.id))
+        return {
+            selectedCount: selected.length,
+            selectedDetails: selected.map(s => s.detail)
+        }
+    }, [allReviewTexts, selectedIds])
+
     // 自动滚动到底部：当消息数量变化或 AI 正在思考时
     const prevMessagesCountRef = useRef(messages.length)
     useEffect(() => {
@@ -875,12 +887,14 @@ export function ReviewPanel(props: {
                             isReviewing={startReviewMutation.isPending}
                             reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
                             unreviewedRounds={pendingRoundsData?.unreviewedRounds}
+                            selectedIds={selectedIds}
+                            onSelectedIdsChange={setSelectedIds}
                         />
                     </div>
                 </div>
             )}
 
-            {/* 底部状态栏 - 包含状态信息和 Review 按钮（发送按钮在 ReviewSuggestions 中） */}
+            {/* 底部状态栏 - 左侧 Review 按钮，中间状态信息，右侧发送按钮 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-t border-[var(--app-divider)] bg-[var(--app-subtle-bg)]">
                 <div className="flex items-center justify-between gap-2 text-xs">
                     {/* 左侧：Review 按钮 */}
@@ -900,13 +914,13 @@ export function ReviewPanel(props: {
                                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
-                                Review 完成
+                                完成
                             </span>
                         )}
                     </div>
 
-                    {/* 右侧：状态信息 */}
-                    <div className="flex items-center gap-2 text-[var(--app-hint)]">
+                    {/* 中间：状态信息 */}
+                    <div className="flex-1 flex items-center justify-center gap-2 text-[var(--app-hint)]">
                         {/* 加载中 */}
                         {!currentReview && reviewSessions === undefined && (
                             <>
@@ -959,6 +973,18 @@ export function ReviewPanel(props: {
                                 )}
                             </span>
                         )}
+                    </div>
+
+                    {/* 右侧：发送按钮 */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => applySuggestionsMutation.mutate(selectedDetails)}
+                            disabled={selectedCount === 0 || applySuggestionsMutation.isPending}
+                            className="px-2 py-1 text-xs font-medium rounded bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {applySuggestionsMutation.isPending ? '发送中...' : `发送 (${selectedCount})`}
+                        </button>
                     </div>
                 </div>
             </div>

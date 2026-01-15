@@ -37,6 +37,24 @@ export interface ReviewResult {
     stats?: ReviewStats  // 添加统计信息
 }
 
+// 获取所有合并后的建议（供父组件使用）
+export function getMergedSuggestions(reviewTexts: string[]): ReviewSuggestion[] {
+    const allSuggestions: ReviewSuggestion[] = []
+    for (let i = 0; i < reviewTexts.length; i++) {
+        const result = parseReviewResult(reviewTexts[i])
+        if (result) {
+            for (const suggestion of result.suggestions) {
+                const uniqueId = `${i}_${suggestion.id}`
+                allSuggestions.push({
+                    ...suggestion,
+                    id: uniqueId
+                })
+            }
+        }
+    }
+    return allSuggestions
+}
+
 // 从 AI 回复文本中解析 JSON
 export function parseReviewResult(text: string): ReviewResult | null {
     // 尝试从 ```json 代码块中提取
@@ -243,18 +261,26 @@ interface ReviewSuggestionsProps {
     reviewTexts: string[]  // 支持多个 review 文本
     onApply: (details: string[]) => void
     isApplying?: boolean
-    // Review 按钮相关
+    // Review 按钮相关（已移到父组件状态栏）
     onReview?: (previousSuggestions: SuggestionWithStatus[]) => void
     isReviewing?: boolean
     reviewDisabled?: boolean
     unreviewedRounds?: number
+    // 外部控制的选中状态
+    selectedIds: Set<string>
+    onSelectedIdsChange: (ids: Set<string>) => void
+    // 外部控制的已发送状态
+    appliedIds: Set<string>
+    onAppliedIdsChange: (ids: Set<string>) => void
 }
 
-export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, isReviewing, reviewDisabled, unreviewedRounds }: ReviewSuggestionsProps) {
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, isReviewing, reviewDisabled, unreviewedRounds, selectedIds, onSelectedIdsChange }: ReviewSuggestionsProps) {
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
     const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
     const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())  // 已发送给主 AI 的建议
+
+    // 使用外部传入的 selectedIds 和 setter
+    const setSelectedIds = onSelectedIdsChange
 
     // 合并多个 review 结果，为每个建议生成唯一 ID，同时提取统计和总结
     const { mergedSuggestions, latestStats, latestSummary } = useMemo(() => {
@@ -392,63 +418,37 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
     }, [onReview, mergedSuggestions, appliedIds, deletedIds])
 
     // 没有可见的建议时
+    // 没有可见的建议时
     if (visibleSuggestions.length === 0) {
         // 如果有 stats（Review 完成但没有问题），显示统计卡片
         if (latestStats) {
             return (
-                <div className="space-y-2">
-                    {/* Review 完成统计卡片 - 0 条建议 */}
-                    <div className="rounded-md border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-2.5 py-1.5">
-                        <div className="flex items-center gap-2 text-xs">
-                            <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span className="font-medium text-green-700 dark:text-green-300">
-                                Review 完成
-                            </span>
-                            <span className="text-green-600 dark:text-green-400">
-                                代码质量良好，无建议
-                            </span>
-                        </div>
-                        {latestSummary && (
-                            <p className="mt-1 text-[11px] text-green-600 dark:text-green-400 line-clamp-2">
-                                {latestSummary}
-                            </p>
-                        )}
+                <div className="rounded-md border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-2.5 py-1.5">
+                    <div className="flex items-center gap-2 text-xs">
+                        <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="font-medium text-green-700 dark:text-green-300">
+                            Review 完成
+                        </span>
+                        <span className="text-green-600 dark:text-green-400">
+                            代码质量良好，无建议
+                        </span>
                     </div>
-                    {/* 如果有待 review 轮次，显示 Review 按钮 */}
-                    {onReview && unreviewedRounds && unreviewedRounds > 0 && (
-                        <div className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={handleReview}
-                                disabled={reviewDisabled || isReviewing}
-                                className="flex-1 px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                {isReviewing ? '执行中...' : `Review (${unreviewedRounds})`}
-                            </button>
-                        </div>
+                    {latestSummary && (
+                        <p className="mt-1 text-[11px] text-green-600 dark:text-green-400 line-clamp-2">
+                            {latestSummary}
+                        </p>
                     )}
                 </div>
             )
         }
-        // 如果有 Review 回调且有待 review 轮次，只显示 Review 按钮
-        if (onReview && unreviewedRounds && unreviewedRounds > 0) {
-            return (
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-[var(--app-hint)]">所有建议已处理</span>
-                    <button
-                        type="button"
-                        onClick={handleReview}
-                        disabled={reviewDisabled || isReviewing}
-                        className="px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                        {isReviewing ? '执行中...' : `Review (${unreviewedRounds})`}
-                    </button>
-                </div>
-            )
-        }
-        return null
+        // 所有建议已处理
+        return (
+            <div className="text-xs text-center text-[var(--app-hint)] py-1">
+                所有建议已处理
+            </div>
+        )
     }
 
     const visibleIds = visibleSuggestions.map(s => s.id)
@@ -545,33 +545,6 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
                 ))}
             </div>
 
-            {/* 按钮行：左边 Review，右边发送 */}
-            <div className="flex items-center gap-2">
-                {/* Review 按钮 */}
-                {onReview && (
-                    <button
-                        type="button"
-                        onClick={handleReview}
-                        disabled={reviewDisabled || isReviewing || (!unreviewedRounds || unreviewedRounds === 0)}
-                        className="px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                        {isReviewing ? '执行中...' : `Review (${unreviewedRounds || 0})`}
-                    </button>
-                )}
-
-                {/* 中间分隔 */}
-                <div className="flex-1" />
-
-                {/* 发送按钮 */}
-                <button
-                    type="button"
-                    onClick={handleApply}
-                    disabled={!someSelected || isApplying}
-                    className="px-2 py-1 text-xs font-medium rounded bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                    {isApplying ? '发送中...' : `发送 (${selectedCount})`}
-                </button>
-            </div>
         </div>
     )
 }

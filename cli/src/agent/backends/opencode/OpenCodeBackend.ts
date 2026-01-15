@@ -353,12 +353,13 @@ export class OpenCodeBackend implements AgentBackend {
                 break;
             }
             case 'message.part.updated': {
-                const props = event.properties as { part: OpencodePart & { messageID?: string }; delta?: string };
+                const props = event.properties as { part: OpencodePart & { messageID?: string; id?: string }; delta?: string };
                 // Only emit if it's an assistant message (not user echo)
                 const messageID = props.part?.messageID;
                 const role = messageID ? session.promptState?.messageRoles.get(messageID) : null;
                 if (session.promptState && role === 'assistant') {
-                    this.emitPartUpdate(props.part, session.promptState.onUpdate);
+                    // Use delta for incremental text updates, otherwise use full part
+                    this.emitPartUpdate(props.part, props.delta, session.promptState.onUpdate);
                 }
                 break;
             }
@@ -480,16 +481,21 @@ export class OpenCodeBackend implements AgentBackend {
         }
     }
 
-    private emitPartUpdate(part: OpencodePart, onUpdate: (msg: AgentMessage) => void): void {
+    private emitPartUpdate(part: OpencodePart, delta: string | undefined, onUpdate: (msg: AgentMessage) => void): void {
         switch (part.type) {
             case 'text': {
-                const textPart = part as OpencodeTextPart;
-                onUpdate({ type: 'text', text: textPart.text });
+                // Use delta for incremental updates if available
+                if (delta !== undefined) {
+                    onUpdate({ type: 'text', text: delta });
+                }
+                // Don't emit full text - it would cause duplicates
                 break;
             }
             case 'reasoning': {
-                const reasoningPart = part as OpencodeReasoningPart;
-                onUpdate({ type: 'reasoning', text: reasoningPart.text });
+                // Use delta for incremental updates if available
+                if (delta !== undefined) {
+                    onUpdate({ type: 'reasoning', text: delta });
+                }
                 break;
             }
             case 'tool': {
