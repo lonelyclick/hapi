@@ -75,20 +75,30 @@ function extractAIText(content: unknown): string | null {
     if (!payload) return null
 
     const data = payload.data as Record<string, unknown>
-    if (!data || data.type !== 'assistant') return null
+    if (!data) return null
 
-    const message = data.message as Record<string, unknown>
-    if (!message?.content) return null
+    // 支持多种消息类型
+    // 1. Claude Code 格式: data.type === 'assistant' 且 data.message.content 是数组
+    // 2. 其他 AI 格式: data.type === 'text' 且 data.text 是字符串
+    if (data.type === 'assistant') {
+        const message = data.message as Record<string, unknown>
+        if (!message?.content) return null
 
-    const contentArr = message.content as Array<{ type?: string; text?: string }>
-    const texts: string[] = []
-    for (const item of contentArr) {
-        if (item.type === 'text' && item.text) {
-            texts.push(item.text)
+        const contentArr = message.content as Array<{ type?: string; text?: string }>
+        const texts: string[] = []
+        for (const item of contentArr) {
+            if (item.type === 'text' && item.text) {
+                texts.push(item.text)
+            }
         }
+        return texts.length > 0 ? texts.join('\n\n') : null
     }
 
-    return texts.length > 0 ? texts.join('\n\n') : null
+    if (data.type === 'text' && typeof data.text === 'string') {
+        return data.text.trim() || null
+    }
+
+    return null
 }
 
 function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown; createdAt: number }>): DialogueRound[] {
@@ -96,7 +106,20 @@ function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown;
     let currentRound: DialogueRound | null = null
     let roundNumber = 0
 
+    // 调试：记录消息角色分布
+    let userCount = 0
+    let agentCount = 0
+    let agentWithTextCount = 0
+
     for (const message of messages) {
+        const content = message.content as Record<string, unknown>
+        if (content?.role === 'user') userCount++
+        if (content?.role === 'agent') {
+            agentCount++
+            const aiText = extractAIText(message.content)
+            if (aiText) agentWithTextCount++
+        }
+
         const userText = extractUserText(message.content)
         const aiText = extractAIText(message.content)
 
@@ -123,6 +146,8 @@ function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown;
     if (currentRound) {
         rounds.push(currentRound)
     }
+
+    console.log('[ReviewSync] Message stats: user=', userCount, 'agent=', agentCount, 'agentWithText=', agentWithTextCount)
 
     return rounds
 }
