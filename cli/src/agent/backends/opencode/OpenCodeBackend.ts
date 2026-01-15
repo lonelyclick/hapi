@@ -504,6 +504,13 @@ export class OpenCodeBackend implements AgentBackend {
             session.abortController.abort();
         }
 
+        // Resolve the prompt promise if pending
+        if (session.promptState) {
+            session.promptState.onUpdate({ type: 'turn_complete', stopReason: 'cancelled' });
+            session.promptState.resolve();
+            session.promptState = null;
+        }
+
         // Also abort in OpenCode
         if (session.opencodeSessionId) {
             try {
