@@ -682,6 +682,17 @@ export function ReviewPanel(props: {
 
     // 从已处理的 blocks 中提取最后一个包含 suggestions JSON 的文本（覆盖而非累加）
     const allReviewTexts = useMemo(() => {
+        // Debug: 打印所有 agent-text blocks
+        const agentTextBlocks = reconciled.blocks.filter(b => b.kind === 'agent-text')
+        console.log('[ReviewPanel] Total blocks:', reconciled.blocks.length, 'agent-text blocks:', agentTextBlocks.length)
+        for (const block of agentTextBlocks) {
+            if (block.kind === 'agent-text') {
+                console.log('[ReviewPanel] agent-text block:', block.id, 'text length:', block.text.length, 'text preview:', block.text.substring(0, 200))
+                const result = parseReviewResult(block.text)
+                console.log('[ReviewPanel] parseReviewResult:', result ? `suggestions: ${result.suggestions.length}, stats: ${JSON.stringify(result.stats)}` : 'null')
+            }
+        }
+
         // 倒序查找第一个有效的 review 结果
         for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
             const block = reconciled.blocks[i]

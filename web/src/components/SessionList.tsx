@@ -5,7 +5,7 @@ import { ViewersBadge } from './ViewersBadge'
 // Filter types
 type CreatorFilter = 'mine' | 'others'
 type ArchiveFilter = boolean  // true = show archived (offline) sessions only
-type AgentFilter = 'claude' | 'codex'
+type AgentFilter = 'claude' | 'codex' | 'opencode'
 type ProjectFilter = string | null  // project id or null for all
 
 function getSessionPath(session: SessionSummary): string | null {
@@ -42,10 +42,11 @@ function isMySession(session: SessionSummary, currentUserEmail: string | null): 
 }
 
 // Get agent type
-function getAgentType(session: SessionSummary): 'claude' | 'codex' | 'other' {
+function getAgentType(session: SessionSummary): 'claude' | 'codex' | 'opencode' | 'other' {
     const flavor = session.metadata?.flavor?.trim()?.toLowerCase()
     if (flavor === 'claude') return 'claude'
     if (flavor === 'codex') return 'codex'
+    if (flavor === 'opencode') return 'opencode'
     return 'other'
 }
 
@@ -83,6 +84,7 @@ function filterSessions(
         const agentType = getAgentType(session)
         if (agentFilter === 'claude' && agentType !== 'claude') return false
         if (agentFilter === 'codex' && agentType !== 'codex') return false
+        if (agentFilter === 'opencode' && agentType !== 'opencode') return false
 
         // Project filter
         if (projectFilter !== null) {
@@ -138,6 +140,7 @@ function getAgentLabel(session: SessionSummary): string {
     const flavor = session.metadata?.flavor?.trim()
     if (flavor === 'claude') return 'Claude'
     if (flavor === 'codex') return 'Codex'
+    if (flavor === 'opencode') return 'OpenCode'
     if (flavor === 'gemini') return 'Gemini'
     if (flavor) return flavor
     return 'Agent'
@@ -386,6 +389,7 @@ export function SessionList(props: {
                     <div className="flex gap-1">
                         <FilterButton value="claude" current={agentFilter} label="Claude" onClick={setAgentFilter} />
                         <FilterButton value="codex" current={agentFilter} label="Codex" onClick={setAgentFilter} />
+                        <FilterButton value="opencode" current={agentFilter} label="OpenCode" onClick={setAgentFilter} />
                     </div>
                 </div>
 
