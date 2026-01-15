@@ -256,7 +256,7 @@ export async function runAgentSession(opts: {
         };
 
         if (config.modelMode !== undefined && 'setModel' in backend && typeof backend.setModel === 'function') {
-            backend.setModel(agentSessionId, config.modelMode);
+            await backend.setModel(agentSessionId, config.modelMode);
             // Update runtimeModel metadata
             session.updateMetadata((currentMetadata) => ({
                 ...currentMetadata,

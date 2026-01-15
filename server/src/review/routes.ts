@@ -501,8 +501,8 @@ export function createReviewRoutes(
         const existingRounds = await reviewStore.getReviewRounds(id)
         const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
-        // 找出未汇总的轮次
-        const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
+        // 找出未汇总的轮次（必须有 AI 回复，否则算作"未完成"的轮次）
+        const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber) && r.aiMessages.length > 0)
 
         if (pendingRounds.length === 0) {
             return c.json({
@@ -935,8 +935,8 @@ ${batchRounds.map(r => `  {
         const existingRounds = await reviewStore.getReviewRounds(id)
         const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
-        // 找出未汇总的轮次
-        const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
+        // 找出未汇总的轮次（必须有 AI 回复，否则算作"未完成"的轮次）
+        const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber) && r.aiMessages.length > 0)
 
         // 获取已经 review 过的轮次
         const reviewedRoundNumbers = await reviewStore.getReviewedRoundNumbers(id)

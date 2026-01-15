@@ -387,9 +387,9 @@ export class AutoReviewService {
                 const existingRounds = await this.reviewStore.getReviewRounds(reviewId)
                 const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
-                // 找出未汇总的轮次
-                const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
-                console.log('[ReviewSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size)
+                // 找出未汇总的轮次（必须有 AI 回复，否则算作"未完成"的轮次）
+                const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber) && r.aiMessages.length > 0)
+                console.log('[ReviewSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size, '(excluded incomplete rounds without AI reply)')
 
                 // 通知前端当前状态
                 this.broadcastSyncStatus(reviewSession, {
