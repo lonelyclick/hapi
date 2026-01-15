@@ -25,45 +25,59 @@ const OPENROUTER_MODELS = [
     { value: 'qwen/qwen-2.5-coder-32b-instruct', label: 'Qwen 2.5 Coder 32B' },
 ]
 
-// OpenCode supported models (75+ providers via AI SDK)
+// OpenCode supported models - using OpenCode's native model ID format
 const OPENCODE_MODELS = [
-    // Anthropic
-    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4', provider: 'Anthropic' },
-    { value: 'anthropic/claude-opus-4', label: 'Claude Opus 4', provider: 'Anthropic' },
-    { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4', provider: 'Anthropic' },
+    // Anthropic (Claude)
+    { value: 'anthropic.claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'Anthropic' },
+    { value: 'anthropic.claude-opus-4-20250514', label: 'Claude Opus 4', provider: 'Anthropic' },
+    { value: 'anthropic.claude-3-7-sonnet-latest', label: 'Claude 3.7 Sonnet', provider: 'Anthropic' },
+    { value: 'anthropic.claude-3-5-sonnet-latest', label: 'Claude 3.5 Sonnet', provider: 'Anthropic' },
+    { value: 'anthropic.claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku', provider: 'Anthropic' },
+    { value: 'anthropic.claude-3-opus-latest', label: 'Claude 3 Opus', provider: 'Anthropic' },
     // OpenAI
-    { value: 'openai/gpt-4o', label: 'GPT-4o', provider: 'OpenAI' },
-    { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI' },
-    { value: 'openai/o1', label: 'o1', provider: 'OpenAI' },
-    { value: 'openai/o3-mini', label: 'o3-mini', provider: 'OpenAI' },
-    // Google
-    { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google' },
-    { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
-    // DeepSeek
-    { value: 'deepseek/deepseek-chat', label: 'DeepSeek V3', provider: 'DeepSeek' },
-    { value: 'deepseek/deepseek-r1', label: 'DeepSeek R1', provider: 'DeepSeek' },
+    { value: 'openai.gpt-4.1', label: 'GPT-4.1', provider: 'OpenAI' },
+    { value: 'openai.gpt-4.1-mini', label: 'GPT-4.1 Mini', provider: 'OpenAI' },
+    { value: 'openai.gpt-4.1-nano', label: 'GPT-4.1 Nano', provider: 'OpenAI' },
+    { value: 'openai.gpt-4.5-preview', label: 'GPT-4.5 Preview', provider: 'OpenAI' },
+    { value: 'openai.gpt-4o', label: 'GPT-4o', provider: 'OpenAI' },
+    { value: 'openai.gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI' },
+    { value: 'openai.o1', label: 'o1', provider: 'OpenAI' },
+    { value: 'openai.o1-pro', label: 'o1 Pro', provider: 'OpenAI' },
+    { value: 'openai.o1-mini', label: 'o1 Mini', provider: 'OpenAI' },
+    { value: 'openai.o3', label: 'o3', provider: 'OpenAI' },
+    { value: 'openai.o3-mini', label: 'o3 Mini', provider: 'OpenAI' },
+    { value: 'openai.o4-mini', label: 'o4 Mini', provider: 'OpenAI' },
+    // Google Gemini
+    { value: 'gemini.gemini-2.5', label: 'Gemini 2.5', provider: 'Google' },
+    { value: 'gemini.gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
+    { value: 'gemini.gemini-2.0-flash', label: 'Gemini 2.0 Flash', provider: 'Google' },
+    { value: 'gemini.gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', provider: 'Google' },
+    // xAI (Grok)
+    { value: 'xai.grok-3-beta', label: 'Grok 3 Beta', provider: 'xAI' },
+    { value: 'xai.grok-3-mini-beta', label: 'Grok 3 Mini Beta', provider: 'xAI' },
+    { value: 'xai.grok-3-fast-beta', label: 'Grok 3 Fast Beta', provider: 'xAI' },
+    { value: 'xai.grok-3-mini-fast-beta', label: 'Grok 3 Mini Fast Beta', provider: 'xAI' },
+    // Groq (fast inference)
+    { value: 'groq.llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile', provider: 'Groq' },
+    { value: 'groq.qwen-qwq', label: 'Qwen QWQ', provider: 'Groq' },
+    { value: 'groq.deepseek-r1-distill-llama-70b', label: 'DeepSeek R1 Distill Llama 70B', provider: 'Groq' },
+    { value: 'groq.meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout', provider: 'Groq' },
+    { value: 'groq.meta-llama/llama-4-maverick-17b-128e-instruct', label: 'Llama 4 Maverick', provider: 'Groq' },
+    // GitHub Copilot
+    { value: 'copilot.gpt-4o', label: 'GPT-4o', provider: 'Copilot' },
+    { value: 'copilot.gpt-4.1', label: 'GPT-4.1', provider: 'Copilot' },
+    { value: 'copilot.claude-sonnet-4', label: 'Claude Sonnet 4', provider: 'Copilot' },
+    { value: 'copilot.claude-3.7-sonnet', label: 'Claude 3.7 Sonnet', provider: 'Copilot' },
+    { value: 'copilot.o1', label: 'o1', provider: 'Copilot' },
+    { value: 'copilot.o3-mini', label: 'o3 Mini', provider: 'Copilot' },
+    { value: 'copilot.o4-mini', label: 'o4 Mini', provider: 'Copilot' },
+    { value: 'copilot.gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Copilot' },
+    { value: 'copilot.gemini-2.0-flash', label: 'Gemini 2.0 Flash', provider: 'Copilot' },
+    // AWS Bedrock
+    { value: 'bedrock.claude-3.7-sonnet', label: 'Claude 3.7 Sonnet', provider: 'Bedrock' },
     // MiniMax (OpenAI-compatible API)
     { value: 'minimax-openai/MiniMax-M2.1', label: 'MiniMax-M2.1', provider: 'MiniMax' },
     { value: 'minimax-openai/MiniMax-Text-01', label: 'MiniMax-Text-01', provider: 'MiniMax' },
-    // Groq (fast inference)
-    { value: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B', provider: 'Groq' },
-    { value: 'groq/mixtral-8x7b-32768', label: 'Mixtral 8x7B', provider: 'Groq' },
-    // xAI
-    { value: 'xai/grok-3', label: 'Grok 3', provider: 'xAI' },
-    { value: 'xai/grok-3-mini', label: 'Grok 3 Mini', provider: 'xAI' },
-    // Together AI
-    { value: 'together/meta-llama/Llama-3.3-70B-Instruct-Turbo', label: 'Llama 3.3 70B Turbo', provider: 'Together' },
-    { value: 'together/Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen 2.5 Coder 32B', provider: 'Together' },
-    // Fireworks
-    { value: 'fireworks/llama-v3p3-70b-instruct', label: 'Llama 3.3 70B', provider: 'Fireworks' },
-    // Cerebras
-    { value: 'cerebras/llama-3.3-70b', label: 'Llama 3.3 70B', provider: 'Cerebras' },
-    // Moonshot (Kimi)
-    { value: 'moonshot/kimi-k2', label: 'Kimi K2', provider: 'Moonshot' },
-    // Local (Ollama)
-    { value: 'ollama/llama3.3', label: 'Llama 3.3 (Local)', provider: 'Ollama' },
-    { value: 'ollama/qwen2.5-coder', label: 'Qwen 2.5 Coder (Local)', provider: 'Ollama' },
-    { value: 'ollama/deepseek-r1', label: 'DeepSeek R1 (Local)', provider: 'Ollama' },
 ]
 
 function SpawnLogPanel({ logs }: { logs: SpawnLogEntry[] }) {
@@ -141,7 +155,7 @@ export function NewSession(props: {
     const [agent, setAgent] = useState<AgentType>('claude')
     const [claudeAgent, setClaudeAgent] = useState('')
     const [openrouterModel, setOpenrouterModel] = useState(OPENROUTER_MODELS[0].value)
-    const [opencodeModel, setOpencodeModel] = useState('minimax-openai/MiniMax-M2.1')
+    const [opencodeModel, setOpencodeModel] = useState(OPENCODE_MODELS[0].value)
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
     const [spawnLogs, setSpawnLogs] = useState<SpawnLogEntry[]>([])
