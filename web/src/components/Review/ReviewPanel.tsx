@@ -995,8 +995,8 @@ export function ReviewPanel(props: {
                             <span>未找到 Review 会话</span>
                         )}
 
-                        {/* 同步/检查状态 */}
-                        {currentReview && autoSyncStatus?.status === 'syncing' && pendingRoundsData && (
+                        {/* 同步/检查状态 - 优先显示同步进度 */}
+                        {currentReview && (autoSyncStatus?.status === 'syncing' || (session?.thinking && pendingRoundsData?.hasPendingRounds)) && pendingRoundsData && (
                             <span className="flex items-center gap-1 text-blue-500">
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1005,7 +1005,7 @@ export function ReviewPanel(props: {
                                 同步 {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds}
                             </span>
                         )}
-                        {currentReview && autoSyncStatus?.status === 'checking' && (
+                        {currentReview && autoSyncStatus?.status === 'checking' && !session?.thinking && (
                             <span className="flex items-center gap-1 text-blue-500">
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1014,8 +1014,8 @@ export function ReviewPanel(props: {
                                 检查中
                             </span>
                         )}
-                        {/* AI 思考状态 */}
-                        {currentReview && session?.thinking && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && (
+                        {/* AI 思考状态 - 仅在不是同步时显示 */}
+                        {currentReview && session?.thinking && !pendingRoundsData?.hasPendingRounds && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && (
                             <span className="flex items-center gap-1 text-green-500">
                                 <div className="flex gap-0.5">
                                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
