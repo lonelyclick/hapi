@@ -110,6 +110,7 @@ function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown;
     let userCount = 0
     let agentCount = 0
     let agentWithTextCount = 0
+    let sampleAgentLogged = false
 
     for (const message of messages) {
         const content = message.content as Record<string, unknown>
@@ -118,6 +119,21 @@ function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown;
             agentCount++
             const aiText = extractAIText(message.content)
             if (aiText) agentWithTextCount++
+            // 调试：输出第一条 agent 消息的结构
+            if (!sampleAgentLogged && agentCount <= 3) {
+                const rawContent = content?.content
+                let payload: Record<string, unknown> | null = null
+                if (typeof rawContent === 'string') {
+                    try { payload = JSON.parse(rawContent) } catch { /* ignore */ }
+                } else if (typeof rawContent === 'object' && rawContent) {
+                    payload = rawContent as Record<string, unknown>
+                }
+                if (payload) {
+                    const data = payload.data as Record<string, unknown>
+                    console.log('[ReviewSync] Sample agent message:', JSON.stringify({ type: payload.type, dataType: data?.type, dataKeys: data ? Object.keys(data) : null }, null, 2).substring(0, 500))
+                    sampleAgentLogged = true
+                }
+            }
         }
 
         const userText = extractUserText(message.content)
