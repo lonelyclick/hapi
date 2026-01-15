@@ -139,8 +139,19 @@ export async function generateSummariesWithMinimax(
         if (call.function?.name === 'save_round_summaries') {
             try {
                 const args = JSON.parse(call.function.arguments)
-                if (Array.isArray(args.summaries)) {
-                    return args.summaries.filter((s: unknown) =>
+                let summaries = args.summaries
+
+                // MiniMax 有时会返回双重编码的 JSON 字符串
+                if (typeof summaries === 'string') {
+                    try {
+                        summaries = JSON.parse(summaries)
+                    } catch {
+                        console.error('[MinimaxSync] Failed to parse nested summaries string')
+                    }
+                }
+
+                if (Array.isArray(summaries)) {
+                    return summaries.filter((s: unknown) =>
                         s && typeof s === 'object' &&
                         'round' in (s as object) &&
                         'summary' in (s as object)
