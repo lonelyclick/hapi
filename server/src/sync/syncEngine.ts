@@ -1183,6 +1183,30 @@ export class SyncEngine {
         })
     }
 
+    /**
+     * 直接添加消息到 session（用于后端注入消息）
+     */
+    async addMessage(sessionId: string, content: unknown): Promise<void> {
+        const msg = await this.store.addMessage(sessionId, content)
+
+        // Keep a small in-memory cache
+        const cached = this.sessionMessages.get(sessionId) ?? []
+        cached.push({ id: msg.id, seq: msg.seq, localId: msg.localId, content: msg.content, createdAt: msg.createdAt })
+        this.sessionMessages.set(sessionId, cached.slice(-200))
+
+        this.emit({
+            type: 'message-received',
+            sessionId,
+            message: {
+                id: msg.id,
+                seq: msg.seq,
+                localId: msg.localId,
+                content: msg.content,
+                createdAt: msg.createdAt
+            }
+        })
+    }
+
     async approvePermission(
         sessionId: string,
         requestId: string,
