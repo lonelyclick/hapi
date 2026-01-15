@@ -97,6 +97,7 @@ export class OpenCodeBackend implements AgentBackend {
     private readonly sessions = new Map<string, LocalSession>();
     private serverProcess: ChildProcess | null = null;
     private serverUrl: string | null = null;
+    private serverPassword: string | null = null;
     private permissionHandler: ((request: PermissionRequest) => void) | null = null;
     private eventSource: EventSource | null = null;
     private isConnected = false;
@@ -109,6 +110,15 @@ export class OpenCodeBackend implements AgentBackend {
             serverStartTimeout: options.serverStartTimeout ?? 30000,
             autoStartServer: options.autoStartServer ?? true,
         };
+    }
+
+    private getAuthHeaders(): Record<string, string> {
+        if (!this.serverPassword) {
+            return {};
+        }
+        // HTTP Basic Auth: username is 'opencode', password is the generated password
+        const credentials = Buffer.from(`opencode:${this.serverPassword}`).toString('base64');
+        return { 'Authorization': `Basic ${credentials}` };
     }
 
     async initialize(): Promise<void> {
@@ -137,9 +147,13 @@ export class OpenCodeBackend implements AgentBackend {
             `--port=${this.options.port}`
         ];
 
+        // Generate a random password for server security
+        this.serverPassword = randomUUID();
+
         this.serverProcess = spawn('opencode', args, {
             env: {
                 ...process.env,
+                OPENCODE_SERVER_PASSWORD: this.serverPassword,
                 OPENCODE_CONFIG_CONTENT: JSON.stringify({
                     model: this.options.defaultModel,
                     permission: {
@@ -197,7 +211,9 @@ export class OpenCodeBackend implements AgentBackend {
     }
 
     private async testConnection(): Promise<void> {
-        const response = await fetch(`${this.serverUrl}/project/current`);
+        const response = await fetch(`${this.serverUrl}/project/current`, {
+            headers: this.getAuthHeaders()
+        });
         if (!response.ok) {
             throw new Error(`Failed to connect to OpenCode server: ${response.status}`);
         }
