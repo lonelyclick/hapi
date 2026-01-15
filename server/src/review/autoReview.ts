@@ -79,7 +79,8 @@ function extractAIText(content: unknown): string | null {
 
     // 支持多种消息类型
     // 1. Claude Code 格式: data.type === 'assistant' 且 data.message.content 是数组
-    // 2. 其他 AI 格式: data.type === 'text' 且 data.text 是字符串
+    // 2. Codex 格式: data.type === 'message' 且 data.message 是字符串 (payload.type === 'codex')
+    // 3. 其他 AI 格式: data.type === 'text' 且 data.text 是字符串
     if (data.type === 'assistant') {
         const message = data.message as Record<string, unknown>
         if (!message?.content) return null
@@ -92,6 +93,11 @@ function extractAIText(content: unknown): string | null {
             }
         }
         return texts.length > 0 ? texts.join('\n\n') : null
+    }
+
+    // Codex 格式：type=codex, data.type=message, data.message=字符串
+    if (data.type === 'message' && typeof data.message === 'string') {
+        return data.message.trim() || null
     }
 
     if (data.type === 'text' && typeof data.text === 'string') {
