@@ -14,6 +14,72 @@ import { useHappyChatContextSafe } from '@/components/AssistantChat/context'
 
 export const MARKDOWN_PLUGINS = [remarkGfm]
 
+// Box drawing characters used in tree structures
+const TREE_CHAR_REGEX = /[─│├└┬┴┼┌┐┘]/
+
+// Detect if text contains tree structure patterns (lines with tree drawing characters)
+function hasTreeStructure(text: string): boolean {
+    return TREE_CHAR_REGEX.test(text)
+}
+
+// Check if code blocks are balanced (even number of ``` markers)
+function isCodeBlockBalanced(text: string): boolean {
+    const markers = text.match(/```/g)
+    if (!markers) return true
+    return markers.length % 2 === 0
+}
+
+// Preprocess markdown to handle incomplete code blocks and protect tree structures
+// This fixes issues when streaming splits code blocks across multiple messages
+export function preprocessMarkdown(text: string): string {
+    // If text has tree structure characters and code blocks are not balanced,
+    // close the unclosed code block
+    if (hasTreeStructure(text) && !isCodeBlockBalanced(text)) {
+        return text + '\n```'
+    }
+
+    // If text has tree structure but is not inside any code block,
+    // and the lines look like tree output, wrap them in a code block
+    if (hasTreeStructure(text) && !text.includes('```')) {
+        const lines = text.split('\n')
+        const result: string[] = []
+        let inTreeSection = false
+        let treeLines: string[] = []
+
+        for (const line of lines) {
+            // Check if line is part of tree structure (has tree chars or is indented continuation)
+            const isTreeLine = TREE_CHAR_REGEX.test(line) ||
+                (inTreeSection && /^[\s│]+/.test(line) && line.trim().length > 0)
+
+            if (isTreeLine) {
+                if (!inTreeSection) {
+                    inTreeSection = true
+                    result.push('```')
+                }
+                treeLines.push(line)
+            } else {
+                if (inTreeSection) {
+                    result.push(...treeLines)
+                    result.push('```')
+                    treeLines = []
+                    inTreeSection = false
+                }
+                result.push(line)
+            }
+        }
+
+        // Close any remaining tree section
+        if (inTreeSection && treeLines.length > 0) {
+            result.push(...treeLines)
+            result.push('```')
+        }
+
+        return result.join('\n')
+    }
+
+    return text
+}
+
 // 检测是否是绝对路径 (支持 @ + ~ 等常见路径字符，且至少包含一个非数字字符)
 const ABSOLUTE_PATH_REGEX = /^(\/[\w.@+~-]*[a-zA-Z_][\w.@+~-]*\/)+[\w.@+~-]*$/
 // 检测是否是相对路径（以 ./ 或 字母/下划线开头，包含 /，可以有或没有文件扩展名）
@@ -637,6 +703,7 @@ export function MarkdownText() {
         <MarkdownTextPrimitive
             remarkPlugins={MARKDOWN_PLUGINS}
             components={allComponents}
+            preprocess={preprocessMarkdown}
             className={cn('aui-md min-w-0 max-w-full break-words text-sm')}
         />
     )

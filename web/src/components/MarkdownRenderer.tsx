@@ -1,7 +1,7 @@
 import type { MarkdownTextPrimitiveProps } from '@assistant-ui/react-markdown'
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown'
 import { TextMessagePartProvider } from '@assistant-ui/react'
-import { MARKDOWN_PLUGINS, defaultComponents } from '@/components/assistant-ui/markdown-text'
+import { MARKDOWN_PLUGINS, defaultComponents, preprocessMarkdown } from '@/components/assistant-ui/markdown-text'
 import { cn } from '@/lib/utils'
 
 interface MarkdownRendererProps {
@@ -19,6 +19,7 @@ function MarkdownContent(props: MarkdownRendererProps) {
             <MarkdownTextPrimitive
                 remarkPlugins={MARKDOWN_PLUGINS}
                 components={mergedComponents}
+                preprocess={preprocessMarkdown}
                 className={cn('aui-md min-w-0 max-w-full break-words text-sm')}
             />
         </TextMessagePartProvider>
