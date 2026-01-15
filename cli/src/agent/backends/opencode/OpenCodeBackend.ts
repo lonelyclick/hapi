@@ -232,7 +232,8 @@ export class OpenCodeBackend implements AgentBackend {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-opencode-directory': config.cwd
+                'x-opencode-directory': config.cwd,
+                ...this.getAuthHeaders()
             },
             body: JSON.stringify({
                 title: `HAPI Session ${localSessionId.slice(0, 8)}`
@@ -283,7 +284,8 @@ export class OpenCodeBackend implements AgentBackend {
             const response = await fetch(eventUrl, {
                 headers: {
                     'Accept': 'text/event-stream',
-                    'x-opencode-directory': directory
+                    'x-opencode-directory': directory,
+                    ...this.getAuthHeaders()
                 }
             });
 
@@ -425,7 +427,8 @@ export class OpenCodeBackend implements AgentBackend {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-opencode-directory': session.config.cwd
+                    'x-opencode-directory': session.config.cwd,
+                    ...this.getAuthHeaders()
                 },
                 body: JSON.stringify({
                     parts: [
@@ -533,7 +536,8 @@ export class OpenCodeBackend implements AgentBackend {
                 await fetch(`${this.serverUrl}/session/${session.opencodeSessionId}/abort`, {
                     method: 'POST',
                     headers: {
-                        'x-opencode-directory': session.config.cwd
+                        'x-opencode-directory': session.config.cwd,
+                        ...this.getAuthHeaders()
                     }
                 });
             } catch (error) {
@@ -574,7 +578,8 @@ export class OpenCodeBackend implements AgentBackend {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-opencode-directory': session.config.cwd
+                    'x-opencode-directory': session.config.cwd,
+                    ...this.getAuthHeaders()
                 },
                 body: JSON.stringify({
                     response: opencodeResponse
