@@ -63,6 +63,12 @@ type OpencodePermission = {
     metadata: Record<string, unknown>;
 };
 
+type PromptState = {
+    onUpdate: (msg: AgentMessage) => void;
+    resolve: () => void;
+    reject: (error: Error) => void;
+};
+
 type LocalSession = {
     id: string;
     opencodeSessionId: string | null;
@@ -70,6 +76,7 @@ type LocalSession = {
     model: string;
     abortController: AbortController | null;
     pendingPermissions: Map<string, OpencodePermission>;
+    promptState: PromptState | null;
 };
 
 export type OpenCodeBackendOptions = {
@@ -229,7 +236,8 @@ export class OpenCodeBackend implements AgentBackend {
             config,
             model,
             abortController: null,
-            pendingPermissions: new Map()
+            pendingPermissions: new Map(),
+            promptState: null
         };
 
         this.sessions.set(localSessionId, session);
@@ -312,7 +320,36 @@ export class OpenCodeBackend implements AgentBackend {
         const session = this.sessions.get(localSessionId);
         if (!session) return;
 
+        logger.debug(`[OpenCode] Event: ${event.type}`, JSON.stringify(event.properties).slice(0, 200));
+
         switch (event.type) {
+            case 'message.part.updated': {
+                const props = event.properties as { part: OpencodePart; delta?: string };
+                // Only emit if we're currently prompting
+                if (session.promptState) {
+                    this.emitPartUpdate(props.part, session.promptState.onUpdate);
+                }
+                break;
+            }
+            case 'session.idle': {
+                const props = event.properties as { sessionID: string };
+                if (props.sessionID === opencodeSessionId && session.promptState) {
+                    // Prompt is complete
+                    session.promptState.onUpdate({ type: 'turn_complete', stopReason: 'end_turn' });
+                    session.promptState.resolve();
+                    session.promptState = null;
+                }
+                break;
+            }
+            case 'session.error': {
+                const props = event.properties as { sessionID: string; error: string };
+                if (props.sessionID === opencodeSessionId && session.promptState) {
+                    session.promptState.onUpdate({ type: 'error', message: props.error });
+                    session.promptState.reject(new Error(props.error));
+                    session.promptState = null;
+                }
+                break;
+            }
             case 'permission.updated': {
                 const permission = event.properties as OpencodePermission;
                 if (permission.sessionID === opencodeSessionId) {
@@ -360,8 +397,14 @@ export class OpenCodeBackend implements AgentBackend {
 
         const textContent = content.map(c => c.text).join('\n');
 
+        // Create a promise that will be resolved when session.idle event is received
+        const promptPromise = new Promise<void>((resolve, reject) => {
+            session.promptState = { onUpdate, resolve, reject };
+        });
+
         try {
-            // Send prompt to OpenCode
+            // Send prompt to OpenCode - this returns an empty response
+            // The actual response comes via SSE events
             const response = await fetch(`${this.serverUrl}/session/${session.opencodeSessionId}/message`, {
                 method: 'POST',
                 headers: {
@@ -384,26 +427,15 @@ export class OpenCodeBackend implements AgentBackend {
                 throw new Error(`OpenCode prompt failed: ${response.status} ${errorText}`);
             }
 
-            // Parse the response which contains the assistant message and parts
-            const result = await response.json() as {
-                info: { id: string; role: string };
-                parts: OpencodePart[];
-            } | null;
+            logger.debug('[OpenCode] Prompt sent, waiting for SSE events...');
 
-            logger.debug('[OpenCode] Prompt response:', JSON.stringify(result, null, 2));
-
-            // Process parts and emit updates
-            if (result && result.parts && Array.isArray(result.parts)) {
-                for (const part of result.parts) {
-                    this.emitPartUpdate(part, onUpdate);
-                }
-            } else {
-                logger.debug('[OpenCode] Response has no parts or unexpected format');
-            }
-
-            onUpdate({ type: 'turn_complete', stopReason: 'end_turn' });
+            // Wait for the prompt to complete via SSE events
+            await promptPromise;
 
         } catch (error) {
+            // Clear prompt state on error
+            session.promptState = null;
+
             if (error instanceof Error && error.name === 'AbortError') {
                 onUpdate({ type: 'turn_complete', stopReason: 'cancelled' });
                 return;

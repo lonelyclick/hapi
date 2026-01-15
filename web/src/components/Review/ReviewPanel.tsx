@@ -345,7 +345,7 @@ export function ReviewPanel(props: {
             return await api.getReviewPendingRounds(currentReviewForPending.id)
         },
         enabled: pendingRoundsEnabled,
-        staleTime: Infinity  // 数据不会自动过期
+        staleTime: 30000  // 30 秒后重新获取，确保刷新页面后数据是最新的
     })
 
     // 合并 savedSummaries：API 初始数据 + SSE 实时推送的新数据
