@@ -887,24 +887,42 @@ export function ReviewPanel(props: {
                 </div>
             </AssistantRuntimeProvider>
 
-            {/* 固定在底部的建议列表 - 无高度限制，向上扩展 */}
-            {allReviewTexts.length > 0 && (
+            {/* 固定在底部的建议列表/结果卡片 */}
+            {/* 有建议时显示建议列表，或者 Review 完成时显示完成卡片 */}
+            {(allReviewTexts.length > 0 || (currentReview && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && pendingRoundsData?.summarizedRounds && pendingRoundsData.summarizedRounds > 0)) && (
                 <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
                     <div className="px-3 py-2">
-                        <ReviewSuggestions
-                            key={allReviewTexts.join('|').substring(0, 100)}
-                            reviewTexts={allReviewTexts}
-                            onApply={(details) => applySuggestionsMutation.mutate(details)}
-                            isApplying={applySuggestionsMutation.isPending}
-                            onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
-                            isReviewing={startReviewMutation.isPending}
-                            reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
-                            unreviewedRounds={pendingRoundsData?.unreviewedRounds}
-                            selectedIds={selectedIds}
-                            onSelectedIdsChange={setSelectedIds}
-                            appliedIds={appliedIds}
-                            onAppliedIdsChange={setAppliedIds}
-                        />
+                        {allReviewTexts.length > 0 ? (
+                            <ReviewSuggestions
+                                key={allReviewTexts.join('|').substring(0, 100)}
+                                reviewTexts={allReviewTexts}
+                                onApply={(details) => applySuggestionsMutation.mutate(details)}
+                                isApplying={applySuggestionsMutation.isPending}
+                                onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
+                                isReviewing={startReviewMutation.isPending}
+                                reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
+                                unreviewedRounds={pendingRoundsData?.unreviewedRounds}
+                                selectedIds={selectedIds}
+                                onSelectedIdsChange={setSelectedIds}
+                                appliedIds={appliedIds}
+                                onAppliedIdsChange={setAppliedIds}
+                            />
+                        ) : (
+                            /* Review 完成但没有解析到建议时显示完成卡片 */
+                            <div className="rounded-md border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-2.5 py-1.5">
+                                <div className="flex items-center gap-2 text-xs">
+                                    <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="font-medium text-green-700 dark:text-green-300">
+                                        Review 完成
+                                    </span>
+                                    <span className="text-green-600 dark:text-green-400">
+                                        已审查 {pendingRoundsData?.summarizedRounds} 轮对话
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
