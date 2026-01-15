@@ -843,7 +843,7 @@ export function ReviewPanel(props: {
                                     isApplying={applySuggestionsMutation.isPending}
                                     onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
                                     isReviewing={startReviewMutation.isPending}
-                                    reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || autoSyncStatus?.status === 'syncing'}
+                                    reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
                                     unreviewedRounds={pendingRoundsData?.unreviewedRounds}
                                 />
                             </div>
