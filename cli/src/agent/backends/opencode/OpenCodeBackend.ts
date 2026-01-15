@@ -61,9 +61,12 @@ export class OpenCodeBackend implements AgentBackend {
         }
 
         // Build environment with model configuration
+        // Include API keys for various providers
         const env: Record<string, string> = {
             ...process.env as Record<string, string>,
             OPENCODE_MODEL: this.currentModel,
+            // MiniMax API key (from opencode config or env)
+            MINIMAX_API_KEY: process.env.MINIMAX_API_KEY || 'sk-cp-SyWLlbpx4KLRqnlPG7gm6Xj_Aai907R6T_cW8KB26cE0wC05jrjI_C7O-Pvu__54bznJf-05u0fbWAFdVa2pnHv6gb_70IOnGDdNIxvYCQUtWij_7ckW0H4',
         };
 
         logger.debug(`[OpenCode] Starting ACP with model: ${this.currentModel}`);
