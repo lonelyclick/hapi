@@ -189,15 +189,20 @@ export function ReviewPanel(props: {
 
     // 检查未汇总的轮次（pending 和 active 状态都需要查询）
     // 不需要轮询，只在用户点击同步或同步完成后手动刷新
+    const pendingRoundsEnabled = Boolean(currentReviewForPending?.id) && (currentReviewForPending?.status === 'pending' || currentReviewForPending?.status === 'active')
+    console.log('[ReviewPanel] currentReviewForPending:', currentReviewForPending?.id, 'status:', currentReviewForPending?.status, 'enabled:', pendingRoundsEnabled)
+
     const { data: pendingRoundsData } = useQuery({
         queryKey: ['review-pending-rounds', currentReviewForPending?.id],
         queryFn: async () => {
             if (!currentReviewForPending?.id) throw new Error('No review ID')
             return await api.getReviewPendingRounds(currentReviewForPending.id)
         },
-        enabled: Boolean(currentReviewForPending?.id) && (currentReviewForPending?.status === 'pending' || currentReviewForPending?.status === 'active'),
+        enabled: pendingRoundsEnabled,
         staleTime: Infinity  // 数据不会自动过期
     })
+
+    console.log('[ReviewPanel] pendingRoundsData:', pendingRoundsData, 'autoSyncStatus:', autoSyncStatus)
 
     // 获取 Review Session 信息
     const { data: reviewSession } = useQuery({
@@ -679,6 +684,57 @@ export function ReviewPanel(props: {
                             normalizedMessagesCount={normalizedMessages.length}
                             renderedMessagesCount={reconciled.blocks.length}
                         />
+                        {/* 同步状态卡片 - 当没有消息时显示 */}
+                        {reconciled.blocks.length === 0 && pendingRoundsData && (
+                            <div className="mx-auto w-full max-w-content min-w-0 px-4 py-8">
+                                <div className="rounded-lg border border-[var(--app-divider)] bg-[var(--app-subtle-bg)] p-4">
+                                    <div className="flex flex-col items-center gap-3">
+                                        {/* 同步进度 */}
+                                        {(autoSyncStatus?.status === 'syncing' || autoSyncStatus?.status === 'checking' || pendingRoundsData.hasPendingRounds) ? (
+                                            <>
+                                                <div className="flex items-center gap-2">
+                                                    <svg className="animate-spin h-5 w-5 text-blue-500" viewBox="0 0 24 24" fill="none">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                    </svg>
+                                                    <span className="text-sm font-medium text-[var(--app-fg)]">正在同步对话轮次...</span>
+                                                </div>
+                                                <div className="text-xs text-[var(--app-hint)]">
+                                                    已同步 {pendingRoundsData.summarizedRounds} / {pendingRoundsData.totalRounds} 轮
+                                                </div>
+                                                <div className="w-full max-w-xs bg-[var(--app-divider)] rounded-full h-2">
+                                                    <div
+                                                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                                        style={{ width: `${pendingRoundsData.totalRounds > 0 ? (pendingRoundsData.summarizedRounds / pendingRoundsData.totalRounds) * 100 : 0}%` }}
+                                                    />
+                                                </div>
+                                            </>
+                                        ) : pendingRoundsData.hasUnreviewedRounds ? (
+                                            <>
+                                                <div className="flex items-center gap-2">
+                                                    <svg className="h-5 w-5 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                    <span className="text-sm font-medium text-[var(--app-fg)]">同步完成</span>
+                                                </div>
+                                                <div className="text-xs text-[var(--app-hint)]">
+                                                    共 {pendingRoundsData.summarizedRounds} 轮对话已汇总，{pendingRoundsData.unreviewedRounds} 轮待 Review
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="flex items-center gap-2">
+                                                    <svg className="h-5 w-5 text-[var(--app-hint)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                    <span className="text-sm text-[var(--app-hint)]">暂无待 Review 的内容</span>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         {/* 建议卡片 - 显示在对话列表下方（合并所有 review 结果） */}
                         {allReviewTexts.length > 0 && (
                             <div className="mx-auto w-full max-w-content min-w-0 px-3 pb-4">

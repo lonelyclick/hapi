@@ -234,7 +234,7 @@ export class AutoReviewService {
     }
 
     /**
-     * 同步轮次 - 使用 MiniMax function calling
+     * 同步轮次 - 使用 MiniMax function calling（循环处理所有批次）
      */
     private async syncRounds(reviewSession: StoredReviewSession): Promise<void> {
         const reviewId = reviewSession.id
@@ -249,143 +249,151 @@ export class AutoReviewService {
 
         try {
             this.syncingReviewIds.add(reviewId)
-            console.log('[ReviewSync] Getting all messages for main session...')
-
-            // 获取主 Session 所有消息
-            const allMessages = await this.engine.getAllMessages(mainSessionId)
-            console.log('[ReviewSync] Got', allMessages.length, 'messages')
-            const allRounds = groupMessagesIntoRounds(allMessages)
-            console.log('[ReviewSync] Grouped into', allRounds.length, 'rounds')
-
-            // 获取已汇总的轮次
-            const existingRounds = await this.reviewStore.getReviewRounds(reviewId)
-            const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
-
-            // 找出未汇总的轮次
-            const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
-            console.log('[ReviewSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size)
-
-            // 通知前端当前状态
-            this.broadcastSyncStatus(reviewSession, {
-                status: 'checking',
-                totalRounds: allRounds.length,
-                summarizedRounds: existingRounds.length,
-                pendingRounds: pendingRounds.length
-            })
-
-            if (pendingRounds.length === 0) {
-                this.broadcastSyncStatus(reviewSession, {
-                    status: 'complete',
-                    totalRounds: allRounds.length,
-                    summarizedRounds: existingRounds.length,
-                    pendingRounds: 0
-                })
-                return
-            }
 
             // 获取 MiniMax API Key（从环境变量读取）
             const minimaxApiKey = process.env.MINIMAX_API_KEY
             if (!minimaxApiKey) {
                 console.error('[ReviewSync] MiniMax API key not configured')
+                return
+            }
+
+            // 循环处理所有批次
+            let continueSync = true
+            while (continueSync) {
+                console.log('[ReviewSync] Getting all messages for main session...')
+
+                // 获取主 Session 所有消息
+                const allMessages = await this.engine.getAllMessages(mainSessionId)
+                console.log('[ReviewSync] Got', allMessages.length, 'messages')
+                const allRounds = groupMessagesIntoRounds(allMessages)
+                console.log('[ReviewSync] Grouped into', allRounds.length, 'rounds')
+
+                // 获取已汇总的轮次
+                const existingRounds = await this.reviewStore.getReviewRounds(reviewId)
+                const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
+
+                // 找出未汇总的轮次
+                const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber))
+                console.log('[ReviewSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size)
+
+                // 通知前端当前状态
                 this.broadcastSyncStatus(reviewSession, {
-                    status: 'complete',
+                    status: 'checking',
                     totalRounds: allRounds.length,
                     summarizedRounds: existingRounds.length,
                     pendingRounds: pendingRounds.length
                 })
-                return
-            }
 
-            // 计算批次
-            const batchRounds: typeof pendingRounds = []
-            let currentBatchSize = 0
+                if (pendingRounds.length === 0) {
+                    // 计算未 review 的轮次数
+                    const reviewedRoundNumbers = await this.reviewStore.getReviewedRoundNumbers(reviewId)
+                    const unreviewedCount = existingRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber)).length
 
-            for (const round of pendingRounds) {
-                const roundSize = round.userInput.length + round.aiMessages.join('').length + 200
-                if (currentBatchSize + roundSize > MAX_BATCH_CHARS && batchRounds.length >= MIN_ROUNDS_PER_BATCH) {
-                    break
-                }
-                batchRounds.push(round)
-                currentBatchSize += roundSize
-                if (batchRounds.length >= MAX_ROUNDS_PER_BATCH) {
-                    break
-                }
-            }
-
-            // 通知前端正在同步
-            this.broadcastSyncStatus(reviewSession, {
-                status: 'syncing',
-                totalRounds: allRounds.length,
-                summarizedRounds: existingRounds.length,
-                pendingRounds: pendingRounds.length,
-                syncingRounds: batchRounds.map(r => r.roundNumber)
-            })
-
-            console.log('[ReviewSync] Calling MiniMax API for', batchRounds.length, 'rounds')
-
-            // 调用 MiniMax function calling
-            const summaries = await generateSummariesWithMinimax(minimaxApiKey, batchRounds)
-            console.log('[ReviewSync] MiniMax returned', summaries.length, 'summaries')
-
-            // 保存汇总结果
-            const savedRounds: number[] = []
-            for (const summary of summaries) {
-                if (summarizedRoundNumbers.has(summary.round)) {
-                    console.log('[ReviewSync] Round', summary.round, 'already exists, skipping')
-                    continue
-                }
-                const targetRound = allRounds.find(r => r.roundNumber === summary.round)
-                if (!targetRound) {
-                    console.log('[ReviewSync] Round', summary.round, 'not found in main session')
-                    continue
-                }
-                try {
-                    await this.reviewStore.createReviewRound({
-                        reviewSessionId: reviewId,
-                        roundNumber: summary.round,
-                        userInput: targetRound.userInput,
-                        aiSummary: summary.summary,
-                        originalMessageIds: targetRound.messageIds,
-                        startedAt: targetRound.startedAt,
-                        endedAt: targetRound.endedAt
+                    this.broadcastSyncStatus(reviewSession, {
+                        status: 'complete',
+                        totalRounds: allRounds.length,
+                        summarizedRounds: existingRounds.length,
+                        pendingRounds: 0,
+                        unreviewedRounds: unreviewedCount
                     })
-                    savedRounds.push(summary.round)
-                    summarizedRoundNumbers.add(summary.round)  // 防止重复
-                    console.log('[ReviewSync] Saved round', summary.round)
-                } catch (e) {
-                    console.error('[ReviewSync] Failed to save round', summary.round, e)
+                    continueSync = false
+                    break
                 }
-            }
 
-            // 更新状态
-            const newSummarizedCount = existingRounds.length + savedRounds.length
-            const newPendingCount = allRounds.length - newSummarizedCount
+                // 计算批次
+                const batchRounds: typeof pendingRounds = []
+                let currentBatchSize = 0
 
-            // 计算未 review 的轮次数
-            const reviewedRoundNumbers = await this.reviewStore.getReviewedRoundNumbers(reviewId)
-            const newExistingRounds = await this.reviewStore.getReviewRounds(reviewId)
-            const unreviewedCount = newExistingRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber)).length
+                for (const round of pendingRounds) {
+                    const roundSize = round.userInput.length + round.aiMessages.join('').length + 200
+                    if (currentBatchSize + roundSize > MAX_BATCH_CHARS && batchRounds.length >= MIN_ROUNDS_PER_BATCH) {
+                        break
+                    }
+                    batchRounds.push(round)
+                    currentBatchSize += roundSize
+                    if (batchRounds.length >= MAX_ROUNDS_PER_BATCH) {
+                        break
+                    }
+                }
 
-            this.broadcastSyncStatus(reviewSession, {
-                status: newPendingCount > 0 ? 'syncing' : 'complete',
-                totalRounds: allRounds.length,
-                summarizedRounds: newSummarizedCount,
-                pendingRounds: newPendingCount,
-                savedRounds,
-                unreviewedRounds: unreviewedCount
-            })
+                // 通知前端正在同步
+                this.broadcastSyncStatus(reviewSession, {
+                    status: 'syncing',
+                    totalRounds: allRounds.length,
+                    summarizedRounds: existingRounds.length,
+                    pendingRounds: pendingRounds.length,
+                    syncingRounds: batchRounds.map(r => r.roundNumber)
+                })
 
-            // 更新状态为 active
-            if (reviewSession.status === 'pending') {
-                await this.reviewStore.updateReviewSessionStatus(reviewId, 'active')
-            }
+                console.log('[ReviewSync] Calling MiniMax API for', batchRounds.length, 'rounds')
 
-            // 如果还有待同步的轮次，继续同步
-            if (newPendingCount > 0 && savedRounds.length > 0) {
-                console.log('[ReviewSync] More rounds pending, continuing sync...')
-                // 短暂延迟避免过快调用 API
-                await new Promise(resolve => setTimeout(resolve, 1000))
-                await this.syncRounds(reviewSession)
+                // 调用 MiniMax function calling
+                const summaries = await generateSummariesWithMinimax(minimaxApiKey, batchRounds)
+                console.log('[ReviewSync] MiniMax returned', summaries.length, 'summaries')
+
+                // 保存汇总结果
+                const savedRounds: number[] = []
+                for (const summary of summaries) {
+                    if (summarizedRoundNumbers.has(summary.round)) {
+                        console.log('[ReviewSync] Round', summary.round, 'already exists, skipping')
+                        continue
+                    }
+                    const targetRound = allRounds.find(r => r.roundNumber === summary.round)
+                    if (!targetRound) {
+                        console.log('[ReviewSync] Round', summary.round, 'not found in main session')
+                        continue
+                    }
+                    try {
+                        await this.reviewStore.createReviewRound({
+                            reviewSessionId: reviewId,
+                            roundNumber: summary.round,
+                            userInput: targetRound.userInput,
+                            aiSummary: summary.summary,
+                            originalMessageIds: targetRound.messageIds,
+                            startedAt: targetRound.startedAt,
+                            endedAt: targetRound.endedAt
+                        })
+                        savedRounds.push(summary.round)
+                        summarizedRoundNumbers.add(summary.round)  // 防止重复
+                        console.log('[ReviewSync] Saved round', summary.round)
+                    } catch (e) {
+                        console.error('[ReviewSync] Failed to save round', summary.round, e)
+                    }
+                }
+
+                // 更新状态
+                const newSummarizedCount = existingRounds.length + savedRounds.length
+                const newPendingCount = allRounds.length - newSummarizedCount
+
+                // 计算未 review 的轮次数
+                const reviewedRoundNumbers = await this.reviewStore.getReviewedRoundNumbers(reviewId)
+                const newExistingRounds = await this.reviewStore.getReviewRounds(reviewId)
+                const unreviewedCount = newExistingRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber)).length
+
+                this.broadcastSyncStatus(reviewSession, {
+                    status: newPendingCount > 0 ? 'syncing' : 'complete',
+                    totalRounds: allRounds.length,
+                    summarizedRounds: newSummarizedCount,
+                    pendingRounds: newPendingCount,
+                    savedRounds,
+                    unreviewedRounds: unreviewedCount
+                })
+
+                // 更新状态为 active
+                if (reviewSession.status === 'pending') {
+                    await this.reviewStore.updateReviewSessionStatus(reviewId, 'active')
+                    reviewSession.status = 'active'  // 更新本地状态
+                }
+
+                // 检查是否需要继续
+                if (newPendingCount > 0 && savedRounds.length > 0) {
+                    console.log('[ReviewSync] More rounds pending, continuing sync...')
+                    // 短暂延迟避免过快调用 API
+                    await new Promise(resolve => setTimeout(resolve, 1000))
+                    // 继续下一轮循环
+                } else {
+                    continueSync = false
+                }
             }
         } catch (err) {
             console.error('[ReviewSync] syncRounds error:', err)
@@ -393,11 +401,15 @@ export class AutoReviewService {
             const allMessages = await this.engine.getAllMessages(mainSessionId).catch(() => [])
             const allRounds = groupMessagesIntoRounds(allMessages)
             const existingRounds = await this.reviewStore.getReviewRounds(reviewId).catch(() => [])
+            const reviewedRoundNumbers = await this.reviewStore.getReviewedRoundNumbers(reviewId).catch(() => new Set<number>())
+            const unreviewedCount = existingRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber)).length
+
             this.broadcastSyncStatus(reviewSession, {
                 status: 'complete',
                 totalRounds: allRounds.length,
                 summarizedRounds: existingRounds.length,
-                pendingRounds: allRounds.length - existingRounds.length
+                pendingRounds: allRounds.length - existingRounds.length,
+                unreviewedRounds: unreviewedCount
             })
         } finally {
             this.syncingReviewIds.delete(reviewId)

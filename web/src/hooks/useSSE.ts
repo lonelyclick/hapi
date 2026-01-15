@@ -225,9 +225,11 @@ export function useSSE(options: {
                     savedRounds?: number[]
                     unreviewedRounds?: number
                 }
+                // event.sessionId 是 mainSessionId
+                const mainSessionId = 'sessionId' in event ? event.sessionId : undefined
                 if (data.reviewSessionId) {
                     if (import.meta.env.DEV) {
-                        console.log('[sse] review-sync-status', data)
+                        console.log('[sse] review-sync-status', data, 'mainSessionId:', mainSessionId)
                     }
                     // 直接更新 pending rounds 数据
                     queryClient.setQueryData(
@@ -255,6 +257,10 @@ export function useSSE(options: {
                             updatedAt: Date.now()
                         }
                     )
+                    // 刷新 review-sessions 查询以更新状态
+                    if (mainSessionId) {
+                        void queryClient.invalidateQueries({ queryKey: ['review-sessions', mainSessionId] })
+                    }
                 }
             }
 
