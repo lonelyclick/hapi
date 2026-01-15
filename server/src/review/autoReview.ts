@@ -252,6 +252,9 @@ export class AutoReviewService {
      */
     private async injectParsedResultToSession(reviewSessionId: string, result: ReviewResult): Promise<void> {
         try {
+            // Debug: 打印原始建议
+            console.log('[ReviewSync] Raw suggestions from MiniMax:', JSON.stringify(result.suggestions, null, 2))
+
             // 计算统计信息
             const stats = {
                 total: result.suggestions.length,

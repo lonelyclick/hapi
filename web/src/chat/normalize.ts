@@ -107,6 +107,17 @@ function normalizeAssistantOutput(
     const modelContent = message.content
     const blocks: NormalizedAgentContent[] = []
 
+    // Debug: 检查是否是结构化审查结果
+    if (Array.isArray(modelContent)) {
+        for (const block of modelContent) {
+            if (isObject(block) && block.type === 'text' && typeof block.text === 'string') {
+                if (block.text.includes('结构化审查结果')) {
+                    console.log('[normalize] Found structured review result message:', messageId, 'text length:', block.text.length)
+                }
+            }
+        }
+    }
+
     if (typeof modelContent === 'string') {
         blocks.push({ type: 'text', text: modelContent, uuid, parentUUID })
     } else if (Array.isArray(modelContent)) {

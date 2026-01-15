@@ -50,22 +50,49 @@ export function parseReviewResult(text: string): ReviewResult | null {
         jsonStr = objMatch ? objMatch[0] : null
     }
 
-    if (!jsonStr) return null
+    if (!jsonStr) {
+        console.log('[parseReviewResult] No JSON found in text, text length:', text.length, 'preview:', text.substring(0, 100))
+        return null
+    }
 
     try {
         const parsed = JSON.parse(jsonStr)
+        console.log('[parseReviewResult] Parsed JSON:', {
+            suggestionsCount: parsed.suggestions?.length,
+            hasStats: !!parsed.stats,
+            stats: parsed.stats,
+            rawSuggestions: parsed.suggestions
+        })
         if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+            const filtered = parsed.suggestions.filter((s: unknown) =>
+                s && typeof s === 'object' &&
+                'id' in s && 'title' in s && 'detail' in s
+            )
+            console.log('[parseReviewResult] After filter:', filtered.length, 'of', parsed.suggestions.length)
+            if (filtered.length !== parsed.suggestions.length) {
+                // Log which suggestions were filtered out
+                for (const s of parsed.suggestions) {
+                    if (!s || typeof s !== 'object') {
+                        console.log('[parseReviewResult] Filtered out (not object):', s)
+                    } else {
+                        const missing = []
+                        if (!('id' in s)) missing.push('id')
+                        if (!('title' in s)) missing.push('title')
+                        if (!('detail' in s)) missing.push('detail')
+                        if (missing.length > 0) {
+                            console.log('[parseReviewResult] Filtered out (missing fields):', missing, 'suggestion:', s)
+                        }
+                    }
+                }
+            }
             return {
-                suggestions: parsed.suggestions.filter((s: unknown) =>
-                    s && typeof s === 'object' &&
-                    'id' in s && 'title' in s && 'detail' in s
-                ),
+                suggestions: filtered,
                 summary: parsed.summary || '',
                 stats: parsed.stats  // 解析统计信息
             }
         }
-    } catch {
-        // JSON 解析失败
+    } catch (e) {
+        console.error('[parseReviewResult] JSON parse error:', e)
     }
 
     return null

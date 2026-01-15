@@ -702,9 +702,11 @@ export function ReviewPanel(props: {
             // 只要能解析出 suggestions（包括空数组），就认为是有效结果
             // 即使 suggestions 为空也返回，这样可以显示统计卡片
             if (result && result.suggestions) {
+                console.log('[ReviewPanel] Found review result, returning text with', result.suggestions.length, 'suggestions')
                 return [block.text]
             }
         }
+        console.log('[ReviewPanel] No valid review result found in any agent-text block')
         return []
     }, [reconciled.blocks])
 
@@ -878,6 +880,7 @@ export function ReviewPanel(props: {
                 <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
                     <div className="px-3 py-2">
                         <ReviewSuggestions
+                            key={allReviewTexts.join('|').substring(0, 100)}
                             reviewTexts={allReviewTexts}
                             onApply={(details) => applySuggestionsMutation.mutate(details)}
                             isApplying={applySuggestionsMutation.isPending}

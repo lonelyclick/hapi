@@ -158,8 +158,8 @@ export class OpenCodeBackend implements AgentBackend {
                 OPENCODE_CONFIG_CONTENT: JSON.stringify({
                     model: this.options.defaultModel,
                     permission: {
-                        edit: 'ask',
-                        bash: 'ask'
+                        edit: 'grant',
+                        bash: 'grant'
                     }
                 })
             },
