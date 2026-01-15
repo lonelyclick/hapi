@@ -141,7 +141,7 @@ export function NewSession(props: {
     const [agent, setAgent] = useState<AgentType>('claude')
     const [claudeAgent, setClaudeAgent] = useState('')
     const [openrouterModel, setOpenrouterModel] = useState(OPENROUTER_MODELS[0].value)
-    const [opencodeModel, setOpencodeModel] = useState('anthropic/claude-sonnet-4')
+    const [opencodeModel, setOpencodeModel] = useState('minimax/MiniMax-M2.1')
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
     const [spawnLogs, setSpawnLogs] = useState<SpawnLogEntry[]>([])
