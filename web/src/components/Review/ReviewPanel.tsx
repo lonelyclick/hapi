@@ -611,43 +611,8 @@ export function ReviewPanel(props: {
         }
     })
 
-    // 保存 AI 的汇总结果
-    const saveSummaryMutation = useMutation({
-        mutationFn: async () => {
-            if (!currentReview) {
-                throw new Error('No current review found')
-            }
-            return await api.saveReviewSummary(currentReview.id)
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
-        },
-        onError: (error) => {
-            // noSummary 错误通常是因为消息还没同步完成，静默忽略
-            const errMsg = String(error)
-            if (!errMsg.includes('noSummary')) {
-                console.error('[ReviewPanel] saveReviewSummary error:', error)
-            }
-        }
-    })
-
-    // 当 AI 完成思考后自动尝试保存汇总
-    const prevThinkingRef = useRef<boolean | undefined>(undefined)
-    useEffect(() => {
-        const wasThinking = prevThinkingRef.current
-        const isThinking = session?.thinking
-        prevThinkingRef.current = isThinking
-
-        // 从思考中变为不思考 -> AI 刚完成回复
-        if (wasThinking === true && isThinking === false && currentReview?.status === 'active') {
-            // 延迟 3 秒再保存，确保消息已经完全同步到服务器
-            setTimeout(() => {
-                saveSummaryMutation.mutate()
-            }, 3000)
-        }
-    }, [session?.thinking, currentReview?.status, saveSummaryMutation])
-
     // 开始 Review（发送给 Review AI）
+    // 注意：Review AI 回复结束后，后端会自动用 MiniMax 解析结果并注入到 Review Session
     const startReviewMutation = useMutation({
         mutationFn: async (previousSuggestions?: SuggestionWithStatus[]) => {
             if (!currentReview) {
@@ -800,11 +765,7 @@ export function ReviewPanel(props: {
                     </button>
                     <button
                         type="button"
-                        onClick={() => {
-                            if (window.confirm('确定要删除此 Review 会话吗？')) {
-                                cancelReviewMutation.mutate()
-                            }
-                        }}
+                        onClick={() => setDeleteDialogOpen(true)}
                         disabled={cancelReviewMutation.isPending}
                         className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-[var(--app-hint)] hover:text-red-500 disabled:opacity-50"
                         title="删除 Review"
@@ -952,6 +913,37 @@ export function ReviewPanel(props: {
                     </div>
                 )}
             </div>
+
+            {/* 删除确认对话框 */}
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>删除 Review</DialogTitle>
+                        <DialogDescription>
+                            确定要删除此 Review 会话吗？此操作无法撤销。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setDeleteDialogOpen(false)}
+                            className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
+                        >
+                            取消
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setDeleteDialogOpen(false)
+                                cancelReviewMutation.mutate()
+                            }}
+                            className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+                        >
+                            删除
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
