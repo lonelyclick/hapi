@@ -205,17 +205,34 @@ export function ReviewPanel(props: {
 
     console.log('[ReviewPanel] pendingRoundsData:', pendingRoundsData, 'autoSyncStatus:', autoSyncStatus)
 
-    // 合并 savedSummaries：优先使用 SSE 实时数据，否则使用 API 初始数据
+    // 合并 savedSummaries：API 初始数据 + SSE 实时推送的新数据
     const savedSummaries = useMemo(() => {
-        // SSE 实时推送的数据优先
-        if (autoSyncStatus?.savedSummaries && autoSyncStatus.savedSummaries.length > 0) {
-            return autoSyncStatus.savedSummaries
+        const merged: Array<{ round: number; summary: string }> = []
+        const seen = new Set<number>()
+
+        // 先添加 API 返回的初始数据
+        if (pendingRoundsData?.savedSummaries) {
+            for (const s of pendingRoundsData.savedSummaries) {
+                if (!seen.has(s.round)) {
+                    merged.push(s)
+                    seen.add(s.round)
+                }
+            }
         }
-        // 否则使用 API 返回的初始数据
-        if (pendingRoundsData?.savedSummaries && pendingRoundsData.savedSummaries.length > 0) {
-            return pendingRoundsData.savedSummaries
+
+        // 再添加 SSE 实时推送的新数据（累积的）
+        if (autoSyncStatus?.savedSummaries) {
+            for (const s of autoSyncStatus.savedSummaries) {
+                if (!seen.has(s.round)) {
+                    merged.push(s)
+                    seen.add(s.round)
+                }
+            }
         }
-        return []
+
+        // 按轮次排序
+        merged.sort((a, b) => a.round - b.round)
+        return merged
     }, [autoSyncStatus?.savedSummaries, pendingRoundsData?.savedSummaries])
 
     // 获取 Review Session 信息
