@@ -205,6 +205,19 @@ export function ReviewPanel(props: {
 
     console.log('[ReviewPanel] pendingRoundsData:', pendingRoundsData, 'autoSyncStatus:', autoSyncStatus)
 
+    // 合并 savedSummaries：优先使用 SSE 实时数据，否则使用 API 初始数据
+    const savedSummaries = useMemo(() => {
+        // SSE 实时推送的数据优先
+        if (autoSyncStatus?.savedSummaries && autoSyncStatus.savedSummaries.length > 0) {
+            return autoSyncStatus.savedSummaries
+        }
+        // 否则使用 API 返回的初始数据
+        if (pendingRoundsData?.savedSummaries && pendingRoundsData.savedSummaries.length > 0) {
+            return pendingRoundsData.savedSummaries
+        }
+        return []
+    }, [autoSyncStatus?.savedSummaries, pendingRoundsData?.savedSummaries])
+
     // 获取 Review Session 信息
     const { data: reviewSession } = useQuery({
         queryKey: ['session', props.reviewSessionId],
@@ -718,7 +731,7 @@ export function ReviewPanel(props: {
                                 )}
 
                                 {/* 已完成汇总的结果卡片 */}
-                                {autoSyncStatus?.savedSummaries && autoSyncStatus.savedSummaries.length > 0 && (
+                                {savedSummaries.length > 0 && (
                                     <div className="w-full">
                                         <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border border-green-200 dark:border-green-700 shadow-sm overflow-hidden">
                                             <div className="flex items-center gap-1.5 px-3 py-2 bg-green-100/50 dark:bg-green-800/30 border-b border-green-200 dark:border-green-700">
@@ -726,11 +739,11 @@ export function ReviewPanel(props: {
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                 </svg>
                                                 <span className="text-sm font-medium text-green-700 dark:text-green-300">
-                                                    第 {autoSyncStatus.savedSummaries.map(s => s.round).join(', ')} 轮汇总完成
+                                                    第 {savedSummaries.map(s => s.round).join(', ')} 轮汇总完成
                                                 </span>
                                             </div>
                                             <div className="p-2 space-y-2 max-h-80 overflow-y-auto">
-                                                {autoSyncStatus.savedSummaries.map(summary => (
+                                                {savedSummaries.map(summary => (
                                                     <div key={summary.round} className="rounded bg-white dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 overflow-hidden">
                                                         <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 dark:bg-green-800/30 border-b border-green-100 dark:border-green-700/50">
                                                             <div className="flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-white text-[10px] font-bold shrink-0">

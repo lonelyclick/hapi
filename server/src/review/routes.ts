@@ -944,6 +944,12 @@ ${batchRounds.map(r => `  {
         // 计算待 review 的轮次（已汇总但未 review）
         const unreviewedRounds = existingRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber))
 
+        // 返回已保存的汇总内容（用于刷新页面后恢复显示）
+        const savedSummaries = existingRounds.map(r => ({
+            round: r.roundNumber,
+            summary: r.aiSummary
+        })).sort((a, b) => a.round - b.round)
+
         return c.json({
             totalRounds: allRounds.length,
             summarizedRounds: existingRounds.length,
@@ -952,7 +958,9 @@ ${batchRounds.map(r => `  {
             // 新增：review 相关统计
             reviewedRounds: reviewedRoundNumbers.size,
             unreviewedRounds: unreviewedRounds.length,
-            hasUnreviewedRounds: unreviewedRounds.length > 0
+            hasUnreviewedRounds: unreviewedRounds.length > 0,
+            // 已保存的汇总内容
+            savedSummaries
         })
     })
 

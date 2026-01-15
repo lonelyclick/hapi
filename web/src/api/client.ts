@@ -1063,6 +1063,7 @@ export class ApiClient {
         reviewedRounds: number
         unreviewedRounds: number
         hasUnreviewedRounds: boolean
+        savedSummaries?: Array<{ round: number; summary: string }>
     }> {
         return await this.request<{
             totalRounds: number
@@ -1072,6 +1073,7 @@ export class ApiClient {
             reviewedRounds: number
             unreviewedRounds: number
             hasUnreviewedRounds: boolean
+            savedSummaries?: Array<{ round: number; summary: string }>
         }>(
             `/api/review/sessions/${encodeURIComponent(reviewId)}/pending-rounds`
         )
