@@ -252,18 +252,37 @@ export class AutoReviewService {
      */
     private async injectParsedResultToSession(reviewSessionId: string, result: ReviewResult): Promise<void> {
         try {
-            // 构造 JSON 格式的消息内容
+            // 计算统计信息
+            const stats = {
+                total: result.suggestions.length,
+                byType: {
+                    bug: result.suggestions.filter(s => s.type === 'bug').length,
+                    security: result.suggestions.filter(s => s.type === 'security').length,
+                    performance: result.suggestions.filter(s => s.type === 'performance').length,
+                    improvement: result.suggestions.filter(s => s.type === 'improvement').length
+                },
+                bySeverity: {
+                    high: result.suggestions.filter(s => s.severity === 'high').length,
+                    medium: result.suggestions.filter(s => s.severity === 'medium').length,
+                    low: result.suggestions.filter(s => s.severity === 'low').length
+                }
+            }
+
+            // 构造 JSON 格式的消息内容（用于 ReviewSuggestions 解析）
             const jsonContent = JSON.stringify({
                 suggestions: result.suggestions,
-                summary: result.summary
+                summary: result.summary,
+                stats  // 添加统计信息
             }, null, 2)
 
             const messageText = `## 结构化审查结果\n\n\`\`\`json\n${jsonContent}\n\`\`\``
 
-            // 构造符合 Claude Agent SDK 格式的消息
+            // 构造符合前端 normalize.ts 期望的消息格式
+            // 格式：{ role: 'agent', content: { type: 'output', data: { type: 'assistant', message: { content: [...] } } } }
             const agentMessage = {
                 role: 'agent',
-                content: JSON.stringify({
+                content: {
+                    type: 'output',
                     data: {
                         type: 'assistant',
                         message: {
@@ -275,12 +294,12 @@ export class AutoReviewService {
                             ]
                         }
                     }
-                })
+                }
             }
 
             // 注入消息到 Review Session
             await this.engine.addMessage(reviewSessionId, agentMessage)
-            console.log('[ReviewSync] Injected parsed result to Review Session')
+            console.log('[ReviewSync] Injected parsed result to Review Session, stats:', stats)
         } catch (err) {
             console.error('[ReviewSync] Failed to inject parsed result:', err)
         }

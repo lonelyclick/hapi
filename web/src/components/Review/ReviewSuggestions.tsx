@@ -15,9 +15,26 @@ export interface ReviewSuggestion {
     detail: string
 }
 
+// 统计信息
+export interface ReviewStats {
+    total: number
+    byType: {
+        bug: number
+        security: number
+        performance: number
+        improvement: number
+    }
+    bySeverity: {
+        high: number
+        medium: number
+        low: number
+    }
+}
+
 export interface ReviewResult {
     suggestions: ReviewSuggestion[]
     summary: string
+    stats?: ReviewStats  // 添加统计信息
 }
 
 // 从 AI 回复文本中解析 JSON
@@ -43,7 +60,8 @@ export function parseReviewResult(text: string): ReviewResult | null {
                     s && typeof s === 'object' &&
                     'id' in s && 'title' in s && 'detail' in s
                 ),
-                summary: parsed.summary || ''
+                summary: parsed.summary || '',
+                stats: parsed.stats  // 解析统计信息
             }
         }
     } catch {
@@ -237,12 +255,17 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
     const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
     const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())  // 已发送给主 AI 的建议
 
-    // 合并多个 review 结果，为每个建议生成唯一 ID
-    const mergedSuggestions = useMemo(() => {
+    // 合并多个 review 结果，为每个建议生成唯一 ID，同时提取统计和总结
+    const { mergedSuggestions, latestStats, latestSummary } = useMemo(() => {
         const allSuggestions: ReviewSuggestion[] = []
+        let stats: ReviewStats | undefined
+        let summary = ''
         for (let i = 0; i < reviewTexts.length; i++) {
             const result = parseReviewResult(reviewTexts[i])
             if (result) {
+                // 取最后一个 review 结果的 stats 和 summary
+                if (result.stats) stats = result.stats
+                if (result.summary) summary = result.summary
                 for (const suggestion of result.suggestions) {
                     // 生成唯一 ID：review索引_原始ID
                     const uniqueId = `${i}_${suggestion.id}`
@@ -253,7 +276,7 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
                 }
             }
         }
-        return allSuggestions
+        return { mergedSuggestions: allSuggestions, latestStats: stats, latestSummary: summary }
     }, [reviewTexts])
 
     // 过滤掉已删除的建议
@@ -409,6 +432,43 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
 
     return (
         <div className="space-y-2">
+            {/* Review 完成统计卡片 */}
+            {latestStats && (
+                <div className="rounded-md border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 px-2.5 py-1.5">
+                    <div className="flex items-center gap-2 text-xs">
+                        <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="font-medium text-blue-700 dark:text-blue-300">
+                            Review 完成
+                        </span>
+                        <span className="text-blue-600 dark:text-blue-400">
+                            {latestStats.total} 条建议
+                        </span>
+                        {latestStats.bySeverity.high > 0 && (
+                            <span className="px-1.5 py-0.5 text-[10px] rounded bg-red-500/20 text-red-600 dark:text-red-400">
+                                {latestStats.bySeverity.high} 高危
+                            </span>
+                        )}
+                        {latestStats.bySeverity.medium > 0 && (
+                            <span className="px-1.5 py-0.5 text-[10px] rounded bg-yellow-500/20 text-yellow-600 dark:text-yellow-400">
+                                {latestStats.bySeverity.medium} 中危
+                            </span>
+                        )}
+                        {latestStats.bySeverity.low > 0 && (
+                            <span className="px-1.5 py-0.5 text-[10px] rounded bg-green-500/20 text-green-600 dark:text-green-400">
+                                {latestStats.bySeverity.low} 低危
+                            </span>
+                        )}
+                    </div>
+                    {latestSummary && (
+                        <p className="mt-1 text-[11px] text-blue-600 dark:text-blue-400 line-clamp-2">
+                            {latestSummary}
+                        </p>
+                    )}
+                </div>
+            )}
+
             {/* 操作栏 */}
             <div className="flex items-center justify-between text-[11px]">
                 <div className="flex items-center gap-3">
