@@ -479,8 +479,8 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
 
     return (
         <div className="space-y-2">
-            {/* Review 完成统计卡片 */}
-            {latestStats && (
+            {/* Review 完成统计卡片 - 只在有建议且有 stats 时显示 */}
+            {latestStats && latestStats.total > 0 && (
                 <div className="rounded-md border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 px-2.5 py-1.5">
                     <div className="flex items-center gap-2 text-xs">
                         <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">

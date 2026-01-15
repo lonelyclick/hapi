@@ -437,12 +437,6 @@ export function ReviewPanel(props: {
                 continue
             }
             const next = normalizeDecryptedMessage(message)
-            // 调试：检查带 stats 的消息
-            const contentStr = JSON.stringify(message.content)
-            if (contentStr.includes('"stats"')) {
-                console.log('[ReviewPanel] Message with stats:', message.id, message.content)
-                console.log('[ReviewPanel] Normalized result:', next)
-            }
             cache.set(message.id, { source: message, normalized: next })
             if (next) normalized.push(next)
         }
@@ -688,23 +682,18 @@ export function ReviewPanel(props: {
 
     // 从已处理的 blocks 中提取最后一个包含 suggestions JSON 的文本（覆盖而非累加）
     const allReviewTexts = useMemo(() => {
-        console.log('[ReviewPanel] reconciled.blocks:', reconciled.blocks.length, reconciled.blocks.map(b => b.kind))
         // 倒序查找第一个有效的 review 结果
         for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
             const block = reconciled.blocks[i]
             if (block.kind !== 'agent-text') continue
 
-            console.log('[ReviewPanel] Found agent-text block:', block.text?.substring(0, 200))
             const result = parseReviewResult(block.text)
-            console.log('[ReviewPanel] parseReviewResult:', result)
             // 只要能解析出 suggestions（包括空数组），就认为是有效结果
             // 即使 suggestions 为空也返回，这样可以显示统计卡片
             if (result && result.suggestions) {
-                console.log('[ReviewPanel] Returning block.text for suggestions')
                 return [block.text]
             }
         }
-        console.log('[ReviewPanel] No valid review result found')
         return []
     }, [reconciled.blocks])
 
