@@ -464,6 +464,7 @@ export class AutoReviewService {
                     const contentArr = message.content as Array<{ type?: string; text?: string }>
                     for (const item of contentArr) {
                         if (item.type === 'text' && item.text) {
+                            console.log('[ReviewSync] Found text content, length:', item.text.length, 'preview:', item.text.substring(0, 200))
                             // 提取 JSON
                             const jsonBlocks = [...item.text.matchAll(/```json\s*([\s\S]*?)\s*```/g)]
                             const jsonMatch = jsonBlocks.length > 0 ? jsonBlocks[jsonBlocks.length - 1] : null
