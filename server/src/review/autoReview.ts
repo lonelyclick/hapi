@@ -333,6 +333,7 @@ export class AutoReviewService {
 
                 // 保存汇总结果
                 const savedRounds: number[] = []
+                const savedSummaries: Array<{ round: number; summary: string }> = []
                 for (const summary of summaries) {
                     if (summarizedRoundNumbers.has(summary.round)) {
                         console.log('[ReviewSync] Round', summary.round, 'already exists, skipping')
@@ -354,6 +355,7 @@ export class AutoReviewService {
                             endedAt: targetRound.endedAt
                         })
                         savedRounds.push(summary.round)
+                        savedSummaries.push({ round: summary.round, summary: summary.summary })
                         summarizedRoundNumbers.add(summary.round)  // 防止重复
                         console.log('[ReviewSync] Saved round', summary.round)
                     } catch (e) {
@@ -376,6 +378,7 @@ export class AutoReviewService {
                     summarizedRounds: newSummarizedCount,
                     pendingRounds: newPendingCount,
                     savedRounds,
+                    savedSummaries,
                     unreviewedRounds: unreviewedCount
                 })
 
@@ -525,6 +528,7 @@ export class AutoReviewService {
 
             // 保存
             const savedRounds: number[] = []
+            const savedSummaries: Array<{ round: number; summary: string }> = []
             console.log('[ReviewSync] Existing rounds:', [...existingRoundNumbers])
             for (const summary of summaries) {
                 if (existingRoundNumbers.has(summary.round)) {
@@ -547,6 +551,7 @@ export class AutoReviewService {
                         endedAt: targetRound.endedAt
                     })
                     savedRounds.push(summary.round)
+                    savedSummaries.push({ round: summary.round, summary: summary.summary })
                     console.log('[ReviewSync] Saved round', summary.round)
                 } catch (e) {
                     console.error('[ReviewSync] Failed to save round', summary.round, e)
@@ -567,6 +572,7 @@ export class AutoReviewService {
                 summarizedRounds: newExistingRounds.length,
                 pendingRounds: pendingCount,
                 savedRounds,
+                savedSummaries,
                 unreviewedRounds: unreviewedCount
             })
 
@@ -587,6 +593,7 @@ export class AutoReviewService {
         pendingRounds: number
         syncingRounds?: number[]
         savedRounds?: number[]
+        savedSummaries?: Array<{ round: number; summary: string }>  // 保存的汇总内容
         unreviewedRounds?: number
     }): void {
         if (!this.sseManager) return

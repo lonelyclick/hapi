@@ -1,6 +1,6 @@
 {
   "name": "@twsxtd/hapi",
-  "version": "v2026.01.15.1009",
+  "version": "v2026.01.15.1048",
   "description": "App for agentic coding - access coding agent anywhere",
   "author": "Kirill Dubovitskiy & weishu",
   "license": "LGPL-3.0-or-later",
@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
+    "@opencode-ai/sdk": "^1.1.21",
     "@types/cross-spawn": "^6.0.6",
     "@types/ps-list": "^6.2.1",
     "@types/react": "^19.2.7",

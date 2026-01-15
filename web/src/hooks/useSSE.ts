@@ -223,6 +223,7 @@ export function useSSE(options: {
                     pendingRounds?: number
                     syncingRounds?: number[]
                     savedRounds?: number[]
+                    savedSummaries?: Array<{ round: number; summary: string }>
                     unreviewedRounds?: number
                 }
                 // event.sessionId 是 mainSessionId
@@ -248,13 +249,28 @@ export function useSSE(options: {
                         })
                     )
                     // 同时存储同步状态（用于显示 "正在同步..." 等）
+                    // 累积 savedSummaries（因为可能分多批次同步）
                     queryClient.setQueryData(
                         ['review-sync-status', data.reviewSessionId],
-                        {
-                            status: data.status,
-                            syncingRounds: data.syncingRounds,
-                            savedRounds: data.savedRounds,
-                            updatedAt: Date.now()
+                        (old: { savedSummaries?: Array<{ round: number; summary: string }> } | undefined) => {
+                            // 累积保存的汇总内容
+                            const existingSummaries = old?.savedSummaries ?? []
+                            const newSummaries = data.savedSummaries ?? []
+                            const allSummaries = [...existingSummaries]
+                            for (const s of newSummaries) {
+                                if (!allSummaries.some(e => e.round === s.round)) {
+                                    allSummaries.push(s)
+                                }
+                            }
+                            // 按轮次排序
+                            allSummaries.sort((a, b) => a.round - b.round)
+                            return {
+                                status: data.status,
+                                syncingRounds: data.syncingRounds,
+                                savedRounds: data.savedRounds,
+                                savedSummaries: allSummaries,
+                                updatedAt: Date.now()
+                            }
                         }
                     )
                     // 刷新 review-sessions 查询以更新状态
