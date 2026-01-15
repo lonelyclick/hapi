@@ -70,6 +70,18 @@ function CloseIcon(props: { className?: string }) {
     )
 }
 
+function TrashIcon(props: { className?: string }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+        </svg>
+    )
+}
+
 function ChevronIcon(props: { className?: string; expanded?: boolean }) {
     return (
         <svg
@@ -786,12 +798,16 @@ export function ReviewPanel(props: {
                     </button>
                     <button
                         type="button"
-                        onClick={() => cancelReviewMutation.mutate()}
+                        onClick={() => {
+                            if (window.confirm('确定要删除此 Review 会话吗？')) {
+                                cancelReviewMutation.mutate()
+                            }
+                        }}
                         disabled={cancelReviewMutation.isPending}
                         className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-[var(--app-hint)] hover:text-red-500 disabled:opacity-50"
-                        title="关闭 Review"
+                        title="删除 Review"
                     >
-                        <CloseIcon />
+                        <TrashIcon />
                     </button>
                 </div>
             </div>
