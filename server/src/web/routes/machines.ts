@@ -8,12 +8,13 @@ import { requireMachine } from './guards'
 
 const spawnBodySchema = z.object({
     directory: z.string().min(1),
-    agent: z.enum(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok', 'openrouter', 'aider-cli']).optional(),
+    agent: z.enum(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok', 'openrouter', 'aider-cli', 'opencode']).optional(),
     yolo: z.boolean().optional(),
     sessionType: z.enum(['simple', 'worktree']).optional(),
     worktreeName: z.string().optional(),
     claudeAgent: z.string().min(1).optional(),
     openrouterModel: z.string().min(1).optional(),
+    opencodeModel: z.string().min(1).optional(),
     source: z.string().min(1).max(100).optional()
 })
 
@@ -127,7 +128,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             parsed.data.yolo,
             parsed.data.sessionType,
             parsed.data.worktreeName,
-            { claudeAgent: parsed.data.claudeAgent, openrouterModel: parsed.data.openrouterModel, source }
+            { claudeAgent: parsed.data.claudeAgent, openrouterModel: parsed.data.openrouterModel, opencodeModel: parsed.data.opencodeModel, source }
         )
 
         // 如果 spawn 成功，等 session online 后设置 createdBy 并发送初始化 prompt

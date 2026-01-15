@@ -7,7 +7,7 @@ import { Spinner } from '@/components/Spinner'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 
-type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli'
+type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli' | 'opencode'
 
 // Popular OpenRouter models
 const OPENROUTER_MODELS = [
@@ -100,6 +100,7 @@ export function NewSession(props: {
     const [agent, setAgent] = useState<AgentType>('claude')
     const [claudeAgent, setClaudeAgent] = useState('')
     const [openrouterModel, setOpenrouterModel] = useState(OPENROUTER_MODELS[0].value)
+    const [opencodeModel, setOpencodeModel] = useState('anthropic/claude-sonnet-4')
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
     const [spawnLogs, setSpawnLogs] = useState<SpawnLogEntry[]>([])

@@ -388,6 +388,7 @@ export async function startDaemon(): Promise<void> {
             case 'grok': return 'grok';
             case 'openrouter': return 'openrouter';
             case 'aider-cli': return 'aider-cli';
+            case 'opencode': return 'opencode';
             default: return 'claude';
           }
         })();
@@ -403,6 +404,10 @@ export async function startDaemon(): Promise<void> {
         const openrouterModel = typeof options.openrouterModel === 'string' ? options.openrouterModel.trim() : '';
         if (agent === 'openrouter' && openrouterModel) {
           args.push('--model', openrouterModel);
+        }
+        const opencodeModel = typeof options.opencodeModel === 'string' ? options.opencodeModel.trim() : '';
+        if (agent === 'opencode' && opencodeModel) {
+          args.push('--model', opencodeModel);
         }
         if (options.sessionId) {
           args.push('--hapi-session-id', options.sessionId);
