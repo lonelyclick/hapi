@@ -909,20 +909,20 @@ export function ReviewPanel(props: {
                 <div className="flex items-center gap-1" onMouseDown={e => e.stopPropagation()}>
                     <button
                         type="button"
-                        onClick={props.onClose}
-                        className="p-1.5 rounded hover:bg-[var(--app-bg)] text-[var(--app-hint)]"
-                        title="关闭"
-                    >
-                        <CloseIcon />
-                    </button>
-                    <button
-                        type="button"
                         onClick={() => setDeleteDialogOpen(true)}
                         disabled={cancelReviewMutation.isPending}
                         className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-[var(--app-hint)] hover:text-red-500 disabled:opacity-50"
                         title="删除 Review"
                     >
                         <TrashIcon />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={props.onClose}
+                        className="p-1.5 rounded hover:bg-[var(--app-bg)] text-[var(--app-hint)]"
+                        title="关闭"
+                    >
+                        <CloseIcon />
                     </button>
                 </div>
             </div>
