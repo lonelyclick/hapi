@@ -689,13 +689,8 @@ export function ReviewPanel(props: {
 
             const result = parseReviewResult(block.text)
             // 只要能解析出 suggestions（包括空数组），就认为是有效结果
-            // 空数组表示所有问题都已修复，应该清空建议列表
+            // 即使 suggestions 为空也返回，这样可以显示统计卡片
             if (result && result.suggestions) {
-                // 如果 suggestions 为空数组，返回空，表示没有建议需要显示
-                if (result.suggestions.length === 0) {
-                    return []
-                }
-                // 只返回最后一个 review 结果
                 return [block.text]
             }
         }
