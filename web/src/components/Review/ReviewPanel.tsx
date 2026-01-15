@@ -222,7 +222,6 @@ export function ReviewPanel(props: {
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
     const threadContainerRef = useRef<HTMLDivElement>(null)
 
-    const [isExpanded, setIsExpanded] = useState(true)
     const [panelWidth, setPanelWidth] = useState(500)
     const [panelX, setPanelX] = useState<number | null>(null)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -876,25 +875,6 @@ export function ReviewPanel(props: {
         queryClient.invalidateQueries({ queryKey: ['messages', props.reviewSessionId] })
     }, [queryClient, props.reviewSessionId])
 
-    // 气泡模式
-    if (!isExpanded) {
-        return (
-            <button
-                type="button"
-                onClick={() => setIsExpanded(true)}
-                className={`fixed z-50 rounded-full bg-[var(--app-secondary-bg)] text-[var(--app-fg)] shadow-lg border border-[var(--app-divider)] hover:bg-[var(--app-subtle-bg)] hover:scale-105 transition-all flex items-center justify-center ${
-                    isMobile ? 'bottom-20 right-4 w-12 h-12' : 'bottom-5 right-5 w-14 h-14'
-                }`}
-                title="打开 Review AI"
-            >
-                <ReviewIcon className={isMobile ? 'w-5 h-5' : 'w-6 h-6'} />
-                {(currentReview?.status === 'active' || session?.thinking) && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-pulse" />
-                )}
-            </button>
-        )
-    }
-
     // 移动端全屏，桌面端保持可拖拽
     const rightPos = isMobile ? 0 : (panelX === null ? 0 : undefined)
     const leftPos = isMobile ? 0 : (panelX !== null ? panelX : undefined)
@@ -940,11 +920,11 @@ export function ReviewPanel(props: {
                 <div className="flex items-center gap-1" onMouseDown={e => e.stopPropagation()}>
                     <button
                         type="button"
-                        onClick={() => setIsExpanded(false)}
+                        onClick={props.onClose}
                         className="p-1.5 rounded hover:bg-[var(--app-bg)] text-[var(--app-hint)]"
-                        title="收起"
+                        title="关闭"
                     >
-                        <MinimizeIcon />
+                        <CloseIcon />
                     </button>
                     <button
                         type="button"

@@ -1,11 +1,13 @@
 /**
- * Join Review AI 按钮组件
+ * Review AI 按钮组件
  *
- * 这是一个试验性功能，用于多 Session 协作 Review 模式
+ * 显示在 Session Header 上，用于：
+ * 1. 如果没有 Review Session，显示创建按钮
+ * 2. 如果有 Review Session，显示图标 + 待审数量，点击打开/关闭面板
  */
 
 import { useState, useRef, useEffect } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAppContext } from '@/lib/app-context'
 
 // 支持的 Review 模型选项（直接选择，不需要子级变体）
@@ -16,7 +18,7 @@ const REVIEW_MODELS = [
     { value: 'grok', label: 'Grok' }
 ] as const
 
-function UsersIcon(props: { className?: string }) {
+function ReviewIcon(props: { className?: string }) {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -30,10 +32,10 @@ function UsersIcon(props: { className?: string }) {
             strokeLinejoin="round"
             className={props.className}
         >
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M8 10h.01" />
+            <path d="M12 10h.01" />
+            <path d="M16 10h.01" />
         </svg>
     )
 }
@@ -59,12 +61,41 @@ function ChevronDownIcon(props: { className?: string }) {
 
 export function JoinReviewButton(props: {
     sessionId: string
+    /** 是否已打开 Review 面板 */
+    isReviewPanelOpen?: boolean
+    /** 点击已有 Review 时触发 */
+    onToggleReviewPanel?: () => void
+    /** 创建新 Review 后触发 */
     onReviewCreated?: (reviewSessionId: string) => void
 }) {
     const { api } = useAppContext()
     const queryClient = useQueryClient()
     const [showMenu, setShowMenu] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
+
+    // 查询当前 Session 的活跃 Review Session
+    const { data: activeReviewSession } = useQuery({
+        queryKey: ['review-sessions', 'active', props.sessionId],
+        queryFn: async () => {
+            try {
+                return await api.getActiveReviewSession(props.sessionId)
+            } catch {
+                return null
+            }
+        },
+        staleTime: 0
+    })
+
+    // 查询待审轮次数量（如果有 Review Session）
+    const { data: pendingRoundsData } = useQuery({
+        queryKey: ['review-pending-rounds', activeReviewSession?.id],
+        queryFn: async () => {
+            if (!activeReviewSession?.id) throw new Error('No review ID')
+            return await api.getReviewPendingRounds(activeReviewSession.id)
+        },
+        enabled: Boolean(activeReviewSession?.id),
+        staleTime: 30000
+    })
 
     // 点击外部关闭菜单
     useEffect(() => {
@@ -91,6 +122,7 @@ export function JoinReviewButton(props: {
         onSuccess: (result) => {
             setShowMenu(false)
             queryClient.invalidateQueries({ queryKey: ['review-sessions', props.sessionId] })
+            queryClient.invalidateQueries({ queryKey: ['review-sessions', 'active', props.sessionId] })
             props.onReviewCreated?.(result.reviewSessionId)
         }
     })
@@ -99,6 +131,34 @@ export function JoinReviewButton(props: {
         createReviewMutation.mutate(model)
     }
 
+    // 计算待审数量
+    const unreviewedCount = pendingRoundsData?.unreviewedRounds ?? 0
+    const hasPending = pendingRoundsData?.hasPendingRounds ?? false
+
+    // 如果已有 Review Session，显示图标 + 数量按钮
+    if (activeReviewSession?.reviewSessionId) {
+        return (
+            <button
+                type="button"
+                onClick={props.onToggleReviewPanel}
+                className={`flex h-7 items-center gap-1 rounded-md px-2 transition-colors ${
+                    props.isReviewPanelOpen
+                        ? 'bg-purple-500/20 text-purple-600'
+                        : 'bg-purple-500/10 text-purple-600 hover:bg-purple-500/20'
+                }`}
+                title={props.isReviewPanelOpen ? '关闭 Review 面板' : '打开 Review 面板'}
+            >
+                <ReviewIcon />
+                {(unreviewedCount > 0 || hasPending) && (
+                    <span className={`text-xs font-medium ${hasPending ? 'text-amber-500' : ''}`}>
+                        {hasPending ? '...' : unreviewedCount}
+                    </span>
+                )}
+            </button>
+        )
+    }
+
+    // 没有 Review Session，显示创建按钮
     return (
         <div className="relative" ref={menuRef}>
             <button
@@ -106,10 +166,9 @@ export function JoinReviewButton(props: {
                 onClick={() => setShowMenu(!showMenu)}
                 disabled={createReviewMutation.isPending}
                 className="flex h-7 items-center gap-1 rounded-md bg-purple-500/10 px-2 text-purple-600 transition-colors hover:bg-purple-500/20 disabled:opacity-50"
-                title="Join Review AI"
+                title="创建 Review AI"
             >
-                <UsersIcon />
-                <span className="text-xs font-medium">Review</span>
+                <ReviewIcon />
                 <ChevronDownIcon />
             </button>
 
