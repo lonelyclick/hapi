@@ -711,10 +711,21 @@ export function ReviewPanel(props: {
         }
     })
 
-    // 当 AI 完成思考时，重置 isReviewing 状态
+    // 追踪 AI 是否曾经开始思考（用于判断 Review 是否真正结束）
+    const hasStartedThinkingRef = useRef(false)
+
+    // 当 AI 开始思考时，标记已开始
     useEffect(() => {
-        if (!session?.thinking && isReviewing) {
+        if (session?.thinking && isReviewing) {
+            hasStartedThinkingRef.current = true
+        }
+    }, [session?.thinking, isReviewing])
+
+    // 当 AI 完成思考时，重置 isReviewing 状态（只有在 AI 曾经开始过思考后才重置）
+    useEffect(() => {
+        if (!session?.thinking && isReviewing && hasStartedThinkingRef.current) {
             setIsReviewing(false)
+            hasStartedThinkingRef.current = false
         }
     }, [session?.thinking, isReviewing])
 
