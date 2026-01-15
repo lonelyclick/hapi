@@ -7,7 +7,7 @@
 
 // MiniMax API 配置
 const MINIMAX_API_URL = 'https://api.minimax.io/v1/chat/completions'
-const MINIMAX_MODEL = 'MiniMax-M2.1-lightning'  // 快速版本，适合简单任务
+const MINIMAX_MODEL = 'MiniMax-M2.1'  // M2.1 标准版本
 
 // 汇总结果类型
 export interface RoundSummary {
