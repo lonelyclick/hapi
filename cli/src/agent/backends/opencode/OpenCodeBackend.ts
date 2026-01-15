@@ -67,7 +67,8 @@ type PromptState = {
     onUpdate: (msg: AgentMessage) => void;
     resolve: () => void;
     reject: (error: Error) => void;
-    currentMessageRole: 'user' | 'assistant' | null;
+    // Track message IDs and their roles to filter user message echo
+    messageRoles: Map<string, 'user' | 'assistant'>;
 };
 
 type LocalSession = {
@@ -343,18 +344,20 @@ export class OpenCodeBackend implements AgentBackend {
 
         switch (event.type) {
             case 'message.updated': {
-                // Track the role of the current message being processed
-                const props = event.properties as { info: { role?: string } };
-                if (session.promptState && props.info?.role) {
-                    session.promptState.currentMessageRole = props.info.role as 'user' | 'assistant';
-                    logger.debug(`[OpenCode] Message role: ${props.info.role}`);
+                // Track message ID and role to filter user message echo
+                const props = event.properties as { info: { id: string; role: 'user' | 'assistant' } };
+                if (session.promptState && props.info?.id && props.info?.role) {
+                    session.promptState.messageRoles.set(props.info.id, props.info.role);
+                    logger.debug(`[OpenCode] Message ${props.info.id} role: ${props.info.role}`);
                 }
                 break;
             }
             case 'message.part.updated': {
-                const props = event.properties as { part: OpencodePart; delta?: string };
-                // Only emit if we're currently prompting AND it's an assistant message (not user echo)
-                if (session.promptState && session.promptState.currentMessageRole === 'assistant') {
+                const props = event.properties as { part: OpencodePart & { messageID?: string }; delta?: string };
+                // Only emit if it's an assistant message (not user echo)
+                const messageID = props.part?.messageID;
+                const role = messageID ? session.promptState?.messageRoles.get(messageID) : null;
+                if (session.promptState && role === 'assistant') {
                     this.emitPartUpdate(props.part, session.promptState.onUpdate);
                 }
                 break;
@@ -427,7 +430,7 @@ export class OpenCodeBackend implements AgentBackend {
 
         // Create a promise that will be resolved when session.idle event is received
         const promptPromise = new Promise<void>((resolve, reject) => {
-            session.promptState = { onUpdate, resolve, reject, currentMessageRole: null };
+            session.promptState = { onUpdate, resolve, reject, messageRoles: new Map() };
         });
 
         try {

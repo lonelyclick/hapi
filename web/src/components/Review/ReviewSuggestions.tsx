@@ -50,49 +50,23 @@ export function parseReviewResult(text: string): ReviewResult | null {
         jsonStr = objMatch ? objMatch[0] : null
     }
 
-    if (!jsonStr) {
-        console.log('[parseReviewResult] No JSON found in text, text length:', text.length, 'preview:', text.substring(0, 100))
-        return null
-    }
+    if (!jsonStr) return null
 
     try {
         const parsed = JSON.parse(jsonStr)
-        console.log('[parseReviewResult] Parsed JSON:', {
-            suggestionsCount: parsed.suggestions?.length,
-            hasStats: !!parsed.stats,
-            stats: parsed.stats,
-            rawSuggestions: parsed.suggestions
-        })
         if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
             const filtered = parsed.suggestions.filter((s: unknown) =>
                 s && typeof s === 'object' &&
                 'id' in s && 'title' in s && 'detail' in s
             )
-            console.log('[parseReviewResult] After filter:', filtered.length, 'of', parsed.suggestions.length)
-            if (filtered.length !== parsed.suggestions.length) {
-                // Log which suggestions were filtered out
-                for (const s of parsed.suggestions) {
-                    if (!s || typeof s !== 'object') {
-                        console.log('[parseReviewResult] Filtered out (not object):', s)
-                    } else {
-                        const missing = []
-                        if (!('id' in s)) missing.push('id')
-                        if (!('title' in s)) missing.push('title')
-                        if (!('detail' in s)) missing.push('detail')
-                        if (missing.length > 0) {
-                            console.log('[parseReviewResult] Filtered out (missing fields):', missing, 'suggestion:', s)
-                        }
-                    }
-                }
-            }
             return {
                 suggestions: filtered,
                 summary: parsed.summary || '',
-                stats: parsed.stats  // 解析统计信息
+                stats: parsed.stats
             }
         }
-    } catch (e) {
-        console.error('[parseReviewResult] JSON parse error:', e)
+    } catch {
+        // JSON 解析失败
     }
 
     return null
@@ -444,24 +418,16 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
                     </div>
                     {/* 如果有待 review 轮次，显示 Review 按钮 */}
                     {onReview && unreviewedRounds && unreviewedRounds > 0 && (
-                        <button
-                            type="button"
-                            onClick={handleReview}
-                            disabled={reviewDisabled || isReviewing}
-                            className="w-full px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                            {isReviewing ? (
-                                <span className="flex items-center justify-center gap-1.5">
-                                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                    </svg>
-                                    执行中...
-                                </span>
-                            ) : (
-                                `Review ${unreviewedRounds} 轮`
-                            )}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleReview}
+                                disabled={reviewDisabled || isReviewing}
+                                className="flex-1 px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {isReviewing ? '执行中...' : `Review (${unreviewedRounds})`}
+                            </button>
+                        </div>
                     )}
                 </div>
             )
@@ -469,27 +435,15 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
         // 如果有 Review 回调且有待 review 轮次，只显示 Review 按钮
         if (onReview && unreviewedRounds && unreviewedRounds > 0) {
             return (
-                <div className="space-y-2">
-                    <div className="text-xs text-center text-[var(--app-hint)]">
-                        所有建议已处理
-                    </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--app-hint)]">所有建议已处理</span>
                     <button
                         type="button"
                         onClick={handleReview}
                         disabled={reviewDisabled || isReviewing}
-                        className="w-full px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                        {isReviewing ? (
-                            <span className="flex items-center justify-center gap-1.5">
-                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                </svg>
-                                执行中...
-                            </span>
-                        ) : (
-                            `Review ${unreviewedRounds} 轮`
-                        )}
+                        {isReviewing ? '执行中...' : `Review (${unreviewedRounds})`}
                     </button>
                 </div>
             )
@@ -591,51 +545,32 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
                 ))}
             </div>
 
-            {/* 按钮行 */}
-            <div className="flex gap-2">
-                {/* 发送按钮 */}
-                <button
-                    type="button"
-                    onClick={handleApply}
-                    disabled={!someSelected || isApplying}
-                    className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-sm hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                    {isApplying ? (
-                        <span className="flex items-center justify-center gap-1.5">
-                            <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                            </svg>
-                            发送中...
-                        </span>
-                    ) : (
-                        `发送 ${selectedCount} 条`
-                    )}
-                </button>
-
+            {/* 按钮行：左边 Review，右边发送 */}
+            <div className="flex items-center gap-2">
                 {/* Review 按钮 */}
                 {onReview && (
                     <button
                         type="button"
                         onClick={handleReview}
-                        disabled={reviewDisabled || isReviewing}
-                        className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        disabled={reviewDisabled || isReviewing || (!unreviewedRounds || unreviewedRounds === 0)}
+                        className="px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                        {isReviewing ? (
-                            <span className="flex items-center justify-center gap-1.5">
-                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                </svg>
-                                执行中...
-                            </span>
-                        ) : unreviewedRounds && unreviewedRounds > 0 ? (
-                            `Review ${unreviewedRounds} 轮`
-                        ) : (
-                            '全部已 Review'
-                        )}
+                        {isReviewing ? '执行中...' : `Review (${unreviewedRounds || 0})`}
                     </button>
                 )}
+
+                {/* 中间分隔 */}
+                <div className="flex-1" />
+
+                {/* 发送按钮 */}
+                <button
+                    type="button"
+                    onClick={handleApply}
+                    disabled={!someSelected || isApplying}
+                    className="px-2 py-1 text-xs font-medium rounded bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                    {isApplying ? '发送中...' : `发送 (${selectedCount})`}
+                </button>
             </div>
         </div>
     )
