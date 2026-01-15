@@ -87,21 +87,24 @@ interface SuggestionCardProps {
     suggestion: ReviewSuggestion
     selected: boolean
     expanded: boolean
+    applied: boolean  // 是否已发送
     onToggle: () => void
     onExpand: () => void
     onDelete: () => void
 }
 
-function SuggestionCard({ suggestion, selected, expanded, onToggle, onExpand, onDelete }: SuggestionCardProps) {
+function SuggestionCard({ suggestion, selected, expanded, applied, onToggle, onExpand, onDelete }: SuggestionCardProps) {
     const colors = typeColors[suggestion.type] || typeColors.improvement
 
     return (
         <div
             className={`relative rounded-md border transition-all ${
-                selected
-                    ? `${colors.bg} ${colors.border}`
-                    : 'border-[var(--app-divider)] hover:border-[var(--app-hint)]'
-            }`}
+                applied
+                    ? 'opacity-60 bg-[var(--app-subtle-bg)]'
+                    : selected
+                        ? `${colors.bg} ${colors.border}`
+                        : 'border-[var(--app-divider)] hover:border-[var(--app-hint)]'
+            } ${applied ? 'border-[var(--app-divider)]' : ''}`}
         >
             {/* 主行：可点击选择 */}
             <div
@@ -129,10 +132,17 @@ function SuggestionCard({ suggestion, selected, expanded, onToggle, onExpand, on
                     {severityLabels[suggestion.severity] || suggestion.severity}
                 </span>
 
-                {/* 标题 */}
-                <span className="flex-1 text-xs text-[var(--app-fg)] truncate">
+                {/* 标题 - 已发送的用删除线 */}
+                <span className={`flex-1 text-xs text-[var(--app-fg)] truncate ${applied ? 'line-through text-[var(--app-hint)]' : ''}`}>
                     {suggestion.title}
                 </span>
+
+                {/* 已发送标记 */}
+                {applied && (
+                    <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-medium rounded bg-green-500/20 text-green-600 dark:text-green-400">
+                        已发送
+                    </span>
+                )}
 
                 {/* 删除按钮 */}
                 <button
@@ -439,6 +449,7 @@ export function ReviewSuggestions({ reviewTexts, onApply, isApplying, onReview, 
                         suggestion={suggestion}
                         selected={selectedIds.has(suggestion.id)}
                         expanded={expandedIds.has(suggestion.id)}
+                        applied={appliedIds.has(suggestion.id)}
                         onToggle={() => toggleSelection(suggestion.id)}
                         onExpand={() => toggleExpand(suggestion.id)}
                         onDelete={() => deleteSuggestion(suggestion.id)}
