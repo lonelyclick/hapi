@@ -941,8 +941,8 @@ export function ReviewPanel(props: {
             </AssistantRuntimeProvider>
 
             {/* 固定在底部的建议列表/结果卡片 */}
-            {/* 有建议时显示建议列表，或者 Review 完成时显示完成卡片 */}
-            {(allReviewTexts.length > 0 || (currentReview && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && pendingRoundsData?.summarizedRounds && pendingRoundsData.summarizedRounds > 0)) && (
+            {/* 有建议时显示建议列表，或者 Review 完成时显示完成卡片（正在 Review 时不显示完成卡片） */}
+            {(allReviewTexts.length > 0 || (!isReviewing && currentReview && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && pendingRoundsData?.summarizedRounds && pendingRoundsData.summarizedRounds > 0)) && (
                 <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
                     <div className="px-3 py-2">
                         {allReviewTexts.length > 0 ? (
