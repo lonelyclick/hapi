@@ -388,11 +388,17 @@ export class OpenCodeBackend implements AgentBackend {
             const result = await response.json() as {
                 info: { id: string; role: string };
                 parts: OpencodePart[];
-            };
+            } | null;
+
+            logger.debug('[OpenCode] Prompt response:', JSON.stringify(result, null, 2));
 
             // Process parts and emit updates
-            for (const part of result.parts) {
-                this.emitPartUpdate(part, onUpdate);
+            if (result && result.parts && Array.isArray(result.parts)) {
+                for (const part of result.parts) {
+                    this.emitPartUpdate(part, onUpdate);
+                }
+            } else {
+                logger.debug('[OpenCode] Response has no parts or unexpected format');
             }
 
             onUpdate({ type: 'turn_complete', stopReason: 'end_turn' });
