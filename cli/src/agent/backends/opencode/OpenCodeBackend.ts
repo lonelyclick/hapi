@@ -64,16 +64,20 @@ export class OpenCodeBackend implements AgentBackend {
             this.transport = null;
         }
 
-        // Build environment with model configuration
-        const env: Record<string, string> = {
-            ...process.env as Record<string, string>,
-            OPENCODE_MODEL: this.currentModel,
+        // Build environment with model configuration using OPENCODE_CONFIG_CONTENT
+        const configContent: Record<string, unknown> = {
+            model: this.currentModel
         };
         if (this.currentVariant) {
-            env.OPENCODE_VARIANT = this.currentVariant;
+            // OpenAI models support reasoning_effort parameter
+            configContent.reasoningEffort = this.currentVariant;
         }
+        const env: Record<string, string> = {
+            ...process.env as Record<string, string>,
+            OPENCODE_CONFIG_CONTENT: JSON.stringify(configContent),
+        };
 
-        logger.debug(`[OpenCode] Starting ACP with model: ${this.currentModel}, variant: ${this.currentVariant ?? 'default'}`);
+        logger.debug(`[OpenCode] Starting ACP with config: ${JSON.stringify(configContent)}`);
 
         // Use opencode acp mode via stdio
         this.transport = new AcpStdioTransport({
