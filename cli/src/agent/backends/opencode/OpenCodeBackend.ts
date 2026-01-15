@@ -68,8 +68,8 @@ export class OpenCodeBackend implements AgentBackend {
         const configContent: Record<string, unknown> = {
             model: this.currentModel
         };
-        if (this.currentVariant) {
-            // OpenAI models support reasoning_effort parameter
+        // Only add reasoningEffort for OpenAI models (they support this parameter)
+        if (this.currentVariant && this.currentModel.startsWith('openai/')) {
             configContent.reasoningEffort = this.currentVariant;
         }
         const env: Record<string, string> = {
