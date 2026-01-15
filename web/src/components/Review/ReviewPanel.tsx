@@ -999,7 +999,7 @@ export function ReviewPanel(props: {
             )}
 
             {/* 底部状态栏 - 左侧 Review 按钮，中间状态信息，右侧发送按钮 */}
-            <div className="flex-shrink-0 px-3 py-1.5 border-t border-[var(--app-divider)] bg-[var(--app-subtle-bg)]">
+            <div className="flex-shrink-0 px-3 py-1.5 border-t border-[var(--app-divider)] bg-[var(--app-subtle-bg)] pb-[calc(0.375rem+env(safe-area-inset-bottom))]">
                 <div className="flex items-center justify-between gap-2 text-xs">
                     {/* 左侧：Review 按钮 */}
                     <div className="flex items-center gap-2">
