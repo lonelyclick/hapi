@@ -223,9 +223,6 @@ function buildReviewPrompt(
         ? `\n## 时间范围\n\n开发开始时间：${formatTimestamp(timeRange.start)}\n`
         : ''
 
-    // 不指定具体的 git 参数，让 Review AI 可以查看所有相关代码
-    const gitHint = `用 git log/diff 查看代码改动，鼓励读取相关源文件以全面了解上下文`
-
     // 构建之前建议的上下文
     let previousSuggestionsInfo = ''
     if (previousSuggestions && previousSuggestions.length > 0) {
@@ -264,7 +261,6 @@ function buildReviewPrompt(
 ${roundsSummary}
 ${timeRangeInfo}${previousSuggestionsInfo}
 ## 审查
-${gitHint}
 鼓励读取相关文件。审查：正确性、安全、性能、需求、可维护性。
 
 ## 输出要求
