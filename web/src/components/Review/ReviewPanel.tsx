@@ -16,6 +16,7 @@ import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import type { DecryptedMessage, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import { ReviewSuggestions, parseReviewResult, type SuggestionWithStatus } from './ReviewSuggestions'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
 // Icons
 function ReviewIcon(props: { className?: string }) {
@@ -211,6 +212,7 @@ export function ReviewPanel(props: {
     const [isExpanded, setIsExpanded] = useState(true)
     const [panelWidth, setPanelWidth] = useState(500)
     const [panelX, setPanelX] = useState<number | null>(null)
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
     // 移动端检测
     const [isMobile, setIsMobile] = useState(false)
