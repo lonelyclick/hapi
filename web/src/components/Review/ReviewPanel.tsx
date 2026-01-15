@@ -830,46 +830,44 @@ export function ReviewPanel(props: {
 
             {/* 对话界面 - 复用 HappyThread */}
             <AssistantRuntimeProvider runtime={runtime}>
-                <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-                    {/* 可滚动的对话区域 */}
-                    <div ref={threadContainerRef} className="flex-1 overflow-y-auto">
-                        <HappyThread
-                            key={props.reviewSessionId}
-                            api={api}
-                            sessionId={props.reviewSessionId}
-                            metadata={session?.metadata ?? null}
-                            disabled={false}
-                            onRefresh={handleRefresh}
-                            onRetryMessage={undefined}
-                            isLoadingMessages={isLoadingMessages}
-                            messagesWarning={null}
-                            hasMoreMessages={false}
-                            isLoadingMoreMessages={false}
-                            onLoadMore={async () => {}}
-                            rawMessagesCount={messages.length}
-                            normalizedMessagesCount={normalizedMessages.length}
-                            renderedMessagesCount={reconciled.blocks.length}
-                        />
-                    </div>
-
-                    {/* 固定在底部的建议列表 - 无最大高度限制，可展开至顶部 */}
-                    {allReviewTexts.length > 0 && (
-                        <div className="min-h-0 flex-1 border-t border-[var(--app-divider)] bg-[var(--app-bg)] overflow-y-auto">
-                            <div className="px-3 py-2">
-                                <ReviewSuggestions
-                                    reviewTexts={allReviewTexts}
-                                    onApply={(details) => applySuggestionsMutation.mutate(details)}
-                                    isApplying={applySuggestionsMutation.isPending}
-                                    onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
-                                    isReviewing={startReviewMutation.isPending}
-                                    reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
-                                    unreviewedRounds={pendingRoundsData?.unreviewedRounds}
-                                />
-                            </div>
-                        </div>
-                    )}
+                {/* 可滚动的对话区域 */}
+                <div ref={threadContainerRef} className="min-h-0 flex-1 overflow-y-auto">
+                    <HappyThread
+                        key={props.reviewSessionId}
+                        api={api}
+                        sessionId={props.reviewSessionId}
+                        metadata={session?.metadata ?? null}
+                        disabled={false}
+                        onRefresh={handleRefresh}
+                        onRetryMessage={undefined}
+                        isLoadingMessages={isLoadingMessages}
+                        messagesWarning={null}
+                        hasMoreMessages={false}
+                        isLoadingMoreMessages={false}
+                        onLoadMore={async () => {}}
+                        rawMessagesCount={messages.length}
+                        normalizedMessagesCount={normalizedMessages.length}
+                        renderedMessagesCount={reconciled.blocks.length}
+                    />
                 </div>
             </AssistantRuntimeProvider>
+
+            {/* 固定在底部的建议列表 */}
+            {allReviewTexts.length > 0 && (
+                <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)] max-h-64 overflow-y-auto">
+                    <div className="px-3 py-2">
+                        <ReviewSuggestions
+                            reviewTexts={allReviewTexts}
+                            onApply={(details) => applySuggestionsMutation.mutate(details)}
+                            isApplying={applySuggestionsMutation.isPending}
+                            onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
+                            isReviewing={startReviewMutation.isPending}
+                            reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
+                            unreviewedRounds={pendingRoundsData?.unreviewedRounds}
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* 底部状态栏 - 固定显示同步状态 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-t border-[var(--app-divider)] bg-[var(--app-subtle-bg)]">
