@@ -711,24 +711,6 @@ export function ReviewPanel(props: {
         }
     })
 
-    // 追踪 AI 是否曾经开始思考（用于判断 Review 是否真正结束）
-    const hasStartedThinkingRef = useRef(false)
-
-    // 当 AI 开始思考时，标记已开始
-    useEffect(() => {
-        if (session?.thinking && isReviewing) {
-            hasStartedThinkingRef.current = true
-        }
-    }, [session?.thinking, isReviewing])
-
-    // 当 AI 完成思考时，重置 isReviewing 状态（只有在 AI 曾经开始过思考后才重置）
-    useEffect(() => {
-        if (!session?.thinking && isReviewing && hasStartedThinkingRef.current) {
-            setIsReviewing(false)
-            hasStartedThinkingRef.current = false
-        }
-    }, [session?.thinking, isReviewing])
-
     // 从已处理的 blocks 中提取最后一个包含 suggestions JSON 的文本（覆盖而非累加）
     const allReviewTexts = useMemo(() => {
         // 倒序查找第一个有效的 review 结果
@@ -745,6 +727,30 @@ export function ReviewPanel(props: {
         }
         return []
     }, [reconciled.blocks])
+
+    // 追踪 Review 开始时的 allReviewTexts 长度（用于判断 MiniMax 是否处理完成）
+    const reviewStartTextsLengthRef = useRef<number | null>(null)
+
+    // 当开始 Review 时，记录当前 allReviewTexts 的长度
+    useEffect(() => {
+        if (isReviewing && reviewStartTextsLengthRef.current === null) {
+            reviewStartTextsLengthRef.current = allReviewTexts.length
+        }
+    }, [isReviewing, allReviewTexts.length])
+
+    // 当 MiniMax 处理完成（allReviewTexts 有新内容）且 AI 不再思考时，重置 isReviewing
+    // 这确保了整个流程（Review AI 回复 + MiniMax 解析）都完成后才重置状态
+    useEffect(() => {
+        if (!isReviewing) return
+        if (reviewStartTextsLengthRef.current === null) return
+        // AI 还在思考，不重置
+        if (session?.thinking) return
+        // allReviewTexts 有新内容，说明 MiniMax 已处理完成
+        if (allReviewTexts.length > reviewStartTextsLengthRef.current) {
+            setIsReviewing(false)
+            reviewStartTextsLengthRef.current = null
+        }
+    }, [isReviewing, allReviewTexts.length, session?.thinking])
 
     // 计算选中的建议数量和详情
     const { selectedCount, selectedDetails } = useMemo(() => {
