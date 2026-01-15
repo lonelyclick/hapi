@@ -246,9 +246,15 @@ function mergeAgentTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
 
         const prev = merged[merged.length - 1]
         if (prev && prev.kind === 'agent-text') {
-            // Merge consecutive agent-text blocks (for streaming deltas from OpenRouter, etc.)
-            merged[merged.length - 1] = { ...prev, text: prev.text + block.text }
-            continue
+            // Only merge if they belong to the same message (same base id before the index suffix)
+            // IDs are like "msg-123:0", "msg-123:1" - same message has same base id
+            const prevBaseId = prev.id.split(':')[0]
+            const currBaseId = block.id.split(':')[0]
+            if (prevBaseId === currBaseId) {
+                // Merge consecutive agent-text blocks from the same message (for streaming deltas)
+                merged[merged.length - 1] = { ...prev, text: prev.text + block.text }
+                continue
+            }
         }
 
         merged.push(block)
