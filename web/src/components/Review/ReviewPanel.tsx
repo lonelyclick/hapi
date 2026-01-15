@@ -616,6 +616,16 @@ export function ReviewPanel(props: {
         }
     })
 
+    // 滚动到底部的辅助函数
+    const scrollToBottom = useCallback(() => {
+        const container = threadContainerRef.current
+        if (container) {
+            requestAnimationFrame(() => {
+                container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+            })
+        }
+    }, [])
+
     // 开始 Review（发送给 Review AI）
     // 注意：Review AI 回复结束后，后端会自动用 MiniMax 解析结果并注入到 Review Session
     const startReviewMutation = useMutation({
@@ -638,6 +648,8 @@ export function ReviewPanel(props: {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['review-sessions', props.mainSessionId] })
             queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
+            // 执行 review 时滚动到底部
+            scrollToBottom()
         }
     })
 
@@ -797,9 +809,9 @@ export function ReviewPanel(props: {
                 </div>
             </div>
 
-            {/* 已完成汇总的结果卡片 - 固定在顶部 */}
+            {/* 已完成汇总的结果卡片 - 默认收起，展开时可抵达底部 */}
             {savedSummaries.length > 0 && (
-                <div className="flex-shrink-0 border-b border-[var(--app-divider)] max-h-48 overflow-y-auto">
+                <div className="min-h-0 flex-shrink border-b border-[var(--app-divider)] overflow-y-auto">
                     <SummaryCards summaries={savedSummaries} />
                 </div>
             )}
@@ -828,21 +840,19 @@ export function ReviewPanel(props: {
                         />
                     </div>
 
-                    {/* 固定在底部的建议列表 */}
+                    {/* 固定在底部的建议列表 - 无最大高度限制，可展开至顶部 */}
                     {allReviewTexts.length > 0 && (
-                        <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
-                            <div className="max-h-64 overflow-y-auto">
-                                <div className="px-3 py-2">
-                                    <ReviewSuggestions
-                                        reviewTexts={allReviewTexts}
-                                        onApply={(details) => applySuggestionsMutation.mutate(details)}
-                                        isApplying={applySuggestionsMutation.isPending}
-                                        onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
-                                        isReviewing={startReviewMutation.isPending}
-                                        reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
-                                        unreviewedRounds={pendingRoundsData?.unreviewedRounds}
-                                    />
-                                </div>
+                        <div className="min-h-0 flex-1 border-t border-[var(--app-divider)] bg-[var(--app-bg)] overflow-y-auto">
+                            <div className="px-3 py-2">
+                                <ReviewSuggestions
+                                    reviewTexts={allReviewTexts}
+                                    onApply={(details) => applySuggestionsMutation.mutate(details)}
+                                    isApplying={applySuggestionsMutation.isPending}
+                                    onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
+                                    isReviewing={startReviewMutation.isPending}
+                                    reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
+                                    unreviewedRounds={pendingRoundsData?.unreviewedRounds}
+                                />
                             </div>
                         </div>
                     )}
