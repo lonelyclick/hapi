@@ -960,17 +960,19 @@ export function ReviewPanel(props: {
                 <div className="flex items-center justify-between gap-2 text-xs">
                     {/* 左侧：Review 按钮 */}
                     <div className="flex items-center gap-2">
-                        {currentReview && pendingRoundsData?.hasUnreviewedRounds && (
+                        {/* Review 按钮：有待审轮次或正在同步时都显示 */}
+                        {currentReview && (pendingRoundsData?.hasUnreviewedRounds || pendingRoundsData?.hasPendingRounds || session?.thinking) && (
                             <button
                                 type="button"
                                 onClick={() => startReviewMutation.mutate()}
-                                disabled={startReviewMutation.isPending || session?.thinking || autoSyncStatus?.status === 'syncing'}
+                                disabled={startReviewMutation.isPending || session?.thinking || autoSyncStatus?.status === 'syncing' || pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds}
                                 className="px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
-                                {startReviewMutation.isPending ? '执行中...' : `Review (${pendingRoundsData.unreviewedRounds})`}
+                                {startReviewMutation.isPending ? '执行中...' : `Review (${pendingRoundsData?.unreviewedRounds ?? 0})`}
                             </button>
                         )}
-                        {currentReview && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && (
+                        {/* 完成状态：没有待审轮次且没有待同步轮次且不在思考 */}
+                        {currentReview && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && !session?.thinking && (
                             <span className="text-green-500 flex items-center gap-1">
                                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
