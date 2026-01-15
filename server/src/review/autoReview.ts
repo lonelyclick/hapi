@@ -360,10 +360,11 @@ export class AutoReviewService {
             // 获取 Review Session 的最新消息
             const messagesResult = await this.engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 10, beforeSeq: null })
 
-            // 提取汇总
+            // 提取汇总 - 从最新消息开始找，确保取到最新的回复
             let summaries: Array<{ round: number; summary: string }> = []
 
-            for (const m of messagesResult.messages.reverse()) {
+            // messagesResult.messages 已经是按时间倒序（最新在前），直接遍历即可
+            for (const m of messagesResult.messages) {
                 const content = m.content as Record<string, unknown>
                 if (content?.role !== 'agent') continue
 
