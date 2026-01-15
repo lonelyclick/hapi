@@ -796,6 +796,93 @@ export function ReviewPanel(props: {
                 </div>
             </div>
 
+            {/* 顶部状态栏 - 固定显示同步状态 */}
+            <div className="flex-shrink-0 px-3 py-1.5 border-b border-[var(--app-divider)] bg-[var(--app-subtle-bg)]">
+                {/* 加载中 */}
+                {!currentReview && reviewSessions === undefined && (
+                    <div className="flex items-center justify-center gap-2 text-[var(--app-hint)]">
+                        <LoadingIcon className="w-3 h-3" />
+                        <span className="text-xs">加载中...</span>
+                    </div>
+                )}
+
+                {/* 找不到 currentReview 但 reviewSessions 已加载 */}
+                {!currentReview && reviewSessions !== undefined && (
+                    <div className="text-xs text-center text-[var(--app-hint)]">
+                        未找到 Review 会话信息
+                    </div>
+                )}
+
+                {/* pending 或 active 状态 */}
+                {(currentReview?.status === 'pending' || currentReview?.status === 'active') && (
+                    <div className="flex items-center justify-between gap-2">
+                        {/* 左侧：状态信息 */}
+                        <div className="flex items-center gap-2 text-xs text-[var(--app-hint)]">
+                            {/* 同步状态 */}
+                            {autoSyncStatus?.status === 'syncing' && pendingRoundsData && (
+                                <span className="flex items-center gap-1 text-blue-500">
+                                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    同步中 {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds}
+                                </span>
+                            )}
+                            {autoSyncStatus?.status === 'checking' && (
+                                <span className="flex items-center gap-1 text-blue-500">
+                                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    检查中
+                                </span>
+                            )}
+                            {/* AI 思考状态 */}
+                            {session?.thinking && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && (
+                                <span className="flex items-center gap-1 text-green-500">
+                                    <div className="flex gap-0.5">
+                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                    AI 处理中
+                                </span>
+                            )}
+                            {/* 空闲状态：显示轮次信息 */}
+                            {!session?.thinking && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && pendingRoundsData && (
+                                <span>
+                                    {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds} 轮已汇总
+                                    {pendingRoundsData.hasUnreviewedRounds && (
+                                        <span className="text-amber-500 ml-1">· {pendingRoundsData.unreviewedRounds} 轮待审查</span>
+                                    )}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* 右侧：Review 按钮 */}
+                        {allReviewTexts.length === 0 && pendingRoundsData?.hasUnreviewedRounds && (
+                            <button
+                                type="button"
+                                onClick={() => startReviewMutation.mutate()}
+                                disabled={startReviewMutation.isPending || pendingRoundsData?.hasPendingRounds || session?.thinking || autoSyncStatus?.status === 'syncing'}
+                                className="px-2.5 py-0.5 text-xs font-medium rounded bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                                {startReviewMutation.isPending ? '执行中...' : `Review ${pendingRoundsData.unreviewedRounds} 轮`}
+                            </button>
+                        )}
+                        {/* 所有轮次都已审查完成且没有建议 */}
+                        {allReviewTexts.length === 0 && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && (
+                            <span className="text-xs text-green-500 flex items-center gap-1">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                全部完成
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
+
             {/* 对话界面 - 复用 HappyThread */}
             <AssistantRuntimeProvider runtime={runtime}>
                 <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -824,11 +911,10 @@ export function ReviewPanel(props: {
                         )}
                     </div>
 
-                    {/* 固定在底部的建议列表和状态栏 */}
-                    <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
-                        {/* 建议卡片 - 固定在底部 */}
-                        {allReviewTexts.length > 0 && (
-                            <div className="max-h-64 overflow-y-auto border-b border-[var(--app-divider)]">
+                    {/* 固定在底部的建议列表 */}
+                    {allReviewTexts.length > 0 && (
+                        <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
+                            <div className="max-h-64 overflow-y-auto">
                                 <div className="px-3 py-2">
                                     <ReviewSuggestions
                                         reviewTexts={allReviewTexts}
@@ -841,93 +927,8 @@ export function ReviewPanel(props: {
                                     />
                                 </div>
                             </div>
-                        )}
-
-                        {/* 底部状态栏 - 始终显示 */}
-                        <div className="px-3 py-2 bg-[var(--app-subtle-bg)]">
-                            {/* 加载中 */}
-                            {!currentReview && reviewSessions === undefined && (
-                                <div className="flex items-center justify-center gap-2 text-[var(--app-hint)]">
-                                    <LoadingIcon />
-                                    <span className="text-xs">加载中...</span>
-                                </div>
-                            )}
-
-                            {/* 找不到 currentReview 但 reviewSessions 已加载 */}
-                            {!currentReview && reviewSessions !== undefined && (
-                                <div className="text-xs text-center text-[var(--app-hint)]">
-                                    未找到 Review 会话信息
-                                </div>
-                            )}
-
-                            {/* pending 或 active 状态 */}
-                            {(currentReview?.status === 'pending' || currentReview?.status === 'active') && (
-                                <div className="flex items-center justify-between gap-2">
-                                    {/* 左侧：状态信息 */}
-                                    <div className="flex items-center gap-2 text-xs text-[var(--app-hint)]">
-                                        {/* 同步状态 */}
-                                        {autoSyncStatus?.status === 'syncing' && pendingRoundsData && (
-                                            <span className="flex items-center gap-1">
-                                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                                </svg>
-                                                同步 {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds}
-                                            </span>
-                                        )}
-                                        {autoSyncStatus?.status === 'checking' && (
-                                            <span className="flex items-center gap-1">
-                                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                                </svg>
-                                                检查中
-                                            </span>
-                                        )}
-                                        {/* AI 思考状态 */}
-                                        {session?.thinking && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && (
-                                            <span className="flex items-center gap-1">
-                                                <div className="flex gap-0.5">
-                                                    <span className="w-1 h-1 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                                    <span className="w-1 h-1 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                                    <span className="w-1 h-1 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                                </div>
-                                                AI 处理中
-                                            </span>
-                                        )}
-                                        {/* 空闲状态：显示轮次信息 */}
-                                        {!session?.thinking && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && pendingRoundsData && (
-                                            <span>
-                                                {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds} 轮已汇总
-                                                {pendingRoundsData.hasUnreviewedRounds && ` · ${pendingRoundsData.unreviewedRounds} 轮待审查`}
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {/* 右侧：Review 按钮 */}
-                                    {allReviewTexts.length === 0 && pendingRoundsData?.hasUnreviewedRounds && (
-                                        <button
-                                            type="button"
-                                            onClick={() => startReviewMutation.mutate()}
-                                            disabled={startReviewMutation.isPending || pendingRoundsData?.hasPendingRounds || session?.thinking || autoSyncStatus?.status === 'syncing'}
-                                            className="px-3 py-1 text-xs font-medium rounded bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                                        >
-                                            {startReviewMutation.isPending ? '执行中...' : `Review ${pendingRoundsData.unreviewedRounds} 轮`}
-                                        </button>
-                                    )}
-                                    {/* 所有轮次都已审查完成且没有建议 */}
-                                    {allReviewTexts.length === 0 && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && (
-                                        <span className="text-xs text-green-500 flex items-center gap-1">
-                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                            全部完成
-                                        </span>
-                                    )}
-                                </div>
-                            )}
                         </div>
-                    </div>
+                    )}
                 </div>
             </AssistantRuntimeProvider>
         </div>

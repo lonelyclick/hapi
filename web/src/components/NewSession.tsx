@@ -42,6 +42,9 @@ const OPENCODE_MODELS = [
     // DeepSeek
     { value: 'deepseek/deepseek-chat', label: 'DeepSeek V3', provider: 'DeepSeek' },
     { value: 'deepseek/deepseek-r1', label: 'DeepSeek R1', provider: 'DeepSeek' },
+    // MiniMax
+    { value: 'minimax/MiniMax-Text-01', label: 'MiniMax-Text-01', provider: 'MiniMax' },
+    { value: 'minimax/abab6.5s-chat', label: 'abab6.5s-chat', provider: 'MiniMax' },
     // Groq (fast inference)
     { value: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B', provider: 'Groq' },
     { value: 'groq/mixtral-8x7b-32768', label: 'Mixtral 8x7B', provider: 'Groq' },
