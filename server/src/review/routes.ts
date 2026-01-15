@@ -198,14 +198,6 @@ function formatTimestamp(ts: number): string {
 }
 
 /**
- * 格式化时间戳为 git 命令可用的格式
- */
-function formatGitTimestamp(ts: number): string {
-    const date = new Date(ts)
-    return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '')
-}
-
-/**
  * 之前的建议项
  */
 interface PreviousSuggestion {
@@ -226,13 +218,13 @@ function buildReviewPrompt(
     timeRange?: { start: number; end: number },
     previousSuggestions?: PreviousSuggestion[]
 ): string {
+    // 只显示开发开始时间，让 Review AI 自行决定如何查看代码
     const timeRangeInfo = timeRange
-        ? `\n## 时间范围\n\n开发时间：${formatTimestamp(timeRange.start)} ~ ${formatTimestamp(timeRange.end)}\n`
+        ? `\n## 时间范围\n\n开发开始时间：${formatTimestamp(timeRange.start)}\n`
         : ''
 
-    const gitHint = timeRange
-        ? `用 git log/diff --after="${formatGitTimestamp(timeRange.start)}" --before="${formatGitTimestamp(timeRange.end + 60000)}" 查看时间段内改动，或 git diff HEAD 查看未提交改动`
-        : `用 git log -5 和 git diff HEAD~3 查看最近改动`
+    // 不指定具体的 git 参数，让 Review AI 可以查看所有相关代码
+    const gitHint = `用 git log/diff 查看代码改动，鼓励读取相关源文件以全面了解上下文`
 
     // 构建之前建议的上下文
     let previousSuggestionsInfo = ''
