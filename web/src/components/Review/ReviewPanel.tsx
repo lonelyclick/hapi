@@ -437,6 +437,12 @@ export function ReviewPanel(props: {
                 continue
             }
             const next = normalizeDecryptedMessage(message)
+            // 调试：检查带 stats 的消息
+            const contentStr = JSON.stringify(message.content)
+            if (contentStr.includes('"stats"')) {
+                console.log('[ReviewPanel] Message with stats:', message.id, message.content)
+                console.log('[ReviewPanel] Normalized result:', next)
+            }
             cache.set(message.id, { source: message, normalized: next })
             if (next) normalized.push(next)
         }
