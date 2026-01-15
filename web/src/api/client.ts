@@ -479,16 +479,17 @@ export class ApiClient {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli',
+        agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli' | 'opencode',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
         claudeAgent?: string,
-        openrouterModel?: string
+        openrouterModel?: string,
+        opencodeModel?: string
     ): Promise<SpawnResponse> {
         return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn`, {
             method: 'POST',
-            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeAgent, openrouterModel, source: 'webapp' })
+            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeAgent, openrouterModel, opencodeModel, source: 'webapp' })
         })
     }
 

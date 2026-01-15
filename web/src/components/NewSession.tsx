@@ -172,7 +172,8 @@ export function NewSession(props: {
                 yolo: true,
                 sessionType: 'simple',
                 claudeAgent: agent === 'claude' ? (claudeAgent.trim() || undefined) : undefined,
-                openrouterModel: agent === 'openrouter' ? openrouterModel : undefined
+                openrouterModel: agent === 'openrouter' ? openrouterModel : undefined,
+                opencodeModel: agent === 'opencode' ? opencodeModel : undefined
             })
 
             // Update logs from server response
@@ -286,7 +287,7 @@ export function NewSession(props: {
                     Agents
                 </label>
                 <div className="flex flex-wrap gap-x-3 gap-y-2">
-                    {(['claude', 'codex', 'gemini', 'aider-cli'] as const).map((agentType) => (
+                    {(['claude', 'codex', 'gemini', 'opencode', 'aider-cli'] as const).map((agentType) => (
                         <label
                             key={agentType}
                             className="flex items-center gap-1 cursor-pointer"
@@ -368,6 +369,24 @@ export function NewSession(props: {
                     </select>
                     <div className="text-[11px] text-[var(--app-hint)]">
                         Select model from OpenRouter. Requires OPENROUTER_API_KEY.
+                    </div>
+                </div>
+            ) : null}
+            {agent === 'opencode' ? (
+                <div className="flex flex-col gap-1.5 px-3 pb-3">
+                    <label className="text-xs font-medium text-[var(--app-hint)]">
+                        Model (OpenCode)
+                    </label>
+                    <input
+                        type="text"
+                        value={opencodeModel}
+                        onChange={(e) => setOpencodeModel(e.target.value)}
+                        disabled={isFormDisabled}
+                        placeholder="e.g. anthropic/claude-sonnet-4"
+                        className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
+                    />
+                    <div className="text-[11px] text-[var(--app-hint)]">
+                        OpenCode supports 20+ providers. Format: provider/model (e.g. openai/gpt-4o).
                     </div>
                 </div>
             ) : null}

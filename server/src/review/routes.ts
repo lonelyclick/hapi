@@ -950,6 +950,8 @@ ${batchRounds.map(r => `  {
             summary: r.aiSummary
         })).sort((a, b) => a.round - b.round)
 
+        console.log('[pending-rounds] existingRounds count:', existingRounds.length, 'savedSummaries count:', savedSummaries.length)
+
         return c.json({
             totalRounds: allRounds.length,
             summarizedRounds: existingRounds.length,
