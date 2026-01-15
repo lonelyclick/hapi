@@ -93,17 +93,17 @@ export function SessionChat(props: {
                 return null
             }
         },
-        staleTime: 30000
+        staleTime: 0  // 每次都重新获取，确保从列表进入时能拿到最新数据
     })
 
     // 如果有活跃的 Review Session，自动显示面板
     useEffect(() => {
         // 用户手动关闭后，不再自动恢复
         if (userClosedReviewRef.current) return
-        if (activeReviewSession?.reviewSessionId && !reviewSessionId) {
+        if (activeReviewSession?.reviewSessionId) {
             setReviewSessionId(activeReviewSession.reviewSessionId)
         }
-    }, [activeReviewSession, reviewSessionId])
+    }, [activeReviewSession])
 
     useEffect(() => {
         normalizedCacheRef.current.clear()
