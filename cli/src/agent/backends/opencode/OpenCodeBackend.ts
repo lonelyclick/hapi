@@ -47,7 +47,7 @@ export class OpenCodeBackend implements AgentBackend {
 
     constructor(private readonly options: OpenCodeBackendOptions = {}) {
         this.initTimeoutMs = options.initTimeoutMs ?? 30_000;
-        this.currentModel = options.defaultModel ?? 'minimax/MiniMax-M2.1';
+        this.currentModel = options.defaultModel ?? 'minimax-openai/MiniMax-M2.1';
     }
 
     async initialize(): Promise<void> {

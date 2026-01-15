@@ -1016,7 +1016,7 @@ export function ReviewPanel(props: {
                                 检查中
                             </span>
                         )}
-                        {/* AI 思考状态 - 仅在不是同步时显示 */}
+                        {/* AI 思考状态 - 仅在不是同步时显示，区分 Review 和其他处理 */}
                         {currentReview && session?.thinking && !pendingRoundsData?.hasPendingRounds && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && (
                             <span className="flex items-center gap-1 text-green-500">
                                 <div className="flex gap-0.5">
@@ -1024,7 +1024,7 @@ export function ReviewPanel(props: {
                                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                                 </div>
-                                AI 处理中
+                                {pendingRoundsData?.hasUnreviewedRounds ? '正在 Review' : 'AI 处理中'}
                             </span>
                         )}
                         {/* 空闲状态：显示轮次信息 */}

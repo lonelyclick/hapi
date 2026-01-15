@@ -42,9 +42,9 @@ const OPENCODE_MODELS = [
     // DeepSeek
     { value: 'deepseek/deepseek-chat', label: 'DeepSeek V3', provider: 'DeepSeek' },
     { value: 'deepseek/deepseek-r1', label: 'DeepSeek R1', provider: 'DeepSeek' },
-    // MiniMax
-    { value: 'minimax/MiniMax-M2.1', label: 'MiniMax-M2.1', provider: 'MiniMax' },
-    { value: 'minimax/MiniMax-Text-01', label: 'MiniMax-Text-01', provider: 'MiniMax' },
+    // MiniMax (OpenAI-compatible API)
+    { value: 'minimax-openai/MiniMax-M2.1', label: 'MiniMax-M2.1', provider: 'MiniMax' },
+    { value: 'minimax-openai/MiniMax-Text-01', label: 'MiniMax-Text-01', provider: 'MiniMax' },
     // Groq (fast inference)
     { value: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B', provider: 'Groq' },
     { value: 'groq/mixtral-8x7b-32768', label: 'Mixtral 8x7B', provider: 'Groq' },
@@ -141,7 +141,7 @@ export function NewSession(props: {
     const [agent, setAgent] = useState<AgentType>('claude')
     const [claudeAgent, setClaudeAgent] = useState('')
     const [openrouterModel, setOpenrouterModel] = useState(OPENROUTER_MODELS[0].value)
-    const [opencodeModel, setOpencodeModel] = useState('minimax/MiniMax-M2.1')
+    const [opencodeModel, setOpencodeModel] = useState('minimax-openai/MiniMax-M2.1')
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
     const [spawnLogs, setSpawnLogs] = useState<SpawnLogEntry[]>([])
