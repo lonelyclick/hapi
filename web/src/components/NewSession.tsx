@@ -25,6 +25,44 @@ const OPENROUTER_MODELS = [
     { value: 'qwen/qwen-2.5-coder-32b-instruct', label: 'Qwen 2.5 Coder 32B' },
 ]
 
+// OpenCode supported models (75+ providers via AI SDK)
+const OPENCODE_MODELS = [
+    // Anthropic
+    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4', provider: 'Anthropic' },
+    { value: 'anthropic/claude-opus-4', label: 'Claude Opus 4', provider: 'Anthropic' },
+    { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4', provider: 'Anthropic' },
+    // OpenAI
+    { value: 'openai/gpt-4o', label: 'GPT-4o', provider: 'OpenAI' },
+    { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI' },
+    { value: 'openai/o1', label: 'o1', provider: 'OpenAI' },
+    { value: 'openai/o3-mini', label: 'o3-mini', provider: 'OpenAI' },
+    // Google
+    { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google' },
+    { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google' },
+    // DeepSeek
+    { value: 'deepseek/deepseek-chat', label: 'DeepSeek V3', provider: 'DeepSeek' },
+    { value: 'deepseek/deepseek-r1', label: 'DeepSeek R1', provider: 'DeepSeek' },
+    // Groq (fast inference)
+    { value: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B', provider: 'Groq' },
+    { value: 'groq/mixtral-8x7b-32768', label: 'Mixtral 8x7B', provider: 'Groq' },
+    // xAI
+    { value: 'xai/grok-3', label: 'Grok 3', provider: 'xAI' },
+    { value: 'xai/grok-3-mini', label: 'Grok 3 Mini', provider: 'xAI' },
+    // Together AI
+    { value: 'together/meta-llama/Llama-3.3-70B-Instruct-Turbo', label: 'Llama 3.3 70B Turbo', provider: 'Together' },
+    { value: 'together/Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen 2.5 Coder 32B', provider: 'Together' },
+    // Fireworks
+    { value: 'fireworks/llama-v3p3-70b-instruct', label: 'Llama 3.3 70B', provider: 'Fireworks' },
+    // Cerebras
+    { value: 'cerebras/llama-3.3-70b', label: 'Llama 3.3 70B', provider: 'Cerebras' },
+    // Moonshot (Kimi)
+    { value: 'moonshot/kimi-k2', label: 'Kimi K2', provider: 'Moonshot' },
+    // Local (Ollama)
+    { value: 'ollama/llama3.3', label: 'Llama 3.3 (Local)', provider: 'Ollama' },
+    { value: 'ollama/qwen2.5-coder', label: 'Qwen 2.5 Coder (Local)', provider: 'Ollama' },
+    { value: 'ollama/deepseek-r1', label: 'DeepSeek R1 (Local)', provider: 'Ollama' },
+]
+
 function SpawnLogPanel({ logs }: { logs: SpawnLogEntry[] }) {
     if (logs.length === 0) return null
 
@@ -377,16 +415,20 @@ export function NewSession(props: {
                     <label className="text-xs font-medium text-[var(--app-hint)]">
                         Model (OpenCode)
                     </label>
-                    <input
-                        type="text"
+                    <select
                         value={opencodeModel}
                         onChange={(e) => setOpencodeModel(e.target.value)}
                         disabled={isFormDisabled}
-                        placeholder="e.g. anthropic/claude-sonnet-4"
                         className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
-                    />
+                    >
+                        {OPENCODE_MODELS.map((model) => (
+                            <option key={model.value} value={model.value}>
+                                {model.provider} - {model.label}
+                            </option>
+                        ))}
+                    </select>
                     <div className="text-[11px] text-[var(--app-hint)]">
-                        OpenCode supports 20+ providers. Format: provider/model (e.g. openai/gpt-4o).
+                        OpenCode supports 75+ providers via AI SDK. Configure API keys in opencode.json.
                     </div>
                 </div>
             ) : null}

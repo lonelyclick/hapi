@@ -306,7 +306,6 @@ export function ReviewPanel(props: {
     // 检查未汇总的轮次（pending 和 active 状态都需要查询）
     // 不需要轮询，只在用户点击同步或同步完成后手动刷新
     const pendingRoundsEnabled = Boolean(currentReviewForPending?.id) && (currentReviewForPending?.status === 'pending' || currentReviewForPending?.status === 'active')
-    console.log('[ReviewPanel] currentReviewForPending:', currentReviewForPending?.id, 'status:', currentReviewForPending?.status, 'enabled:', pendingRoundsEnabled)
 
     const { data: pendingRoundsData } = useQuery({
         queryKey: ['review-pending-rounds', currentReviewForPending?.id],
@@ -317,8 +316,6 @@ export function ReviewPanel(props: {
         enabled: pendingRoundsEnabled,
         staleTime: Infinity  // 数据不会自动过期
     })
-
-    console.log('[ReviewPanel] pendingRoundsData:', pendingRoundsData, 'savedSummaries in pendingRoundsData:', pendingRoundsData?.savedSummaries?.length, 'autoSyncStatus:', autoSyncStatus)
 
     // 合并 savedSummaries：API 初始数据 + SSE 实时推送的新数据
     const savedSummaries = useMemo(() => {
@@ -662,24 +659,15 @@ export function ReviewPanel(props: {
 
     // 从已处理的 blocks 中提取最后一个包含 suggestions JSON 的文本（覆盖而非累加）
     const allReviewTexts = useMemo(() => {
-        console.log('[ReviewPanel] Searching for suggestions in', reconciled.blocks.length, 'blocks')
         // 倒序查找第一个有效的 review 结果
-        let agentTextCount = 0
         for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
             const block = reconciled.blocks[i]
             if (block.kind !== 'agent-text') continue
-            agentTextCount++
-
-            // 检查是否包含 json 代码块
-            if (block.text.includes('```json')) {
-                console.log(`[ReviewPanel] agent-text #${agentTextCount}: len=${block.text.length}, has json block, full text:`, block.text)
-            }
 
             const result = parseReviewResult(block.text)
             // 只要能解析出 suggestions（包括空数组），就认为是有效结果
             // 空数组表示所有问题都已修复，应该清空建议列表
             if (result && result.suggestions) {
-                console.log('[ReviewPanel] Found suggestions:', result.suggestions.length)
                 // 如果 suggestions 为空数组，返回空，表示没有建议需要显示
                 if (result.suggestions.length === 0) {
                     return []
@@ -688,7 +676,6 @@ export function ReviewPanel(props: {
                 return [block.text]
             }
         }
-        console.log('[ReviewPanel] No suggestions found in', agentTextCount, 'agent-text blocks')
         return []
     }, [reconciled.blocks])
 
