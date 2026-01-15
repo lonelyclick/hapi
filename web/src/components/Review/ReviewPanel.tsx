@@ -119,16 +119,16 @@ function SummaryCards(props: { summaries: Array<{ round: number; summary: string
     const noneExpanded = expandedRounds.size === 0
 
     return (
-        <div className="mx-auto w-full max-w-content min-w-0 px-4 py-4">
+        <div className="px-3 py-2">
             <div className="rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border border-green-200 dark:border-green-700 shadow-sm overflow-hidden">
                 {/* 头部 */}
-                <div className="flex items-center justify-between px-3 py-2 bg-green-100/50 dark:bg-green-800/30 border-b border-green-200 dark:border-green-700">
+                <div className="flex items-center justify-between px-2 py-1.5 bg-green-100/50 dark:bg-green-800/30 border-b border-green-200 dark:border-green-700">
                     <div className="flex items-center gap-1.5">
-                        <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-3.5 h-3.5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span className="text-sm font-medium text-green-700 dark:text-green-300">
-                            已汇总 {props.summaries.length} 轮对话
+                        <span className="text-xs font-medium text-green-700 dark:text-green-300">
+                            已汇总 {props.summaries.length} 轮
                         </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -136,7 +136,7 @@ function SummaryCards(props: { summaries: Array<{ round: number; summary: string
                             type="button"
                             onClick={expandAll}
                             disabled={allExpanded}
-                            className="text-xs text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="text-[10px] text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             全部展开
                         </button>
@@ -145,33 +145,33 @@ function SummaryCards(props: { summaries: Array<{ round: number; summary: string
                             type="button"
                             onClick={collapseAll}
                             disabled={noneExpanded}
-                            className="text-xs text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="text-[10px] text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             全部收起
                         </button>
                     </div>
                 </div>
                 {/* 汇总列表 */}
-                <div className="p-2 space-y-1 max-h-96 overflow-y-auto">
+                <div className="p-1.5 space-y-1">
                     {props.summaries.map(summary => {
                         const expanded = expandedRounds.has(summary.round)
                         return (
                             <div key={summary.round} className="rounded bg-white dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 overflow-hidden">
                                 <div
-                                    className="flex items-center gap-1.5 px-2 py-1.5 bg-green-50 dark:bg-green-800/30 cursor-pointer hover:bg-green-100 dark:hover:bg-green-800/50 transition-colors"
+                                    className="flex items-center gap-1.5 px-2 py-1 bg-green-50 dark:bg-green-800/30 cursor-pointer hover:bg-green-100 dark:hover:bg-green-800/50 transition-colors"
                                     onClick={() => toggleRound(summary.round)}
                                 >
-                                    <div className="flex items-center justify-center w-5 h-5 rounded-full bg-green-500 text-white text-[10px] font-bold shrink-0">
+                                    <div className="flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-white text-[9px] font-bold shrink-0">
                                         {summary.round}
                                     </div>
-                                    <span className="flex-1 text-xs text-slate-600 dark:text-slate-300 truncate">
-                                        {summary.summary.slice(0, 50)}{summary.summary.length > 50 ? '...' : ''}
+                                    <span className="flex-1 text-[11px] text-slate-600 dark:text-slate-300 truncate">
+                                        {summary.summary.slice(0, 60)}{summary.summary.length > 60 ? '...' : ''}
                                     </span>
                                     <ChevronIcon expanded={expanded} className="text-green-500 shrink-0" />
                                 </div>
                                 {expanded && (
-                                    <div className="px-2 py-2 border-t border-green-100 dark:border-green-700/50">
-                                        <div className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                                    <div className="px-2 py-1.5 border-t border-green-100 dark:border-green-700/50">
+                                        <div className="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
                                             {summary.summary}
                                         </div>
                                     </div>
@@ -883,6 +883,13 @@ export function ReviewPanel(props: {
                 )}
             </div>
 
+            {/* 已完成汇总的结果卡片 - 固定在顶部状态栏下方 */}
+            {savedSummaries.length > 0 && (
+                <div className="flex-shrink-0 border-b border-[var(--app-divider)] max-h-48 overflow-y-auto">
+                    <SummaryCards summaries={savedSummaries} />
+                </div>
+            )}
+
             {/* 对话界面 - 复用 HappyThread */}
             <AssistantRuntimeProvider runtime={runtime}>
                 <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -905,10 +912,6 @@ export function ReviewPanel(props: {
                             normalizedMessagesCount={normalizedMessages.length}
                             renderedMessagesCount={reconciled.blocks.length}
                         />
-                        {/* 已完成汇总的结果卡片 - 当没有消息时显示 */}
-                        {reconciled.blocks.length === 0 && savedSummaries.length > 0 && (
-                            <SummaryCards summaries={savedSummaries} />
-                        )}
                     </div>
 
                     {/* 固定在底部的建议列表 */}
