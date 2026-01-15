@@ -11,7 +11,6 @@ import type { SSEManager } from '../sse/sseManager'
 import type { ReviewStore } from './store'
 import type { StoredReviewSession } from './types'
 import { generateSummariesWithMinimax } from './minimaxSync'
-import { getMinimaxCredentials } from '../credentials'
 
 // 同步配置
 const MAX_BATCH_CHARS = 50000  // 每批最大字符数
@@ -284,8 +283,8 @@ export class AutoReviewService {
                 return
             }
 
-            // 获取 MiniMax API Key
-            const { apiKey: minimaxApiKey } = await getMinimaxCredentials()
+            // 获取 MiniMax API Key（从环境变量读取）
+            const minimaxApiKey = process.env.MINIMAX_API_KEY
             if (!minimaxApiKey) {
                 console.error('[ReviewSync] MiniMax API key not configured')
                 this.broadcastSyncStatus(reviewSession, {
