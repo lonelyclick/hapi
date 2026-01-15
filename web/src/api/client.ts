@@ -1108,13 +1108,19 @@ export class ApiClient {
         )
     }
 
-    async applyReviewSuggestion(reviewId: string, action: string): Promise<{ success: boolean }> {
+    async applyReviewSuggestion(reviewId: string, action: string, suggestionIds?: string[]): Promise<{ success: boolean }> {
         return await this.request<{ success: boolean }>(
             `/api/review/sessions/${encodeURIComponent(reviewId)}/apply`,
             {
                 method: 'POST',
-                body: JSON.stringify({ action })
+                body: JSON.stringify({ action, suggestionIds })
             }
+        )
+    }
+
+    async getAppliedSuggestionIds(reviewId: string): Promise<{ appliedIds: string[] }> {
+        return await this.request<{ appliedIds: string[] }>(
+            `/api/review/sessions/${encodeURIComponent(reviewId)}/applied-suggestions`
         )
     }
 }

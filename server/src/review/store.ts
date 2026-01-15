@@ -84,6 +84,10 @@ export class ReviewStore implements IReviewStore {
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_executions' AND column_name = 'reviewed_round_numbers') THEN
                     ALTER TABLE review_executions ADD COLUMN reviewed_round_numbers INTEGER[];
                 END IF;
+                -- 添加 applied_suggestion_ids 字段到 review_sessions（存储已发送的建议 ID）
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_sessions' AND column_name = 'applied_suggestion_ids') THEN
+                    ALTER TABLE review_sessions ADD COLUMN applied_suggestion_ids TEXT[] DEFAULT '{}';
+                END IF;
             END $$;
         `)
     }
@@ -344,6 +348,34 @@ export class ReviewStore implements IReviewStore {
             [error, now, id]
         )
 
+        return (queryResult.rowCount ?? 0) > 0
+    }
+
+    // ============ Applied Suggestions 相关方法 ============
+
+    async getAppliedSuggestionIds(reviewSessionId: string): Promise<string[]> {
+        const result = await this.pool.query(
+            `SELECT applied_suggestion_ids FROM review_sessions WHERE id = $1`,
+            [reviewSessionId]
+        )
+        if (result.rows.length === 0) {
+            return []
+        }
+        return (result.rows[0].applied_suggestion_ids as string[]) ?? []
+    }
+
+    async addAppliedSuggestionIds(reviewSessionId: string, suggestionIds: string[]): Promise<boolean> {
+        const now = Date.now()
+        // 使用 array_cat 合并数组，然后用子查询去重
+        const queryResult = await this.pool.query(
+            `UPDATE review_sessions
+             SET applied_suggestion_ids = (
+                 SELECT ARRAY(SELECT DISTINCT unnest(array_cat(applied_suggestion_ids, $1::TEXT[])))
+             ),
+             updated_at = $2
+             WHERE id = $3`,
+            [suggestionIds, now, reviewSessionId]
+        )
         return (queryResult.rowCount ?? 0) > 0
     }
 

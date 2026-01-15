@@ -228,6 +228,7 @@ export function ReviewPanel(props: {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())
+    const [appliedIdsInitialized, setAppliedIdsInitialized] = useState(false)
 
     // 移动端检测
     const [isMobile, setIsMobile] = useState(false)
@@ -375,6 +376,27 @@ export function ReviewPanel(props: {
         merged.sort((a, b) => a.round - b.round)
         return merged
     }, [autoSyncStatus?.savedSummaries, pendingRoundsData?.savedSummaries])
+
+    // 获取已发送的建议 ID（从后端持久化数据）
+    const { data: appliedSuggestionsData } = useQuery({
+        queryKey: ['review-applied-suggestions', currentReviewForPending?.id],
+        queryFn: async () => {
+            if (!currentReviewForPending?.id) throw new Error('No review ID')
+            return await api.getAppliedSuggestionIds(currentReviewForPending.id)
+        },
+        enabled: Boolean(currentReviewForPending?.id),
+        staleTime: Infinity  // 只在首次加载时获取
+    })
+
+    // 初始化 appliedIds（只执行一次）
+    useEffect(() => {
+        if (appliedIdsInitialized) return
+        if (!appliedSuggestionsData?.appliedIds) return
+        if (appliedSuggestionsData.appliedIds.length > 0) {
+            setAppliedIds(new Set(appliedSuggestionsData.appliedIds))
+        }
+        setAppliedIdsInitialized(true)
+    }, [appliedSuggestionsData, appliedIdsInitialized])
 
     // 页面加载后，如果有 pendingRounds 且不在同步中，自动触发同步
     const autoSyncTriggeredRef = useRef(false)
@@ -730,9 +752,15 @@ export function ReviewPanel(props: {
     // 应用建议到主 Session
     const applySuggestionsMutation = useMutation({
         mutationFn: async (details: string[]) => {
+            if (!currentReview) {
+                throw new Error('No current review found')
+            }
             // 合并所有选中的建议详情
             const combined = details.join('\n\n---\n\n')
-            await api.sendMessage(props.mainSessionId, combined)
+            // 获取当前选中的 ID（在 mutationFn 中捕获，避免闭包问题）
+            const idsToApply = Array.from(selectedIds)
+            // 调用新 API，同时发送消息和保存已发送的建议 ID
+            await api.applyReviewSuggestion(currentReview.id, combined, idsToApply)
         },
         onSuccess: () => {
             // 将已选中的 ID 加入已发送集合

@@ -1181,7 +1181,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             return c.json({ error: 'Sync engine not available' }, 503)
         }
 
-        const body = await c.req.json().catch(() => null) as { action?: string } | null
+        const body = await c.req.json().catch(() => null) as { action?: string; suggestionIds?: string[] } | null
         if (!body?.action) {
             return c.json({ error: 'action is required' }, 400)
         }
@@ -1197,7 +1197,25 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             sentFrom: 'webapp'
         })
 
+        // 保存已发送的建议 ID（如果提供了）
+        if (body.suggestionIds && body.suggestionIds.length > 0) {
+            await reviewStore.addAppliedSuggestionIds(id, body.suggestionIds)
+        }
+
         return c.json({ success: true })
+    })
+
+    // 获取已发送的建议 ID
+    app.get('/review/sessions/:id/applied-suggestions', async (c) => {
+        const id = c.req.param('id')
+
+        const reviewSession = await reviewStore.getReviewSession(id)
+        if (!reviewSession) {
+            return c.json({ error: 'Review session not found' }, 404)
+        }
+
+        const appliedIds = await reviewStore.getAppliedSuggestionIds(id)
+        return c.json({ appliedIds })
     })
 
     return app

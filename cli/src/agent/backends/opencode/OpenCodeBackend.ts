@@ -43,21 +43,30 @@ export class OpenCodeBackend implements AgentBackend {
     private messageHandler: AcpMessageHandler | null = null;
     private activeSessionId: string | null = null;
     private readonly initTimeoutMs: number;
-    private readonly defaultModel: string;
+    private currentModel: string;
 
     constructor(private readonly options: OpenCodeBackendOptions = {}) {
         this.initTimeoutMs = options.initTimeoutMs ?? 30_000;
-        this.defaultModel = options.defaultModel ?? 'anthropic/claude-sonnet-4';
+        this.currentModel = options.defaultModel ?? 'minimax/MiniMax-M2.1';
     }
 
     async initialize(): Promise<void> {
-        if (this.transport) return;
+        await this.startTransport();
+    }
+
+    private async startTransport(): Promise<void> {
+        if (this.transport) {
+            await this.transport.close().catch(() => {});
+            this.transport = null;
+        }
 
         // Build environment with model configuration
         const env: Record<string, string> = {
             ...process.env as Record<string, string>,
-            OPENCODE_MODEL: this.defaultModel,
+            OPENCODE_MODEL: this.currentModel,
         };
+
+        logger.debug(`[OpenCode] Starting ACP with model: ${this.currentModel}`);
 
         // Use opencode acp mode via stdio
         this.transport = new AcpStdioTransport({
@@ -97,12 +106,25 @@ export class OpenCodeBackend implements AgentBackend {
                 throw new Error('Invalid initialize response from OpenCode ACP');
             }
 
-            logger.debug(`[OpenCode] ACP initialized with protocol version ${response.protocolVersion}`);
+            logger.debug(`[OpenCode] ACP initialized with protocol version ${response.protocolVersion}, model: ${this.currentModel}`);
         } catch (error) {
             await this.transport.close().catch(() => {});
             this.transport = null;
             throw error;
         }
+    }
+
+    // Method to change model - requires restarting the ACP process
+    async setModel(_sessionId: string, model: string): Promise<void> {
+        if (this.currentModel === model) {
+            return;
+        }
+        logger.debug(`[OpenCode] Changing model from ${this.currentModel} to ${model}`);
+        this.currentModel = model;
+        // Restart transport with new model
+        await this.startTransport();
+        // Note: This will lose the current OpenCode session state
+        // A new session will be created on next newSession() call
     }
 
     async newSession(config: AgentSessionConfig): Promise<string> {
