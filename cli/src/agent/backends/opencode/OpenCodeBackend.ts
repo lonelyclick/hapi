@@ -114,6 +114,11 @@ export class OpenCodeBackend implements AgentBackend {
         }
     }
 
+    // Method to get current model
+    getModel(_sessionId: string): string {
+        return this.currentModel;
+    }
+
     // Method to change model - requires restarting the ACP process
     async setModel(_sessionId: string, model: string): Promise<void> {
         if (this.currentModel === model) {
