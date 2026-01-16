@@ -309,13 +309,10 @@ function RelativeFilePathLink({ path }: { path: string }) {
     const [loading, setLoading] = useState(false)
 
     const filename = path.split('/').pop() || path
-
-    // 文件夹路径不显示为链接，直接显示文本
-    if (isFolderPath(path)) {
-        return <>{path}</>
-    }
+    const isFolder = isFolderPath(path)
 
     useEffect(() => {
+        if (isFolder) return
         if (!context?.api || !context?.sessionId) {
             setStatus('not-exists')
             return
@@ -396,7 +393,7 @@ function RelativeFilePathLink({ path }: { path: string }) {
 
         // 调度批量检查
         scheduleBatchCheck(context.api, sessionId)
-    }, [context?.api, context?.sessionId, path])
+    }, [context?.api, context?.sessionId, path, isFolder])
 
     const handleClick = async (e: React.MouseEvent) => {
         e.preventDefault()
@@ -426,8 +423,8 @@ function RelativeFilePathLink({ path }: { path: string }) {
         }
     }
 
-    // 检查中或不存在时，显示为普通文本
-    if (status !== 'exists') {
+    // 文件夹路径或检查中/不存在时，显示为普通文本
+    if (isFolder || status !== 'exists') {
         return <>{path}</>
     }
 
