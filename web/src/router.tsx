@@ -34,6 +34,7 @@ import SettingsPage from '@/routes/settings'
 import UsagePage from '@/routes/usage'
 import GroupsPage from '@/routes/groups'
 import GroupChatPage from '@/routes/groups/chat'
+import VideoDisguiserPage from '@/routes/video-disguiser'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -493,6 +494,12 @@ const groupChatRoute = createRoute({
     component: GroupChatPage,
 })
 
+const videoDisguiserRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/video-disguiser',
+    component: VideoDisguiserPage,
+})
+
 export const routeTree = rootRoute.addChildren([
     indexRoute,
     sessionsRoute,
@@ -503,6 +510,7 @@ export const routeTree = rootRoute.addChildren([
     usageRoute,
     groupsRoute,
     groupChatRoute,
+    videoDisguiserRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']
