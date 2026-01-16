@@ -247,13 +247,13 @@ function SessionItem(props: {
                     <span className="shrink-0">{getAgentLabel(s)}</span>
                     {showCreator && s.createdBy && (
                         <>
-                            <span className="opacity-50">•</span>
+                            <span className="opacity-50">·</span>
                             <span className="shrink-0" title={s.createdBy}>{getCreatorDisplayName(s.createdBy)}</span>
                         </>
                     )}
                     {project && (
                         <>
-                            <span className="opacity-50">•</span>
+                            <span className="opacity-50">·</span>
                             <span className="truncate" title={project.path}>{project.name}</span>
                         </>
                     )}
