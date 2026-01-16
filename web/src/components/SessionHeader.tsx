@@ -397,20 +397,22 @@ export function SessionHeader(props: {
                             {agentLabel}
                         </span>
                     )}
-                    {/* Join Review AI 按钮 (试验性功能) */}
+                    {/* Join Review AI 按钮 (试验性功能) - PC端显示 */}
                     {props.session.active && (
-                        <JoinReviewButton
-                            sessionId={props.session.id}
-                            isReviewPanelOpen={props.isReviewPanelOpen}
-                            onToggleReviewPanel={props.onToggleReviewPanel}
-                            onReviewCreated={props.onReviewCreated}
-                        />
+                        <div className="hidden sm:block">
+                            <JoinReviewButton
+                                sessionId={props.session.id}
+                                isReviewPanelOpen={props.isReviewPanelOpen}
+                                onToggleReviewPanel={props.onToggleReviewPanel}
+                                onReviewCreated={props.onReviewCreated}
+                            />
+                        </div>
                     )}
                     {props.viewers && props.viewers.length > 0 && (
                         <ViewersBadge viewers={props.viewers} compact buttonClassName="h-5 leading-none" />
                     )}
-                    {/* Subscription toggle with dropdown menu */}
-                    <div className="relative" ref={subscribersMenuRef}>
+                    {/* Subscription toggle with dropdown menu - PC端显示 */}
+                    <div className="hidden sm:block relative" ref={subscribersMenuRef}>
                         <div className="flex items-center">
                             {/* 主按钮：切换自己的订阅 */}
                             <button
@@ -562,6 +564,59 @@ export function SessionHeader(props: {
                         </button>
                         {showMoreMenu && (
                             <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
+                                {/* Review 按钮 */}
+                                {props.session.active && props.onToggleReviewPanel && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false)
+                                            props.onToggleReviewPanel?.()
+                                        }}
+                                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                                            props.isReviewPanelOpen
+                                                ? 'text-purple-600 bg-purple-500/10'
+                                                : 'text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
+                                        }`}
+                                    >
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="16"
+                                            height="16"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            className="shrink-0"
+                                        >
+                                            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                                            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                                        </svg>
+                                        <span>Review</span>
+                                    </button>
+                                )}
+                                {/* 订阅按钮 */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        toggleSubscriptionMutation.mutate(!isSubscribed)
+                                        setShowMoreMenu(false)
+                                    }}
+                                    disabled={toggleSubscriptionMutation.isPending}
+                                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                                        isSubscribed
+                                            ? 'text-blue-600 bg-blue-500/10'
+                                            : 'text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
+                                    } disabled:opacity-50`}
+                                >
+                                    <BellIcon subscribed={isSubscribed} className="shrink-0" />
+                                    <span>{isSubscribed ? '取消订阅' : '订阅通知'}</span>
+                                    {totalSubscribers > 0 && (
+                                        <span className="ml-auto text-[10px] text-[var(--app-hint)]">{totalSubscribers}</span>
+                                    )}
+                                </button>
+                                {/* 刷新账号 */}
                                 {props.onRefreshAccount ? (
                                     <button
                                         type="button"
@@ -576,6 +631,7 @@ export function SessionHeader(props: {
                                         <span>刷新账号</span>
                                     </button>
                                 ) : null}
+                                {/* 删除会话 */}
                                 {props.onDelete ? (
                                     <button
                                         type="button"
