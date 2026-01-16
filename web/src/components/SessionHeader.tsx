@@ -421,7 +421,7 @@ export function SessionHeader(props: {
                                         ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
                                         : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
                                 } disabled:opacity-50`}
-                                title={isSubscribed ? '已订阅通知 (点击取消)' : '订阅通知'}
+                                title={isSubscribed ? 'Subscribed (click to unsubscribe)' : 'Subscribe'}
                             >
                                 <BellIcon subscribed={isSubscribed} />
                                 {totalSubscribers > 0 && (
@@ -437,7 +437,7 @@ export function SessionHeader(props: {
                                         ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20'
                                         : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] border-[var(--app-divider)]'
                                 }`}
-                                title="管理订阅者"
+                                title="Manage subscribers"
                             >
                                 <ChevronDownIcon />
                             </button>
@@ -446,11 +446,11 @@ export function SessionHeader(props: {
                         {showSubscribersMenu && subscribersData && (
                             <div className="absolute right-0 top-full z-30 mt-1 min-w-[200px] max-w-[280px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
                                 <div className="px-3 py-1.5 text-[10px] font-medium text-[var(--app-hint)] uppercase tracking-wider">
-                                    通知订阅者 ({totalSubscribers})
+                                    Subscribers ({totalSubscribers})
                                 </div>
                                 {totalSubscribers === 0 ? (
                                     <div className="px-3 py-2 text-xs text-[var(--app-hint)]">
-                                        暂无订阅者
+                                        No subscribers
                                     </div>
                                 ) : (
                                     <div className="max-h-[200px] overflow-y-auto">
@@ -459,10 +459,10 @@ export function SessionHeader(props: {
                                             <div className="flex items-center justify-between px-3 py-1.5 hover:bg-[var(--app-subtle-bg)]">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <span className="text-xs truncate">
-                                                        {subscribersData.creatorChatId === currentChatId ? '我 (创建者)' : `TG: ${subscribersData.creatorChatId}`}
+                                                        {subscribersData.creatorChatId === currentChatId ? 'Me (creator)' : `TG: ${subscribersData.creatorChatId}`}
                                                     </span>
                                                     <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600">
-                                                        创建者
+                                                        Creator
                                                     </span>
                                                 </div>
                                                 <button
@@ -470,7 +470,7 @@ export function SessionHeader(props: {
                                                     onClick={() => removeSubscriberMutation.mutate({ subscriberId: subscribersData.creatorChatId!, type: 'chatId' })}
                                                     disabled={removeSubscriberMutation.isPending}
                                                     className="shrink-0 p-1 rounded hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
-                                                    title="移除订阅"
+                                                    title="Remove"
                                                 >
                                                     <XIcon />
                                                 </button>
@@ -481,11 +481,11 @@ export function SessionHeader(props: {
                                             <div key={`chat-${chatId}`} className="flex items-center justify-between px-3 py-1.5 hover:bg-[var(--app-subtle-bg)]">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <span className="text-xs truncate">
-                                                        {chatId === currentChatId ? '我' : `TG: ${chatId}`}
+                                                        {chatId === currentChatId ? 'Me' : `TG: ${chatId}`}
                                                     </span>
                                                     {chatId === subscribersData.creatorChatId && (
                                                         <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600">
-                                                            创建者
+                                                            Creator
                                                         </span>
                                                     )}
                                                 </div>
@@ -494,7 +494,7 @@ export function SessionHeader(props: {
                                                     onClick={() => removeSubscriberMutation.mutate({ subscriberId: chatId, type: 'chatId' })}
                                                     disabled={removeSubscriberMutation.isPending}
                                                     className="shrink-0 p-1 rounded hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
-                                                    title="移除订阅"
+                                                    title="Remove"
                                                 >
                                                     <XIcon />
                                                 </button>
@@ -505,7 +505,7 @@ export function SessionHeader(props: {
                                             <div key={`client-${clientId}`} className="flex items-center justify-between px-3 py-1.5 hover:bg-[var(--app-subtle-bg)]">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <span className="text-xs truncate">
-                                                        {clientId === currentClientId ? '我 (Web)' : `Web: ${clientId.slice(0, 8)}...`}
+                                                        {clientId === currentClientId ? 'Me (Web)' : `Web: ${clientId.slice(0, 8)}...`}
                                                     </span>
                                                 </div>
                                                 <button
@@ -513,7 +513,7 @@ export function SessionHeader(props: {
                                                     onClick={() => removeSubscriberMutation.mutate({ subscriberId: clientId, type: 'clientId' })}
                                                     disabled={removeSubscriberMutation.isPending}
                                                     className="shrink-0 p-1 rounded hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
-                                                    title="移除订阅"
+                                                    title="Remove"
                                                 >
                                                     <XIcon />
                                                 </button>
@@ -532,7 +532,7 @@ export function SessionHeader(props: {
                                 onClick={props.onRefreshAccount}
                                 disabled={props.refreshAccountDisabled}
                                 className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-green-500/10 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="刷新账号 (保留上下文)"
+                                title="Refresh account (keep context)"
                             >
                                 <RefreshAccountIcon />
                             </button>
@@ -555,7 +555,7 @@ export function SessionHeader(props: {
                             type="button"
                             onClick={() => setShowMoreMenu(!showMoreMenu)}
                             className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                            title="更多操作"
+                            title="More"
                         >
                             <MoreIcon />
                         </button>
@@ -565,7 +565,7 @@ export function SessionHeader(props: {
                                 {props.viewers && props.viewers.length > 0 && (
                                     <>
                                         <div className="px-3 py-1.5 text-[10px] font-medium text-[var(--app-hint)] uppercase tracking-wider">
-                                            在线 ({props.viewers.length})
+                                            Online ({props.viewers.length})
                                         </div>
                                         {props.viewers.map((viewer) => (
                                             <div key={viewer.clientId} className="flex items-center gap-2 px-3 py-1.5">
@@ -625,7 +625,7 @@ export function SessionHeader(props: {
                                     } disabled:opacity-50`}
                                 >
                                     <BellIcon subscribed={isSubscribed} className="shrink-0" />
-                                    <span>{isSubscribed ? '取消订阅' : '订阅通知'}</span>
+                                    <span>{isSubscribed ? 'Unsubscribe' : 'Subscribe'}</span>
                                     {totalSubscribers > 0 && (
                                         <span className="ml-auto text-[10px] text-[var(--app-hint)]">{totalSubscribers}</span>
                                     )}
@@ -642,7 +642,7 @@ export function SessionHeader(props: {
                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <RefreshAccountIcon className="shrink-0" />
-                                        <span>刷新账号</span>
+                                        <span>Refresh Account</span>
                                     </button>
                                 ) : null}
                                 {/* 删除会话 */}
@@ -657,7 +657,7 @@ export function SessionHeader(props: {
                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <TrashIcon className="shrink-0" />
-                                        <span>删除会话</span>
+                                        <span>Delete Session</span>
                                     </button>
                                 ) : null}
                             </div>
