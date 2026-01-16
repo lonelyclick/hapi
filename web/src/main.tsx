@@ -91,6 +91,20 @@ async function bootstrap() {
     const updateSW = registerSW({
         immediate: true,
         onNeedRefresh() {
+            // Check if we recently refreshed to prevent infinite loops on iOS webapp
+            const lastRefresh = Number(localStorage.getItem(lastRefreshKey) ?? 0)
+            if (lastRefresh && Date.now() - lastRefresh < 60_000) {
+                console.log('[SW] onNeedRefresh ignored - recently refreshed')
+                return
+            }
+
+            // Also check loop detection
+            const disableUntil = Number(storage.getItem(updateDisableKey) ?? 0)
+            if (Date.now() < disableUntil) {
+                console.log('[SW] onNeedRefresh ignored - in cooldown period')
+                return
+            }
+
             // Show update banner instead of auto-updating
             // User needs to click to trigger the update
             console.log('New version available, waiting for user action...')
