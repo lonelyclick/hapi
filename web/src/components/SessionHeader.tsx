@@ -207,7 +207,6 @@ export function SessionHeader(props: {
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
     const runtimeAgent = props.session.metadata?.runtimeAgent?.trim() || null
     const runtimeModel = useMemo(() => formatRuntimeModel(props.session), [props.session])
-    const [showAgentTip, setShowAgentTip] = useState(false)
     const agentMeta = useMemo(
         () => {
             const parts = [agentLabel]
@@ -224,8 +223,6 @@ export function SessionHeader(props: {
         },
         [agentLabel, runtimeAgent, runtimeModel, worktreeBranch]
     )
-    const hasAgentTip = agentMeta !== agentLabel
-    const agentTipId = `session-agent-tip-${props.session.id}`
 
     // Subscription state - supports both Telegram chatId and Web clientId
     const tg = getTelegramWebApp()
@@ -323,7 +320,6 @@ export function SessionHeader(props: {
     }, [subscribersData])
 
     useEffect(() => {
-        setShowAgentTip(false)
         setShowSubscribersMenu(false)
         setShowMoreMenu(false)
     }, [props.session.id])
@@ -349,7 +345,7 @@ export function SessionHeader(props: {
                         <div className="max-w-[180px] truncate font-medium text-sm sm:max-w-none">
                             {title}
                         </div>
-                        <div className="hidden sm:block text-[10px] text-[var(--app-hint)] truncate">
+                        <div className="text-[10px] text-[var(--app-hint)] truncate max-w-[180px] sm:max-w-none">
                             {agentMeta}
                         </div>
                     </div>
@@ -357,46 +353,6 @@ export function SessionHeader(props: {
 
                 {/* Right side: Viewers + Action buttons */}
                 <div className="flex shrink-0 items-center gap-1.5">
-                    {hasAgentTip ? (
-                        <div className="sm:hidden relative shrink-0">
-                            <button
-                                type="button"
-                                className="flex h-5 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--app-hint)]"
-                                title={agentMeta}
-                                aria-label={agentMeta}
-                                aria-describedby={agentTipId}
-                                aria-expanded={showAgentTip}
-                                onClick={() => setShowAgentTip((prev) => !prev)}
-                                onBlur={() => setShowAgentTip(false)}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Escape') {
-                                        setShowAgentTip(false)
-                                    }
-                                }}
-                            >
-                                <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full border border-current text-[8px] font-semibold leading-none">
-                                    i
-                                </span>
-                                <span className="leading-none">{agentLabel}</span>
-                            </button>
-                            {showAgentTip ? (
-                                <div
-                                    id={agentTipId}
-                                    role="tooltip"
-                                    className="absolute right-0 top-full z-20 mt-1 max-w-[80vw] whitespace-nowrap rounded-md border border-[var(--app-divider)] bg-[var(--app-bg)] px-2 py-1 text-[10px] text-[var(--app-fg)] shadow-lg"
-                                >
-                                    {agentMeta}
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : (
-                        <span
-                            className="sm:hidden inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--app-hint)]"
-                            title={agentMeta}
-                        >
-                            {agentLabel}
-                        </span>
-                    )}
                     {/* Join Review AI 按钮 (试验性功能) - PC端显示 */}
                     {props.session.active && (
                         <div className="hidden sm:block">
