@@ -267,6 +267,12 @@ export function SessionHeader(props: {
     const currentChatId = tg?.initDataUnsafe?.user?.id?.toString() ?? null
     const currentClientId = getClientId()
 
+    // 过滤掉自己，只显示其他在线用户
+    const otherViewers = useMemo(() => {
+        if (!props.viewers) return []
+        return props.viewers.filter(v => v.clientId !== currentClientId)
+    }, [props.viewers, currentClientId])
+
     const subscribersQueryKey = ['session-subscribers', props.session.id]
     const { data: subscribersData } = useQuery({
         queryKey: subscribersQueryKey,
@@ -402,10 +408,10 @@ export function SessionHeader(props: {
                             />
                         </div>
                     )}
-                    {/* PC端：在线用户 */}
-                    {props.viewers && props.viewers.length > 0 && (
+                    {/* PC端：在线用户（排除自己） */}
+                    {otherViewers.length > 0 && (
                         <div className="hidden sm:block">
-                            <ViewersBadge viewers={props.viewers} compact buttonClassName="h-7 leading-none" />
+                            <ViewersBadge viewers={otherViewers} compact buttonClassName="h-7 leading-none" />
                         </div>
                     )}
                     {/* Subscription toggle with dropdown menu - PC端显示 */}
@@ -561,13 +567,13 @@ export function SessionHeader(props: {
                         </button>
                         {showMoreMenu && (
                             <div className="absolute right-0 top-full z-30 mt-1 min-w-[160px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
-                                {/* 在线用户列表 */}
-                                {props.viewers && props.viewers.length > 0 && (
+                                {/* 在线用户列表（排除自己） */}
+                                {otherViewers.length > 0 && (
                                     <>
                                         <div className="px-3 py-1.5 text-[10px] font-medium text-[var(--app-hint)] uppercase tracking-wider">
-                                            Online ({props.viewers.length})
+                                            Online ({otherViewers.length})
                                         </div>
-                                        {props.viewers.map((viewer) => (
+                                        {otherViewers.map((viewer) => (
                                             <div key={viewer.clientId} className="flex items-center gap-2 px-3 py-1.5">
                                                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
                                                 <span className="text-xs text-[var(--app-fg)] truncate">
