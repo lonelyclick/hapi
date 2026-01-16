@@ -364,8 +364,11 @@ export function SessionHeader(props: {
                             />
                         </div>
                     )}
+                    {/* PC端：在线用户 */}
                     {props.viewers && props.viewers.length > 0 && (
-                        <ViewersBadge viewers={props.viewers} compact buttonClassName="h-5 leading-none" />
+                        <div className="hidden sm:block">
+                            <ViewersBadge viewers={props.viewers} compact buttonClassName="h-7 leading-none" />
+                        </div>
                     )}
                     {/* Subscription toggle with dropdown menu - PC端显示 */}
                     <div className="hidden sm:block relative" ref={subscribersMenuRef}>
@@ -508,12 +511,21 @@ export function SessionHeader(props: {
                             </button>
                         ) : null}
                     </div>
-                    {/* 移动端：更多菜单 */}
-                    <div className="sm:hidden relative" ref={moreMenuRef}>
+                    {/* 移动端：在线用户 + 更多菜单组合 */}
+                    <div className="sm:hidden relative flex items-center" ref={moreMenuRef}>
+                        {props.viewers && props.viewers.length > 0 && (
+                            <ViewersBadge
+                                viewers={props.viewers}
+                                compact
+                                buttonClassName="h-7 leading-none rounded-r-none border-r border-[var(--app-divider)]"
+                            />
+                        )}
                         <button
                             type="button"
                             onClick={() => setShowMoreMenu(!showMoreMenu)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                            className={`flex h-7 w-7 items-center justify-center bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] ${
+                                props.viewers && props.viewers.length > 0 ? 'rounded-l-none rounded-r-md' : 'rounded-md'
+                            }`}
                             title="更多操作"
                         >
                             <MoreIcon />
