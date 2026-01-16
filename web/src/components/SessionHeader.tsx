@@ -516,12 +516,9 @@ export function SessionHeader(props: {
                         <button
                             type="button"
                             onClick={() => setShowMoreMenu(!showMoreMenu)}
-                            className="flex h-7 items-center gap-1 px-2 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
                             title="更多操作"
                         >
-                            {props.viewers && props.viewers.length > 0 && (
-                                <span className="text-[10px] font-medium text-blue-600">{props.viewers.length}</span>
-                            )}
                             <MoreIcon />
                         </button>
                         {showMoreMenu && (
