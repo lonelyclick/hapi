@@ -137,8 +137,10 @@ function SessionsPage() {
         setIsRefreshing(true)
 
         try {
-            // Mark refresh time to prevent infinite loops on iOS
-            localStorage.setItem('hapi-last-refresh-ts', Date.now().toString())
+            // User-initiated refresh: clear cooldown to ensure fresh start
+            localStorage.removeItem('hapi-last-refresh-ts')
+            localStorage.removeItem('hapi-sw-disable-until')
+            sessionStorage.removeItem('hapi-sw-disable-until')
 
             const registrations = await navigator.serviceWorker?.getRegistrations()
             if (registrations) {
@@ -157,7 +159,6 @@ function SessionsPage() {
             window.location.reload()
         } catch (error) {
             console.error('Force refresh failed:', error)
-            localStorage.setItem('hapi-last-refresh-ts', Date.now().toString())
             window.location.reload()
         }
     }, [isRefreshing])
