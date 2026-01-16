@@ -7,7 +7,6 @@ import { queryKeys } from '@/lib/query-keys'
 
 export function useMessages(api: ApiClient | null, sessionId: string | null): {
     messages: DecryptedMessage[]
-    warning: string | null
     isLoading: boolean
     isLoadingMore: boolean
     hasMore: boolean
@@ -48,11 +47,6 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
         return merged
     }, [query.data?.pages])
 
-    const warning = useMemo(() => {
-        if (!query.error) return null
-        return query.error instanceof Error ? query.error.message : 'Failed to load messages'
-    }, [query.error])
-
     const loadMore = async () => {
         if (!query.hasNextPage || query.isFetchingNextPage) return
         await query.fetchNextPage()
@@ -60,7 +54,6 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
 
     return {
         messages,
-        warning,
         isLoading: query.isLoading,
         isLoadingMore: query.isFetchingNextPage,
         hasMore: Boolean(query.hasNextPage),

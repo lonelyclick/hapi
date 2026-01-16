@@ -4,7 +4,7 @@
  * In the direct-connect architecture:
  * - hapi-server is the server (Socket.IO + REST)
  * - hapi CLI connects directly to the server (no relay)
- * - No E2E encryption; data is stored as JSON in SQLite
+ * - No E2E encryption; data is stored as JSON in PostgreSQL
  */
 
 import { z } from 'zod'

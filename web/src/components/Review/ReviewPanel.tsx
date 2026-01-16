@@ -947,7 +947,6 @@ export function ReviewPanel(props: {
                         onRefresh={handleRefresh}
                         onRetryMessage={undefined}
                         isLoadingMessages={isLoadingMessages}
-                        messagesWarning={null}
                         hasMoreMessages={false}
                         isLoadingMoreMessages={false}
                         onLoadMore={async () => {}}

@@ -5,7 +5,7 @@
 HAPI CLI (`hapi`) is a command-line tool that wraps Claude Code to enable remote control and session sharing via `hapi-server` (Telegram Bot + Mini App). It's part of a two-component system:
 
 1. **hapi** (this project) - CLI wrapper for Claude Code
-2. **hapi-server** - Public server (Socket.IO + REST + SQLite) + Telegram Mini App
+2. **hapi-server** - Public server (Socket.IO + REST + PostgreSQL) + Telegram Mini App
 
 ## Code Style Preferences
 

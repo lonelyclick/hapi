@@ -51,7 +51,6 @@ export function SessionChat(props: {
     session: Session
     viewers?: SessionViewer[]
     messages: DecryptedMessage[]
-    messagesWarning: string | null
     hasMoreMessages: boolean
     isLoadingMessages: boolean
     isLoadingMoreMessages: boolean
@@ -70,10 +69,8 @@ export function SessionChat(props: {
     const controlsDisabled = !props.session.active
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
-    const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, clearMessages, refreshAccount, isPending } = useSessionActions(props.api, props.session.id)
+    const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, refreshAccount, isPending } = useSessionActions(props.api, props.session.id)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-    const [clearDialogOpen, setClearDialogOpen] = useState(false)
-    const [clearSuggestionDismissed, setClearSuggestionDismissed] = useState(false)
     const [isResuming, setIsResuming] = useState(false)
     const [resumeError, setResumeError] = useState<string | null>(null)
     // Review 面板状态 (试验性功能)
@@ -128,7 +125,6 @@ export function SessionChat(props: {
         blocksByIdRef.current.clear()
         setIsResuming(false)
         setResumeError(null)
-        setClearSuggestionDismissed(false)
         // 不在这里清除 reviewSessionId，让它由 activeReviewSession 数据控制
         // setReviewSessionId(null)
         userClosedReviewRef.current = false  // 切换 session 时重置
@@ -218,13 +214,6 @@ export function SessionChat(props: {
         props.onRefresh()
     }, [switchSession, props.onRefresh])
 
-    const handleViewFiles = useCallback(() => {
-        navigate({
-            to: '/sessions/$sessionId/files',
-            params: { sessionId: props.session.id }
-        })
-    }, [navigate, props.session.id])
-
     const handleViewTerminal = useCallback(() => {
         navigate({
             to: '/sessions/$sessionId/terminal',
@@ -248,10 +237,6 @@ export function SessionChat(props: {
         }
     }, [deleteSession, haptic, props])
 
-    const handleClearMessagesClick = useCallback(() => {
-        setClearDialogOpen(true)
-    }, [])
-
     const handleRefreshAccount = useCallback(async () => {
         try {
             const result = await refreshAccount()
@@ -267,18 +252,6 @@ export function SessionChat(props: {
             console.error('Failed to refresh account:', error)
         }
     }, [refreshAccount, haptic, queryClient, navigate])
-
-    const handleClearMessagesConfirm = useCallback(async (compact: boolean) => {
-        setClearDialogOpen(false)
-        try {
-            await clearMessages(30, compact)
-            haptic.notification('success')
-            props.onRefresh()
-        } catch (error) {
-            haptic.notification('error')
-            console.error('Failed to clear messages:', error)
-        }
-    }, [clearMessages, haptic, props])
 
     const sendPendingMessage = useCallback(async (sessionId: string, text: string) => {
         const trimmed = text.trim()
@@ -401,14 +374,11 @@ export function SessionChat(props: {
                     session={props.session}
                     viewers={props.viewers}
                     onBack={props.onBack}
-                    onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
-                    onClearMessages={handleClearMessagesClick}
                     onDelete={handleDeleteClick}
                     onRefreshAccount={props.session.metadata?.flavor === 'claude' ? handleRefreshAccount : undefined}
                     onReviewCreated={handleReviewCreated}
                     isReviewPanelOpen={Boolean(reviewSessionId)}
                     onToggleReviewPanel={handleToggleReviewPanel}
-                    clearDisabled={isPending}
                     deleteDisabled={isPending}
                     refreshAccountDisabled={isPending}
                 />
@@ -442,47 +412,6 @@ export function SessionChat(props: {
                 </DialogContent>
             </Dialog>
 
-            <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>清空聊天记录</DialogTitle>
-                        <DialogDescription>
-                            清空显示的聊天记录？将保留最近 30 条消息。
-                            {props.session.active && (
-                                <span className="block mt-1 text-xs">
-                                    建议先 Compact（压缩总结），可保留更多上下文信息。
-                                </span>
-                            )}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="mt-4 flex justify-end gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setClearDialogOpen(false)}
-                            className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
-                        >
-                            取消
-                        </button>
-                        {props.session.active && (
-                            <button
-                                type="button"
-                                onClick={() => handleClearMessagesConfirm(true)}
-                                className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
-                            >
-                                Compact 后清空
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            onClick={() => handleClearMessagesConfirm(false)}
-                            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
-                        >
-                            直接清空
-                        </button>
-                    </div>
-                </DialogContent>
-            </Dialog>
-
             {controlsDisabled ? (
                 <div className="px-3 pt-3">
                     <div className="mx-auto w-full max-w-content rounded-md bg-[var(--app-subtle-bg)] p-3 text-sm text-[var(--app-hint)]">
@@ -493,33 +422,6 @@ export function SessionChat(props: {
                                 : props.messages.length === 0
                                     ? 'Starting session...'
                                     : 'Session is inactive. Tap the composer to resume.'}
-                    </div>
-                </div>
-            ) : null}
-
-            {/* 消息过多提示横幅 */}
-            {props.messages.length >= 200 && !clearSuggestionDismissed ? (
-                <div className="px-3 pt-2">
-                    <div className="mx-auto w-full max-w-content flex items-center justify-between gap-2 rounded-md bg-orange-500/10 border border-orange-500/20 px-3 py-2 text-sm text-orange-600 dark:text-orange-400">
-                        <span>
-                            聊天记录较多 ({props.messages.length} 条)，可能导致页面卡顿。建议清空旧消息。
-                        </span>
-                        <div className="flex shrink-0 items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setClearDialogOpen(true)}
-                                className="rounded px-2 py-1 text-xs font-medium bg-orange-500 text-white hover:bg-orange-600"
-                            >
-                                清空
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setClearSuggestionDismissed(true)}
-                                className="rounded px-2 py-1 text-xs font-medium hover:bg-orange-500/20"
-                            >
-                                忽略
-                            </button>
-                        </div>
                     </div>
                 </div>
             ) : null}
@@ -535,7 +437,6 @@ export function SessionChat(props: {
                         onRefresh={props.onRefresh}
                         onRetryMessage={props.onRetryMessage}
                         isLoadingMessages={props.isLoadingMessages}
-                        messagesWarning={props.messagesWarning}
                         hasMoreMessages={props.hasMoreMessages}
                         isLoadingMoreMessages={props.isLoadingMoreMessages}
                         onLoadMore={props.onLoadMore}

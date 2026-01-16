@@ -208,7 +208,6 @@ export type AuthResponse = {
 export type SessionsResponse = { sessions: SessionSummary[] }
 export type SessionResponse = { session: Session }
 export type DeleteSessionResponse = { ok: true }
-export type ClearMessagesResponse = { ok: true; deleted: number; remaining: number; compacted?: boolean }
 export type MessageCountResponse = { count: number }
 export type MessagesResponse = {
     messages: DecryptedMessage[]
@@ -239,19 +238,6 @@ export type GitCommandResponse = {
     stdout?: string
     stderr?: string
     exitCode?: number
-    error?: string
-}
-
-export type FileSearchItem = {
-    fileName: string
-    filePath: string
-    fullPath: string
-    fileType: 'file' | 'folder'
-}
-
-export type FileSearchResponse = {
-    success: boolean
-    files?: FileSearchItem[]
     error?: string
 }
 

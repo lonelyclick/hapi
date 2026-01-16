@@ -29,8 +29,6 @@ import { useSessionViewers } from '@/hooks/queries/useSessionViewers'
 import { useSendMessage } from '@/hooks/mutations/useSendMessage'
 import { useOtherUserTyping } from '@/hooks/useOtherUserTyping'
 import { queryKeys } from '@/lib/query-keys'
-import FilesPage from '@/routes/sessions/files'
-import FilePage from '@/routes/sessions/file'
 import TerminalPage from '@/routes/sessions/terminal'
 import SettingsPage from '@/routes/settings'
 import UsagePage from '@/routes/usage'
@@ -270,7 +268,6 @@ function SessionPage() {
     } = useSession(api, sessionId)
     const {
         messages,
-        warning: messagesWarning,
         isLoading: messagesLoading,
         isLoadingMore: messagesLoadingMore,
         hasMore: messagesHasMore,
@@ -356,7 +353,6 @@ function SessionPage() {
             session={session}
             viewers={viewers}
             messages={messages}
-            messagesWarning={messagesWarning}
             hasMoreMessages={messagesHasMore}
             isLoadingMessages={messagesLoading}
             isLoadingMoreMessages={messagesLoadingMore}
@@ -456,37 +452,10 @@ const sessionRoute = createRoute({
     component: SessionPage,
 })
 
-const sessionFilesRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/sessions/$sessionId/files',
-    component: FilesPage,
-})
-
 const sessionTerminalRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/sessions/$sessionId/terminal',
     component: TerminalPage,
-})
-
-type SessionFileSearch = {
-    path: string
-    staged?: boolean
-}
-
-const sessionFileRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/sessions/$sessionId/file',
-    validateSearch: (search: Record<string, unknown>): SessionFileSearch => {
-        const path = typeof search.path === 'string' ? search.path : ''
-        const staged = search.staged === true || search.staged === 'true'
-            ? true
-            : search.staged === false || search.staged === 'false'
-                ? false
-                : undefined
-
-        return staged === undefined ? { path } : { path, staged }
-    },
-    component: FilePage,
 })
 
 const newSessionRoute = createRoute({
@@ -524,8 +493,6 @@ export const routeTree = rootRoute.addChildren([
     sessionsRoute,
     sessionRoute,
     sessionTerminalRoute,
-    sessionFilesRoute,
-    sessionFileRoute,
     newSessionRoute,
     settingsRoute,
     usageRoute,

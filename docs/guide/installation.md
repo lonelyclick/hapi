@@ -90,9 +90,8 @@ On first run, HAPI:
 ```
 ~/.hapi/
 ├── settings.json      # Main configuration
-├── hapi.db           # SQLite database (server)
 ├── daemon.state.json  # Daemon process state
-└── logs/             # Log files
+└── logs/              # Log files
 ```
 </details>
 
@@ -105,7 +104,7 @@ On first run, HAPI:
 | `HAPI_SERVER_URL` | `http://localhost:3006` | Server URL for CLI |
 | `WEBAPP_PORT` | `3006` | HTTP server port |
 | `HAPI_HOME` | `~/.hapi` | Config directory path |
-| `DB_PATH` | `~/.hapi/hapi.db` | Database file path |
+| `DATABASE_URL` | - | PostgreSQL connection string |
 | `CORS_ORIGINS` | - | Allowed CORS origins |
 | `FEISHU_APP_ID` | - | Feishu/Lark app ID (speech-to-text) |
 | `FEISHU_APP_SECRET` | - | Feishu/Lark app secret (speech-to-text) |

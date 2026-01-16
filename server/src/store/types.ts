@@ -392,7 +392,6 @@ export type PostgresConfig = {
 
 // Store 配置类型
 export type StoreConfig = {
-    type: 'sqlite' | 'postgres'
-    sqlitePath?: string
+    type: 'postgres'
     postgres?: PostgresConfig
 }

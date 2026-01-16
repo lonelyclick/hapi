@@ -60,7 +60,6 @@ export function HappyThread(props: {
     onRefresh: () => void
     onRetryMessage?: (localId: string) => void
     isLoadingMessages: boolean
-    messagesWarning: string | null
     hasMoreMessages: boolean
     isLoadingMoreMessages: boolean
     onLoadMore: () => Promise<unknown>
@@ -274,12 +273,6 @@ export function HappyThread(props: {
                                 <MessageSkeleton />
                             ) : (
                                 <>
-                                    {props.messagesWarning ? (
-                                        <div className="mb-3 rounded-md bg-amber-500/10 p-2 text-xs">
-                                            {props.messagesWarning}
-                                        </div>
-                                    ) : null}
-
                                     {props.hasMoreMessages && !props.isLoadingMessages ? (
                                         <div className="py-1 mb-2">
                                             <div className="mx-auto w-fit">

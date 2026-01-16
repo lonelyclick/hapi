@@ -15,7 +15,6 @@
  * - FEISHU_APP_SECRET: Feishu/Lark app secret for speech-to-text
  * - FEISHU_BASE_URL: Feishu/Lark OpenAPI base URL (default: https://open.feishu.cn)
  * - HAPI_HOME: Data directory (default: ~/.hapi)
- * - DB_PATH: SQLite database path (default: {HAPI_HOME}/hapi.db)
  */
 
 import { existsSync, mkdirSync } from 'node:fs'
@@ -63,9 +62,6 @@ class Configuration {
     /** Data directory for credentials and state */
     public readonly dataDir: string
 
-    /** SQLite DB path */
-    public readonly dbPath: string
-
     /** Port for the Mini App HTTP server */
     public readonly webappPort: number
 
@@ -102,12 +98,10 @@ class Configuration {
     /** Private constructor - use createConfiguration() instead */
     private constructor(
         dataDir: string,
-        dbPath: string,
         serverSettings: ServerSettings,
         sources: ServerSettingsResult['sources']
     ) {
         this.dataDir = dataDir
-        this.dbPath = dbPath
         this.settingsFile = join(dataDir, 'settings.json')
 
         // Apply server settings
@@ -152,27 +146,21 @@ class Configuration {
             mkdirSync(dataDir, { recursive: true })
         }
 
-        // 2. Determine DB path (env only - not persisted)
-        const dbPath = process.env.DB_PATH
-            ? process.env.DB_PATH.replace(/^~/, homedir())
-            : join(dataDir, 'hapi.db')
-
-        // 3. Load server settings (with persistence)
+        // 2. Load server settings (with persistence)
         const settingsResult = await loadServerSettings(dataDir)
 
         if (settingsResult.savedToFile) {
             console.log(`[Server] Configuration saved to ${join(dataDir, 'settings.json')}`)
         }
 
-        // 4. Create configuration instance
+        // 3. Create configuration instance
         const config = new Configuration(
             dataDir,
-            dbPath,
             settingsResult.settings,
             settingsResult.sources
         )
 
-        // 5. Load CLI API token
+        // 4. Load CLI API token
         const tokenResult = await getOrCreateCliApiToken(dataDir)
         config._setCliApiToken(tokenResult.token, tokenResult.source, tokenResult.isNew)
 

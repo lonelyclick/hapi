@@ -6,12 +6,10 @@ import type {
     AgentGroupType,
     AuthResponse,
     BroadcastResponse,
-    ClearMessagesResponse,
     CreateGroupResponse,
     DeleteGroupResponse,
     DeleteSessionResponse,
     FileReadResponse,
-    FileSearchResponse,
     FileUploadResponse,
     GitCommandResponse,
     GroupMessagesResponse,
@@ -261,16 +259,6 @@ export class ApiClient {
         )
     }
 
-    async clearMessages(sessionId: string, keepCount: number = 30, compact: boolean = false): Promise<ClearMessagesResponse> {
-        return await this.request<ClearMessagesResponse>(
-            `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
-            {
-                method: 'DELETE',
-                body: JSON.stringify({ keepCount, compact })
-            }
-        )
-    }
-
     async streamSpeechToText(payload: SpeechToTextStreamRequest): Promise<SpeechToTextStreamResponse> {
         const headers = new Headers()
         const liveToken = this.getToken ? this.getToken() : null
@@ -320,18 +308,6 @@ export class ApiClient {
             params.set('staged', staged ? 'true' : 'false')
         }
         return await this.request<GitCommandResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/git-diff-file?${params.toString()}`)
-    }
-
-    async searchSessionFiles(sessionId: string, query: string, limit?: number): Promise<FileSearchResponse> {
-        const params = new URLSearchParams()
-        if (query) {
-            params.set('query', query)
-        }
-        if (limit !== undefined) {
-            params.set('limit', `${limit}`)
-        }
-        const qs = params.toString()
-        return await this.request<FileSearchResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/files${qs ? `?${qs}` : ''}`)
     }
 
     async readSessionFile(sessionId: string, path: string): Promise<FileReadResponse> {

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import type { ClearMessagesResponse, ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
+import type { ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 
 type PermissionModeValue = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
@@ -30,7 +30,6 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
     setPermissionMode: (mode: PermissionMode) => Promise<void>
     setModelMode: (config: ModelConfig) => Promise<void>
     deleteSession: () => Promise<void>
-    clearMessages: (keepCount: number, compact?: boolean) => Promise<ClearMessagesResponse>
     refreshAccount: () => Promise<{ newSessionId: string }>
     isPending: boolean
 } {
@@ -100,20 +99,6 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         },
     })
 
-    const clearMessagesMutation = useMutation({
-        mutationFn: async (params: { keepCount: number; compact?: boolean }) => {
-            if (!api || !sessionId) {
-                throw new Error('Session unavailable')
-            }
-            return await api.clearMessages(sessionId, params.keepCount, params.compact ?? false)
-        },
-        onSuccess: async () => {
-            if (!sessionId) return
-            // Reset messages query to refetch fresh data
-            await queryClient.resetQueries({ queryKey: queryKeys.messages(sessionId) })
-        },
-    })
-
     const refreshAccountMutation = useMutation({
         mutationFn: async () => {
             if (!api || !sessionId) {
@@ -132,7 +117,6 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         setPermissionMode: permissionMutation.mutateAsync,
         setModelMode: modelMutation.mutateAsync,
         deleteSession: deleteMutation.mutateAsync,
-        clearMessages: (keepCount: number, compact?: boolean) => clearMessagesMutation.mutateAsync({ keepCount, compact }),
         refreshAccount: async () => {
             const result = await refreshAccountMutation.mutateAsync()
             return { newSessionId: result.newSessionId }
@@ -142,7 +126,6 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
             || permissionMutation.isPending
             || modelMutation.isPending
             || deleteMutation.isPending
-            || clearMessagesMutation.isPending
             || refreshAccountMutation.isPending,
     }
 }

@@ -40,26 +40,6 @@ function BackIcon(props: { className?: string }) {
     )
 }
 
-function FilesIcon(props: { className?: string }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={props.className}
-        >
-            <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-            <path d="M14 2v6h6" />
-        </svg>
-    )
-}
-
 function TrashIcon(props: { className?: string }) {
     return (
         <svg
@@ -79,27 +59,6 @@ function TrashIcon(props: { className?: string }) {
             <path d="M10 11v6" />
             <path d="M14 11v6" />
             <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-        </svg>
-    )
-}
-
-function EraserIcon(props: { className?: string }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={props.className}
-        >
-            <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
-            <path d="M22 21H7" />
-            <path d="m5 11 9 9" />
         </svg>
     )
 }
@@ -210,8 +169,6 @@ export function SessionHeader(props: {
     session: Session
     viewers?: SessionViewer[]
     onBack: () => void
-    onViewFiles?: () => void
-    onClearMessages?: () => void
     onDelete?: () => void
     onRefreshAccount?: () => void
     onReviewCreated?: (reviewSessionId: string) => void
@@ -219,7 +176,6 @@ export function SessionHeader(props: {
     isReviewPanelOpen?: boolean
     /** 切换 Review 面板 */
     onToggleReviewPanel?: () => void
-    clearDisabled?: boolean
     deleteDisabled?: boolean
     refreshAccountDisabled?: boolean
 }) {
@@ -540,49 +496,56 @@ export function SessionHeader(props: {
                             </div>
                         )}
                     </div>
-                    {props.onRefreshAccount ? (
-                        <button
-                            type="button"
-                            onClick={props.onRefreshAccount}
-                            disabled={props.refreshAccountDisabled}
-                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-green-500/10 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="刷新账号 (保留上下文)"
-                        >
-                            <RefreshAccountIcon />
-                        </button>
-                    ) : null}
-                    {props.onViewFiles ? (
-                        <button
-                            type="button"
-                            onClick={props.onViewFiles}
-                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                            title="Files"
-                        >
-                            <FilesIcon />
-                        </button>
-                    ) : null}
-                    {props.onClearMessages ? (
-                        <button
-                            type="button"
-                            onClick={props.onClearMessages}
-                            disabled={props.clearDisabled}
-                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-orange-500/10 hover:text-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="清空聊天记录"
-                        >
-                            <EraserIcon />
-                        </button>
-                    ) : null}
-                    {props.onDelete ? (
-                        <button
-                            type="button"
-                            onClick={props.onDelete}
-                            disabled={props.deleteDisabled}
-                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Delete session"
-                        >
-                            <TrashIcon />
-                        </button>
-                    ) : null}
+                    {/* PC端：独立按钮 */}
+                    <div className="hidden sm:flex items-center gap-1.5">
+                        {props.onRefreshAccount ? (
+                            <button
+                                type="button"
+                                onClick={props.onRefreshAccount}
+                                disabled={props.refreshAccountDisabled}
+                                className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-green-500/10 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="刷新账号 (保留上下文)"
+                            >
+                                <RefreshAccountIcon />
+                            </button>
+                        ) : null}
+                        {props.onDelete ? (
+                            <button
+                                type="button"
+                                onClick={props.onDelete}
+                                disabled={props.deleteDisabled}
+                                className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Delete session"
+                            >
+                                <TrashIcon />
+                            </button>
+                        ) : null}
+                    </div>
+                    {/* 移动端：按钮组 */}
+                    <div className="sm:hidden flex items-center rounded-md bg-[var(--app-subtle-bg)] overflow-hidden">
+                        {props.onRefreshAccount ? (
+                            <button
+                                type="button"
+                                onClick={props.onRefreshAccount}
+                                disabled={props.refreshAccountDisabled}
+                                className="flex h-7 w-7 items-center justify-center text-[var(--app-hint)] transition-colors hover:bg-green-500/10 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed border-r border-[var(--app-divider)]"
+                                title="刷新账号 (保留上下文)"
+                            >
+                                <RefreshAccountIcon />
+                            </button>
+                        ) : null}
+                        {props.onDelete ? (
+                            <button
+                                type="button"
+                                onClick={props.onDelete}
+                                disabled={props.deleteDisabled}
+                                className="flex h-7 w-7 items-center justify-center text-[var(--app-hint)] transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Delete session"
+                            >
+                                <TrashIcon />
+                            </button>
+                        ) : null}
+                    </div>
                 </div>
             </div>
         </div>

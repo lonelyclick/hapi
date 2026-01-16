@@ -9,7 +9,7 @@ Telegram bot + HTTP API + realtime updates for hapi.
 - Server-Sent Events stream for live updates in the web app.
 - Socket.IO channel for CLI connections.
 - Serves the web app from `web/dist` or embedded assets in the single binary.
-- Persists state in SQLite.
+- Persists state in PostgreSQL.
 
 ## Configuration
 
@@ -35,7 +35,7 @@ See `src/configuration.ts` for all options.
 - `WEBAPP_PORT` - HTTP port (default: 3006).
 - `CORS_ORIGINS` - Comma-separated origins, or `*`.
 - `HAPI_HOME` - Data directory (default: ~/.hapi).
-- `DB_PATH` - SQLite database path (default: HAPI_HOME/hapi.db).
+- `DATABASE_URL` - PostgreSQL connection string.
 
 ## Running
 
@@ -178,7 +178,7 @@ See `src/sync/syncEngine.ts` for the main session/message manager:
 
 ## Storage
 
-See `src/store/index.ts` for SQLite persistence:
+See `src/store/index.ts` for PostgreSQL persistence:
 
 - Sessions with metadata and agent state.
 - Messages with pagination support.
@@ -215,7 +215,7 @@ The script uses `CLI_API_TOKEN` (or `~/.hapi/settings.json`) to authenticate and
 - `src/socket/` - Socket.IO setup and handlers.
 - `src/telegram/` - Telegram bot.
 - `src/sync/` - Core session/message logic.
-- `src/store/` - SQLite persistence.
+- `src/store/` - PostgreSQL persistence.
 - `src/sse/` - Server-Sent Events.
 
 ## Security model

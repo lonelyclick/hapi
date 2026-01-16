@@ -11,7 +11,7 @@
 ### 项目背景
 
 HAPI 是一个 AI 开发助手远程控制系统，包含：
-- **server**: Bun + Hono 后端，SQLite 数据库
+- **server**: Bun + Hono 后端，PostgreSQL 数据库
 - **webapp**: React 前端
 - **cli**: 命令行工具
 
