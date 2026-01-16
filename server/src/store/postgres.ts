@@ -743,34 +743,58 @@ export class PostgresStore implements IStore {
     // ========== Message 操作 ==========
 
     async addMessage(sessionId: string, content: unknown, localId?: string): Promise<StoredMessage> {
-        if (localId) {
-            const existing = await this.pool.query(
-                'SELECT * FROM messages WHERE session_id = $1 AND local_id = $2',
-                [sessionId, localId]
-            )
-            if (existing.rows.length > 0) {
-                return this.toStoredMessage(existing.rows[0])
+        // Use a transaction with row-level lock to prevent race conditions
+        // when multiple streaming chunks arrive simultaneously
+        const client = await this.pool.connect()
+        try {
+            await client.query('BEGIN')
+
+            // Check for duplicate localId first (outside lock is fine - it's a safety check)
+            if (localId) {
+                const existing = await client.query(
+                    'SELECT * FROM messages WHERE session_id = $1 AND local_id = $2',
+                    [sessionId, localId]
+                )
+                if (existing.rows.length > 0) {
+                    await client.query('COMMIT')
+                    return this.toStoredMessage(existing.rows[0])
+                }
             }
+
+            // Lock the session row to serialize seq assignment
+            // FOR UPDATE ensures only one transaction can compute next seq at a time
+            await client.query(
+                'SELECT id FROM sessions WHERE id = $1 FOR UPDATE',
+                [sessionId]
+            )
+
+            // Now safely get next seq - no other transaction can read/write this session's messages
+            const seqResult = await client.query(
+                'SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM messages WHERE session_id = $1',
+                [sessionId]
+            )
+            const nextSeq = seqResult.rows[0].next_seq
+
+            const now = Date.now()
+            const id = randomUUID()
+
+            await client.query(`
+                INSERT INTO messages (id, session_id, content, created_at, seq, local_id)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            `, [id, sessionId, JSON.stringify(content), now, nextSeq, localId || null])
+
+            await client.query('UPDATE sessions SET seq = seq + 1, updated_at = $1 WHERE id = $2', [now, sessionId])
+
+            await client.query('COMMIT')
+
+            const result = await this.pool.query('SELECT * FROM messages WHERE id = $1', [id])
+            return this.toStoredMessage(result.rows[0])
+        } catch (err) {
+            await client.query('ROLLBACK')
+            throw err
+        } finally {
+            client.release()
         }
-
-        const seqResult = await this.pool.query(
-            'SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM messages WHERE session_id = $1',
-            [sessionId]
-        )
-        const nextSeq = seqResult.rows[0].next_seq
-
-        const now = Date.now()
-        const id = randomUUID()
-
-        await this.pool.query(`
-            INSERT INTO messages (id, session_id, content, created_at, seq, local_id)
-            VALUES ($1, $2, $3, $4, $5, $6)
-        `, [id, sessionId, JSON.stringify(content), now, nextSeq, localId || null])
-
-        await this.pool.query('UPDATE sessions SET seq = seq + 1, updated_at = $1 WHERE id = $2', [now, sessionId])
-
-        const result = await this.pool.query('SELECT * FROM messages WHERE id = $1', [id])
-        return this.toStoredMessage(result.rows[0])
     }
 
     async getMessages(sessionId: string, limit: number = 200, beforeSeq?: number): Promise<StoredMessage[]> {

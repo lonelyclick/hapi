@@ -742,8 +742,17 @@ export function reduceChatBlocks(
         }
     }
 
-    // Sort blocks by createdAt to ensure permission-only blocks appear in correct order
-    rootResult.blocks.sort((a, b) => a.createdAt - b.createdAt)
+    // Sort blocks by createdAt to ensure permission-only blocks appear in correct order.
+    // We use a stable sort by adding original index as tiebreaker for equal createdAt values.
+    // This preserves message order for streaming chunks that may have the same timestamp.
+    const indexedBlocks = rootResult.blocks.map((block, index) => ({ block, index }))
+    indexedBlocks.sort((a, b) => {
+        const timeDiff = a.block.createdAt - b.block.createdAt
+        if (timeDiff !== 0) return timeDiff
+        // Stable sort: preserve original order for equal createdAt
+        return a.index - b.index
+    })
+    const sortedBlocks = indexedBlocks.map(({ block }) => block)
 
-    return { blocks: dedupeAgentEvents(rootResult.blocks), hasReadyEvent, latestUsage }
+    return { blocks: dedupeAgentEvents(sortedBlocks), hasReadyEvent, latestUsage }
 }
