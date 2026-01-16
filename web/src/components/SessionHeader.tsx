@@ -512,28 +512,32 @@ export function SessionHeader(props: {
                         ) : null}
                     </div>
                     {/* 移动端：在线用户 + 更多菜单按钮组 */}
-                    <div className="sm:hidden relative flex items-center rounded-md bg-[var(--app-subtle-bg)] overflow-hidden" ref={moreMenuRef}>
-                        {props.viewers && props.viewers.length > 0 && (
+                    <div className="sm:hidden relative" ref={moreMenuRef}>
+                        <div className="flex items-center rounded-md bg-[var(--app-subtle-bg)]">
+                            {props.viewers && props.viewers.length > 0 && (
+                                <button
+                                    type="button"
+                                    className="flex h-7 items-center gap-1 px-2 text-[10px] font-medium text-blue-600 border-r border-[var(--app-divider)] rounded-l-md"
+                                    title={`${props.viewers.length} 人在线`}
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                    <span>{props.viewers.length}</span>
+                                </button>
+                            )}
                             <button
                                 type="button"
-                                className="flex h-7 items-center gap-1 px-2 text-[10px] font-medium text-blue-600 border-r border-[var(--app-divider)]"
-                                title={`${props.viewers.length} 人在线`}
+                                onClick={() => setShowMoreMenu(!showMoreMenu)}
+                                className={`flex h-7 w-7 items-center justify-center text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] ${
+                                    props.viewers && props.viewers.length > 0 ? 'rounded-r-md' : 'rounded-md'
+                                }`}
+                                title="更多操作"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                    <circle cx="12" cy="12" r="3" />
-                                </svg>
-                                <span>{props.viewers.length}</span>
+                                <MoreIcon />
                             </button>
-                        )}
-                        <button
-                            type="button"
-                            onClick={() => setShowMoreMenu(!showMoreMenu)}
-                            className="flex h-7 w-7 items-center justify-center text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                            title="更多操作"
-                        >
-                            <MoreIcon />
-                        </button>
+                        </div>
                         {showMoreMenu && (
                             <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
                                 {/* Review 按钮 */}
