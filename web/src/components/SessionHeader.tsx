@@ -1,11 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Session, SessionViewer } from '@/types/api'
+import type { Project, Session, SessionViewer } from '@/types/api'
 import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
 import { getClientId } from '@/lib/client-identity'
 import { ViewersBadge } from './ViewersBadge'
 import { useAppContext } from '@/lib/app-context'
 import { JoinReviewButton } from './Review'
+
+function getSessionPath(session: Session): string | null {
+    return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
+}
+
+function matchSessionToProject(session: Session, projects: Project[]): Project | null {
+    const sessionPath = getSessionPath(session)
+    if (!sessionPath) return null
+    if (!Array.isArray(projects)) return null
+
+    // Exact match first
+    for (const project of projects) {
+        if (project.path === sessionPath) {
+            return project
+        }
+    }
+
+    // Check if session path starts with project path (for worktrees)
+    for (const project of projects) {
+        if (sessionPath.startsWith(project.path + '/') || sessionPath.startsWith(project.path + '-')) {
+            return project
+        }
+    }
+
+    return null
+}
 
 function getSessionTitle(session: Session): string {
     if (session.metadata?.name) {
@@ -207,6 +233,15 @@ export function SessionHeader(props: {
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
     const runtimeAgent = props.session.metadata?.runtimeAgent?.trim() || null
     const runtimeModel = useMemo(() => formatRuntimeModel(props.session), [props.session])
+
+    // 查询项目列表
+    const { data: projectsData } = useQuery({
+        queryKey: ['projects'],
+        queryFn: async () => api.getProjects()
+    })
+    const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
+    const project = useMemo(() => matchSessionToProject(props.session, projects), [props.session, projects])
+
     const agentMeta = useMemo(
         () => {
             const parts = [agentLabel]
@@ -216,12 +251,15 @@ export function SessionHeader(props: {
             if (runtimeModel) {
                 parts.push(runtimeModel)
             }
+            if (project) {
+                parts.push(project.name)
+            }
             if (worktreeBranch) {
                 parts.push(worktreeBranch)
             }
-            return parts.join(' • ')
+            return parts.join(' · ')
         },
-        [agentLabel, runtimeAgent, runtimeModel, worktreeBranch]
+        [agentLabel, runtimeAgent, runtimeModel, project, worktreeBranch]
     )
 
     // Subscription state - supports both Telegram chatId and Web clientId
