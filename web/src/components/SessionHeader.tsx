@@ -122,6 +122,27 @@ function ChevronDownIcon(props: { className?: string }) {
     )
 }
 
+function MoreIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <circle cx="12" cy="12" r="1" />
+            <circle cx="12" cy="5" r="1" />
+            <circle cx="12" cy="19" r="1" />
+        </svg>
+    )
+}
+
 function RefreshAccountIcon(props: { className?: string }) {
     return (
         <svg
@@ -265,20 +286,27 @@ export function SessionHeader(props: {
     const [showSubscribersMenu, setShowSubscribersMenu] = useState(false)
     const subscribersMenuRef = useRef<HTMLDivElement>(null)
 
+    // 移动端更多菜单状态
+    const [showMoreMenu, setShowMoreMenu] = useState(false)
+    const moreMenuRef = useRef<HTMLDivElement>(null)
+
     // 点击外部关闭菜单
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (subscribersMenuRef.current && !subscribersMenuRef.current.contains(event.target as Node)) {
                 setShowSubscribersMenu(false)
             }
+            if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+                setShowMoreMenu(false)
+            }
         }
-        if (showSubscribersMenu) {
+        if (showSubscribersMenu || showMoreMenu) {
             document.addEventListener('mousedown', handleClickOutside)
         }
         return () => {
             document.removeEventListener('mousedown', handleClickOutside)
         }
-    }, [showSubscribersMenu])
+    }, [showSubscribersMenu, showMoreMenu])
 
     // 计算订阅者总数
     const totalSubscribers = useMemo(() => {
@@ -297,6 +325,7 @@ export function SessionHeader(props: {
     useEffect(() => {
         setShowAgentTip(false)
         setShowSubscribersMenu(false)
+        setShowMoreMenu(false)
     }, [props.session.id])
 
     // In Telegram, don't render header (Telegram provides its own)
@@ -521,30 +550,48 @@ export function SessionHeader(props: {
                             </button>
                         ) : null}
                     </div>
-                    {/* 移动端：按钮组 */}
-                    <div className="sm:hidden flex items-center rounded-md bg-[var(--app-subtle-bg)] overflow-hidden">
-                        {props.onRefreshAccount ? (
-                            <button
-                                type="button"
-                                onClick={props.onRefreshAccount}
-                                disabled={props.refreshAccountDisabled}
-                                className="flex h-7 w-7 items-center justify-center text-[var(--app-hint)] transition-colors hover:bg-green-500/10 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed border-r border-[var(--app-divider)]"
-                                title="刷新账号 (保留上下文)"
-                            >
-                                <RefreshAccountIcon />
-                            </button>
-                        ) : null}
-                        {props.onDelete ? (
-                            <button
-                                type="button"
-                                onClick={props.onDelete}
-                                disabled={props.deleteDisabled}
-                                className="flex h-7 w-7 items-center justify-center text-[var(--app-hint)] transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Delete session"
-                            >
-                                <TrashIcon />
-                            </button>
-                        ) : null}
+                    {/* 移动端：更多菜单 */}
+                    <div className="sm:hidden relative" ref={moreMenuRef}>
+                        <button
+                            type="button"
+                            onClick={() => setShowMoreMenu(!showMoreMenu)}
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                            title="更多操作"
+                        >
+                            <MoreIcon />
+                        </button>
+                        {showMoreMenu && (
+                            <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
+                                {props.onRefreshAccount ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false)
+                                            props.onRefreshAccount?.()
+                                        }}
+                                        disabled={props.refreshAccountDisabled}
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <RefreshAccountIcon className="shrink-0" />
+                                        <span>刷新账号</span>
+                                    </button>
+                                ) : null}
+                                {props.onDelete ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false)
+                                            props.onDelete?.()
+                                        }}
+                                        disabled={props.deleteDisabled}
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <TrashIcon className="shrink-0" />
+                                        <span>删除会话</span>
+                                    </button>
+                                ) : null}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
