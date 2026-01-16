@@ -1,3 +1,5 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+
 interface UpdateBannerProps {
     onRefresh: () => void
     onDismiss: () => void
@@ -5,20 +7,29 @@ interface UpdateBannerProps {
 
 export function UpdateBanner({ onRefresh, onDismiss }: UpdateBannerProps) {
     return (
-        <div className="fixed top-0 left-0 right-0 bg-blue-500 text-white text-center py-2 text-sm font-medium z-50 flex items-center justify-center gap-3 border-b border-blue-600">
-            <span>New version available</span>
-            <button
-                onClick={onRefresh}
-                className="px-3 py-1 bg-white text-blue-600 rounded-full text-xs font-semibold hover:bg-blue-50 active:bg-blue-100 transition-colors"
-            >
-                Refresh
-            </button>
-            <button
-                onClick={onDismiss}
-                className="text-white/80 hover:text-white text-xs underline"
-            >
-                Later
-            </button>
-        </div>
+        <Dialog open onOpenChange={(open) => { if (!open) onDismiss() }}>
+            <DialogContent className="max-w-sm">
+                <DialogHeader>
+                    <DialogTitle className="text-center">新版本可用</DialogTitle>
+                    <DialogDescription className="text-center">
+                        发现新版本，是否立即刷新以获取最新功能？
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex gap-3 mt-4">
+                    <button
+                        onClick={onDismiss}
+                        className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-[var(--app-subtle-bg)] text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors"
+                    >
+                        稍后
+                    </button>
+                    <button
+                        onClick={onRefresh}
+                        className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 transition-colors"
+                    >
+                        立即刷新
+                    </button>
+                </div>
+            </DialogContent>
+        </Dialog>
     )
 }
