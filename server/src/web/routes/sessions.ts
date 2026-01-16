@@ -24,6 +24,19 @@ type SessionSummaryMetadata = {
         worktreePath?: string
         createdAt?: number
     }
+    // OpenCode 特有字段
+    opencodeCapabilities?: {
+        fs: boolean
+        terminal: boolean
+        mcp: boolean
+        tools: string[]
+    }
+    opencodeStatus?: {
+        initialized: boolean
+        sessionActive: boolean
+        lastActivity?: number
+        errorCount?: number
+    }
 }
 
 type SessionViewer = {
@@ -59,7 +72,10 @@ function toSessionSummary(session: Session): SessionSummary {
         runtimeAgent: session.metadata.runtimeAgent,
         runtimeModel: session.metadata.runtimeModel,
         runtimeModelReasoningEffort: session.metadata.runtimeModelReasoningEffort,
-        worktree: session.metadata.worktree
+        worktree: session.metadata.worktree,
+        // OpenCode 特有字段
+        opencodeCapabilities: session.metadata.opencodeCapabilities,
+        opencodeStatus: session.metadata.opencodeStatus
     } : null
 
     const todoProgress = session.todos?.length ? {

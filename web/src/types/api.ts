@@ -27,6 +27,20 @@ export type SessionMetadataSummary = {
     runtimeModel?: string
     runtimeModelReasoningEffort?: ModelReasoningEffort
     worktree?: WorktreeMetadata
+    source?: string
+    // OpenCode 特有字段
+    opencodeCapabilities?: {
+        fs: boolean
+        terminal: boolean
+        mcp: boolean
+        tools: string[]
+    }
+    opencodeStatus?: {
+        initialized: boolean
+        sessionActive: boolean
+        lastActivity?: number
+        errorCount?: number
+    }
 }
 
 export type AgentStateRequest = {

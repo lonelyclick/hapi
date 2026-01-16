@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { isTelegramApp } from '@/hooks/useTelegram'
+import './video-disguiser.css'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -192,7 +193,9 @@ export default function VideoDisguiserPage() {
             const canvas = canvasRef.current
             const ctx = canvas.getContext('2d')
             
-            if (!ctx) return
+            if (!ctx) {
+                throw new Error('无法获取canvas上下文')
+            }
             
             canvas.width = video.videoWidth
             canvas.height = video.videoHeight
@@ -208,14 +211,19 @@ export default function VideoDisguiserPage() {
             
             ctx.filter = filters.join(' ')
             
-            // Create processed video using MediaRecorder
-            const stream = canvas.captureStream(30) // 30 FPS
+            const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') 
+                ? 'video/webm;codecs=vp9' 
+                : 'video/webm'
+            
+            const stream = canvas.captureStream(30)
             const mediaRecorder = new MediaRecorder(stream, {
-                mimeType: 'video/webm',
-                videoBitsPerSecond: 2500000
+                mimeType,
+                videoBitsPerSecond: 5000000
             })
             
             const chunks: Blob[] = []
+            let totalFrames = 0
+            const targetFrames = Math.floor(video.duration * 30)
             
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -224,39 +232,66 @@ export default function VideoDisguiserPage() {
             }
             
             mediaRecorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'video/webm' })
+                const blob = new Blob(chunks, { type: mimeType })
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a')
                 a.href = url
-                a.download = `disguised_${videoFile.name}`
+                a.download = `disguised_${videoFile.name.replace(/\.[^/.]+$/, '.webm')}`
+                document.body.appendChild(a)
                 a.click()
+                document.body.removeChild(a)
                 URL.revokeObjectURL(url)
                 setIsProcessing(false)
                 setProgress(100)
             }
             
-            // Reset video to start and record
-            const originalTime = video.currentTime
-            video.currentTime = 0
+            mediaRecorder.onerror = (event) => {
+                console.error('MediaRecorder error:', event)
+                setIsProcessing(false)
+                throw new Error('视频录制失败')
+            }
             
-            video.onseeked = () => {
-                mediaRecorder.start()
-                
-                const updateFrame = () => {
-                    if (video.currentTime < video.duration) {
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-                        setProgress((video.currentTime / video.duration) * 100)
-                        requestAnimationFrame(updateFrame)
-                    } else {
-                        mediaRecorder.stop()
-                        video.currentTime = originalTime
-                    }
+            const originalTime = video.currentTime
+            const originalPlaybackRate = video.playbackRate
+            
+            video.pause()
+            video.currentTime = 0
+            video.playbackRate = 1
+            
+            await new Promise((resolve) => {
+                video.onseeked = resolve
+            })
+            
+            mediaRecorder.start(100)
+            
+            const drawFrame = () => {
+                if (totalFrames >= targetFrames || video.currentTime >= video.duration) {
+                    mediaRecorder.stop()
+                    video.currentTime = originalTime
+                    video.playbackRate = originalPlaybackRate
+                    return
                 }
                 
-                updateFrame()
+                try {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+                    totalFrames++
+                    setProgress(Math.min((totalFrames / targetFrames) * 100, 99))
+                    
+                    video.currentTime = totalFrames / 30
+                    video.onseeked = () => {
+                        requestAnimationFrame(drawFrame)
+                    }
+                } catch (error) {
+                    console.error('Error drawing frame:', error)
+                    mediaRecorder.stop()
+                }
             }
+            
+            drawFrame()
+            
         } catch (error) {
             console.error('Error processing video:', error)
+            alert(`处理视频时出错: ${error instanceof Error ? error.message : '未知错误'}`)
             setIsProcessing(false)
         }
     }, [videoFile, settings])
@@ -273,7 +308,6 @@ export default function VideoDisguiserPage() {
 
     return (
         <div className="flex h-full flex-col bg-[var(--app-bg)]">
-            {/* Header */}
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
                 <div className="mx-auto w-full max-w-content flex items-center gap-2 px-3 py-1.5">
                     {!isTelegramApp() && (
@@ -291,7 +325,6 @@ export default function VideoDisguiserPage() {
 
             <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                 <div className="mx-auto w-full max-w-content p-3 space-y-4">
-                    {/* File Input */}
                     <div className="bg-[var(--app-secondary-bg)] rounded-lg p-4">
                         <input
                             ref={fileInputRef}
@@ -315,7 +348,6 @@ export default function VideoDisguiserPage() {
 
                     {videoUrl && (
                         <>
-                            {/* Video Preview */}
                             <div className="bg-[var(--app-secondary-bg)] rounded-lg p-4">
                                 <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
                                     <video
@@ -333,7 +365,6 @@ export default function VideoDisguiserPage() {
                                     />
                                 </div>
                                 
-                                {/* Video Controls */}
                                 <div className="mt-4 space-y-3">
                                     <div className="flex items-center gap-3">
                                         <button
@@ -357,19 +388,17 @@ export default function VideoDisguiserPage() {
                                                         videoRef.current.currentTime = Number(e.target.value)
                                                     }
                                                 }}
-                                                className="w-full h-1 bg-[var(--app-divider)] rounded-lg appearance-none cursor-pointer slider"
+                                                className="w-full video-disguiser-time-slider"
                                             />
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Adjustment Controls */}
                             <div className="bg-[var(--app-secondary-bg)] rounded-lg p-4">
                                 <h3 className="text-sm font-medium text-[var(--app-fg)] mb-4">视频参数调节</h3>
                                 
                                 <div className="space-y-4">
-                                    {/* Brightness */}
                                     <div>
                                         <label className="flex items-center justify-between text-sm text-[var(--app-fg)] mb-2">
                                             <span>亮度</span>
@@ -381,11 +410,10 @@ export default function VideoDisguiserPage() {
                                             max="200"
                                             value={settings.brightness}
                                             onChange={(e) => handleSettingChange('brightness', Number(e.target.value))}
-                                            className="w-full h-2 bg-[var(--app-divider)] rounded-lg appearance-none cursor-pointer"
+                                            className="w-full video-disguiser-slider"
                                         />
                                     </div>
 
-                                    {/* Contrast */}
                                     <div>
                                         <label className="flex items-center justify-between text-sm text-[var(--app-fg)] mb-2">
                                             <span>对比度</span>
@@ -397,11 +425,10 @@ export default function VideoDisguiserPage() {
                                             max="200"
                                             value={settings.contrast}
                                             onChange={(e) => handleSettingChange('contrast', Number(e.target.value))}
-                                            className="w-full h-2 bg-[var(--app-divider)] rounded-lg appearance-none cursor-pointer"
+                                            className="w-full video-disguiser-slider"
                                         />
                                     </div>
 
-                                    {/* Saturation */}
                                     <div>
                                         <label className="flex items-center justify-between text-sm text-[var(--app-fg)] mb-2">
                                             <span>饱和度</span>
@@ -413,11 +440,10 @@ export default function VideoDisguiserPage() {
                                             max="200"
                                             value={settings.saturation}
                                             onChange={(e) => handleSettingChange('saturation', Number(e.target.value))}
-                                            className="w-full h-2 bg-[var(--app-divider)] rounded-lg appearance-none cursor-pointer"
+                                            className="w-full video-disguiser-slider"
                                         />
                                     </div>
 
-                                    {/* Hue */}
                                     <div>
                                         <label className="flex items-center justify-between text-sm text-[var(--app-fg)] mb-2">
                                             <span>色相</span>
@@ -429,11 +455,10 @@ export default function VideoDisguiserPage() {
                                             max="360"
                                             value={settings.hue}
                                             onChange={(e) => handleSettingChange('hue', Number(e.target.value))}
-                                            className="w-full h-2 bg-[var(--app-divider)] rounded-lg appearance-none cursor-pointer"
+                                            className="w-full video-disguiser-slider"
                                         />
                                     </div>
 
-                                    {/* Blur */}
                                     <div>
                                         <label className="flex items-center justify-between text-sm text-[var(--app-fg)] mb-2">
                                             <span>模糊</span>
@@ -445,11 +470,10 @@ export default function VideoDisguiserPage() {
                                             max="10"
                                             value={settings.blur}
                                             onChange={(e) => handleSettingChange('blur', Number(e.target.value))}
-                                            className="w-full h-2 bg-[var(--app-divider)] rounded-lg appearance-none cursor-pointer"
+                                            className="w-full video-disguiser-slider"
                                         />
                                     </div>
 
-                                    {/* Grayscale */}
                                     <div>
                                         <label className="flex items-center justify-between text-sm text-[var(--app-fg)] mb-2">
                                             <span>灰度</span>
@@ -461,11 +485,10 @@ export default function VideoDisguiserPage() {
                                             max="100"
                                             value={settings.grayscale}
                                             onChange={(e) => handleSettingChange('grayscale', Number(e.target.value))}
-                                            className="w-full h-2 bg-[var(--app-divider)] rounded-lg appearance-none cursor-pointer"
+                                            className="w-full video-disguiser-slider"
                                         />
                                     </div>
 
-                                    {/* Sepia */}
                                     <div>
                                         <label className="flex items-center justify-between text-sm text-[var(--app-fg)] mb-2">
                                             <span>怀旧</span>
@@ -477,12 +500,11 @@ export default function VideoDisguiserPage() {
                                             max="100"
                                             value={settings.sepia}
                                             onChange={(e) => handleSettingChange('sepia', Number(e.target.value))}
-                                            className="w-full h-2 bg-[var(--app-divider)] rounded-lg appearance-none cursor-pointer"
+                                            className="w-full video-disguiser-slider"
                                         />
                                     </div>
                                 </div>
 
-                                {/* Action Buttons */}
                                 <div className="flex gap-3 mt-6">
                                     <button
                                         onClick={handleReset}
@@ -493,7 +515,9 @@ export default function VideoDisguiserPage() {
                                     <button
                                         onClick={handleDownload}
                                         disabled={isProcessing}
-                                        className="flex-1 py-2 px-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className={`flex-1 py-2 px-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                                            isProcessing ? 'video-disguiser-processing' : ''
+                                        }`}
                                     >
                                         {isProcessing ? (
                                             <>

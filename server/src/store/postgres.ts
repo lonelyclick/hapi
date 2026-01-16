@@ -105,6 +105,12 @@ export class PostgresStore implements IStore {
             ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_by TEXT;
             CREATE INDEX IF NOT EXISTS idx_sessions_tag ON sessions(tag);
             CREATE INDEX IF NOT EXISTS idx_sessions_tag_namespace ON sessions(tag, namespace);
+            -- OpenCode session 查询优化索引
+            CREATE INDEX IF NOT EXISTS idx_sessions_flavor ON sessions((metadata->>'flavor'));
+            CREATE INDEX IF NOT EXISTS idx_sessions_flavor_namespace ON sessions((metadata->>'flavor'), namespace);
+            CREATE INDEX IF NOT EXISTS idx_sessions_flavor_active ON sessions((metadata->>'flavor'), active) WHERE (metadata->>'flavor') = 'opencode';
+            CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_sessions_active_updated ON sessions(active, updated_at DESC) WHERE active = TRUE;
 
             -- Machines 表
             CREATE TABLE IF NOT EXISTS machines (

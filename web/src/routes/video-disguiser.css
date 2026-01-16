@@ -1,0 +1,101 @@
+.video-disguiser-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.video-disguiser-slider::-webkit-slider-track {
+    background: var(--app-divider);
+    height: 8px;
+    border-radius: 4px;
+}
+
+.video-disguiser-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--app-accent);
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    margin-top: -6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: all 0.2s ease;
+}
+
+.video-disguiser-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+}
+
+.video-disguiser-slider::-moz-range-track {
+    background: var(--app-divider);
+    height: 8px;
+    border-radius: 4px;
+    border: none;
+}
+
+.video-disguiser-slider::-moz-range-thumb {
+    background: var(--app-accent);
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: all 0.2s ease;
+}
+
+.video-disguiser-slider::-moz-range-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+}
+
+.video-disguiser-time-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+    height: 4px;
+}
+
+.video-disguiser-time-slider::-webkit-slider-track {
+    background: var(--app-divider);
+    height: 4px;
+    border-radius: 2px;
+}
+
+.video-disguiser-time-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--app-accent);
+    height: 12px;
+    width: 12px;
+    border-radius: 50%;
+    margin-top: -4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.video-disguiser-time-slider::-moz-range-track {
+    background: var(--app-divider);
+    height: 4px;
+    border-radius: 2px;
+    border: none;
+}
+
+.video-disguiser-time-slider::-moz-range-thumb {
+    background: var(--app-accent);
+    height: 12px;
+    width: 12px;
+    border-radius: 50%;
+    border: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+@keyframes video-disguiser-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.video-disguiser-processing {
+    animation: video-disguiser-pulse 1.5s ease-in-out infinite;
+}

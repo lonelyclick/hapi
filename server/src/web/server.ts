@@ -25,6 +25,7 @@ import { createUsageRoutes } from './routes/usage'
 import { createGroupRoutes } from './routes/groups'
 import { createClaudeAccountsRoutes } from './routes/claude-accounts'
 import { createReviewRoutes, type ReviewStore, type AutoReviewService } from '../review'
+import { createOpenCodeRoutes } from './routes/opencode'
 import type { SSEManager } from '../sse/sseManager'
 import type { Server as BunServer } from 'bun'
 import type { Server as SocketEngine } from '@socket.io/bun-engine'
@@ -116,6 +117,7 @@ function createWebApp(options: {
     app.route('/api', createGroupRoutes(options.store, options.getSyncEngine(), options.getSseManager()))
     app.route('/api', createClaudeAccountsRoutes())
     app.route('/api', createReviewRoutes(options.reviewStore, options.getSyncEngine, options.getSseManager, options.autoReviewService))
+    app.route('/api', createOpenCodeRoutes(options.getSyncEngine, options.getSseManager()))
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap

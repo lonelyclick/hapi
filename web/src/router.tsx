@@ -115,6 +115,26 @@ function UsageIcon(props: { className?: string }) {
     )
 }
 
+function VideoIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+            <polygon points="10 8 16 12 10 16 10 8"></polygon>
+        </svg>
+    )
+}
+
 function SessionsPage() {
     const { api, userEmail } = useAppContext()
     const navigate = useNavigate()
@@ -216,6 +236,14 @@ function SessionsPage() {
                             title="Token Usage"
                         >
                             <UsageIcon />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => navigate({ to: '/video-disguiser' })}
+                            className="flex items-center justify-center h-7 w-7 rounded-lg text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors"
+                            title="Video Disguiser"
+                        >
+                            <VideoIcon />
                         </button>
                         <button
                             type="button"
@@ -493,6 +521,12 @@ const groupChatRoute = createRoute({
     component: GroupChatPage,
 })
 
+const videoDisguiserRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/video-disguiser',
+    component: VideoDisguiserPage,
+})
+
 export const routeTree = rootRoute.addChildren([
     indexRoute,
     sessionsRoute,
@@ -503,6 +537,7 @@ export const routeTree = rootRoute.addChildren([
     usageRoute,
     groupsRoute,
     groupChatRoute,
+    videoDisguiserRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']
