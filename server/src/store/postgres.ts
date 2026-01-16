@@ -816,7 +816,17 @@ export class PostgresStore implements IStore {
         }
 
         const result = await this.pool.query(query, params)
-        return result.rows.reverse().map(row => this.toStoredMessage(row))
+        console.log(`[DEBUG] getMessages(${sessionId.slice(0,8)}...): query=${query}, beforeSeq=${beforeSeq}`)
+        console.log(`[DEBUG] DB returned ${result.rows.length} messages, first 3 rows:`)
+        result.rows.slice(0, 3).forEach((row, i) => {
+            console.log(`[DEBUG]   Row${i}: seq=${row.seq}, created_at=${row.created_at}, id=${row.id}`)
+        })
+        const reversed = result.rows.reverse().map(row => this.toStoredMessage(row))
+        console.log(`[DEBUG] After reverse(), first 3 messages:`)
+        reversed.slice(0, 3).forEach((msg, i) => {
+            console.log(`[DEBUG]   Msg${i}: seq=${msg.seq}, createdAt=${msg.createdAt}, id=${msg.id}`)
+        })
+        return reversed
     }
 
     async getMessagesAfter(sessionId: string, afterSeq: number, limit: number = 200): Promise<StoredMessage[]> {
@@ -1849,7 +1859,12 @@ export class PostgresStore implements IStore {
         params.push(limit)
 
         const result = await this.pool.query(query, params)
-        return result.rows.map(row => ({
+        console.log(`[DEBUG] getGroupMessages(${groupId.slice(0,8)}...): query=${query}, beforeId=${beforeId}`)
+        console.log(`[DEBUG] GROUP DB returned ${result.rows.length} messages, first 3 rows:`)
+        result.rows.slice(0, 3).forEach((row, i) => {
+            console.log(`[DEBUG]   Row${i}: id=${row.id}, created_at=${row.created_at}`)
+        })
+        const mapped = result.rows.map(row => ({
             id: row.id,
             groupId: row.group_id,
             sourceSessionId: row.source_session_id,
@@ -1858,6 +1873,11 @@ export class PostgresStore implements IStore {
             messageType: row.message_type as GroupMessageType,
             createdAt: Number(row.created_at)
         }))
+        console.log(`[DEBUG] GROUP mapped, first 3 messages:`)
+        mapped.slice(0, 3).forEach((msg, i) => {
+            console.log(`[DEBUG]   Msg${i}: id=${msg.id}, createdAt=${msg.createdAt}`)
+        })
+        return mapped
     }
 
     // ========== Session Creator Chat ID 操作 ==========

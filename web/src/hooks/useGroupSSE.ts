@@ -58,12 +58,22 @@ export function useGroupSSE(options: {
         queryClient.setQueryData<{ messages: AgentGroupMessage[] }>(
             ['group-messages', options.groupId],
             (old) => {
-                if (!old) return { messages: [message] }
+                if (!old) {
+                    console.log(`[DEBUG] SSE new group ${options.groupId}: creating with message ${message.id} @${message.createdAt}`)
+                    return { messages: [message] }
+                }
                 // 检查是否已存在
                 if (old.messages.some(m => m.id === message.id)) {
+                    console.log(`[DEBUG] SSE duplicate message ${message.id}, ignoring`)
                     return old
                 }
-                return { messages: [...old.messages, message].sort((a, b) => a.createdAt - b.createdAt) }
+                const newMessages = [...old.messages, message].sort((a, b) => a.createdAt - b.createdAt)
+                console.log(`[DEBUG] SSE added message ${message.id} @${message.createdAt}, total: ${newMessages.length}`)
+                console.log(`[DEBUG] First 3 messages after sort:`)
+                newMessages.slice(0, 3).forEach((msg, i) => {
+                    console.log(`[DEBUG]   Msg${i}: ${msg.id} @${msg.createdAt}`)
+                })
+                return { messages: newMessages }
             }
         )
 

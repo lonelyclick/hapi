@@ -37,6 +37,19 @@ export function GroupMessageList(props: GroupMessageListProps) {
 
     // Sort messages by createdAt (oldest first)
     const sortedMessages = [...messages].sort((a, b) => a.createdAt - b.createdAt)
+    
+    // Debug logging
+    if (messages.length > 0) {
+        console.log(`[DEBUG] GroupMessageList received ${messages.length} messages`)
+        console.log(`[DEBUG] First 3 raw messages:`)
+        messages.slice(0, 3).forEach((msg, i) => {
+            console.log(`[DEBUG]   Raw${i}: ${msg.id} @${msg.createdAt}`)
+        })
+        console.log(`[DEBUG] First 3 sorted messages:`)
+        sortedMessages.slice(0, 3).forEach((msg, i) => {
+            console.log(`[DEBUG]   Sorted${i}: ${msg.id} @${msg.createdAt}`)
+        })
+    }
 
     if (isLoading && messages.length === 0) {
         return (
