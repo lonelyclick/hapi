@@ -1,6 +1,16 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 
 const CACHED_VERSION_KEY = 'hapi-cached-version'
+const LAST_REFRESH_KEY = 'hapi-last-refresh-ts'
+const REFRESH_COOLDOWN_MS = 30_000 // 30 seconds cooldown between refreshes
+
+// Check if we're in iOS standalone mode (webapp)
+function isIOSStandalone(): boolean {
+    return (
+        ('standalone' in navigator && (navigator as { standalone?: boolean }).standalone === true) ||
+        window.matchMedia('(display-mode: standalone)').matches
+    )
+}
 
 // Get the current version from the build-time injected JS bundle filename
 function getCurrentVersion(): string {
@@ -16,6 +26,19 @@ function getCurrentVersion(): string {
         }
     }
     return 'unknown'
+}
+
+// Check if we recently refreshed (to prevent infinite refresh loops)
+function wasRecentlyRefreshed(): boolean {
+    const lastRefresh = localStorage.getItem(LAST_REFRESH_KEY)
+    if (!lastRefresh) return false
+    const elapsed = Date.now() - parseInt(lastRefresh, 10)
+    return elapsed < REFRESH_COOLDOWN_MS
+}
+
+// Mark that we just refreshed
+function markRefreshed(): void {
+    localStorage.setItem(LAST_REFRESH_KEY, Date.now().toString())
 }
 
 // Clear all caches and unregister service workers
@@ -65,8 +88,16 @@ export function useVersionCheck(options: UseVersionCheckOptions): UseVersionChec
 
     const [currentVersion] = useState(() => getCurrentVersion())
     const [serverVersion, setServerVersion] = useState<string | null>(null)
-    const [dismissed, setDismissed] = useState(false)
+    const [dismissed, setDismissed] = useState(() => {
+        // If we recently refreshed, auto-dismiss to prevent infinite loops
+        if (wasRecentlyRefreshed()) {
+            console.log('[VersionCheck] Recently refreshed, auto-dismissing update prompt')
+            return true
+        }
+        return false
+    })
     const initialCheckDone = useRef(false)
+    const isIOS = useRef(isIOSStandalone())
 
     const checkVersion = useCallback(async () => {
         try {
@@ -92,19 +123,27 @@ export function useVersionCheck(options: UseVersionCheckOptions): UseVersionChec
         if (!enabled) return
 
         // Initial check (with delay to not block app startup)
+        // Longer delay on iOS standalone to prevent issues
+        const initialDelay = isIOS.current ? 3000 : 1000
         const initialTimeout = setTimeout(() => {
             if (!initialCheckDone.current) {
                 initialCheckDone.current = true
                 checkVersion()
             }
-        }, 1000) // Reduced delay for faster version check
+        }, initialDelay)
 
-        // Periodic checks
-        const interval = setInterval(checkVersion, checkInterval)
+        // Periodic checks (less frequent on iOS)
+        const actualInterval = isIOS.current ? Math.max(checkInterval, 120_000) : checkInterval
+        const interval = setInterval(checkVersion, actualInterval)
 
         // Check on visibility change (when user comes back to the app)
+        // But skip if we recently refreshed (iOS infinite loop prevention)
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
+                if (wasRecentlyRefreshed()) {
+                    console.log('[VersionCheck] Skipping visibility check - recently refreshed')
+                    return
+                }
                 checkVersion()
             }
         }
@@ -126,6 +165,8 @@ export function useVersionCheck(options: UseVersionCheckOptions): UseVersionChec
     )
 
     const refresh = useCallback(async () => {
+        // Mark that we're refreshing to prevent infinite loops
+        markRefreshed()
         // Clear all caches before reloading
         await clearAllCaches()
         if (serverVersion) {

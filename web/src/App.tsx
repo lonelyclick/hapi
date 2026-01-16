@@ -30,10 +30,30 @@ export function App() {
 
     // Service Worker update state
     const [swUpdateFn, setSwUpdateFn] = useState<((reloadPage?: boolean) => Promise<void>) | null>(null)
-    const [swUpdateDismissed, setSwUpdateDismissed] = useState(false)
+    const [swUpdateDismissed, setSwUpdateDismissed] = useState(() => {
+        // Check if we recently refreshed to prevent infinite SW update loops on iOS
+        const lastRefresh = localStorage.getItem('hapi-last-refresh-ts')
+        if (lastRefresh) {
+            const elapsed = Date.now() - parseInt(lastRefresh, 10)
+            if (elapsed < 30_000) {
+                console.log('[SW] Recently refreshed, auto-dismissing SW update')
+                return true
+            }
+        }
+        return false
+    })
 
     useEffect(() => {
         const handleSwUpdate = (event: Event) => {
+            // Check if we recently refreshed to prevent infinite loops
+            const lastRefresh = localStorage.getItem('hapi-last-refresh-ts')
+            if (lastRefresh) {
+                const elapsed = Date.now() - parseInt(lastRefresh, 10)
+                if (elapsed < 30_000) {
+                    console.log('[SW] Ignoring SW update event - recently refreshed')
+                    return
+                }
+            }
             const customEvent = event as CustomEvent<{ updateSW: (reloadPage?: boolean) => Promise<void> }>
             setSwUpdateFn(() => customEvent.detail.updateSW)
         }
@@ -45,6 +65,8 @@ export function App() {
     const hasUpdate = hasApiUpdate || hasSwUpdate
 
     const handleRefresh = useCallback(() => {
+        // Mark refresh time to prevent infinite loops
+        localStorage.setItem('hapi-last-refresh-ts', Date.now().toString())
         if (swUpdateFn) {
             swUpdateFn(true)
         } else {
