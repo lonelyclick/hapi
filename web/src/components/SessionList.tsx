@@ -394,21 +394,18 @@ export function SessionList(props: {
                     </div>
                 </div>
 
-                {/* Project filter */}
+                {/* Project filter - right aligned */}
                 {projectsWithSessions.length > 0 && (
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-[var(--app-hint)]">Project:</span>
-                        <select
-                            value={projectFilter ?? ''}
-                            onChange={(e) => setProjectFilter(e.target.value || null)}
-                            className="text-xs px-2 py-1 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-fg)] border border-[var(--app-divider)] focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        >
-                            <option value="">All Projects</option>
-                            {projectsWithSessions.map(project => (
-                                <option key={project.id} value={project.id}>{project.name}</option>
-                            ))}
-                        </select>
-                    </div>
+                    <select
+                        value={projectFilter ?? ''}
+                        onChange={(e) => setProjectFilter(e.target.value || null)}
+                        className="ml-auto text-xs px-2 py-1 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-fg)] border border-[var(--app-divider)] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                        <option value="">All Projects</option>
+                        {projectsWithSessions.map(project => (
+                            <option key={project.id} value={project.id}>{project.name}</option>
+                        ))}
+                    </select>
                 )}
             </div>
 
