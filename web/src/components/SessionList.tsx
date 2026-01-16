@@ -243,7 +243,7 @@ function SessionItem(props: {
                         <ViewersBadge viewers={s.viewers} />
                     )}
                 </div>
-                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--app-hint)]">
+                <div className="flex items-center gap-1 mt-0.5 text-[11px] text-[var(--app-hint)]">
                     <span className="shrink-0">{getAgentLabel(s)}</span>
                     {showCreator && s.createdBy && (
                         <>
