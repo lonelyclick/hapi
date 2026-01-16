@@ -337,6 +337,10 @@ export function SessionHeader(props: {
     const [showMoreMenu, setShowMoreMenu] = useState(false)
     const moreMenuRef = useRef<HTMLDivElement>(null)
 
+    // 移动端 agent 详情弹出框状态
+    const [showAgentDetails, setShowAgentDetails] = useState(false)
+    const agentDetailsRef = useRef<HTMLDivElement>(null)
+
     // 点击外部关闭菜单
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -346,14 +350,17 @@ export function SessionHeader(props: {
             if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
                 setShowMoreMenu(false)
             }
+            if (agentDetailsRef.current && !agentDetailsRef.current.contains(event.target as Node)) {
+                setShowAgentDetails(false)
+            }
         }
-        if (showSubscribersMenu || showMoreMenu) {
+        if (showSubscribersMenu || showMoreMenu || showAgentDetails) {
             document.addEventListener('mousedown', handleClickOutside)
         }
         return () => {
             document.removeEventListener('mousedown', handleClickOutside)
         }
-    }, [showSubscribersMenu, showMoreMenu])
+    }, [showSubscribersMenu, showMoreMenu, showAgentDetails])
 
     // 计算订阅者总数
     const totalSubscribers = useMemo(() => {
@@ -372,6 +379,7 @@ export function SessionHeader(props: {
     useEffect(() => {
         setShowSubscribersMenu(false)
         setShowMoreMenu(false)
+        setShowAgentDetails(false)
     }, [props.session.id])
 
     // In Telegram, don't render header (Telegram provides its own)
@@ -391,13 +399,34 @@ export function SessionHeader(props: {
                     >
                         <BackIcon />
                     </button>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 relative" ref={agentDetailsRef}>
                         <div className="max-w-[180px] truncate font-medium text-sm sm:max-w-none">
                             {title}
                         </div>
-                        <div className="text-[10px] text-[var(--app-hint)] truncate max-w-[180px] sm:max-w-none">
+                        {/* PC端：显示完整 agentMeta */}
+                        <div className="hidden sm:block text-[10px] text-[var(--app-hint)] truncate">
                             {agentMeta}
                         </div>
+                        {/* 移动端：只显示 agentLabel，点击弹出详情 */}
+                        <button
+                            type="button"
+                            onClick={() => setShowAgentDetails(!showAgentDetails)}
+                            className="sm:hidden text-[10px] text-[var(--app-hint)] truncate max-w-[180px] text-left"
+                        >
+                            {agentLabel} {(runtimeAgent || runtimeModel || project || worktreeBranch) && '...'}
+                        </button>
+                        {/* 移动端详情弹出框 */}
+                        {showAgentDetails && (
+                            <div className="sm:hidden absolute left-0 top-full z-30 mt-1 min-w-[200px] max-w-[280px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-2 px-3 shadow-lg">
+                                <div className="text-xs text-[var(--app-fg)] space-y-1">
+                                    <div><span className="text-[var(--app-hint)]">Agent:</span> {agentLabel}</div>
+                                    {runtimeAgent && <div><span className="text-[var(--app-hint)]">Runtime:</span> {runtimeAgent}</div>}
+                                    {runtimeModel && <div><span className="text-[var(--app-hint)]">Model:</span> {runtimeModel}</div>}
+                                    {project && <div><span className="text-[var(--app-hint)]">Project:</span> {project.name}</div>}
+                                    {worktreeBranch && <div><span className="text-[var(--app-hint)]">Branch:</span> {worktreeBranch}</div>}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
