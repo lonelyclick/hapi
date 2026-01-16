@@ -517,7 +517,8 @@ export function SessionHeader(props: {
                             {props.viewers && props.viewers.length > 0 && (
                                 <button
                                     type="button"
-                                    className="flex h-7 items-center gap-1 px-2 text-[10px] font-medium text-blue-600 border-r border-[var(--app-divider)] rounded-l-md"
+                                    onClick={() => setShowMoreMenu(!showMoreMenu)}
+                                    className="flex h-7 items-center gap-1 px-2 text-[10px] font-medium text-blue-600 border-r border-[var(--app-divider)] rounded-l-md hover:bg-blue-500/10"
                                     title={`${props.viewers.length} 人在线`}
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -540,6 +541,23 @@ export function SessionHeader(props: {
                         </div>
                         {showMoreMenu && (
                             <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
+                                {/* 在线用户列表 */}
+                                {props.viewers && props.viewers.length > 0 && (
+                                    <>
+                                        <div className="px-3 py-1.5 text-[10px] font-medium text-[var(--app-hint)] uppercase tracking-wider">
+                                            在线 ({props.viewers.length})
+                                        </div>
+                                        {props.viewers.map((viewer) => (
+                                            <div key={viewer.clientId} className="flex items-center gap-2 px-3 py-1.5">
+                                                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                                <span className="text-xs text-[var(--app-fg)] truncate">
+                                                    {viewer.email.split('@')[0]}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        <div className="my-1 border-t border-[var(--app-divider)]" />
+                                    </>
+                                )}
                                 {/* Review 按钮 */}
                                 {props.session.active && props.onToggleReviewPanel && (
                                     <button
