@@ -560,7 +560,7 @@ export function SessionHeader(props: {
                             <MoreIcon />
                         </button>
                         {showMoreMenu && (
-                            <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
+                            <div className="absolute right-0 top-full z-30 mt-1 min-w-[160px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
                                 {/* 在线用户列表 */}
                                 {props.viewers && props.viewers.length > 0 && (
                                     <>
@@ -642,7 +642,7 @@ export function SessionHeader(props: {
                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <RefreshAccountIcon className="shrink-0" />
-                                        <span>Refresh Account</span>
+                                        <span className="whitespace-nowrap">Refresh Account</span>
                                     </button>
                                 ) : null}
                                 {/* 删除会话 */}
@@ -657,7 +657,7 @@ export function SessionHeader(props: {
                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <TrashIcon className="shrink-0" />
-                                        <span>Delete Session</span>
+                                        <span className="whitespace-nowrap">Delete Session</span>
                                     </button>
                                 ) : null}
                             </div>
