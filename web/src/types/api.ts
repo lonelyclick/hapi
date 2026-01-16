@@ -67,6 +67,7 @@ export type Session = {
     updatedAt: number
     active: boolean
     thinking: boolean
+    createdBy?: string
     metadata: SessionMetadataSummary | null
     agentState: AgentState | null
     todos?: TodoItem[]

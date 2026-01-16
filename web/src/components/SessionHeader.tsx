@@ -226,7 +226,7 @@ export function SessionHeader(props: {
     deleteDisabled?: boolean
     refreshAccountDisabled?: boolean
 }) {
-    const { api } = useAppContext()
+    const { api, userEmail } = useAppContext()
     const queryClient = useQueryClient()
     const title = useMemo(() => getSessionTitle(props.session), [props.session])
     const worktreeBranch = props.session.metadata?.worktree?.branch
@@ -266,6 +266,12 @@ export function SessionHeader(props: {
     const tg = getTelegramWebApp()
     const currentChatId = tg?.initDataUnsafe?.user?.id?.toString() ?? null
     const currentClientId = getClientId()
+
+    // Check if current user is the creator of this session
+    const isCreator = useMemo(() => {
+        if (!userEmail) return false
+        return props.session.createdBy === userEmail
+    }, [userEmail, props.session.createdBy])
 
     // 过滤掉自己，只显示其他在线用户
     const otherViewers = useMemo(() => {
@@ -414,8 +420,8 @@ export function SessionHeader(props: {
                             <ViewersBadge viewers={otherViewers} compact buttonClassName="h-7 leading-none" />
                         </div>
                     )}
-                    {/* Subscription toggle with dropdown menu - PC端显示 */}
-                    <div className="hidden sm:block relative" ref={subscribersMenuRef}>
+                    {/* Subscription toggle with dropdown menu - PC端显示 (hide if creator) */}
+                    {!isCreator && <div className="hidden sm:block relative" ref={subscribersMenuRef}>
                         <div className="flex items-center">
                             {/* 主按钮：切换自己的订阅 */}
                             <button
@@ -529,7 +535,7 @@ export function SessionHeader(props: {
                                 )}
                             </div>
                         )}
-                    </div>
+                    </div>}
                     {/* PC端：独立按钮 */}
                     <div className="hidden sm:flex items-center gap-1.5">
                         {props.onRefreshAccount ? (
@@ -616,26 +622,28 @@ export function SessionHeader(props: {
                                         <span>Review</span>
                                     </button>
                                 )}
-                                {/* 订阅按钮 */}
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        toggleSubscriptionMutation.mutate(!isSubscribed)
-                                        setShowMoreMenu(false)
-                                    }}
-                                    disabled={toggleSubscriptionMutation.isPending}
-                                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                                        isSubscribed
-                                            ? 'text-blue-600 bg-blue-500/10'
-                                            : 'text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
-                                    } disabled:opacity-50`}
-                                >
-                                    <BellIcon subscribed={isSubscribed} className="shrink-0" />
-                                    <span>{isSubscribed ? 'Unsubscribe' : 'Subscribe'}</span>
-                                    {totalSubscribers > 0 && (
-                                        <span className="ml-auto text-[10px] text-[var(--app-hint)]">{totalSubscribers}</span>
-                                    )}
-                                </button>
+                                {/* 订阅按钮 (hide if creator) */}
+                                {!isCreator && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            toggleSubscriptionMutation.mutate(!isSubscribed)
+                                            setShowMoreMenu(false)
+                                        }}
+                                        disabled={toggleSubscriptionMutation.isPending}
+                                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                                            isSubscribed
+                                                ? 'text-blue-600 bg-blue-500/10'
+                                                : 'text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
+                                        } disabled:opacity-50`}
+                                    >
+                                        <BellIcon subscribed={isSubscribed} className="shrink-0" />
+                                        <span>{isSubscribed ? 'Unsubscribe' : 'Subscribe'}</span>
+                                        {totalSubscribers > 0 && (
+                                            <span className="ml-auto text-[10px] text-[var(--app-hint)]">{totalSubscribers}</span>
+                                        )}
+                                    </button>
+                                )}
                                 {/* 刷新账号 */}
                                 {props.onRefreshAccount ? (
                                     <button
