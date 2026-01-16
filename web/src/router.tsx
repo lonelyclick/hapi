@@ -521,12 +521,6 @@ const groupChatRoute = createRoute({
     component: GroupChatPage,
 })
 
-const videoDisguiserRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/video-disguiser',
-    component: VideoDisguiserPage,
-})
-
 export const routeTree = rootRoute.addChildren([
     indexRoute,
     sessionsRoute,
@@ -537,7 +531,6 @@ export const routeTree = rootRoute.addChildren([
     usageRoute,
     groupsRoute,
     groupChatRoute,
-    videoDisguiserRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']
