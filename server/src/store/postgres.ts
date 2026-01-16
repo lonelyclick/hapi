@@ -802,10 +802,10 @@ export class PostgresStore implements IStore {
         const params: unknown[] = [sessionId]
 
         if (beforeSeq !== undefined) {
-            query += ' AND seq < $2 ORDER BY seq DESC LIMIT $3'
+            query += ' AND seq < $2 ORDER BY seq DESC, created_at DESC LIMIT $3'
             params.push(beforeSeq, limit)
         } else {
-            query += ' ORDER BY seq DESC LIMIT $2'
+            query += ' ORDER BY seq DESC, created_at DESC LIMIT $2'
             params.push(limit)
         }
 
@@ -815,7 +815,7 @@ export class PostgresStore implements IStore {
 
     async getMessagesAfter(sessionId: string, afterSeq: number, limit: number = 200): Promise<StoredMessage[]> {
         const result = await this.pool.query(
-            'SELECT * FROM messages WHERE session_id = $1 AND seq > $2 ORDER BY seq ASC LIMIT $3',
+            'SELECT * FROM messages WHERE session_id = $1 AND seq > $2 ORDER BY seq ASC, created_at ASC LIMIT $3',
             [sessionId, afterSeq, limit]
         )
         return result.rows.map(row => this.toStoredMessage(row))
