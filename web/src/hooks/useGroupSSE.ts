@@ -63,7 +63,7 @@ export function useGroupSSE(options: {
                 if (old.messages.some(m => m.id === message.id)) {
                     return old
                 }
-                return { messages: [...old.messages, message] }
+                return { messages: [...old.messages, message].sort((a, b) => a.createdAt - b.createdAt) }
             }
         )
 

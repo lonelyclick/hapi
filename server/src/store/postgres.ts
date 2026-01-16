@@ -1845,11 +1845,11 @@ export class PostgresStore implements IStore {
             params.push(beforeId)
         }
 
-        query += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1)
+        query += ' ORDER BY created_at ASC, id ASC LIMIT $' + (params.length + 1)
         params.push(limit)
 
         const result = await this.pool.query(query, params)
-        return result.rows.reverse().map(row => ({
+        return result.rows.map(row => ({
             id: row.id,
             groupId: row.group_id,
             sourceSessionId: row.source_session_id,
