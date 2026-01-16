@@ -413,7 +413,7 @@ export function SessionList(props: {
 
             {/* Sessions list */}
             <div className="flex flex-col divide-y divide-[var(--app-divider)]">
-                {filteredSessions.length === 0 ? (
+                {filteredSessions.length === 0 && !props.isLoading ? (
                     <div className="px-3 py-8 text-center text-sm text-[var(--app-hint)]">
                         No matching sessions
                     </div>
