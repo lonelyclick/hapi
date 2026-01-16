@@ -13,7 +13,6 @@ import { queryKeys } from '@/lib/query-keys'
 import { AppContextProvider } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { LoginPrompt } from '@/components/LoginPrompt'
-import { InstallPrompt } from '@/components/InstallPrompt'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { SyncingBanner } from '@/components/SyncingBanner'
 import { UpdateBanner } from '@/components/UpdateBanner'
@@ -525,7 +524,6 @@ export function App() {
             <div className="h-full flex flex-col">
                 <Outlet />
             </div>
-            <InstallPrompt />
             <Toaster />
         </AppContextProvider>
     )

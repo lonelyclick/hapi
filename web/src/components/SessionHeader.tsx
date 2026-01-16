@@ -407,13 +407,13 @@ export function SessionHeader(props: {
                         <div className="hidden sm:block text-[10px] text-[var(--app-hint)] truncate">
                             {agentMeta}
                         </div>
-                        {/* 移动端：显示简化信息，用圆点分隔，点击弹出详情 */}
+                        {/* 移动端：显示 agent · project，点击弹出详情 */}
                         <button
                             type="button"
                             onClick={() => setShowAgentDetails(!showAgentDetails)}
                             className="sm:hidden text-[10px] text-[var(--app-hint)] truncate max-w-[180px] text-left"
                         >
-                            {[agentLabel, runtimeAgent, runtimeModel, worktreeBranch].filter(Boolean).join(' · ')}
+                            {[agentLabel, project?.name].filter(Boolean).join(' · ')}
                         </button>
                         {/* 移动端详情弹出框 */}
                         {showAgentDetails && (
@@ -422,6 +422,7 @@ export function SessionHeader(props: {
                                     <div><span className="text-[var(--app-hint)]">Agent:</span> {agentLabel}</div>
                                     {runtimeAgent && <div><span className="text-[var(--app-hint)]">Runtime:</span> {runtimeAgent}</div>}
                                     {runtimeModel && <div><span className="text-[var(--app-hint)]">Model:</span> {runtimeModel}</div>}
+                                    {project && <div><span className="text-[var(--app-hint)]">Project:</span> {project.name}</div>}
                                     {worktreeBranch && <div><span className="text-[var(--app-hint)]">Branch:</span> {worktreeBranch}</div>}
                                 </div>
                             </div>
