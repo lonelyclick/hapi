@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Project, SessionSummary } from '@/types/api'
 import { ViewersBadge } from './ViewersBadge'
+import { LoadingState } from './LoadingState'
 
 // Filter types
 type CreatorFilter = 'mine' | 'others'
@@ -413,7 +414,11 @@ export function SessionList(props: {
 
             {/* Sessions list */}
             <div className="flex flex-col divide-y divide-[var(--app-divider)]">
-                {filteredSessions.length === 0 && !props.isLoading ? (
+                {props.isLoading && filteredSessions.length === 0 ? (
+                    <div className="px-3 py-8 flex justify-center">
+                        <LoadingState label="Loading..." spinnerSize="sm" />
+                    </div>
+                ) : filteredSessions.length === 0 ? (
                     <div className="px-3 py-8 text-center text-sm text-[var(--app-hint)]">
                         No matching sessions
                     </div>
