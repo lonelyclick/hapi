@@ -361,30 +361,45 @@ export function SessionList(props: {
             ) : null}
 
             {/* Filters */}
-            <div className="flex flex-wrap items-center gap-4 px-3 py-2 border-b border-[var(--app-divider)]">
-                {/* Creator filter */}
-                <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-[var(--app-hint)]">Creator:</span>
-                    <div className="flex gap-1">
-                        <FilterButton value="mine" current={creatorFilter} label="Mine" onClick={setCreatorFilter} />
-                        <FilterButton value="others" current={creatorFilter} label="Others" onClick={setCreatorFilter} />
-                        <button
-                            type="button"
-                            onClick={() => setArchiveFilter(!archiveFilter)}
-                            className={`
-                                px-2 py-1 text-xs rounded-md transition-colors
-                                ${archiveFilter
-                                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
-                                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
-                                }
-                            `}
-                        >
-                            Archive
-                        </button>
+            <div className="flex flex-col gap-2 px-3 py-2 border-b border-[var(--app-divider)]">
+                {/* First row: Creator filter + Project filter */}
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-[var(--app-hint)]">Creator:</span>
+                        <div className="flex gap-1">
+                            <FilterButton value="mine" current={creatorFilter} label="Mine" onClick={setCreatorFilter} />
+                            <FilterButton value="others" current={creatorFilter} label="Others" onClick={setCreatorFilter} />
+                            <button
+                                type="button"
+                                onClick={() => setArchiveFilter(!archiveFilter)}
+                                className={`
+                                    px-2 py-1 text-xs rounded-md transition-colors
+                                    ${archiveFilter
+                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                    }
+                                `}
+                            >
+                                Archive
+                            </button>
+                        </div>
                     </div>
+                    {/* Project filter - right aligned */}
+                    {projectsWithSessions.length > 0 && (
+                        <select
+                            value={projectFilter ?? ''}
+                            onChange={(e) => setProjectFilter(e.target.value || null)}
+                            className="ml-auto text-xs px-2 py-1 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-fg)] border border-[var(--app-divider)] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        >
+                            <option value="">All Projects</option>
+                            {projectsWithSessions.map(project => (
+                                <option key={project.id} value={project.id}>{project.name}</option>
+                            ))}
+                        </select>
+                    )}
                 </div>
 
-                {/* Agent type filter */}
+                {/* Second row: Agent type filter */}
                 <div className="flex items-center gap-1.5">
                     <span className="text-xs text-[var(--app-hint)]">Agent:</span>
                     <div className="flex gap-1">
@@ -393,20 +408,6 @@ export function SessionList(props: {
                         <FilterButton value="opencode" current={agentFilter} label="OpenCode" onClick={setAgentFilter} />
                     </div>
                 </div>
-
-                {/* Project filter - right aligned */}
-                {projectsWithSessions.length > 0 && (
-                    <select
-                        value={projectFilter ?? ''}
-                        onChange={(e) => setProjectFilter(e.target.value || null)}
-                        className="ml-auto text-xs px-2 py-1 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-fg)] border border-[var(--app-divider)] focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    >
-                        <option value="">All Projects</option>
-                        {projectsWithSessions.map(project => (
-                            <option key={project.id} value={project.id}>{project.name}</option>
-                        ))}
-                    </select>
-                )}
             </div>
 
             {/* Sessions list */}
