@@ -131,6 +131,7 @@ export function useSSE(options: {
                             permissionMode?: string
                             modelMode?: string
                             modelReasoningEffort?: string
+                            sid?: string  // 仅包含 sid 表示是 metadata/todos/agentState 更新
                         } | null
 
                         // Check if this is a heartbeat-style event with status fields we can update directly
@@ -142,6 +143,10 @@ export function useSSE(options: {
                             data.modelMode !== undefined ||
                             data.modelReasoningEffort !== undefined
                         )
+
+                        // 检查是否只是 metadata/todos/agentState 更新（只包含 sid）
+                        // 这种情况下不需要刷新 session 列表，可以忽略
+                        const isMetadataOnlyUpdate = data && !hasStatusFields && data.sid !== undefined
 
                         if (hasStatusFields) {
                             if (import.meta.env.DEV) {
@@ -186,10 +191,16 @@ export function useSSE(options: {
                                     }
                                 }
                             )
-                        } else {
-                            // No status fields in event (e.g., todos/metadata update), fallback to invalidation
+                        } else if (isMetadataOnlyUpdate) {
+                            // metadata/todos/agentState 更新不需要刷新 session 列表
+                            // 这些更新会通过 socket.io 直接推送给正在查看该 session 的用户
                             if (import.meta.env.DEV) {
-                                console.log('[sse] invalidate session (no status fields)', event.sessionId, data)
+                                console.log('[sse] ignoring metadata-only session update', event.sessionId)
+                            }
+                        } else {
+                            // No status fields and no sid in event, fallback to invalidation
+                            if (import.meta.env.DEV) {
+                                console.log('[sse] invalidate session (unknown update type)', event.sessionId, data)
                             }
                             void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
                             void queryClient.invalidateQueries({ queryKey: queryKeys.session(event.sessionId) })
