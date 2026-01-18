@@ -250,6 +250,9 @@ export function App() {
     const syncTokenRef = useRef(0)
     const isFirstConnectRef = useRef(true)
     const baseUrlRef = useRef(baseUrl)
+    // 防止 SSE 频繁重连导致过度刷新
+    const lastSseConnectRef = useRef(0)
+    const sseConnectDebounceMs = 5000  // SSE 重连后 5 秒内不重复刷新
 
     useEffect(() => {
         if (baseUrlRef.current === baseUrl) {
@@ -262,6 +265,23 @@ export function App() {
     }, [baseUrl, queryClient])
 
     const handleSseConnect = useCallback(() => {
+        const now = Date.now()
+        const timeSinceLastConnect = now - lastSseConnectRef.current
+
+        // 防止频繁重连导致的过度刷新
+        // 如果距离上次连接不到 5 秒，跳过刷新（可能是网络波动导致的快速重连）
+        if (timeSinceLastConnect < sseConnectDebounceMs && !isFirstConnectRef.current) {
+            if (import.meta.env.DEV) {
+                console.log('[sse] skipping invalidation - reconnected too quickly', {
+                    timeSinceLastConnect,
+                    debounceMs: sseConnectDebounceMs
+                })
+            }
+            return
+        }
+
+        lastSseConnectRef.current = now
+
         // Increment token to track this specific connection
         const token = ++syncTokenRef.current
 

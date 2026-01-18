@@ -101,7 +101,7 @@ export function SessionChat(props: {
                 return null
             }
         },
-        staleTime: 0  // 每次都重新获取，确保从列表进入时能拿到最新数据
+        staleTime: 10_000  // 10 秒内不重复请求，避免频繁刷新
     })
 
     // 如果有活跃的 Review Session，自动显示面板（移动端不自动打开）
