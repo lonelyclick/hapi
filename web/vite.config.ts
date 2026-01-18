@@ -125,22 +125,22 @@ export default defineConfig({
                 start_url: base,
                 icons: [
                     {
-                        src: 'pwa-64x64.png',
+                        src: 'pwa-64x64.png?v=3',
                         sizes: '64x64',
                         type: 'image/png'
                     },
                     {
-                        src: 'pwa-192x192.png',
+                        src: 'pwa-192x192.png?v=3',
                         sizes: '192x192',
                         type: 'image/png'
                     },
                     {
-                        src: 'pwa-512x512.png',
+                        src: 'pwa-512x512.png?v=3',
                         sizes: '512x512',
                         type: 'image/png'
                     },
                     {
-                        src: 'maskable-icon-512x512.png',
+                        src: 'maskable-icon-512x512.png?v=3',
                         sizes: '512x512',
                         type: 'image/png',
                         purpose: 'maskable'
