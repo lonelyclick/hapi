@@ -316,6 +316,27 @@ export class ApiClient {
         return await this.request<FileReadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/file?${params.toString()}`)
     }
 
+    async searchSessionFiles(sessionId: string, query: string, limit?: number): Promise<{
+        success: boolean
+        files?: Array<{
+            fileName: string
+            filePath: string
+            fullPath: string
+            fileType: 'file' | 'folder'
+        }>
+        error?: string
+    }> {
+        const params = new URLSearchParams()
+        if (query) {
+            params.set('query', query)
+        }
+        if (limit !== undefined) {
+            params.set('limit', String(limit))
+        }
+        const qs = params.toString()
+        return await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/files${qs ? `?${qs}` : ''}`)
+    }
+
     async uploadImage(sessionId: string, filename: string, content: string, mimeType: string): Promise<ImageUploadResponse> {
         return await this.request<ImageUploadResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/upload-image`, {
             method: 'POST',
