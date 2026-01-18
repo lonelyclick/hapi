@@ -37,172 +37,29 @@ async function bootstrap() {
         await loadTelegramSdk()
     }
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-    const isStandalone = ('standalone' in navigator && (navigator as { standalone?: boolean }).standalone === true) ||
-        window.matchMedia('(display-mode: standalone)').matches
-    const isIOSWebApp = isIOS && isStandalone
-
-    // iOS webapp needs more conservative update checking
-    const updateIntervalMs = isIOSWebApp ? 5 * 60 * 1000 : (isIOS ? 2 * 60 * 1000 : 30 * 1000)
-    const updateDisableKey = 'hapi-sw-disable-until'
-    const updateLastLoadKey = 'hapi-sw-last-load'
-    const lastRefreshKey = 'hapi-last-refresh-ts'
-    const updateLoopThresholdMs = isIOSWebApp ? 15_000 : 8_000
-    const updateLoopCooldownMs = isIOSWebApp ? 10 * 60 * 1000 : 5 * 60 * 1000
-
-    // Use localStorage for iOS webapp (more persistent than sessionStorage)
-    const storage = isIOSWebApp ? localStorage : sessionStorage
-
-    try {
-        const now = Date.now()
-        const lastLoad = Number(storage.getItem(updateLastLoadKey) ?? 0)
-        const lastRefresh = Number(localStorage.getItem(lastRefreshKey) ?? 0)
-
-        // Check for rapid reload loop
-        if (lastLoad && now - lastLoad < updateLoopThresholdMs) {
-            console.warn('[bootstrap] Detected rapid reload loop, disabling SW updates temporarily')
-            storage.setItem(updateDisableKey, String(now + updateLoopCooldownMs))
-        }
-
-        // Also disable if we recently did a manual refresh
-        if (lastRefresh && now - lastRefresh < 30_000) {
-            console.log('[bootstrap] Recently refreshed, extending SW update cooldown')
-            storage.setItem(updateDisableKey, String(Math.max(
-                Number(storage.getItem(updateDisableKey) ?? 0),
-                now + 60_000
-            )))
-        }
-
-        storage.setItem(updateLastLoadKey, String(now))
-    } catch {
-        // Ignore if storage is unavailable.
-    }
-
-    // Listen for SW update messages (no auto-reload, just log)
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.addEventListener('message', (event) => {
-            if (event.data?.type === 'SW_UPDATED') {
-                console.log('[bootstrap] SW updated to version:', event.data.version)
-                // User will see update banner and can manually refresh
-            }
-        })
-    }
-
-    const updateSW = registerSW({
+    // 简化的 Service Worker 注册
+    // 不再自动检查更新，完全依赖用户手动刷新
+    // 版本更新提醒通过 useVersionCheck hook 显示
+    registerSW({
         immediate: true,
         onNeedRefresh() {
-            // Check if we recently refreshed to prevent infinite loops on iOS webapp
-            const lastRefresh = Number(localStorage.getItem(lastRefreshKey) ?? 0)
-            if (lastRefresh && Date.now() - lastRefresh < 60_000) {
-                console.log('[SW] onNeedRefresh ignored - recently refreshed')
-                return
-            }
-
-            // Also check loop detection
-            const disableUntil = Number(storage.getItem(updateDisableKey) ?? 0)
-            if (Date.now() < disableUntil) {
-                console.log('[SW] onNeedRefresh ignored - in cooldown period')
-                return
-            }
-
-            // Show update banner instead of auto-updating
-            // User needs to click to trigger the update
-            console.log('New version available, waiting for user action...')
-            window.dispatchEvent(new CustomEvent('sw-update-available', { detail: { updateSW } }))
+            // 只记录日志，不触发任何自动刷新
+            // 用户会看到版本更新提示横幅，可以手动点击刷新
+            console.log('[SW] New version available - user can manually refresh')
+            window.dispatchEvent(new CustomEvent('sw-update-available', { detail: {} }))
         },
         onOfflineReady() {
-            console.log('App ready for offline use')
+            console.log('[SW] App ready for offline use')
         },
         onRegistered(registration) {
             if (registration) {
-                let lastUpdateCheckAt = 0
-                const isAutoUpdatePaused = () => {
-                    try {
-                        const disableUntil = Number(storage.getItem(updateDisableKey) ?? 0)
-                        if (Date.now() < disableUntil) {
-                            return true
-                        }
-                        // Also check if we recently refreshed
-                        const lastRefresh = Number(localStorage.getItem(lastRefreshKey) ?? 0)
-                        if (lastRefresh && Date.now() - lastRefresh < 30_000) {
-                            return true
-                        }
-                        return false
-                    } catch {
-                        return false
-                    }
-                }
-                const checkForUpdates = () => {
-                    const now = Date.now()
-                    if (isAutoUpdatePaused()) {
-                        console.log('[SW] Update check paused (cooldown active)')
-                        return
-                    }
-                    // iOS webapp: use longer minimum interval
-                    const minInterval = isIOSWebApp ? 30_000 : 10_000
-                    if (now - lastUpdateCheckAt < minInterval) return
-                    lastUpdateCheckAt = now
-                    registration.update().catch((error) => {
-                        console.warn('SW update check failed:', error)
-                    })
-                }
-
-                // Check for updates immediately on load (but respect cooldown)
-                setTimeout(checkForUpdates, isIOSWebApp ? 5000 : 1000)
-
-                // Check for updates periodically (iOS uses a longer interval to avoid loops)
-                setInterval(checkForUpdates, updateIntervalMs)
-
-                // iOS Safari PWA: check for updates when app returns from background
-                // But be more conservative on iOS webapp
-                document.addEventListener('visibilitychange', () => {
-                    if (document.visibilityState === 'visible') {
-                        if (isIOSWebApp) {
-                            // Delay check on iOS webapp to avoid rapid loops
-                            setTimeout(() => {
-                                console.log('App visible (iOS webapp), checking for updates...')
-                                checkForUpdates()
-                            }, 2000)
-                        } else {
-                            console.log('App visible, checking for updates...')
-                            checkForUpdates()
-                        }
-                    }
-                })
-
-                // iOS Safari: also check on focus (but skip for iOS webapp to avoid loops)
-                if (!isIOSWebApp) {
-                    window.addEventListener('focus', () => {
-                        console.log('Window focused, checking for updates...')
-                        checkForUpdates()
-                    })
-                }
-
-                // Check on online event (network reconnection)
-                window.addEventListener('online', () => {
-                    console.log('Back online, checking for updates...')
-                    checkForUpdates()
-                })
-
-                // iOS Safari: also check on page show (for bfcache)
-                // But be conservative on iOS webapp
-                window.addEventListener('pageshow', (event) => {
-                    if (event.persisted) {
-                        if (isIOSWebApp) {
-                            setTimeout(() => {
-                                console.log('Page restored from bfcache (iOS webapp), checking for updates...')
-                                checkForUpdates()
-                            }, 3000)
-                        } else {
-                            console.log('Page restored from bfcache, checking for updates...')
-                            checkForUpdates()
-                        }
-                    }
-                })
+                console.log('[SW] Service worker registered')
+                // 不再设置任何自动更新检查
+                // 版本检查完全由 useVersionCheck hook 处理（只显示提醒，不自动刷新）
             }
         },
         onRegisterError(error) {
-            console.error('SW registration error:', error)
+            console.error('[SW] Registration error:', error)
         }
     })
 

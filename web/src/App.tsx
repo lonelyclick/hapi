@@ -27,59 +27,30 @@ export function App() {
     const { token, user, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
     const { hasUpdate: hasApiUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
 
-    // Service Worker update state
-    const [swUpdateFn, setSwUpdateFn] = useState<((reloadPage?: boolean) => Promise<void>) | null>(null)
-    const [swUpdateDismissed, setSwUpdateDismissed] = useState(() => {
-        // Check if we recently refreshed to prevent infinite SW update loops on iOS
-        const lastRefresh = localStorage.getItem('hapi-last-refresh-ts')
-        if (lastRefresh) {
-            const elapsed = Date.now() - parseInt(lastRefresh, 10)
-            if (elapsed < 30_000) {
-                console.log('[SW] Recently refreshed, auto-dismissing SW update')
-                return true
-            }
-        }
-        return false
-    })
+    // Service Worker update state (简化版，不再有自动刷新逻辑)
+    const [hasSwUpdate, setHasSwUpdate] = useState(false)
 
     useEffect(() => {
-        const handleSwUpdate = (event: Event) => {
-            // Check if we recently refreshed to prevent infinite loops
-            const lastRefresh = localStorage.getItem('hapi-last-refresh-ts')
-            if (lastRefresh) {
-                const elapsed = Date.now() - parseInt(lastRefresh, 10)
-                if (elapsed < 30_000) {
-                    console.log('[SW] Ignoring SW update event - recently refreshed')
-                    return
-                }
-            }
-            const customEvent = event as CustomEvent<{ updateSW: (reloadPage?: boolean) => Promise<void> }>
-            setSwUpdateFn(() => customEvent.detail.updateSW)
+        const handleSwUpdate = () => {
+            // 只设置状态，不做任何自动刷新
+            setHasSwUpdate(true)
         }
         window.addEventListener('sw-update-available', handleSwUpdate)
         return () => window.removeEventListener('sw-update-available', handleSwUpdate)
     }, [])
 
-    const hasSwUpdate = Boolean(swUpdateFn && !swUpdateDismissed)
     const hasUpdate = hasApiUpdate || hasSwUpdate
 
+    // 用户手动点击刷新
     const handleRefresh = useCallback(() => {
-        // Mark refresh time to prevent infinite loops
-        localStorage.setItem('hapi-last-refresh-ts', Date.now().toString())
-        if (swUpdateFn) {
-            swUpdateFn(true)
-        } else {
-            refreshApp()
-        }
-    }, [swUpdateFn, refreshApp])
+        refreshApp()
+    }, [refreshApp])
 
+    // 用户关闭更新提示
     const handleDismiss = useCallback(() => {
-        if (swUpdateFn) {
-            setSwUpdateDismissed(true)
-        } else {
-            dismissUpdate()
-        }
-    }, [swUpdateFn, dismissUpdate])
+        setHasSwUpdate(false)
+        dismissUpdate()
+    }, [dismissUpdate])
 
     // Subscribe to Web Push notifications when authenticated
     // This enables true background push on iOS 16.4+ and other platforms

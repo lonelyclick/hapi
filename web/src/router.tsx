@@ -157,11 +157,8 @@ function SessionsPage() {
         setIsRefreshing(true)
 
         try {
-            // User-initiated refresh: clear cooldown to ensure fresh start
-            localStorage.removeItem('hapi-last-refresh-ts')
-            localStorage.removeItem('hapi-sw-disable-until')
-            sessionStorage.removeItem('hapi-sw-disable-until')
-
+            // 用户主动触发的强制刷新
+            // 清除 Service Worker 和缓存以获取最新版本
             const registrations = await navigator.serviceWorker?.getRegistrations()
             if (registrations) {
                 for (const registration of registrations) {
