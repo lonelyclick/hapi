@@ -429,9 +429,11 @@ export function HappyComposer(props: {
         setDraft(composerText)
     }, [composerText, setDraft])
 
-    // 同步输入给其他用户（防抖 300ms）
+    // 同步输入给其他用户（防抖 500ms，增加防抖时间减少请求频率）
     // 用 ref 跟踪是否是本地输入，避免把远程同步的内容再发回去
     const isLocalInputRef = useRef(true)
+    // 跟踪上次发送的内容，避免重复发送相同内容
+    const lastSentTextRef = useRef<string>('')
 
     useEffect(() => {
         if (!sessionId || !active) return
@@ -440,16 +442,25 @@ export function HappyComposer(props: {
             isLocalInputRef.current = true
             return
         }
+        // 如果内容与上次发送的相同，不发送
+        if (composerText === lastSentTextRef.current) {
+            return
+        }
 
         if (typingTimeoutRef.current) {
             clearTimeout(typingTimeoutRef.current)
         }
 
         typingTimeoutRef.current = setTimeout(() => {
+            // 再次检查是否与上次发送的相同
+            if (composerText === lastSentTextRef.current) {
+                return
+            }
+            lastSentTextRef.current = composerText
             apiClient.sendTyping(sessionId, composerText).catch(() => {
                 // Ignore errors
             })
-        }, 300)
+        }, 500)  // 增加到 500ms 减少请求频率
 
         return () => {
             if (typingTimeoutRef.current) {
@@ -460,23 +471,28 @@ export function HappyComposer(props: {
 
     // 接收其他用户的输入并同步到输入框
     const prevOtherUserTextRef = useRef<string | null>(null)
+    // 使用 useMemo 提取 otherUserTyping 的 text，避免对象引用变化导致的重复触发
+    const otherUserText = otherUserTyping?.text ?? null
+
     useEffect(() => {
-        if (!otherUserTyping) {
+        if (otherUserText === null) {
             prevOtherUserTextRef.current = null
             return
         }
         // 只有当其他用户输入内容变化时才同步
-        if (otherUserTyping.text === prevOtherUserTextRef.current) return
-        prevOtherUserTextRef.current = otherUserTyping.text
+        if (otherUserText === prevOtherUserTextRef.current) return
+        prevOtherUserTextRef.current = otherUserText
 
         // 标记为非本地输入，避免把同步过来的内容再发回去
         isLocalInputRef.current = false
-        assistantApi.composer().setText(otherUserTyping.text)
+        // 同时更新 lastSentTextRef，防止发送这个同步过来的内容
+        lastSentTextRef.current = otherUserText
+        assistantApi.composer().setText(otherUserText)
         setInputState({
-            text: otherUserTyping.text,
-            selection: { start: otherUserTyping.text.length, end: otherUserTyping.text.length }
+            text: otherUserText,
+            selection: { start: otherUserText.length, end: otherUserText.length }
         })
-    }, [otherUserTyping, assistantApi])
+    }, [otherUserText, assistantApi])
 
     useEffect(() => {
         setInputState((prev) => {

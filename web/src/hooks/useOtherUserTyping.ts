@@ -18,10 +18,13 @@ export function useOtherUserTyping(sessionId: string | null): TypingUser | null 
     const queryClient = useQueryClient()
     const [typingUser, setTypingUser] = useState<TypingUser | null>(null)
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // 防止重复更新相同的 typing 数据
+    const lastTypingRef = useRef<{ text: string; email: string } | null>(null)
 
     useEffect(() => {
         if (!sessionId) {
             setTypingUser(null)
+            lastTypingRef.current = null
             return
         }
 
@@ -35,15 +38,30 @@ export function useOtherUserTyping(sessionId: string | null): TypingUser | null 
 
             const data = event.query.state.data as TypingData | null | undefined
             if (!data?.typing) {
-                setTypingUser(null)
+                if (lastTypingRef.current !== null) {
+                    lastTypingRef.current = null
+                    setTypingUser(null)
+                }
                 return
             }
 
             // 检查是否过期
             if (Date.now() - data.updatedAt > TYPING_TIMEOUT_MS) {
-                setTypingUser(null)
+                if (lastTypingRef.current !== null) {
+                    lastTypingRef.current = null
+                    setTypingUser(null)
+                }
                 return
             }
+
+            // 检查是否与上次相同，避免重复 setState 导致重渲染
+            const current = { text: data.typing.text, email: data.typing.email }
+            if (lastTypingRef.current &&
+                lastTypingRef.current.text === current.text &&
+                lastTypingRef.current.email === current.email) {
+                return
+            }
+            lastTypingRef.current = current
 
             setTypingUser(data.typing)
 
@@ -52,6 +70,7 @@ export function useOtherUserTyping(sessionId: string | null): TypingUser | null 
                 clearTimeout(timeoutRef.current)
             }
             timeoutRef.current = setTimeout(() => {
+                lastTypingRef.current = null
                 setTypingUser(null)
             }, TYPING_TIMEOUT_MS)
         })
@@ -66,6 +85,7 @@ export function useOtherUserTyping(sessionId: string | null): TypingUser | null 
 
     // 切换 session 时清除状态
     useEffect(() => {
+        lastTypingRef.current = null
         setTypingUser(null)
         if (timeoutRef.current) {
             clearTimeout(timeoutRef.current)
