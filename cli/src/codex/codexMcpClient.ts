@@ -659,13 +659,22 @@ export class CodexMcpClient {
             return;
         }
 
-        const candidates: any[] = [event];
-        if (event.data && typeof event.data === 'object') {
-            candidates.push(event.data);
+        const eventRecord = event as Record<string, unknown>;
+        const eventType = typeof eventRecord.type === 'string' ? eventRecord.type : null;
+        const payload = eventRecord.payload;
+
+        const candidates: any[] = [eventRecord];
+        if (eventRecord.data && typeof eventRecord.data === 'object') {
+            candidates.push(eventRecord.data);
+        }
+        if (payload && typeof payload === 'object') {
+            candidates.push(payload);
         }
 
         for (const candidate of candidates) {
-            const sessionId = candidate.session_id ?? candidate.sessionId;
+            const sessionId = candidate.session_id
+                ?? candidate.sessionId
+                ?? (eventType === 'session_meta' ? candidate.id : null);
             if (sessionId) {
                 this.sessionId = sessionId;
                 logger.debug('[CodexMCP] Session ID extracted from event:', this.sessionId);

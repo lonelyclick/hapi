@@ -34,6 +34,8 @@ import SettingsPage from '@/routes/settings'
 import UsagePage from '@/routes/usage'
 import GroupsPage from '@/routes/groups'
 import GroupChatPage from '@/routes/groups/chat'
+import { LoginPage } from '@/routes/login'
+import { AuthCallbackPage } from '@/routes/auth/callback'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -518,8 +520,23 @@ const groupChatRoute = createRoute({
     component: GroupChatPage,
 })
 
+// Auth routes (public - no authentication required)
+const loginRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/login',
+    component: LoginPage,
+})
+
+const authCallbackRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/auth/callback',
+    component: AuthCallbackPage,
+})
+
 export const routeTree = rootRoute.addChildren([
     indexRoute,
+    loginRoute,
+    authCallbackRoute,
     sessionsRoute,
     sessionRoute,
     sessionTerminalRoute,

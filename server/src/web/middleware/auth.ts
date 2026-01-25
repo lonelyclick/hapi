@@ -1,36 +1,40 @@
 import type { MiddlewareHandler } from 'hono'
-import { z } from 'zod'
-import { jwtVerify } from 'jose'
+import { verifyKeycloakToken, extractUserFromToken } from '../keycloak'
+import type { UserRole } from '../../store'
 
 export type WebAppEnv = {
     Variables: {
-        userId: number
+        userId: string  // Keycloak sub (UUID)
         namespace: string
         email?: string
-        clientId?: string
-        deviceType?: string
+        name?: string
+        role: UserRole  // Role from Keycloak token (developer or operator)
+        clientId?: string  // Client identifier for SSE connections
+        deviceType?: string  // Device type for SSE connections
     }
 }
 
-const jwtPayloadSchema = z.object({
-    uid: z.number(),
-    ns: z.string(),
-    em: z.string().optional(),
-    cid: z.string().optional(),
-    dt: z.string().optional()
-})
+// Paths that don't require authentication
+const publicPaths = [
+    '/api/auth/keycloak',
+    '/api/auth/keycloak/callback',
+    '/api/auth/keycloak/refresh',
+    '/api/auth/keycloak/logout',
+]
 
-export function createAuthMiddleware(jwtSecret: Uint8Array): MiddlewareHandler<WebAppEnv> {
+export function createAuthMiddleware(): MiddlewareHandler<WebAppEnv> {
     return async (c, next) => {
         const path = c.req.path
-        if (path === '/api/auth' || path === '/api/bind') {
+
+        // Skip auth for public paths
+        if (publicPaths.some(p => path.startsWith(p))) {
             await next()
             return
         }
 
         const authorization = c.req.header('authorization')
         const tokenFromHeader = authorization?.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : undefined
-        // 支持从 URL query 获取 token（用于 SSE 和图片等需要直接 URL 访问的场景）
+        // Support token in URL query for SSE and direct file access
         const allowTokenInQuery = path === '/api/events' || path.includes('/file') || path.includes('/server-uploads/') || path.includes('/server-downloads/')
         const tokenFromQuery = allowTokenInQuery ? c.req.query().token : undefined
         const token = tokenFromHeader ?? tokenFromQuery
@@ -40,20 +44,19 @@ export function createAuthMiddleware(jwtSecret: Uint8Array): MiddlewareHandler<W
         }
 
         try {
-            const verified = await jwtVerify(token, jwtSecret, { algorithms: ['HS256'] })
-            const parsed = jwtPayloadSchema.safeParse(verified.payload)
-            if (!parsed.success) {
-                return c.json({ error: 'Invalid token payload' }, 401)
-            }
+            // Verify Keycloak JWT token
+            const payload = await verifyKeycloakToken(token)
+            const user = extractUserFromToken(payload)
 
-            c.set('userId', parsed.data.uid)
-            c.set('namespace', parsed.data.ns)
-            c.set('email', parsed.data.em)
-            c.set('clientId', parsed.data.cid)
-            c.set('deviceType', parsed.data.dt)
+            c.set('userId', user.sub)
+            c.set('namespace', 'default')  // All Keycloak users share the same namespace
+            c.set('email', user.email)
+            c.set('name', user.name ?? undefined)
+            c.set('role', user.role)  // Set role from Keycloak token
             await next()
             return
-        } catch {
+        } catch (error) {
+            console.error('[Auth] Token verification failed:', error)
             return c.json({ error: 'Invalid token' }, 401)
         }
     }

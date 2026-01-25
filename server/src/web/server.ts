@@ -7,8 +7,7 @@ import { serveStatic } from 'hono/bun'
 import { configuration } from '../configuration'
 import type { SyncEngine } from '../sync/syncEngine'
 import { createAuthMiddleware, type WebAppEnv } from './middleware/auth'
-import { createAuthRoutes } from './routes/auth'
-import { createBindRoutes } from './routes/bind'
+import { createKeycloakAuthRoutes } from './routes/keycloak-auth'
 import { createEventsRoutes } from './routes/events'
 import { createSessionsRoutes } from './routes/sessions'
 import { createMessagesRoutes } from './routes/messages'
@@ -76,7 +75,6 @@ function serveEmbeddedAsset(asset: EmbeddedWebAsset, isHtml: boolean = false): R
 function createWebApp(options: {
     getSyncEngine: () => SyncEngine | null
     getSseManager: () => SSEManager | null
-    jwtSecret: Uint8Array
     store: IStore
     reviewStore: ReviewStore
     autoReviewService?: AutoReviewService
@@ -98,11 +96,12 @@ function createWebApp(options: {
 
     app.route('/cli', createCliRoutes(options.getSyncEngine))
 
-    app.route('/api', createAuthRoutes(options.jwtSecret, options.store))
-    app.route('/api', createBindRoutes(options.jwtSecret, options.store))
+    // Keycloak SSO authentication routes (public)
+    app.route('/api', createKeycloakAuthRoutes())
     app.route('/api', createVersionRoutes(options.embeddedAssetMap))  // Public, no auth required
 
-    app.use('/api/*', createAuthMiddleware(options.jwtSecret))
+    // Auth middleware - verifies Keycloak JWT tokens
+    app.use('/api/*', createAuthMiddleware())
     app.route('/api', createEventsRoutes(options.getSseManager, options.getSyncEngine))
     app.route('/api', createSessionsRoutes(options.getSyncEngine, options.getSseManager, options.store))
     app.route('/api', createMessagesRoutes(options.getSyncEngine))
@@ -239,7 +238,6 @@ function createWebApp(options: {
 export async function startWebServer(options: {
     getSyncEngine: () => SyncEngine | null
     getSseManager: () => SSEManager | null
-    jwtSecret: Uint8Array
     store: IStore
     reviewStore: ReviewStore
     autoReviewService?: AutoReviewService
@@ -250,7 +248,6 @@ export async function startWebServer(options: {
     const app = createWebApp({
         getSyncEngine: options.getSyncEngine,
         getSseManager: options.getSseManager,
-        jwtSecret: options.jwtSecret,
         store: options.store,
         reviewStore: options.reviewStore,
         autoReviewService: options.autoReviewService,

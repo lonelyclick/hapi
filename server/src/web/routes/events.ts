@@ -38,8 +38,9 @@ export function createEventsRoutes(
         const subscriptionId = randomUUID()
         const namespace = c.get('namespace')
         const email = c.get('email')
-        const clientId = c.get('clientId')
-        const deviceType = c.get('deviceType')
+        // Read clientId and deviceType from query params (sent by frontend)
+        const clientId = parseOptionalId(query.clientId) ?? undefined
+        const deviceType = parseOptionalId(query.deviceType) ?? undefined
 
         if (sessionId || machineId) {
             const engine = getSyncEngine()

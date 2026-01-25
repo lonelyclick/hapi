@@ -294,7 +294,7 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
     }
 
     const TURN_TIMEOUT_MS = parseTimeoutEnv('HAPI_CODEX_TURN_TIMEOUT_MS', 30 * 60 * 1000);
-    const TURN_COMPLETE_GRACE_MS = parseTimeoutEnv('HAPI_CODEX_TURN_COMPLETE_GRACE_MS', 5000);
+    const TURN_COMPLETE_GRACE_MS = parseTimeoutEnv('HAPI_CODEX_TURN_COMPLETE_GRACE_MS', 15000);
     const mcpLogEnabled = parseBooleanEnv('HAPI_MCP_EVENT_LOG', true);
     const mcpLogSampleRate = parseSampleRateEnv('HAPI_MCP_EVENT_LOG_SAMPLE')
         ?? parseSampleRateEnv('HAPI_MCP_EVENT_LOG_SAMPLE_RATE')
@@ -859,19 +859,27 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
                 logger.warn('Error in codex session:', error);
                 const isAbortError = error instanceof Error && error.name === 'AbortError';
                 const isAbortRequested = inFlightAbortRequested || lastAbortReason !== null;
+                const isCompletionAbort = lastAbortReason === 'task_complete' || lastAbortReason === 'turn_aborted';
+                const shouldPreserveSession = isCompletionAbort && client.hasActiveSession();
                 if (inFlight && !inFlight.abortReason) {
                     inFlight.abortReason = isAbortError ? 'abort_error' : 'exception';
                 }
 
                 if (isAbortError || isAbortRequested) {
-                    const abortMessage = lastAbortReason
-                        ? `Aborted (${lastAbortReason})`
-                        : 'Aborted by user';
-                    messageBuffer.addMessage(abortMessage, 'status');
-                    session.sendSessionEvent({ type: 'message', message: abortMessage });
-                    wasCreated = false;
-                    currentModeHash = null;
-                    logger.debug('[Codex] Marked session as not created after abort for proper resume');
+                    if (!isCompletionAbort) {
+                        const abortMessage = lastAbortReason
+                            ? `Aborted (${lastAbortReason})`
+                            : 'Aborted by user';
+                        messageBuffer.addMessage(abortMessage, 'status');
+                        session.sendSessionEvent({ type: 'message', message: abortMessage });
+                    }
+                    if (!shouldPreserveSession) {
+                        wasCreated = false;
+                        currentModeHash = null;
+                        logger.debug('[Codex] Marked session as not created after abort for proper resume');
+                    } else {
+                        logger.debug('[Codex] Completion abort; keeping session for next turn');
+                    }
                 } else {
                     // Unexpected error - try to recover
                     const errorMessage = error instanceof Error ? error.message : String(error);

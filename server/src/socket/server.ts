@@ -1,7 +1,5 @@
 import { Server as Engine } from '@socket.io/bun-engine'
 import { Server, type DefaultEventsMap } from 'socket.io'
-import { jwtVerify } from 'jose'
-import { z } from 'zod'
 import type { IStore } from '../store'
 import { configuration } from '../configuration'
 import { safeCompareStrings } from '../utils/crypto'
@@ -12,11 +10,7 @@ import { RpcRegistry } from './rpcRegistry'
 import type { SyncEvent } from '../sync/syncEngine'
 import { TerminalRegistry } from './terminalRegistry'
 import type { SocketData, SocketServer } from './socketTypes'
-
-const jwtPayloadSchema = z.object({
-    uid: z.number(),
-    ns: z.string()
-})
+import { verifyKeycloakToken, extractUserFromToken } from '../web/keycloak'
 
 const DEFAULT_IDLE_TIMEOUT_MS = 15 * 60_000
 const DEFAULT_MAX_TERMINALS = 4
@@ -32,7 +26,6 @@ function resolveEnvNumber(name: string, fallback: number): number {
 
 export type SocketServerDeps = {
     store: IStore
-    jwtSecret: Uint8Array
     getSession?: (sessionId: string) => { active: boolean; namespace: string } | null | Promise<{ active: boolean; namespace: string } | null>
     onWebappEvent?: (event: SyncEvent) => void
     onSessionAlive?: (payload: { sid: string; time: number; thinking?: boolean; mode?: 'local' | 'remote' }) => void
@@ -124,13 +117,11 @@ export function createSocketServer(deps: SocketServerDeps): {
         }
 
         try {
-            const verified = await jwtVerify(token, deps.jwtSecret, { algorithms: ['HS256'] })
-            const parsed = jwtPayloadSchema.safeParse(verified.payload)
-            if (!parsed.success) {
-                return next(new Error('Invalid token payload'))
-            }
-            socket.data.userId = parsed.data.uid
-            socket.data.namespace = parsed.data.ns
+            // Verify Keycloak JWT token
+            const payload = await verifyKeycloakToken(token)
+            const user = extractUserFromToken(payload)
+            socket.data.userId = user.sub
+            socket.data.namespace = 'default'  // All Keycloak users share the same namespace
             next()
             return
         } catch {
@@ -153,13 +144,11 @@ export function createSocketServer(deps: SocketServerDeps): {
         }
 
         try {
-            const verified = await jwtVerify(token, deps.jwtSecret, { algorithms: ['HS256'] })
-            const parsed = jwtPayloadSchema.safeParse(verified.payload)
-            if (!parsed.success) {
-                return next(new Error('Invalid token payload'))
-            }
-            socket.data.userId = parsed.data.uid
-            socket.data.namespace = parsed.data.ns
+            // Verify Keycloak JWT token
+            const payload = await verifyKeycloakToken(token)
+            const user = extractUserFromToken(payload)
+            socket.data.userId = user.sub
+            socket.data.namespace = 'default'  // All Keycloak users share the same namespace
             next()
             return
         } catch {

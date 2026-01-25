@@ -125,17 +125,6 @@ export type OnlineUser = {
 
 export type UserRole = 'developer' | 'operator'
 
-export type User = {
-    email: string
-    role: UserRole
-    createdAt: number
-}
-
-export type UsersResponse = { users: User[] }
-export type AddUserResponse = { ok: true; users: User[] }
-export type UpdateUserRoleResponse = { ok: true; users: User[] }
-export type RemoveUserResponse = { ok: true; users: User[] }
-
 export type Project = {
     id: string
     name: string

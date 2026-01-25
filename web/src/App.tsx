@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { getTelegramWebApp } from '@/hooks/useTelegram'
 import { initializeTheme } from '@/hooks/useTheme'
-import { useAuth } from '@/hooks/useAuth'
-import { useAuthSource } from '@/hooks/useAuthSource'
+import { useAuth } from '@/providers/KeycloakAuthProvider'
 import { useServerUrl } from '@/hooks/useServerUrl'
 import { useSSE } from '@/hooks/useSSE'
 import { useSyncingState } from '@/hooks/useSyncingState'
@@ -12,7 +10,6 @@ import type { SyncEvent, SessionSummary, Project } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { AppContextProvider } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
-import { LoginPrompt } from '@/components/LoginPrompt'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { SyncingBanner } from '@/components/SyncingBanner'
 import { UpdateBanner } from '@/components/UpdateBanner'
@@ -20,19 +17,18 @@ import { LoadingState } from '@/components/LoadingState'
 import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
 import { notifyTaskComplete, getPendingNotification, clearPendingNotification, useWebPushSubscription } from '@/hooks/useNotification'
+import { getAccessToken } from '@/services/keycloak'
 
 export function App() {
-    const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
-    const { authSource, isLoading: isAuthSourceLoading, setAccessToken } = useAuthSource(baseUrl)
-    const { token, user, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
+    const { baseUrl } = useServerUrl()
+    const { user, isAuthenticated, isLoading: isAuthLoading, error: authError, api, login } = useAuth()
     const { hasUpdate: hasApiUpdate, refresh: refreshApp, dismiss: dismissUpdate } = useVersionCheck({ baseUrl })
 
-    // Service Worker update state (简化版，不再有自动刷新逻辑)
+    // Service Worker update state
     const [hasSwUpdate, setHasSwUpdate] = useState(false)
 
     useEffect(() => {
         const handleSwUpdate = () => {
-            // 只设置状态，不做任何自动刷新
             setHasSwUpdate(true)
         }
         window.addEventListener('sw-update-available', handleSwUpdate)
@@ -41,19 +37,16 @@ export function App() {
 
     const hasUpdate = hasApiUpdate || hasSwUpdate
 
-    // 用户手动点击刷新
     const handleRefresh = useCallback(() => {
         refreshApp()
     }, [refreshApp])
 
-    // 用户关闭更新提示
     const handleDismiss = useCallback(() => {
         setHasSwUpdate(false)
         dismissUpdate()
     }, [dismissUpdate])
 
     // Subscribe to Web Push notifications when authenticated
-    // This enables true background push on iOS 16.4+ and other platforms
     useWebPushSubscription(api)
     const goBack = useAppGoBack()
     const navigate = useNavigate()
@@ -61,11 +54,16 @@ export function App() {
     const matchRoute = useMatchRoute()
 
     useEffect(() => {
-        const tg = getTelegramWebApp()
-        tg?.ready()
-        tg?.expand()
         initializeTheme()
     }, [])
+
+    // Redirect to login if not authenticated (must be before any conditional returns)
+    const isPublicRoute = pathname === '/login' || pathname.startsWith('/auth/')
+    useEffect(() => {
+        if (!isAuthLoading && !isAuthenticated && !isPublicRoute) {
+            navigate({ to: '/login', replace: true })
+        }
+    }, [isAuthLoading, isAuthenticated, isPublicRoute, navigate])
 
     useEffect(() => {
         const preventDefault = (event: Event) => {
@@ -196,24 +194,6 @@ export function App() {
         }
     }, [])
 
-    useEffect(() => {
-        const tg = getTelegramWebApp()
-        const backButton = tg?.BackButton
-        if (!backButton) return
-
-        if (pathname === '/' || pathname === '/sessions') {
-            backButton.offClick(goBack)
-            backButton.hide()
-            return
-        }
-
-        backButton.show()
-        backButton.onClick(goBack)
-        return () => {
-            backButton.offClick(goBack)
-            backButton.hide()
-        }
-    }, [goBack, pathname])
     const queryClient = useQueryClient()
     const sessionMatch = matchRoute({ to: '/sessions/$sessionId' })
     const selectedSessionId = sessionMatch ? sessionMatch.sessionId : null
@@ -221,9 +201,8 @@ export function App() {
     const syncTokenRef = useRef(0)
     const isFirstConnectRef = useRef(true)
     const baseUrlRef = useRef(baseUrl)
-    // 防止 SSE 频繁重连导致过度刷新
     const lastSseConnectRef = useRef(0)
-    const sseConnectDebounceMs = 5000  // SSE 重连后 5 秒内不重复刷新
+    const sseConnectDebounceMs = 5000
 
     useEffect(() => {
         if (baseUrlRef.current === baseUrl) {
@@ -239,8 +218,6 @@ export function App() {
         const now = Date.now()
         const timeSinceLastConnect = now - lastSseConnectRef.current
 
-        // 防止频繁重连导致的过度刷新
-        // 如果距离上次连接不到 5 秒，跳过刷新（可能是网络波动导致的快速重连）
         if (timeSinceLastConnect < sseConnectDebounceMs && !isFirstConnectRef.current) {
             if (import.meta.env.DEV) {
                 console.log('[sse] skipping invalidation - reconnected too quickly', {
@@ -253,12 +230,8 @@ export function App() {
 
         lastSseConnectRef.current = now
 
-        // Increment token to track this specific connection
         const token = ++syncTokenRef.current
 
-        // Only force show banner on first connect (page load)
-        // Subsequent connects (session switches) use non-forced mode
-        // which only shows banner when returning from background
         if (isFirstConnectRef.current) {
             isFirstConnectRef.current = false
             startSync({ force: true })
@@ -284,7 +257,6 @@ export function App() {
                 console.error('Failed to invalidate queries on SSE connect:', error)
             })
             .finally(() => {
-                // Only end sync if this is still the latest connection
                 if (syncTokenRef.current === token) {
                     endSync()
                 }
@@ -293,33 +265,26 @@ export function App() {
 
     const handleSseEvent = useCallback((event: SyncEvent) => {
         if (event.type === 'online-users-changed') {
-            // 更新在线用户缓存
             queryClient.setQueryData(queryKeys.onlineUsers, { users: event.users })
-            // 同时刷新 sessions 列表以更新 viewers
             void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
             return
         }
 
-        // 检测任务完成 (thinking: true -> false)
         if (event.type === 'session-updated') {
             const data = ('data' in event ? event.data : null) as { active?: boolean; thinking?: boolean; wasThinking?: boolean } | null
-            // wasThinking 表示之前是 thinking 状态，现在变成了非 thinking 状态
             if (data?.wasThinking && data.thinking === false) {
                 const isCurrentSession = event.sessionId === selectedSessionId
                 const isAppVisible = document.visibilityState === 'visible'
                 console.log('[notification] task complete detected', { isCurrentSession, isAppVisible, selectedSessionId })
 
-                // 如果是当前 session 且 app 在前台，跳过通知（用户已经在看了）
                 if (isCurrentSession && isAppVisible) {
                     console.log('[notification] skipping - current session in foreground')
                     return
                 }
 
-                // 获取 session 标题和项目
                 const sessionsData = queryClient.getQueryData<{ sessions: SessionSummary[] }>(queryKeys.sessions)
                 const session = sessionsData?.sessions.find(s => s.id === event.sessionId)
 
-                // 如果 session 不在当前用户的列表中，说明不是自己的 session，跳过通知
                 if (!session) {
                     console.log('[notification] skipping - session not in user list', event.sessionId)
                     return
@@ -327,7 +292,6 @@ export function App() {
 
                 const title = session.metadata?.summary?.text || session.metadata?.name || 'Task completed'
 
-                // 查找匹配的项目
                 const projectsData = queryClient.getQueryData<{ projects: Project[] }>(['projects'])
                 const sessionPath = session?.metadata?.path
                 const project = sessionPath
@@ -361,16 +325,16 @@ export function App() {
     }, [navigate, selectedSessionId, queryClient])
 
     const eventSubscription = useMemo(() => {
-        // Exclude "new" which is a route, not a real session ID
         if (selectedSessionId && selectedSessionId !== 'new') {
-            // Also subscribe to all events to receive online-users-changed
             return { sessionId: selectedSessionId, all: true }
         }
         return { all: true }
     }, [selectedSessionId])
 
+    const token = getAccessToken()
+
     useSSE({
-        enabled: Boolean(api && token),
+        enabled: Boolean(api && token && isAuthenticated),
         token: token ?? '',
         baseUrl,
         subscription: eventSubscription,
@@ -378,14 +342,12 @@ export function App() {
         onEvent: handleSseEvent,
     })
 
-    // 处理从通知点击恢复 app 时的自动跳转
+    // Handle pending notification on visibility change
     useEffect(() => {
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
                 const pending = getPendingNotification()
                 if (pending) {
-                    // 如果用户已经在查看某个 session，不要强制跳转到其他 session
-                    // 只有当用户不在任何 session 页面，或者 pending 就是当前 session 时才跳转
                     if (selectedSessionId && selectedSessionId !== pending.sessionId) {
                         console.log('[notification] skipping auto-navigate - user is viewing different session', {
                             current: selectedSessionId,
@@ -406,7 +368,6 @@ export function App() {
         }
 
         document.addEventListener('visibilitychange', handleVisibilityChange)
-        // 初始检查（防止 app 刚启动时有 pending）
         handleVisibilityChange()
 
         return () => {
@@ -414,101 +375,31 @@ export function App() {
         }
     }, [navigate, selectedSessionId])
 
-    // Loading auth source
-    if (isAuthSourceLoading) {
+    // Skip auth checks for public routes (login, callback)
+    if (isPublicRoute) {
+        return <Outlet />
+    }
+
+    // Loading auth state
+    if (isAuthLoading) {
         return (
             <div className="h-full flex items-center justify-center p-4">
-                <LoadingState label="Loading…" className="text-sm" />
+                <LoadingState label="Loading..." className="text-sm" />
             </div>
         )
     }
 
-    // No auth source (browser environment, not logged in)
-    if (!authSource) {
-        return (
-            <LoginPrompt
-                onLogin={setAccessToken}
-                baseUrl={baseUrl}
-                serverUrl={serverUrl}
-                setServerUrl={setServerUrl}
-                clearServerUrl={clearServerUrl}
-            />
-        )
-    }
-
-    if (needsBinding) {
-        return (
-            <LoginPrompt
-                mode="bind"
-                onBind={bind}
-                baseUrl={baseUrl}
-                serverUrl={serverUrl}
-                setServerUrl={setServerUrl}
-                clearServerUrl={clearServerUrl}
-                error={authError ?? undefined}
-            />
-        )
-    }
-
-    // Authenticating (also covers the gap before useAuth effect starts)
-    if (isAuthLoading || (authSource && !token && !authError)) {
+    // Not authenticated - show redirecting message (actual redirect happens in useEffect above)
+    if (!isAuthenticated || !api) {
         return (
             <div className="h-full flex items-center justify-center p-4">
-                <LoadingState label="Authorizing…" className="text-sm" />
-            </div>
-        )
-    }
-
-    // Auth error
-    if (authError || !token || !api) {
-        // If using access token and auth failed, show login again
-        if (authSource.type === 'accessToken') {
-            return (
-                <LoginPrompt
-                    onLogin={setAccessToken}
-                    baseUrl={baseUrl}
-                    serverUrl={serverUrl}
-                    setServerUrl={setServerUrl}
-                    clearServerUrl={clearServerUrl}
-                    error={authError ?? 'Authentication failed'}
-                />
-            )
-        }
-
-        // Telegram auth failed
-        return (
-            <div className="p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="white"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-4 w-4"
-                        >
-                            <circle cx="12" cy="12" r="10" />
-                            <path d="M2 12h20" />
-                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                        </svg>
-                    </div>
-                    <span className="text-lg font-bold yoho-brand-text">Yoho Remote</span>
-                </div>
-                <div className="text-sm text-red-600">
-                    {authError ?? 'Not authorized'}
-                </div>
-                <div className="text-xs text-[var(--app-hint)]">
-                    Open this page from Telegram using the bot's "Open App" button (not "Open in browser").
-                </div>
+                <LoadingState label="Redirecting to login..." className="text-sm" />
             </div>
         )
     }
 
     return (
-        <AppContextProvider value={{ api, token, userEmail: user?.email ?? null }}>
+        <AppContextProvider value={{ api, token: token ?? '', userEmail: user?.email ?? null }}>
             {hasUpdate && <UpdateBanner onRefresh={handleRefresh} onDismiss={handleDismiss} />}
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />

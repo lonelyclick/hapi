@@ -392,8 +392,10 @@ export function createGroupRoutes(
         const subscriptionId = randomUUID()
         const namespace = c.get('namespace') || 'default'
         const email = c.get('email')
-        const clientId = c.get('clientId')
-        const deviceType = c.get('deviceType')
+        // Read clientId and deviceType from query params (sent by frontend)
+        const query = c.req.query()
+        const clientId = query.clientId?.trim() || undefined
+        const deviceType = query.deviceType?.trim() || undefined
 
         return streamSSE(c, async (stream) => {
             sseManager.subscribe({

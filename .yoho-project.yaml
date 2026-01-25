@@ -1,0 +1,303 @@
+version: "1.0"
+
+name: hapi
+type: ai-platform
+description: AI 远程开发平台，支持 Claude Code/Codex/Gemini/Grok 等多种 AI 后端，本地运行远程控制，通过 Telegram Mini App 或 Web UI 操作
+owner: tech
+
+stack:
+  language: typescript
+  framework: none
+  runtime: bun
+  database: [postgres]
+  queue: []
+
+paths:
+  src: src
+  cli: cli/src
+  server: server/src
+  webapp: webapp/src
+  skills: skills
+  config: src/config
+  tests: tests
+
+# CLI 模块
+cli:
+  api: # API 客户端
+    - api.ts - 主 API 客户端
+    - apiSession.ts - WebSocket 会话客户端
+    - auth.ts - 认证
+    - types.ts - 类型定义 (Zod)
+    - rpc/RpcHandlerManager.ts - RPC 管理
+  claude: # Claude Code 集成
+    - runClaude.ts - Claude 会话入口
+    - loop.ts - 控制循环
+    - session.ts - 会话管理
+    - registerKillSessionHandler.ts - 会话生命周期
+    - sdk/ - Claude SDK 集成
+      - query.ts - SDK 查询
+      - types.ts - 消息类型
+      - stream.ts - 流式处理
+      - metadataExtractor.ts - 元数据提取
+  agent: # 多 AI 后端
+    - index.ts - Agent 入口
+    - AgentRegistry.ts - 后端注册
+    - loopBase.ts - 基础循环
+    - permissionAdapter.ts - 权限适配
+    - messageConverter.ts - 消息转换
+    - localLaunchPolicy.ts - 本地启动策略
+    - runners/ - 各后端运行器
+    - backends/ - 后端实现 (ACP等)
+  codex: # Codex 支持
+    - runCodex.ts - Codex 入口
+    - happyMcpStdioBridge.ts - MCP stdio 桥接
+    - codexMcpClient.ts - MCP 客户端
+    - session.ts - 会话管理
+  modules/common: # 通用处理器
+    - registerCommonHandlers.ts - 注册 Bash/文件/Git 等
+    - gitHandlers.ts - Git 操作
+    - slashCommands.ts - 斜杠命令
+    - pathSecurity.ts - 路径安全
+  daemon: # 后台服务
+    - daemon.ts - 守护进程
+    - run.ts - 运行
+    - install.ts / uninstall.ts - 安装卸载
+    - controlClient.ts - IPC 客户端
+  terminal: # 终端管理
+    - TerminalManager.ts - PTY 终端
+
+# Server 模块
+server:
+  store: # 数据存储
+    - interface.ts - IStore 接口
+    - postgres.ts - PostgreSQL 实现
+    - types.ts - 数据类型
+  sync: # 同步引擎
+    - syncEngine.ts - 核心同步逻辑
+  socket: # WebSocket
+    - server.ts - Socket.IO 服务
+    - handlers/ - 事件处理器
+    - rpcRegistry.ts - RPC 注册
+    - terminalRegistry.ts - 终端追踪
+  web: # HTTP API
+    - server.ts - HTTP 服务器
+    - routes/ - API 路由
+      - sessions.ts - 会话 CRUD
+      - messages.ts - 消息处理
+      - permissions.ts - 权限决策
+      - cli.ts - CLI 端点
+      - git.ts - Git 操作
+      - groups.ts - 群聊
+      - machines.ts - 机器管理
+      - claude-accounts.ts - Claude 账号
+      - auth.ts - 认证
+      - settings.ts - 设置
+      - usage.ts - 用量追踪
+      - push.ts - 推送通知
+      - speech.ts - 语音转文字
+  telegram: # Telegram 集成
+    - bot.ts - Bot 设置
+    - sessionView.ts - 会话视图
+    - renderer.ts - 渲染器
+    - callbacks.ts - 回调处理
+  sse: # Server-Sent Events
+    - sseManager.ts - SSE 管理
+  agent: # 自主 Agent
+    - autonomousAgent.ts - 自主执行
+    - collaborationProtocol.ts - 多 Agent 协作
+    - collaborationTask.ts - 任务管理
+    - profileMatcher.ts - 配置匹配
+    - memoryInjector.ts - 记忆注入
+  review: # 代码审查
+    - 自动审查服务
+    - MiniMax 同步集成
+
+# Webapp 模块
+webapp:
+  chat: # 聊天系统
+    - types.ts - 消息类型
+    - modelConfig.ts - AI 模型配置
+    - tracer.ts - 性能追踪
+    - normalize.ts - 消息规范化
+    - reducer.ts - 状态管理
+  components: # UI 组件
+    - AssistantChat/ - 主聊天界面
+    - ToolCard/ - 工具执行可视化
+    - Terminal/ - 终端组件
+    - ChatInput/ - 输入框
+    - DiffView.tsx - Git Diff 显示
+    - CodeBlock.tsx - 代码高亮
+    - MachineList.tsx - 机器列表
+    - SessionHeader.tsx - 会话头部
+    - GroupChat/ - 群聊
+    - AIProfileSettings.tsx - AI 配置
+    - OnlineUsersBadge.tsx - 在线状态
+  hooks: # React Hooks
+    - useAuth.ts - 认证状态
+    - useSendMessage.ts - 发送消息
+    - useSessionDraft.ts - 草稿管理
+    - useTerminalSocket.ts - 终端连接
+    - useTelegram.ts - Telegram 集成
+    - useTheme.ts - 主题
+    - useOnlineStatus.ts - 在线状态
+  routes: # 路由
+    - /sessions - 会话列表
+    - /sessions/:id - 会话详情
+    - /machines - 机器管理
+    - /groups - 群聊
+    - /settings - 设置
+
+# 支持的 AI 后端
+ai_backends:
+  - name: claude-code
+    description: Claude Code (原生 SDK)
+  - name: codex
+    description: OpenAI Codex
+  - name: gemini
+    description: Google Gemini
+  - name: glm-4.7
+    description: NVIDIA NIM GLM
+  - name: minimax-m2.1
+    description: NVIDIA NIM MiniMax
+  - name: grok
+    description: xAI Grok
+  - name: cursor
+    description: Cursor IDE
+  - name: openrouter
+    description: OpenRouter (多供应商)
+  - name: aider
+    description: Aider CLI
+  - name: opencode
+    description: OpenCode (20+ 供应商)
+
+# MCP 工具
+mcp_tools:
+  file:
+    - readFile - 读取文件
+    - writeFile - 写入文件
+    - listDirectory - 列出目录
+    - getDirectoryTree - 目录树
+  search:
+    - ripgrep - 内容搜索
+  system:
+    - bash - Shell 命令
+    - difftastic - 语法感知 Diff
+  git:
+    - git-status - 仓库状态
+    - git-diff-numstat - Diff 统计
+    - git-diff-file - 文件 Diff
+    - git-log - 提交历史
+    - git-blame - 行历史
+  ai:
+    - listSlashCommands - 斜杠命令
+    - uploadImage - 图片上传
+    - uploadFile - 文件上传
+    - change_title - 修改标题
+
+# 权限模式
+permission_modes:
+  - default: 交互式审批
+  - acceptEdits: 自动批准编辑
+  - bypassPermissions: 完全绕过 (YOLO)
+  - plan: 计划模式
+  - read-only: 只读模式
+  - safe-yolo / yolo: 绕过变体
+
+keywords:
+  - pattern: "会话|session|chat"
+    path: server/src/store
+    description: 会话管理
+  - pattern: "agent|claude|AI|后端"
+    path: cli/src/agent
+    description: AI Agent 系统
+  - pattern: "MCP|tool|工具"
+    path: cli/src/modules/common
+    description: MCP 工具
+  - pattern: "远程|remote|connect"
+    path: cli/src/api
+    description: 远程连接
+  - pattern: "权限|permission"
+    path: cli/src/agent/permissionAdapter.ts
+    description: 权限处理
+  - pattern: "终端|terminal|PTY"
+    path: cli/src/terminal
+    description: 终端管理
+  - pattern: "同步|sync"
+    path: server/src/sync
+    description: 同步引擎
+  - pattern: "Telegram|bot|机器人"
+    path: server/src/telegram
+    description: Telegram 集成
+  - pattern: "WebSocket|socket|实时"
+    path: server/src/socket
+    description: WebSocket 服务
+  - pattern: "daemon|守护|后台"
+    path: cli/src/daemon
+    description: 守护进程
+  - pattern: "Codex|codex"
+    path: cli/src/codex
+    description: Codex 支持
+  - pattern: "Git|git|版本"
+    path: cli/src/modules/common/gitHandlers.ts
+    description: Git 操作
+
+dependencies:
+  internal: []
+  external:
+    ai: [anthropic, openai, google-ai]
+    infra: [postgres, socket.io]
+    platform: [telegram]
+
+deployment:
+  method: local
+  command: ./deploy.sh
+  location: 本地服务器 (homelab)
+  path: /home/guang/softwares/hapi
+  url: https://remote.yohomobile.dev
+  services:
+    server:
+      systemd: hapi-server.service
+      port: 3006
+    daemon:
+      systemd: hapi-daemon.service
+      build_flag: --daemon
+  nginx:
+    domain: remote.yohomobile.dev
+    proxy_pass: http://127.0.0.1:3006
+    features: [websocket]
+    client_max_body_size: 50m
+    extra_locations:
+      - path: /reports/
+        alias: /home/guang/happy/yoho-task-v2/reports/
+  steps:
+    - 执行 ./deploy.sh (普通部署) 或 ./deploy.sh --daemon (含 daemon 重建)
+    - 脚本自动 git add/commit/push
+    - 生成时间戳版本号 (vYYYY.MM.DD.HHMM)
+    - 构建 web 前端 (bun run build:web)
+    - 生成嵌入式 web 资源
+    - 构建 hapi-server 可执行文件
+    - 构建 hapi CLI 可执行文件
+    - (可选) 构建 hapi-daemon 可执行文件
+    - 杀死旧进程 (端口 3006, 3000)
+    - systemctl restart hapi-server.service
+    - (可选) systemctl restart hapi-daemon.service
+  build_artifacts:
+    server: cli/dist-exe/bun-linux-x64/hapi-server
+    daemon: cli/dist-exe/bun-linux-x64/hapi-daemon
+    cli: cli/dist-exe/bun-linux-x64/hapi
+  notes:
+    - 仅部署在本地服务器
+    - 使用 systemd 管理服务
+    - --daemon 参数用于重建 daemon (会断开所有会话)
+  credentials:
+    github_token: ../happy/yoho-task-v2/data/credentials/github/yohomobile.pat
+    hapi: ../happy/yoho-task-v2/data/credentials/hapi/
+    env_file: .env
+  env:
+    LANGFUSE_BASE_URL: https://langfuse.yohomobile.dev
+
+development:
+  setup: pnpm install
+  start: pnpm dev
+  test: pnpm test
+  build: pnpm build

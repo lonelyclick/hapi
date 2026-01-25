@@ -137,17 +137,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
         if (result.type === 'success') {
             const email = c.get('email')
             const namespace = c.get('namespace')
-            // 获取用户角色
-            let role: UserRole = 'developer'
-            if (email) {
-                const users = store.getAllowedUsers()
-                if (users.length > 0) {
-                    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase())
-                    if (user) {
-                        role = user.role
-                    }
-                }
-            }
+            const role = c.get('role')  // Role from Keycloak token
             // Wait for session to be online, then set createdBy and send init prompt
             void (async () => {
                 console.log(`[machines/spawn] Waiting for session ${result.sessionId} to come online...`)

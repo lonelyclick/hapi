@@ -14,7 +14,6 @@ import type { IStore } from './store/interface'
 import { SyncEngine, type SyncEvent } from './sync/syncEngine'
 import { HappyBot } from './telegram/bot'
 import { startWebServer } from './web/server'
-import { getOrCreateJwtSecret } from './web/jwtSecret'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
@@ -114,13 +113,13 @@ async function main() {
     } else {
         console.log('[Server] Web Push: disabled (missing VAPID keys)')
     }
-    const jwtSecret = await getOrCreateJwtSecret()
+
+    console.log('[Server] Auth: Keycloak SSO')
 
     sseManager = new SSEManager(30_000)
 
     const socketServer = createSocketServer({
         store,
-        jwtSecret,
         getSession: (sessionId) => syncEngine?.getSession(sessionId) ?? store.getSession(sessionId),
         onWebappEvent: (event: SyncEvent) => syncEngine?.handleRealtimeEvent(event),
         onSessionAlive: (payload) => syncEngine?.handleSessionAlive(payload),
@@ -145,11 +144,10 @@ async function main() {
         })
     }
 
-    // Start HTTP server for Telegram Mini App
+    // Start HTTP server
     webServer = await startWebServer({
         getSyncEngine: () => syncEngine,
         getSseManager: () => sseManager,
-        jwtSecret,
         store,
         reviewStore,
         autoReviewService,

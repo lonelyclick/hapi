@@ -2,7 +2,6 @@ import type {
     AddInputPresetResponse,
     AddMemberResponse,
     AddProjectResponse,
-    AddUserResponse,
     AgentGroupType,
     AuthResponse,
     BroadcastResponse,
@@ -29,7 +28,6 @@ import type {
     RemoveInputPresetResponse,
     RemoveMemberResponse,
     RemoveProjectResponse,
-    RemoveUserResponse,
     ResumeSessionResponse,
     RolePromptsResponse,
     SendGroupMessageResponse,
@@ -42,9 +40,7 @@ import type {
     SessionsResponse,
     UpdateGroupResponse,
     UpdateInputPresetResponse,
-    UpdateProjectResponse,
-    UpdateUserRoleResponse,
-    UsersResponse
+    UpdateProjectResponse
 } from '@/types/api'
 
 type ApiClientOptions = {
@@ -537,35 +533,6 @@ export class ApiClient {
     async removeProject(id: string): Promise<RemoveProjectResponse> {
         return await this.request<RemoveProjectResponse>(`/api/settings/projects/${encodeURIComponent(id)}`, {
             method: 'DELETE'
-        })
-    }
-
-    // 用户管理
-    async getUsers(): Promise<UsersResponse> {
-        return await this.request<UsersResponse>('/api/settings/users')
-    }
-
-    async addUser(email: string, role: 'developer' | 'operator' = 'developer'): Promise<AddUserResponse> {
-        return await this.request<AddUserResponse>('/api/settings/users', {
-            method: 'POST',
-            body: JSON.stringify({ email, role })
-        })
-    }
-
-    async updateUserRole(email: string, role: 'developer' | 'operator'): Promise<UpdateUserRoleResponse> {
-        return await this.request<UpdateUserRoleResponse>(
-            `/api/settings/users/${encodeURIComponent(email)}/role`,
-            {
-                method: 'PUT',
-                body: JSON.stringify({ role })
-            }
-        )
-    }
-
-    async removeUser(email: string): Promise<RemoveUserResponse> {
-        return await this.request<RemoveUserResponse>('/api/settings/users', {
-            method: 'DELETE',
-            body: JSON.stringify({ email })
         })
     }
 

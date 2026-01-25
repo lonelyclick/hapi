@@ -151,13 +151,8 @@ const RESUME_TIMEOUT_MS = 60_000
 const RESUME_CONTEXT_MAX_LINES = 20
 const RESUME_CONTEXT_MAX_CHARS = 16_000
 
-function resolveUserRole(store: IStore, email?: string): UserRole {
-    if (!email) return 'developer'
-    const users = store.getAllowedUsers()
-    if (users.length === 0) return 'developer'
-    const match = users.find(u => u.email.toLowerCase() === email.toLowerCase())
-    return match?.role ?? 'developer'
-}
+// Note: Role is now extracted from Keycloak token in auth middleware
+// Use c.get('role') directly instead of the old resolveUserRole function
 
 async function waitForSessionOnline(engine: SyncEngine, sessionId: string, timeoutMs: number): Promise<boolean> {
     const existing = engine.getSession(sessionId)
@@ -442,7 +437,7 @@ export function createSessionsRoutes(
         if (result.type === 'success') {
             const email = c.get('email')
             const namespace = c.get('namespace')
-            const role = resolveUserRole(store, email)
+            const role = c.get('role')  // Role from Keycloak token
             // Wait for session to be online, then set createdBy and send init prompt
             void (async () => {
                 console.log(`[spawnSession] Waiting for session ${result.sessionId} to come online...`)
@@ -742,7 +737,7 @@ export function createSessionsRoutes(
             void store.setSessionCreatedBy(newSessionId, email, namespace)
         }
 
-        const role = resolveUserRole(store, email)
+        const role = c.get('role')  // Role from Keycloak token
         await sendInitPrompt(engine, newSessionId, role)
 
         if (!resumeSessionId) {
@@ -834,7 +829,7 @@ export function createSessionsRoutes(
         }
 
         // Send init prompt
-        const role = resolveUserRole(store, email)
+        const role = c.get('role')  // Role from Keycloak token
         await sendInitPrompt(engine, newSessionId, role)
 
         // Transfer context from old session

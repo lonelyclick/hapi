@@ -6,7 +6,9 @@ import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
 import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
 import { useNotificationPermission, useWebPushSubscription } from '@/hooks/useNotification'
-import type { InputPreset, Project, UserRole } from '@/types/api'
+import { useServerUrl } from '@/hooks/useServerUrl'
+import { getLogoutUrl, clearTokens } from '@/services/keycloak'
+import type { InputPreset, Project } from '@/types/api'
 import type { ClaudeAccount, ClaudeAccountsConfig } from '@/api/client'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -246,13 +248,10 @@ export default function SettingsPage() {
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
+    const { baseUrl } = useServerUrl()
     const [projectError, setProjectError] = useState<string | null>(null)
     const [showAddProject, setShowAddProject] = useState(false)
     const [editingProject, setEditingProject] = useState<Project | null>(null)
-    const [userError, setUserError] = useState<string | null>(null)
-    const [showAddUser, setShowAddUser] = useState(false)
-    const [newUserEmail, setNewUserEmail] = useState('')
-    const [newUserRole, setNewUserRole] = useState<UserRole>('developer')
     // 当前会话信息
     const currentSession = useMemo(() => ({
         email: getStoredEmail() || '-',
@@ -325,74 +324,6 @@ export default function SettingsPage() {
     const handleRemoveProject = useCallback((id: string) => {
         removeProjectMutation.mutate(id)
     }, [removeProjectMutation])
-
-    // Users
-    const { data: usersData, isLoading: usersLoading } = useQuery({
-        queryKey: ['users'],
-        queryFn: async () => {
-            if (!api) throw new Error('API unavailable')
-            return await api.getUsers()
-        },
-        enabled: Boolean(api)
-    })
-
-    const addUserMutation = useMutation({
-        mutationFn: async ({ email, role }: { email: string; role: UserRole }) => {
-            if (!api) throw new Error('API unavailable')
-            return await api.addUser(email, role)
-        },
-        onSuccess: (result) => {
-            queryClient.setQueryData(['users'], { users: result.users })
-            setShowAddUser(false)
-            setNewUserEmail('')
-            setNewUserRole('developer')
-            setUserError(null)
-        },
-        onError: (err) => {
-            setUserError(err instanceof Error ? err.message : 'Failed to add user')
-        }
-    })
-
-    const updateUserRoleMutation = useMutation({
-        mutationFn: async ({ email, role }: { email: string; role: UserRole }) => {
-            if (!api) throw new Error('API unavailable')
-            return await api.updateUserRole(email, role)
-        },
-        onSuccess: (result) => {
-            queryClient.setQueryData(['users'], { users: result.users })
-        },
-        onError: (err) => {
-            setUserError(err instanceof Error ? err.message : 'Failed to update user role')
-        }
-    })
-
-    const removeUserMutation = useMutation({
-        mutationFn: async (email: string) => {
-            if (!api) throw new Error('API unavailable')
-            return await api.removeUser(email)
-        },
-        onSuccess: (result) => {
-            queryClient.setQueryData(['users'], { users: result.users })
-        },
-        onError: (err) => {
-            setUserError(err instanceof Error ? err.message : 'Failed to remove user')
-        }
-    })
-
-    const handleAddUser = useCallback((e: React.FormEvent) => {
-        e.preventDefault()
-        const trimmedEmail = newUserEmail.trim().toLowerCase()
-        if (!trimmedEmail) return
-        addUserMutation.mutate({ email: trimmedEmail, role: newUserRole })
-    }, [newUserEmail, newUserRole, addUserMutation])
-
-    const handleUpdateUserRole = useCallback((email: string, role: UserRole) => {
-        updateUserRoleMutation.mutate({ email, role })
-    }, [updateUserRoleMutation])
-
-    const handleRemoveUser = useCallback((email: string) => {
-        removeUserMutation.mutate(email)
-    }, [removeUserMutation])
 
     // Input Presets
     const [presetError, setPresetError] = useState<string | null>(null)
@@ -590,42 +521,45 @@ export default function SettingsPage() {
     const autoRotateEnabled = accountsData?.autoRotateEnabled ?? true
 
     const handleLogout = useCallback(async () => {
-        // 清除 localStorage
-        localStorage.clear()
+        try {
+            // 获取 Keycloak 登出 URL
+            const redirectUri = window.location.origin + '/login'
+            const logoutUrl = await getLogoutUrl(baseUrl, redirectUri)
 
-        // 注销 PWA service worker
-        if ('serviceWorker' in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations()
-            for (const registration of registrations) {
-                await registration.unregister()
+            // 清除本地 tokens
+            clearTokens()
+
+            // 清除其他 localStorage
+            localStorage.clear()
+
+            // 注销 PWA service worker
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations()
+                for (const registration of registrations) {
+                    await registration.unregister()
+                }
             }
-        }
 
-        // 清除所有缓存
-        if ('caches' in window) {
-            const cacheNames = await caches.keys()
-            for (const cacheName of cacheNames) {
-                await caches.delete(cacheName)
+            // 清除所有缓存
+            if ('caches' in window) {
+                const cacheNames = await caches.keys()
+                for (const cacheName of cacheNames) {
+                    await caches.delete(cacheName)
+                }
             }
-        }
 
-        // 跳转到首页
-        window.location.href = '/'
-    }, [])
+            // 跳转到 Keycloak 登出页面
+            window.location.href = logoutUrl
+        } catch (error) {
+            console.error('[Logout] Failed to get logout URL:', error)
+            // 如果获取登出 URL 失败，仍然清除本地状态并跳转到登录页
+            clearTokens()
+            localStorage.clear()
+            window.location.href = '/login'
+        }
+    }, [baseUrl])
 
     const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
-    const users = Array.isArray(usersData?.users) ? usersData.users : []
-
-    // 判断当前用户是否为 Developer（有权限管理用户）
-    // 如果用户列表为空，默认所有人都有权限；否则根据邮箱查找角色
-    const currentUserRole = useMemo(() => {
-        if (users.length === 0) return 'developer' // 无用户配置时，允许所有
-        const currentEmail = currentSession.email.toLowerCase()
-        const user = users.find(u => u.email.toLowerCase() === currentEmail)
-        return user?.role ?? 'developer' // 未找到时默认 developer（兼容性）
-    }, [users, currentSession.email])
-
-    const canManageUsers = currentUserRole === 'developer'
 
     // Notification settings
     const {
@@ -685,12 +619,6 @@ export default function SettingsPage() {
                             <div className="px-3 py-2 flex items-center justify-between gap-2">
                                 <span className="text-sm text-[var(--app-hint)]">Email</span>
                                 <span className="text-sm font-mono truncate">{currentSession.email}</span>
-                            </div>
-                            <div className="px-3 py-2 flex items-center justify-between gap-2">
-                                <span className="text-sm text-[var(--app-hint)]">Role</span>
-                                <span className="text-sm">
-                                    {currentUserRole === 'developer' ? 'Developer' : 'Operator'}
-                                </span>
                             </div>
                             <div className="px-3 py-2 flex items-center justify-between gap-2">
                                 <span className="text-sm text-[var(--app-hint)]">Device</span>
@@ -1129,134 +1057,6 @@ export default function SettingsPage() {
                                             </div>
                                         </div>
                                     )
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Users Section */}
-                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                        <div className="px-3 py-2 border-b border-[var(--app-divider)] flex items-center justify-between">
-                            <div>
-                                <h2 className="text-sm font-medium">Users</h2>
-                                <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                    Manage users and their roles. Leave empty to allow all.
-                                </p>
-                            </div>
-                            {canManageUsers && !showAddUser && (
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAddUser(true)}
-                                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] hover:opacity-90 transition-opacity"
-                                >
-                                    <PlusIcon className="w-3 h-3" />
-                                    Add
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Add User Form */}
-                        {showAddUser && (
-                            <form onSubmit={handleAddUser} className="px-3 py-2 border-b border-[var(--app-divider)] space-y-2">
-                                <input
-                                    type="email"
-                                    value={newUserEmail}
-                                    onChange={(e) => setNewUserEmail(e.target.value)}
-                                    placeholder="email@company.com"
-                                    className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
-                                    disabled={addUserMutation.isPending}
-                                />
-                                <div className="flex items-center gap-2">
-                                    <select
-                                        value={newUserRole}
-                                        onChange={(e) => setNewUserRole(e.target.value as UserRole)}
-                                        className="flex-1 px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
-                                        disabled={addUserMutation.isPending}
-                                    >
-                                        <option value="developer">Developer (full access)</option>
-                                        <option value="operator">Operator (execute only)</option>
-                                    </select>
-                                </div>
-                                <div className="flex justify-end gap-2 pt-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setShowAddUser(false)
-                                            setNewUserEmail('')
-                                            setNewUserRole('developer')
-                                            setUserError(null)
-                                        }}
-                                        disabled={addUserMutation.isPending}
-                                        className="px-3 py-1.5 text-sm rounded border border-[var(--app-border)] text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={addUserMutation.isPending || !newUserEmail.trim()}
-                                        className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] disabled:opacity-50 hover:opacity-90 transition-opacity"
-                                    >
-                                        {addUserMutation.isPending && <Spinner size="sm" label={null} />}
-                                        Add User
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-
-                        {userError && (
-                            <div className="px-3 py-2 text-sm text-red-500 border-b border-[var(--app-divider)]">
-                                {userError}
-                            </div>
-                        )}
-
-                        {/* User List */}
-                        {usersLoading ? (
-                            <div className="px-3 py-4 flex justify-center">
-                                <Spinner size="sm" label="Loading..." />
-                            </div>
-                        ) : users.length === 0 && !showAddUser ? (
-                            <div className="px-3 py-4 text-center text-sm text-[var(--app-hint)]">
-                                No users configured. All emails are allowed.
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-[var(--app-divider)]">
-                                {users.map((user) => (
-                                    <div
-                                        key={user.email}
-                                        className="px-3 py-2 flex items-center justify-between gap-2"
-                                    >
-                                        <div className="min-w-0 flex-1">
-                                            <div className="text-sm truncate">{user.email}</div>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            {canManageUsers ? (
-                                                <>
-                                                    <select
-                                                        value={user.role}
-                                                        onChange={(e) => handleUpdateUserRole(user.email, e.target.value as UserRole)}
-                                                        disabled={updateUserRoleMutation.isPending}
-                                                        className="px-2 py-1 text-xs rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] disabled:opacity-50"
-                                                    >
-                                                        <option value="developer">Developer</option>
-                                                        <option value="operator">Operator</option>
-                                                    </select>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleRemoveUser(user.email)}
-                                                        disabled={removeUserMutation.isPending}
-                                                        className="flex h-7 w-7 items-center justify-center rounded text-[var(--app-hint)] hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                                                        title="Remove user"
-                                                    >
-                                                        <TrashIcon />
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <span className="px-2 py-1 text-xs text-[var(--app-hint)]">
-                                                    {user.role === 'developer' ? 'Developer' : 'Operator'}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
                                 ))}
                             </div>
                         )}

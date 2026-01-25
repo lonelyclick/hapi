@@ -3,6 +3,7 @@ import { useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import type { MessagesResponse, Session, SessionResponse, SessionsResponse, SessionSummary, SyncEvent } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { upsertMessagesInCache } from '@/lib/messages'
+import { getClientId, getDeviceType } from '@/lib/client-identity'
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object'
@@ -17,6 +18,9 @@ type SSESubscription = {
 function buildEventsUrl(baseUrl: string, token: string, subscription: SSESubscription): string {
     const params = new URLSearchParams()
     params.set('token', token)
+    // Add client identity for tracking online users
+    params.set('clientId', getClientId())
+    params.set('deviceType', getDeviceType())
     if (subscription.all) {
         params.set('all', 'true')
     }

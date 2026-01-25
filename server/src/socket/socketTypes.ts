@@ -2,7 +2,7 @@ import type { DefaultEventsMap, Server, Socket } from 'socket.io'
 
 export type SocketData = {
     namespace?: string
-    userId?: number
+    userId?: string  // Keycloak user ID (sub claim is UUID string)
 }
 
 export type SocketServer = Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>
