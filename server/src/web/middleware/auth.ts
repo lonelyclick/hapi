@@ -38,6 +38,7 @@ export function createAuthMiddleware(): MiddlewareHandler<WebAppEnv> {
         const allowTokenInQuery = path === '/api/events' || path.includes('/file') || path.includes('/server-uploads/') || path.includes('/server-downloads/')
         const tokenFromQuery = allowTokenInQuery ? c.req.query().token : undefined
         const token = tokenFromHeader ?? tokenFromQuery
+        const clientIdHeader = c.req.header('x-client-id')?.trim()
 
         if (!token) {
             return c.json({ error: 'Missing authorization token' }, 401)
@@ -53,6 +54,9 @@ export function createAuthMiddleware(): MiddlewareHandler<WebAppEnv> {
             c.set('email', user.email)
             c.set('name', user.name ?? undefined)
             c.set('role', user.role)  // Set role from Keycloak token
+            if (clientIdHeader) {
+                c.set('clientId', clientIdHeader)
+            }
             await next()
             return
         } catch (error) {

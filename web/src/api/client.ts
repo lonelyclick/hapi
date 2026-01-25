@@ -47,6 +47,7 @@ type ApiClientOptions = {
     baseUrl?: string
     getToken?: () => string | null
     onUnauthorized?: () => Promise<string | null>
+    getClientId?: () => string | null
 }
 
 type ErrorPayload = {
@@ -81,12 +82,14 @@ export class ApiClient {
     private readonly baseUrl: string | null
     private readonly getToken: (() => string | null) | null
     private readonly onUnauthorized: (() => Promise<string | null>) | null
+    private readonly getClientId: (() => string | null) | null
 
     constructor(token: string, options?: ApiClientOptions) {
         this.token = token
         this.baseUrl = options?.baseUrl ?? null
         this.getToken = options?.getToken ?? null
         this.onUnauthorized = options?.onUnauthorized ?? null
+        this.getClientId = options?.getClientId ?? null
     }
 
     /** 获取当前有效的认证 token */
@@ -156,6 +159,10 @@ export class ApiClient {
             : (liveToken ?? this.token)
         if (authToken) {
             headers.set('authorization', `Bearer ${authToken}`)
+        }
+        const clientId = this.getClientId ? this.getClientId() : null
+        if (clientId && !headers.has('x-client-id')) {
+            headers.set('x-client-id', clientId)
         }
         if (init?.body !== undefined && !headers.has('content-type')) {
             headers.set('content-type', 'application/json')

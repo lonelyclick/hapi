@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { ApiClient } from '@/api/client'
+import { getClientId } from '@/lib/client-identity'
 import {
     getAccessToken,
     getCurrentUser,
@@ -144,6 +145,7 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
         return new ApiClient(token, {
             baseUrl,
             getToken: () => getAccessToken(),
+            getClientId: () => getClientId(),
             onUnauthorized: async (): Promise<string | null> => {
                 const newToken = await ensureValidToken(baseUrl)
                 if (!newToken) {
