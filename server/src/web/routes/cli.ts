@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { configuration } from '../../configuration'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { configuration, getConfiguration } from '../../configuration'
 import { safeCompareStrings } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
 import type { Machine, Session, SyncEngine } from '../../sync/syncEngine'
@@ -168,6 +170,51 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
             return c.json({ error: resolved.error }, resolved.status)
         }
         return c.json({ machine: resolved.machine })
+    })
+
+    // Server uploads - allow CLI to fetch images uploaded via web
+    app.get('/server-uploads/:sessionId/:filename', (c) => {
+        const sessionId = c.req.param('sessionId')
+        const filename = c.req.param('filename')
+
+        try {
+            const config = getConfiguration()
+            const filePath = join(config.dataDir, 'uploads', sessionId, filename)
+
+            if (!existsSync(filePath)) {
+                return c.json({ error: 'File not found' }, 404)
+            }
+
+            const buffer = readFileSync(filePath)
+
+            // Infer MIME type from filename
+            const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+            const imageMimeTypes: Record<string, string> = {
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'png': 'image/png',
+                'gif': 'image/gif',
+                'webp': 'image/webp',
+                'svg': 'image/svg+xml',
+                'bmp': 'image/bmp',
+                'ico': 'image/x-icon',
+                'heic': 'image/heic',
+                'heif': 'image/heif'
+            }
+            const contentType = imageMimeTypes[ext] ?? 'application/octet-stream'
+
+            return new Response(buffer, {
+                status: 200,
+                headers: {
+                    'Content-Type': contentType,
+                    'Content-Length': buffer.length.toString(),
+                    'Cache-Control': 'public, max-age=31536000, immutable'
+                }
+            })
+        } catch (error) {
+            console.error('[cli/server-uploads] read error:', error)
+            return c.json({ error: 'Failed to read file' }, 500)
+        }
     })
 
     return app

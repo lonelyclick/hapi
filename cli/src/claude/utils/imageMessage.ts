@@ -57,11 +57,12 @@ function getMimeType(path: string): string {
 
 /**
  * Fetch image from server-uploads path
- * server-uploads/{sessionId}/{filename} -> fetch from server API
+ * server-uploads/{sessionId}/{filename} -> fetch from server CLI API
  */
 async function fetchServerUploadImage(imagePath: string): Promise<Buffer> {
     // imagePath format: server-uploads/{sessionId}/{filename}
-    const url = `${configuration.serverUrl}/api/${imagePath}`
+    // Use /cli/ endpoint which accepts CLI_API_TOKEN
+    const url = `${configuration.serverUrl}/cli/${imagePath}`
 
     const response = await fetch(url, {
         headers: {
