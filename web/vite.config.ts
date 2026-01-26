@@ -157,6 +157,11 @@ export default defineConfig({
                 // 不要对 /api/ 路径使用 navigateFallback
                 navigateFallbackDenylist: [/^\/api\//],
                 runtimeCaching: [
+                    // 认证 API 不缓存，始终走网络，避免 PWA 中认证状态失效
+                    {
+                        urlPattern: /^\/api\/auth\//,
+                        handler: 'NetworkOnly',
+                    },
                     {
                         urlPattern: /^\/api\/sessions$/,
                         handler: 'NetworkFirst',
