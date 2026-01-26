@@ -6,6 +6,7 @@
 import { readFile } from 'node:fs/promises'
 import { join, isAbsolute } from 'node:path'
 import { logger } from '@/lib'
+import { configuration } from '@/configuration'
 
 const IMAGE_PATTERN = /\[Image:\s*([^\]]+)\]/g
 
@@ -52,6 +53,28 @@ function getMimeType(path: string): string {
         'heif': 'image/heif'
     }
     return mimeTypes[ext] || 'image/png'
+}
+
+/**
+ * Fetch image from server-uploads path
+ * server-uploads/{sessionId}/{filename} -> fetch from server API
+ */
+async function fetchServerUploadImage(imagePath: string): Promise<Buffer> {
+    // imagePath format: server-uploads/{sessionId}/{filename}
+    const url = `${configuration.serverUrl}/api/${imagePath}`
+
+    const response = await fetch(url, {
+        headers: {
+            'Authorization': `Bearer ${configuration.cliApiToken}`
+        }
+    })
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch server image: ${response.status} ${response.statusText}`)
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    return Buffer.from(arrayBuffer)
 }
 
 /**
@@ -113,12 +136,23 @@ export async function buildMessageContent(
 
         // Process image
         const imagePath = match[1].trim()
-        const fullPath = isAbsolute(imagePath)
-            ? imagePath
-            : join(workingDirectory, imagePath)
 
         try {
-            const imageData = await readFile(fullPath)
+            let imageData: Buffer
+
+            // Check if this is a server-uploads path
+            if (imagePath.startsWith('server-uploads/')) {
+                // Fetch from server API
+                imageData = await fetchServerUploadImage(imagePath)
+                logger.debug(`[imageMessage] Fetched server image: ${imagePath}`)
+            } else {
+                // Local file path
+                const fullPath = isAbsolute(imagePath)
+                    ? imagePath
+                    : join(workingDirectory, imagePath)
+                imageData = await readFile(fullPath)
+            }
+
             const base64Data = imageData.toString('base64')
             const mimeType = getMimeType(imagePath)
 
