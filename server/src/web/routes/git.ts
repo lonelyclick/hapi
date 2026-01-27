@@ -28,8 +28,8 @@ const fileUploadSchema = z.object({
     mimeType: z.string().min(1)
 })
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const MAX_FILE_BYTES = 20 * 1024 * 1024
+const MAX_IMAGE_BYTES = 100 * 1024 * 1024
+const MAX_FILE_BYTES = 100 * 1024 * 1024
 
 function logUploadInfo(kind: 'image' | 'file', phase: string, data: Record<string, unknown>): void {
     console.log(`[upload-${kind}] ${phase}`, data)
@@ -355,7 +355,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
                 sizeBytes,
                 maxBytes: MAX_IMAGE_BYTES
             })
-            return c.json({ success: false, error: 'Image too large (max 10MB)' }, 413)
+            return c.json({ success: false, error: 'Image too large (max 100MB)' }, 413)
         }
 
         // 存储到服务器端（不走 RPC）
@@ -446,7 +446,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
                 sizeBytes,
                 maxBytes: MAX_FILE_BYTES
             })
-            return c.json({ success: false, error: 'File too large (max 20MB)' }, 413)
+            return c.json({ success: false, error: 'File too large (max 100MB)' }, 413)
         }
 
         const result = await runRpc(() => engine.uploadFile(
