@@ -321,8 +321,8 @@ export function HappyComposer(props: {
     const [uploadedFiles, setUploadedFiles] = useState<Array<{ path: string; name: string; size: number }>>([])
     const MAX_IMAGES = 5
     const MAX_FILES = 5
-    const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-    const MAX_FILE_BYTES = 20 * 1024 * 1024
+    const MAX_IMAGE_BYTES = 100 * 1024 * 1024
+    const MAX_FILE_BYTES = 100 * 1024 * 1024
 
     const showResumeOverlay = !active && Boolean(onRequestResume)
     const resumeLabel = resumePending
@@ -946,10 +946,10 @@ export function HappyComposer(props: {
             return
         }
 
-        // Validate file size (max 10MB)
+        // Validate file size (max 100MB)
         if (file.size > MAX_IMAGE_BYTES) {
             haptic('error')
-            console.error('Image file too large (max 10MB)')
+            console.error('Image file too large (max 100MB)')
             return
         }
 
@@ -1005,10 +1005,10 @@ export function HappyComposer(props: {
             return
         }
 
-        // Validate file size (max 20MB)
+        // Validate file size (max 100MB)
         if (file.size > MAX_FILE_BYTES) {
             haptic('error')
-            console.error('File too large (max 20MB)')
+            console.error('File too large (max 100MB)')
             return
         }
 
