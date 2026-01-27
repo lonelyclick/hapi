@@ -61,7 +61,10 @@ export function createSocketServer(deps: SocketServerDeps): {
         }
     })
 
-    const engine = new Engine({ path: '/socket.io/' })
+    const engine = new Engine({
+        path: '/socket.io/',
+        maxHttpBufferSize: 150 * 1024 * 1024  // 150MB to support 100MB file uploads with base64 overhead
+    })
     io.bind(engine)
 
     const rpcRegistry = new RpcRegistry()
