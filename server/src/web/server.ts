@@ -258,7 +258,7 @@ export async function startWebServer(options: {
     const socketBodySize = Number.isFinite(socketHandler.maxRequestBodySize)
         ? socketHandler.maxRequestBodySize
         : 0
-    const maxHttpBodySize = Math.max(socketBodySize, 40 * 1024 * 1024)
+    const maxHttpBodySize = Math.max(socketBodySize, 150 * 1024 * 1024)  // 150MB to support 100MB file uploads with base64 overhead
 
     const server = Bun.serve({
         port: configuration.webappPort,
