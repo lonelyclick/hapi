@@ -10,6 +10,20 @@ import { streamSSE } from 'hono/streaming'
 import { spawn } from 'node:child_process'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
+import { writeFileSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+
+// response_format schema 定义
+const responseFormatSchema = z.object({
+    type: z.enum(['text', 'json_object', 'json_schema']),
+    json_schema: z.object({
+        name: z.string().optional(),
+        description: z.string().optional(),
+        schema: z.record(z.unknown()).optional(),
+        strict: z.boolean().optional()
+    }).optional()
+}).optional()
 
 // OpenAI Chat Completions 请求格式
 const chatCompletionRequestSchema = z.object({
@@ -21,6 +35,8 @@ const chatCompletionRequestSchema = z.object({
     stream: z.boolean().default(false),
     temperature: z.number().optional(),
     max_tokens: z.number().optional(),
+    // OpenAI 标准选项
+    response_format: responseFormatSchema,
     // Codex 特定选项
     sandbox: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
     working_directory: z.string().optional(),
@@ -156,6 +172,20 @@ function extractTextFromCodexEvent(event: CodexEvent): string | null {
 }
 
 /**
+ * 创建临时 JSON Schema 文件用于 response_format
+ */
+function createTempSchemaFile(schema: Record<string, unknown>): string {
+    const tempFile = join(tmpdir(), `codex-schema-${randomUUID()}.json`)
+    // 确保 schema 包含 additionalProperties: false（OpenAI 要求）
+    const finalSchema = {
+        ...schema,
+        additionalProperties: false
+    }
+    writeFileSync(tempFile, JSON.stringify(finalSchema, null, 2))
+    return tempFile
+}
+
+/**
  * 运行 Codex CLI 并收集输出
  */
 async function runCodexNonStreaming(
@@ -165,8 +195,19 @@ async function runCodexNonStreaming(
         sandbox?: string
         workingDirectory?: string
         fullAuto?: boolean
+        responseFormat?: {
+            type: 'text' | 'json_object' | 'json_schema'
+            json_schema?: {
+                name?: string
+                description?: string
+                schema?: Record<string, unknown>
+                strict?: boolean
+            }
+        }
     }
 ): Promise<{ content: string; error?: string }> {
+    let tempSchemaFile: string | null = null
+
     return new Promise((resolve) => {
         const args = ['exec', '--json']
 
@@ -181,6 +222,23 @@ async function runCodexNonStreaming(
 
         if (options.fullAuto) {
             args.push('--full-auto')
+        }
+
+        // 处理 response_format
+        if (options.responseFormat) {
+            if (options.responseFormat.type === 'json_object') {
+                // 简单 JSON 对象模式 - 使用通用 schema
+                const genericJsonSchema = {
+                    type: 'object',
+                    additionalProperties: true
+                }
+                tempSchemaFile = createTempSchemaFile(genericJsonSchema)
+                args.push('--output-schema', tempSchemaFile)
+            } else if (options.responseFormat.type === 'json_schema' && options.responseFormat.json_schema?.schema) {
+                // 自定义 JSON Schema
+                tempSchemaFile = createTempSchemaFile(options.responseFormat.json_schema.schema)
+                args.push('--output-schema', tempSchemaFile)
+            }
         }
 
         args.push(prompt)
@@ -236,6 +294,15 @@ async function runCodexNonStreaming(
                 }
             }
 
+            // 清理临时文件
+            if (tempSchemaFile) {
+                try {
+                    unlinkSync(tempSchemaFile)
+                } catch {
+                    // 忽略清理错误
+                }
+            }
+
             if (code !== 0 && collectedTexts.length === 0) {
                 resolve({
                     content: '',
@@ -249,6 +316,15 @@ async function runCodexNonStreaming(
         })
 
         child.on('error', (err) => {
+            // 清理临时文件
+            if (tempSchemaFile) {
+                try {
+                    unlinkSync(tempSchemaFile)
+                } catch {
+                    // 忽略清理错误
+                }
+            }
+
             resolve({
                 content: '',
                 error: `Failed to spawn codex: ${err.message}`
@@ -426,7 +502,8 @@ export function createCodexOpenAIRoutes(): Hono<CodexOpenAIEnv> {
                 model: request.model,
                 sandbox: request.sandbox,
                 workingDirectory: request.working_directory,
-                fullAuto: request.full_auto
+                fullAuto: request.full_auto,
+                responseFormat: request.response_format
             })
 
             if (result.error) {
