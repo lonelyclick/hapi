@@ -172,6 +172,43 @@ function extractTextFromCodexEvent(event: CodexEvent): string | null {
 }
 
 /**
+ * 从文本中提取 JSON 对象
+ * 用于 json_object 模式，从可能包含思考过程的响应中提取最后的 JSON
+ */
+function extractJsonFromText(text: string): string | null {
+    // 尝试从后往前找到有效的 JSON 对象
+    // 因为 Codex 通常会在最后输出 JSON 结果
+    const jsonMatches: string[] = []
+
+    // 方法1：尝试匹配 {...} 结构
+    const braceRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g
+    let match
+    while ((match = braceRegex.exec(text)) !== null) {
+        try {
+            JSON.parse(match[0])
+            jsonMatches.push(match[0])
+        } catch {
+            // 不是有效 JSON，继续
+        }
+    }
+
+    // 返回最后一个有效的 JSON（通常是最终结果）
+    if (jsonMatches.length > 0) {
+        return jsonMatches[jsonMatches.length - 1]
+    }
+
+    // 方法2：如果整个文本就是 JSON，直接返回
+    try {
+        JSON.parse(text.trim())
+        return text.trim()
+    } catch {
+        // 不是 JSON
+    }
+
+    return null
+}
+
+/**
  * 创建临时 JSON Schema 文件用于 response_format
  */
 function createTempSchemaFile(schema: Record<string, unknown>): string {
@@ -225,21 +262,15 @@ async function runCodexNonStreaming(
         }
 
         // 处理 response_format
-        let finalPrompt = prompt
-        if (options.responseFormat) {
-            if (options.responseFormat.type === 'json_object') {
-                // json_object 模式：Codex 的 --output-schema 要求严格的类型定义，
-                // 而 OpenAI 的 json_object 允许任意 JSON 结构。
-                // 因此我们在 prompt 中添加提示，而不是使用 --output-schema
-                finalPrompt = `${prompt}\n\n[重要] 请直接返回一个有效的 JSON 对象作为回答，不要包含任何其他解释文字或 markdown 代码块。`
-            } else if (options.responseFormat.type === 'json_schema' && options.responseFormat.json_schema?.schema) {
-                // 自定义 JSON Schema - 使用 --output-schema
-                tempSchemaFile = createTempSchemaFile(options.responseFormat.json_schema.schema)
-                args.push('--output-schema', tempSchemaFile)
-            }
+        if (options.responseFormat?.type === 'json_schema' && options.responseFormat.json_schema?.schema) {
+            // 自定义 JSON Schema - 使用 --output-schema（推荐方式）
+            tempSchemaFile = createTempSchemaFile(options.responseFormat.json_schema.schema)
+            args.push('--output-schema', tempSchemaFile)
         }
+        // 注意：json_object 模式不使用 --output-schema，因为 Codex 要求完整的 schema 定义
+        // json_object 的结果会在后处理中提取 JSON
 
-        args.push(finalPrompt)
+        args.push(prompt)
 
         const cwd = options.workingDirectory || process.cwd()
 
@@ -307,9 +338,17 @@ async function runCodexNonStreaming(
                     error: errorOutput || `Codex exited with code ${code}`
                 })
             } else {
-                resolve({
-                    content: collectedTexts.join('\n') || 'Task completed.'
-                })
+                let content = collectedTexts.join('\n') || 'Task completed.'
+
+                // 对于 json_object 模式，尝试从内容中提取 JSON
+                if (options.responseFormat?.type === 'json_object') {
+                    const extractedJson = extractJsonFromText(content)
+                    if (extractedJson) {
+                        content = extractedJson
+                    }
+                }
+
+                resolve({ content })
             }
         })
 
