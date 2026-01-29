@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { basename, join } from 'node:path'
+import { basename, join, resolve, dirname } from 'node:path'
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
@@ -241,18 +241,118 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         const limit = parsed.data.limit ?? 200
         const args = ['--files']
 
-        const result = await runRpc(() => engine.runRipgrep(sessionResult.sessionId, args, sessionPath))
+        // Determine search path based on query
+        // - If query starts with '/', treat as absolute path
+        // - If query starts with '../', resolve relative to sessionPath
+        // - Otherwise, search in sessionPath
+        let searchPath = sessionPath
+        let searchQuery = query
+
+        if (query.startsWith('/')) {
+            // Absolute path: extract directory and remaining query
+            // e.g., "/opt/mattermost" -> searchPath="/opt/mattermost", searchQuery=""
+            // e.g., "/opt/matter" -> searchPath="/opt", searchQuery="matter"
+            const parts = query.split('/')
+            // Find the longest existing directory prefix
+            let pathParts: string[] = []
+            let queryPart = ''
+            for (let i = 1; i < parts.length; i++) {
+                const testPath = '/' + parts.slice(1, i + 1).join('/')
+                try {
+                    const stat = await import('node:fs').then(fs => fs.promises.stat(testPath))
+                    if (stat.isDirectory()) {
+                        pathParts = parts.slice(1, i + 1)
+                    } else {
+                        // It's a file, use parent as searchPath
+                        pathParts = parts.slice(1, i)
+                        queryPart = parts.slice(i).join('/')
+                        break
+                    }
+                } catch {
+                    // Path doesn't exist, use what we have
+                    queryPart = parts.slice(i).join('/')
+                    break
+                }
+            }
+            searchPath = pathParts.length > 0 ? '/' + pathParts.join('/') : '/'
+            searchQuery = queryPart
+        } else if (query.startsWith('../') || query.startsWith('..')) {
+            // Relative path: resolve relative to sessionPath
+            // e.g., "../other-project" -> resolve(sessionPath, "../other-project")
+            const resolved = resolve(sessionPath, query)
+            // Find the longest existing directory prefix
+            let testPath = resolved
+            let queryPart = ''
+            while (testPath !== '/') {
+                try {
+                    const stat = await import('node:fs').then(fs => fs.promises.stat(testPath))
+                    if (stat.isDirectory()) {
+                        searchPath = testPath
+                        break
+                    } else {
+                        // It's a file
+                        searchPath = dirname(testPath)
+                        queryPart = basename(testPath)
+                        break
+                    }
+                } catch {
+                    queryPart = queryPart ? basename(testPath) + '/' + queryPart : basename(testPath)
+                    testPath = dirname(testPath)
+                }
+            }
+            if (testPath === '/') {
+                searchPath = '/'
+            }
+            searchQuery = queryPart
+        }
+
+        const result = await runRpc(() => engine.runRipgrep(sessionResult.sessionId, args, searchPath))
         if (!result.success) {
             return c.json({ success: false, error: result.error ?? 'Failed to list files' })
         }
 
         const stdout = result.stdout ?? ''
-        const queryLower = query.toLowerCase()
+        const searchQueryLower = searchQuery.toLowerCase()
+
+        // Determine if we're searching outside the session directory
+        const isExternalPath = query.startsWith('/') || query.startsWith('../') || query.startsWith('..')
+
+        // Calculate path prefix for external paths
+        // For absolute paths: use the searchPath directly
+        // For relative paths (../): calculate relative path from sessionPath
+        let pathPrefix = ''
+        if (isExternalPath) {
+            if (query.startsWith('/')) {
+                pathPrefix = searchPath
+            } else {
+                // For ../ paths, we want to show relative path from sessionPath
+                // e.g., if sessionPath=/home/guang/hapi and searchPath=/home/guang/happy
+                // then prefix should be "../happy"
+                const sessionParts = sessionPath.split('/').filter(Boolean)
+                const searchParts = searchPath.split('/').filter(Boolean)
+
+                // Find common prefix length
+                let commonLen = 0
+                for (let i = 0; i < Math.min(sessionParts.length, searchParts.length); i++) {
+                    if (sessionParts[i] === searchParts[i]) {
+                        commonLen++
+                    } else {
+                        break
+                    }
+                }
+
+                // Build relative path
+                const upCount = sessionParts.length - commonLen
+                const downParts = searchParts.slice(commonLen)
+                pathPrefix = '../'.repeat(upCount) + downParts.join('/')
+            }
+        }
+
         const filePaths = stdout
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line.length > 0)
-            .filter((line) => !query || line.toLowerCase().includes(queryLower))
+            .filter((line) => !searchQuery || line.toLowerCase().includes(searchQueryLower))
 
         // Extract unique directories from file paths
         const dirSet = new Set<string>()
@@ -264,10 +364,18 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             }
         }
 
+        // Helper to build full path with prefix
+        const buildFullPath = (relativePath: string): string => {
+            if (!pathPrefix) return relativePath
+            if (pathPrefix.endsWith('/')) return pathPrefix + relativePath
+            return pathPrefix + '/' + relativePath
+        }
+
         // Filter directories by query if provided
         const matchingDirs = Array.from(dirSet)
-            .filter((dir) => !query || dir.toLowerCase().includes(queryLower))
-            .map((fullPath) => {
+            .filter((dir) => !searchQuery || dir.toLowerCase().includes(searchQueryLower))
+            .map((relativePath) => {
+                const fullPath = buildFullPath(relativePath)
                 const parts = fullPath.split('/')
                 const fileName = parts[parts.length - 1] || fullPath
                 const filePath = parts.slice(0, -1).join('/')
@@ -280,7 +388,8 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             })
 
         // Map files
-        const matchingFiles = filePaths.slice(0, limit).map((fullPath) => {
+        const matchingFiles = filePaths.slice(0, limit).map((relativePath) => {
+            const fullPath = buildFullPath(relativePath)
             const parts = fullPath.split('/')
             const fileName = parts[parts.length - 1] || fullPath
             const filePath = parts.slice(0, -1).join('/')
