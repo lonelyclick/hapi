@@ -290,6 +290,7 @@ function buildToolCallSchema(tools: ToolDefinition[]): Record<string, unknown> {
         : { type: 'object', properties: {}, additionalProperties: false }
 
     // 最终的 output schema：可能调用函数，也可能直接回复
+    // 注意：OpenAI 要求 required 包含所有属性
     return {
         type: 'object',
         properties: {
@@ -312,13 +313,13 @@ function buildToolCallSchema(tools: ToolDefinition[]): Record<string, unknown> {
                 required: ['name', 'arguments'],
                 additionalProperties: false
             },
-            // 如果不调用工具，直接回复
+            // 如果不调用工具，直接回复（可以为空字符串）
             content: {
                 type: 'string',
-                description: 'Direct text response if no tool call is needed'
+                description: 'Direct text response if no tool call is needed, or empty string if calling a tool'
             }
         },
-        required: ['tool_call'],
+        required: ['tool_call', 'function_call', 'content'],  // 所有属性都必须
         additionalProperties: false
     }
 }
