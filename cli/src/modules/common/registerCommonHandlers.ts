@@ -490,16 +490,9 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
     });
 
     // Ripgrep handler - raw interface to ripgrep
+    // Note: Path validation removed to allow searching in any directory (e.g., @/opt/..., @../)
     rpcHandlerManager.registerHandler<RipgrepRequest, RipgrepResponse>('ripgrep', async (data) => {
         logger.debug('Ripgrep request with args:', data.args, 'cwd:', data.cwd);
-
-        // Validate cwd if provided
-        if (data.cwd) {
-            const validation = validatePath(data.cwd, workingDirectory);
-            if (!validation.valid) {
-                return { success: false, error: validation.error };
-            }
-        }
 
         try {
             const result = await runRipgrep(data.args, { cwd: data.cwd });
