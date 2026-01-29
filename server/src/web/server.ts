@@ -25,6 +25,7 @@ import { createGroupRoutes } from './routes/groups'
 import { createClaudeAccountsRoutes } from './routes/claude-accounts'
 import { createReviewRoutes, type ReviewStore, type AutoReviewService } from '../review'
 import { createOpenCodeRoutes } from './routes/opencode'
+import { createCodexOpenAIRoutes } from './routes/codex-openai'
 import type { SSEManager } from '../sse/sseManager'
 import type { Server as BunServer } from 'bun'
 import type { Server as SocketEngine } from '@socket.io/bun-engine'
@@ -93,8 +94,12 @@ function createWebApp(options: {
     })
     app.use('/api/*', corsMiddleware)
     app.use('/cli/*', corsMiddleware)
+    app.use('/v1/*', corsMiddleware)
 
     app.route('/cli', createCliRoutes(options.getSyncEngine))
+
+    // OpenAI Compatible API for Codex CLI (public, no auth required)
+    app.route('/v1', createCodexOpenAIRoutes())
 
     // Keycloak SSO authentication routes (public)
     app.route('/api', createKeycloakAuthRoutes())
