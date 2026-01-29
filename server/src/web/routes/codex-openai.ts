@@ -262,13 +262,12 @@ async function runCodexNonStreaming(
         }
 
         // 处理 response_format
+        // json_schema 模式：使用 --output-schema 传递用户定义的 schema
         if (options.responseFormat?.type === 'json_schema' && options.responseFormat.json_schema?.schema) {
-            // 自定义 JSON Schema - 使用 --output-schema（推荐方式）
             tempSchemaFile = createTempSchemaFile(options.responseFormat.json_schema.schema)
             args.push('--output-schema', tempSchemaFile)
         }
-        // 注意：json_object 模式不使用 --output-schema，因为 Codex 要求完整的 schema 定义
-        // json_object 的结果会在后处理中提取 JSON
+        // json_object 模式：Codex 不支持无 schema 的 JSON 输出，后处理提取 JSON
 
         args.push(prompt)
 
