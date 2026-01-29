@@ -25,6 +25,17 @@ const responseFormatSchema = z.object({
     }).optional()
 }).optional()
 
+// OpenAI function/tool 定义
+const toolSchema = z.object({
+    type: z.literal('function'),
+    function: z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        parameters: z.any().optional(),  // JSON Schema
+        strict: z.boolean().optional()
+    })
+})
+
 // OpenAI Chat Completions 请求格式
 const chatCompletionRequestSchema = z.object({
     model: z.string().default('default'),
@@ -37,6 +48,16 @@ const chatCompletionRequestSchema = z.object({
     max_tokens: z.number().optional(),
     // OpenAI 标准选项
     response_format: responseFormatSchema,
+    tools: z.array(toolSchema).optional(),
+    tool_choice: z.union([
+        z.literal('auto'),
+        z.literal('none'),
+        z.literal('required'),
+        z.object({
+            type: z.literal('function'),
+            function: z.object({ name: z.string() })
+        })
+    ]).optional(),
     // Codex 特定选项
     sandbox: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
     working_directory: z.string().optional(),
@@ -223,6 +244,114 @@ function createTempSchemaFile(schema: Record<string, unknown>): string {
 }
 
 /**
+ * Tool 定义类型
+ */
+interface ToolDefinition {
+    type: 'function'
+    function: {
+        name: string
+        description?: string
+        parameters?: Record<string, unknown>
+        strict?: boolean
+    }
+}
+
+/**
+ * 将 OpenAI tools 转换为 output-schema
+ * 生成的 schema 让模型决定是否调用函数，以及调用哪个函数
+ */
+function buildToolCallSchema(tools: ToolDefinition[]): Record<string, unknown> {
+    // 构建每个函数的调用 schema
+    const functionSchemas: Record<string, unknown>[] = tools.map(tool => {
+        const funcSchema: Record<string, unknown> = {
+            type: 'object',
+            properties: {
+                name: {
+                    type: 'string',
+                    const: tool.function.name  // 固定函数名
+                },
+                arguments: tool.function.parameters || {
+                    type: 'object',
+                    properties: {},
+                    additionalProperties: false
+                }
+            },
+            required: ['name', 'arguments'],
+            additionalProperties: false
+        }
+        return funcSchema
+    })
+
+    // 最终的 output schema：可能调用函数，也可能直接回复
+    return {
+        type: 'object',
+        properties: {
+            // 是否调用工具
+            tool_call: {
+                type: 'boolean',
+                description: 'Set to true if you need to call a function/tool to answer the question'
+            },
+            // 如果调用工具，填写此字段
+            function_call: {
+                type: 'object',
+                properties: {
+                    name: {
+                        type: 'string',
+                        enum: tools.map(t => t.function.name),
+                        description: 'The name of the function to call'
+                    },
+                    arguments: {
+                        type: 'object',
+                        description: 'The arguments to pass to the function as a JSON object'
+                    }
+                },
+                required: ['name', 'arguments'],
+                additionalProperties: false
+            },
+            // 如果不调用工具，直接回复
+            content: {
+                type: 'string',
+                description: 'Direct text response if no tool call is needed'
+            }
+        },
+        required: ['tool_call'],
+        additionalProperties: false
+    }
+}
+
+/**
+ * 为 tools 构建系统提示
+ */
+function buildToolsSystemPrompt(tools: ToolDefinition[]): string {
+    const toolDescriptions = tools.map(tool => {
+        const params = tool.function.parameters
+            ? `\n   Parameters: ${JSON.stringify(tool.function.parameters, null, 2)}`
+            : ''
+        return `- ${tool.function.name}: ${tool.function.description || 'No description'}${params}`
+    }).join('\n')
+
+    return `You have access to the following tools/functions:
+
+${toolDescriptions}
+
+Based on the user's request:
+- If you need to call a tool, set "tool_call" to true and fill in "function_call" with the function name and arguments.
+- If you can answer directly without calling a tool, set "tool_call" to false and put your response in "content".`
+}
+
+/**
+ * Tool call 结果类型
+ */
+interface ToolCallResult {
+    id: string
+    type: 'function'
+    function: {
+        name: string
+        arguments: string
+    }
+}
+
+/**
  * 运行 Codex CLI 并收集输出
  */
 async function runCodexNonStreaming(
@@ -241,8 +370,9 @@ async function runCodexNonStreaming(
                 strict?: boolean
             }
         }
+        tools?: ToolDefinition[]
     }
-): Promise<{ content: string; error?: string }> {
+): Promise<{ content: string; toolCalls?: ToolCallResult[]; error?: string }> {
     let tempSchemaFile: string | null = null
 
     return new Promise((resolve) => {
@@ -261,15 +391,26 @@ async function runCodexNonStreaming(
             args.push('--full-auto')
         }
 
-        // 处理 response_format
-        // json_schema 模式：使用 --output-schema 传递用户定义的 schema
-        if (options.responseFormat?.type === 'json_schema' && options.responseFormat.json_schema?.schema) {
+        // 处理 tools（function calling）
+        let hasTools = false
+        let finalPrompt = prompt
+        if (options.tools && options.tools.length > 0) {
+            hasTools = true
+            // 构建 tool call schema
+            const toolSchema = buildToolCallSchema(options.tools)
+            tempSchemaFile = createTempSchemaFile(toolSchema)
+            args.push('--output-schema', tempSchemaFile)
+            // 添加系统提示
+            finalPrompt = `${buildToolsSystemPrompt(options.tools)}\n\nUser request: ${prompt}`
+        }
+        // 处理 response_format（如果没有 tools）
+        else if (options.responseFormat?.type === 'json_schema' && options.responseFormat.json_schema?.schema) {
             tempSchemaFile = createTempSchemaFile(options.responseFormat.json_schema.schema)
             args.push('--output-schema', tempSchemaFile)
         }
         // json_object 模式：Codex 不支持无 schema 的 JSON 输出，后处理提取 JSON
 
-        args.push(prompt)
+        args.push(finalPrompt)
 
         const cwd = options.workingDirectory || process.cwd()
 
@@ -338,6 +479,32 @@ async function runCodexNonStreaming(
                 })
             } else {
                 let content = collectedTexts.join('\n') || 'Task completed.'
+
+                // 处理 tools 响应
+                if (hasTools) {
+                    try {
+                        const parsed = JSON.parse(content)
+                        if (parsed.tool_call && parsed.function_call) {
+                            // 模型决定调用函数
+                            const toolCall: ToolCallResult = {
+                                id: `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+                                type: 'function',
+                                function: {
+                                    name: parsed.function_call.name,
+                                    arguments: JSON.stringify(parsed.function_call.arguments)
+                                }
+                            }
+                            resolve({ content: '', toolCalls: [toolCall] })
+                            return
+                        } else {
+                            // 模型决定直接回复
+                            resolve({ content: parsed.content || content })
+                            return
+                        }
+                    } catch {
+                        // 解析失败，返回原始内容
+                    }
+                }
 
                 // 对于 json_object 模式，尝试从内容中提取 JSON
                 if (options.responseFormat?.type === 'json_object') {
@@ -539,7 +706,8 @@ export function createCodexOpenAIRoutes(): Hono<CodexOpenAIEnv> {
                 sandbox: request.sandbox,
                 workingDirectory: request.working_directory,
                 fullAuto: request.full_auto,
-                responseFormat: request.response_format
+                responseFormat: request.response_format,
+                tools: request.tools
             })
 
             if (result.error) {
@@ -553,6 +721,17 @@ export function createCodexOpenAIRoutes(): Hono<CodexOpenAIEnv> {
                 }, 500)
             }
 
+            // 构建响应消息
+            const message: Record<string, unknown> = {
+                role: 'assistant',
+                content: result.toolCalls ? null : result.content
+            }
+
+            // 如果有 tool calls，添加到消息中
+            if (result.toolCalls && result.toolCalls.length > 0) {
+                message.tool_calls = result.toolCalls
+            }
+
             return c.json({
                 id: requestId,
                 object: 'chat.completion',
@@ -560,11 +739,8 @@ export function createCodexOpenAIRoutes(): Hono<CodexOpenAIEnv> {
                 model: request.model,
                 choices: [{
                     index: 0,
-                    message: {
-                        role: 'assistant',
-                        content: result.content
-                    },
-                    finish_reason: 'stop'
+                    message,
+                    finish_reason: result.toolCalls ? 'tool_calls' : 'stop'
                 }],
                 usage: {
                     prompt_tokens: 0,  // Codex CLI 不提供 token 计数
