@@ -146,10 +146,17 @@ function buildPromptFromMessages(messages: ChatCompletionRequest['messages']): s
  * 从 Codex JSONL 事件中提取文本内容
  * Codex JSONL 格式示例：
  * {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"今天天气很好。"}}
+ *
+ * 注意：只提取 agent_message 类型，忽略 reasoning 类型（思考过程）
  */
 function extractTextFromCodexEvent(event: CodexEvent): string | null {
-    // 只处理 item.completed 类型的事件，这是包含实际回复的事件
+    // 只处理 item.completed 类型的事件，且只要 agent_message，忽略 reasoning
     if (event.type === 'item.completed' && event.item) {
+        // 忽略 reasoning 类型（思考过程）
+        if (event.item.type === 'reasoning') {
+            return null
+        }
+
         // 直接从 item.text 获取文本（最常见的格式）
         if (event.item.text) {
             return event.item.text
