@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto'
 
 // OpenAI Chat Completions 请求格式
 const chatCompletionRequestSchema = z.object({
-    model: z.string().default('codex'),
+    model: z.string().default('default'),
     messages: z.array(z.object({
         role: z.enum(['system', 'user', 'assistant']),
         content: z.string()
@@ -59,12 +59,25 @@ interface CodexEvent {
     }
 }
 
-// 可用模型列表
+// 可用模型列表 - 基于 Codex CLI 官方支持的模型
+// 参考: https://developers.openai.com/codex/models/
 const AVAILABLE_MODELS = [
-    { id: 'codex', name: 'Codex CLI (Default)', description: 'OpenAI Codex CLI with default model' },
-    { id: 'o3', name: 'O3', description: 'OpenAI O3 model via Codex' },
-    { id: 'o4-mini', name: 'O4 Mini', description: 'OpenAI O4 Mini model via Codex' },
-    { id: 'gpt-4.1', name: 'GPT-4.1', description: 'GPT-4.1 model via Codex' },
+    // 默认模型（使用 ~/.codex/config.toml 中配置的模型）
+    { id: 'default', name: 'Default', description: 'Use default model from Codex config (~/.codex/config.toml)' },
+    // 推荐模型
+    { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', description: 'Most advanced agentic coding model for real-world engineering' },
+    { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', description: 'Smaller, more cost-effective version of GPT-5.1-Codex' },
+    // 替代模型
+    { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', description: 'Optimized for long-horizon, agentic coding tasks' },
+    { id: 'gpt-5.2', name: 'GPT-5.2', description: 'Best general agentic model for tasks across industries' },
+    { id: 'gpt-5.1', name: 'GPT-5.1', description: 'Designed for coding and agentic tasks' },
+    { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex', description: 'For long-running agentic coding tasks' },
+    { id: 'gpt-5-codex', name: 'GPT-5 Codex', description: 'Tuned for extended coding tasks' },
+    { id: 'gpt-5-codex-mini', name: 'GPT-5 Codex Mini', description: 'Cost-effective predecessor model' },
+    { id: 'gpt-5', name: 'GPT-5', description: 'Reasoning model for coding tasks' },
+    // 旧版模型（仍可使用）
+    { id: 'o3', name: 'O3', description: 'OpenAI O3 reasoning model' },
+    { id: 'o4-mini', name: 'O4 Mini', description: 'OpenAI O4 Mini model' },
 ]
 
 type CodexOpenAIEnv = {
@@ -157,7 +170,8 @@ async function runCodexNonStreaming(
     return new Promise((resolve) => {
         const args = ['exec', '--json']
 
-        if (options.model && options.model !== 'codex') {
+        // 当 model 不是 'default' 时才传 --model 参数
+        if (options.model && options.model !== 'default') {
             args.push('--model', options.model)
         }
 
@@ -300,7 +314,8 @@ export function createCodexOpenAIRoutes(): Hono<CodexOpenAIEnv> {
             return streamSSE(c, async (stream) => {
                 const args = ['exec', '--json']
 
-                if (request.model && request.model !== 'codex') {
+                // 当 model 不是 'default' 时才传 --model 参数
+                if (request.model && request.model !== 'default') {
                     args.push('--model', request.model)
                 }
 
