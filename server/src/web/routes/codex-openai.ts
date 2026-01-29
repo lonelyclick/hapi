@@ -225,21 +225,13 @@ async function runCodexNonStreaming(
         }
 
         // 处理 response_format
+        let finalPrompt = prompt
         if (options.responseFormat) {
             if (options.responseFormat.type === 'json_object') {
-                // 简单 JSON 对象模式 - 使用通用 schema，要求返回 response 字段
-                const genericJsonSchema = {
-                    type: 'object',
-                    properties: {
-                        response: {
-                            description: 'The response content as a JSON object or value'
-                        }
-                    },
-                    required: ['response'],
-                    additionalProperties: false
-                }
-                tempSchemaFile = createTempSchemaFile(genericJsonSchema)
-                args.push('--output-schema', tempSchemaFile)
+                // json_object 模式：Codex 的 --output-schema 要求严格的类型定义，
+                // 而 OpenAI 的 json_object 允许任意 JSON 结构。
+                // 因此我们在 prompt 中添加提示，而不是使用 --output-schema
+                finalPrompt = `${prompt}\n\n[重要] 请直接返回一个有效的 JSON 对象作为回答，不要包含任何其他解释文字或 markdown 代码块。`
             } else if (options.responseFormat.type === 'json_schema' && options.responseFormat.json_schema?.schema) {
                 // 自定义 JSON Schema - 使用 --output-schema
                 tempSchemaFile = createTempSchemaFile(options.responseFormat.json_schema.schema)
@@ -247,7 +239,7 @@ async function runCodexNonStreaming(
             }
         }
 
-        args.push(prompt)
+        args.push(finalPrompt)
 
         const cwd = options.workingDirectory || process.cwd()
 
