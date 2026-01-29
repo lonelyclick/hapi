@@ -20,7 +20,7 @@ const responseFormatSchema = z.object({
     json_schema: z.object({
         name: z.string().optional(),
         description: z.string().optional(),
-        schema: z.record(z.unknown()).optional(),
+        schema: z.any().optional(),  // JSON Schema 是任意结构
         strict: z.boolean().optional()
     }).optional()
 }).optional()
