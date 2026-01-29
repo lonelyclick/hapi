@@ -225,23 +225,19 @@ async function runCodexNonStreaming(
         }
 
         // 处理 response_format
+        let finalPrompt = prompt
         if (options.responseFormat) {
             if (options.responseFormat.type === 'json_object') {
-                // 简单 JSON 对象模式 - 使用通用 schema
-                const genericJsonSchema = {
-                    type: 'object',
-                    additionalProperties: true
-                }
-                tempSchemaFile = createTempSchemaFile(genericJsonSchema)
-                args.push('--output-schema', tempSchemaFile)
+                // 简单 JSON 对象模式 - 在 prompt 中添加提示
+                finalPrompt = `${prompt}\n\n请以有效的 JSON 对象格式返回结果，不要包含任何其他文本。`
             } else if (options.responseFormat.type === 'json_schema' && options.responseFormat.json_schema?.schema) {
-                // 自定义 JSON Schema
+                // 自定义 JSON Schema - 使用 --output-schema
                 tempSchemaFile = createTempSchemaFile(options.responseFormat.json_schema.schema)
                 args.push('--output-schema', tempSchemaFile)
             }
         }
 
-        args.push(prompt)
+        args.push(finalPrompt)
 
         const cwd = options.workingDirectory || process.cwd()
 
