@@ -34,17 +34,28 @@ interface CodexEvent {
     type: string
     message?: string
     content?: string
+    // item.completed 事件格式
     item?: {
+        id?: string
         type?: string
         role?: string
+        text?: string  // 直接的文本内容
         content?: Array<{ type: string; text?: string }>
     }
+    // 其他可能的响应格式
     response?: {
         output?: Array<{
             type?: string
             role?: string
+            text?: string
             content?: Array<{ type: string; text?: string }>
         }>
+    }
+    // usage 信息
+    usage?: {
+        input_tokens?: number
+        output_tokens?: number
+        cached_input_tokens?: number
     }
 }
 
@@ -83,27 +94,39 @@ function buildPromptFromMessages(messages: ChatCompletionRequest['messages']): s
 
 /**
  * 从 Codex JSONL 事件中提取文本内容
+ * Codex JSONL 格式示例：
+ * {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"今天天气很好。"}}
  */
 function extractTextFromCodexEvent(event: CodexEvent): string | null {
-    // 直接消息
-    if (event.message) {
-        return event.message
-    }
+    // 只处理 item.completed 类型的事件，这是包含实际回复的事件
+    if (event.type === 'item.completed' && event.item) {
+        // 直接从 item.text 获取文本（最常见的格式）
+        if (event.item.text) {
+            return event.item.text
+        }
 
-    // 从 item 中提取
-    if (event.item?.content) {
-        for (const content of event.item.content) {
-            if (content.type === 'text' && content.text) {
-                return content.text
+        // 从 item.content 数组中提取
+        if (event.item.content) {
+            for (const content of event.item.content) {
+                if (content.type === 'text' && content.text) {
+                    return content.text
+                }
             }
         }
     }
 
-    // 从 response.output 中提取
+    // 直接消息字段
+    if (event.message) {
+        return event.message
+    }
+
+    // 从 response.output 中提取（备用格式）
     if (event.response?.output) {
         const texts: string[] = []
         for (const output of event.response.output) {
-            if (output.content) {
+            if (output.text) {
+                texts.push(output.text)
+            } else if (output.content) {
                 for (const content of output.content) {
                     if (content.type === 'text' && content.text) {
                         texts.push(content.text)
