@@ -257,30 +257,37 @@ interface ToolDefinition {
 }
 
 /**
+ * 递归添加 additionalProperties: false 到所有 object 类型
+ */
+function addAdditionalPropertiesFalse(schema: Record<string, unknown>): Record<string, unknown> {
+    if (schema.type === 'object') {
+        const result: Record<string, unknown> = { ...schema, additionalProperties: false }
+        if (schema.properties && typeof schema.properties === 'object') {
+            const newProps: Record<string, unknown> = {}
+            for (const [key, value] of Object.entries(schema.properties as Record<string, unknown>)) {
+                if (value && typeof value === 'object') {
+                    newProps[key] = addAdditionalPropertiesFalse(value as Record<string, unknown>)
+                } else {
+                    newProps[key] = value
+                }
+            }
+            result.properties = newProps
+        }
+        return result
+    }
+    return schema
+}
+
+/**
  * 将 OpenAI tools 转换为 output-schema
  * 生成的 schema 让模型决定是否调用函数，以及调用哪个函数
  */
 function buildToolCallSchema(tools: ToolDefinition[]): Record<string, unknown> {
-    // 构建每个函数的调用 schema
-    const functionSchemas: Record<string, unknown>[] = tools.map(tool => {
-        const funcSchema: Record<string, unknown> = {
-            type: 'object',
-            properties: {
-                name: {
-                    type: 'string',
-                    const: tool.function.name  // 固定函数名
-                },
-                arguments: tool.function.parameters || {
-                    type: 'object',
-                    properties: {},
-                    additionalProperties: false
-                }
-            },
-            required: ['name', 'arguments'],
-            additionalProperties: false
-        }
-        return funcSchema
-    })
+    // 获取第一个工具的参数 schema（确保有 additionalProperties: false）
+    const firstTool = tools[0]
+    const argsSchema = firstTool.function.parameters
+        ? addAdditionalPropertiesFalse(firstTool.function.parameters as Record<string, unknown>)
+        : { type: 'object', properties: {}, additionalProperties: false }
 
     // 最终的 output schema：可能调用函数，也可能直接回复
     return {
@@ -300,10 +307,7 @@ function buildToolCallSchema(tools: ToolDefinition[]): Record<string, unknown> {
                         enum: tools.map(t => t.function.name),
                         description: 'The name of the function to call'
                     },
-                    arguments: {
-                        type: 'object',
-                        description: 'The arguments to pass to the function as a JSON object'
-                    }
+                    arguments: argsSchema
                 },
                 required: ['name', 'arguments'],
                 additionalProperties: false
