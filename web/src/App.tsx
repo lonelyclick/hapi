@@ -17,7 +17,7 @@ import { LoadingState } from '@/components/LoadingState'
 import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
 import { notifyTaskComplete, getPendingNotification, clearPendingNotification, useWebPushSubscription } from '@/hooks/useNotification'
-import { getAccessToken } from '@/services/keycloak'
+import { getAccessTokenSync } from '@/services/keycloak'
 
 export function App() {
     const { baseUrl } = useServerUrl()
@@ -331,7 +331,7 @@ export function App() {
         return { all: true }
     }, [selectedSessionId])
 
-    const token = getAccessToken()
+    const token = getAccessTokenSync()
 
     useSSE({
         enabled: Boolean(api && token && isAuthenticated),

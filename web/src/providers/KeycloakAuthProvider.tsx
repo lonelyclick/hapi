@@ -1,18 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { ApiClient } from '@/api/client'
 import { getClientId } from '@/lib/client-identity'
-import {
-    getAccessToken,
-    getCurrentUser,
-    isAuthenticated,
-    isTokenExpired,
-    saveTokens,
-    clearTokens,
-    ensureValidToken,
-    getLoginUrl,
-    getLogoutUrl,
-    type KeycloakUser,
-} from '@/services/keycloak'
+import * as keycloak from '@/services/keycloak'
+import type { KeycloakUser } from '@/services/keycloak'
 
 interface AuthContextValue {
     user: KeycloakUser | null
@@ -32,25 +22,29 @@ interface KeycloakAuthProviderProps {
 }
 
 export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProviderProps) {
-    const [user, setUser] = useState<KeycloakUser | null>(() => getCurrentUser())
+    const [user, setUser] = useState<KeycloakUser | null>(() => keycloak.getCurrentUserSync())
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const tokenRef = useRef<string | null>(null)
 
     // Check authentication status on mount
     useEffect(() => {
+        let isCancelled = false
+
         const checkAuth = async () => {
             setIsLoading(true)
             try {
-                if (isAuthenticated()) {
-                    const token = await ensureValidToken(baseUrl)
+                const isAuth = await keycloak.isAuthenticated()
+                if (isAuth) {
+                    const token = await keycloak.ensureValidToken(baseUrl)
                     if (token) {
                         tokenRef.current = token
-                        setUser(getCurrentUser())
+                        const currentUser = await keycloak.getCurrentUser()
+                        setUser(currentUser)
                         setError(null)
                     } else {
                         // Token refresh failed
-                        clearTokens()
+                        await keycloak.clearTokens()
                         setUser(null)
                     }
                 } else {
@@ -59,14 +53,20 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
             } catch (e) {
                 console.error('[KeycloakAuth] Auth check failed:', e)
                 setError(e instanceof Error ? e.message : 'Authentication check failed')
-                clearTokens()
+                await keycloak.clearTokens()
                 setUser(null)
             } finally {
-                setIsLoading(false)
+                if (!isCancelled) {
+                    setIsLoading(false)
+                }
             }
         }
 
         checkAuth()
+
+        return () => {
+            isCancelled = true
+        }
     }, [baseUrl])
 
     // Auto-refresh token before expiry
@@ -74,19 +74,20 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
         if (!user) return
 
         const checkAndRefresh = async () => {
-            if (isTokenExpired()) {
+            if (await keycloak.isTokenExpired()) {
                 try {
-                    const token = await ensureValidToken(baseUrl)
+                    const token = await keycloak.ensureValidToken(baseUrl)
                     if (token) {
                         tokenRef.current = token
-                        setUser(getCurrentUser())
+                        const currentUser = await keycloak.getCurrentUser()
+                        setUser(currentUser)
                     } else {
-                        clearTokens()
+                        await keycloak.clearTokens()
                         setUser(null)
                     }
                 } catch (e) {
                     console.error('[KeycloakAuth] Token refresh failed:', e)
-                    clearTokens()
+                    await keycloak.clearTokens()
                     setUser(null)
                 }
             }
@@ -114,7 +115,7 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
         setError(null)
         try {
             const redirectUri = `${window.location.origin}/auth/callback`
-            const loginUrl = await getLoginUrl(baseUrl, redirectUri)
+            const loginUrl = await keycloak.getLoginUrl(baseUrl, redirectUri)
             window.location.href = loginUrl
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to initiate login')
@@ -126,30 +127,30 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
         setIsLoading(true)
         try {
             const redirectUri = window.location.origin
-            const logoutUrl = await getLogoutUrl(baseUrl, redirectUri)
-            clearTokens()
+            const logoutUrl = await keycloak.getLogoutUrl(baseUrl, redirectUri)
+            await keycloak.clearTokens()
             setUser(null)
             window.location.href = logoutUrl
         } catch (e) {
             // Even if getting logout URL fails, clear local tokens
-            clearTokens()
+            await keycloak.clearTokens()
             setUser(null)
             setIsLoading(false)
         }
     }, [baseUrl])
 
     const api = useMemo(() => {
-        const token = getAccessToken()
+        const token = keycloak.getAccessTokenSync()
         if (!token) return null
 
         return new ApiClient(token, {
             baseUrl,
-            getToken: () => getAccessToken(),
+            getToken: () => keycloak.getAccessTokenSync(),
             getClientId: () => getClientId(),
             onUnauthorized: async (): Promise<string | null> => {
-                const newToken = await ensureValidToken(baseUrl)
+                const newToken = await keycloak.ensureValidToken(baseUrl)
                 if (!newToken) {
-                    clearTokens()
+                    await keycloak.clearTokens()
                     setUser(null)
                     return null
                 }
@@ -160,7 +161,7 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
 
     const value: AuthContextValue = {
         user,
-        isAuthenticated: !!user && isAuthenticated(),
+        isAuthenticated: !!user && keycloak.isAuthenticatedSync(),
         isLoading,
         error,
         api,
@@ -180,5 +181,5 @@ export function useAuth(): AuthContextValue {
 }
 
 // Re-export for convenience
-export { saveTokens, clearTokens, getCurrentUser } from '@/services/keycloak'
+export { keycloak as keycloakService }
 export type { KeycloakUser } from '@/services/keycloak'

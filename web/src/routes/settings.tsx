@@ -527,7 +527,7 @@ export default function SettingsPage() {
             const logoutUrl = await getLogoutUrl(baseUrl, redirectUri)
 
             // 清除本地 tokens
-            clearTokens()
+            await clearTokens()
 
             // 清除其他 localStorage
             localStorage.clear()
@@ -553,7 +553,7 @@ export default function SettingsPage() {
         } catch (error) {
             console.error('[Logout] Failed to get logout URL:', error)
             // 如果获取登出 URL 失败，仍然清除本地状态并跳转到登录页
-            clearTokens()
+            await clearTokens()
             localStorage.clear()
             window.location.href = '/login'
         }

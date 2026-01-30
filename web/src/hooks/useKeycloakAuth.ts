@@ -5,17 +5,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClient } from '@/api/client'
-import {
-    getAccessToken,
-    getCurrentUser,
-    isAuthenticated,
-    isTokenExpired,
-    clearTokens,
-    ensureValidToken,
-    getExpiresAt,
-    refreshToken,
-    type KeycloakUser,
-} from '@/services/keycloak'
+import * as keycloak from '@/services/keycloak'
+import type { KeycloakUser } from '@/services/keycloak'
 
 export interface UseKeycloakAuthResult {
     /** Keycloak access token for API calls */
@@ -35,8 +26,8 @@ export interface UseKeycloakAuthResult {
 }
 
 export function useKeycloakAuth(baseUrl: string): UseKeycloakAuthResult {
-    const [token, setToken] = useState<string | null>(() => getAccessToken())
-    const [user, setUser] = useState<KeycloakUser | null>(() => getCurrentUser())
+    const [token, setToken] = useState<string | null>(() => keycloak.getAccessTokenSync())
+    const [user, setUser] = useState<KeycloakUser | null>(() => keycloak.getCurrentUserSync())
     const [isLoading, setIsLoading] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
     const tokenRef = useRef<string | null>(token)
@@ -44,21 +35,57 @@ export function useKeycloakAuth(baseUrl: string): UseKeycloakAuthResult {
 
     tokenRef.current = token
 
-    // Initial authentication check
+    // Initial authentication check (async to load from IndexedDB)
     useEffect(() => {
-        const checkAuth = () => {
-            if (isAuthenticated()) {
-                setToken(getAccessToken())
-                setUser(getCurrentUser())
+        let isCancelled = false
+
+        const checkAuth = async () => {
+            // First use sync values for immediate UI
+            const syncToken = keycloak.getAccessTokenSync()
+            const syncUser = keycloak.getCurrentUserSync()
+            const syncIsAuth = keycloak.isAuthenticatedSync()
+
+            if (syncIsAuth) {
+                setToken(syncToken)
+                setUser(syncUser)
                 setError(null)
             } else {
                 setToken(null)
                 setUser(null)
             }
-            setIsLoading(false)
+
+            // Then async load from IndexedDB to ensure fresh data
+            try {
+                const [asyncToken, asyncUser, asyncIsAuth] = await Promise.all([
+                    keycloak.getAccessToken(),
+                    keycloak.getCurrentUser(),
+                    keycloak.isAuthenticated(),
+                ])
+
+                if (!isCancelled) {
+                    if (asyncIsAuth && asyncToken) {
+                        setToken(asyncToken)
+                        setUser(asyncUser)
+                        setError(null)
+                    } else {
+                        setToken(null)
+                        setUser(null)
+                    }
+                    setIsLoading(false)
+                }
+            } catch (err) {
+                console.error('[Keycloak] Failed to load auth state:', err)
+                if (!isCancelled) {
+                    setIsLoading(false)
+                }
+            }
         }
 
         checkAuth()
+
+        return () => {
+            isCancelled = true
+        }
     }, [])
 
     // Refresh token handler
@@ -70,7 +97,7 @@ export function useKeycloakAuth(baseUrl: string): UseKeycloakAuthResult {
 
         const run = async (): Promise<string | null> => {
             try {
-                const result = await refreshToken(baseUrl)
+                const result = await keycloak.refreshToken(baseUrl)
                 if (result) {
                     tokenRef.current = result.accessToken
                     setToken(result.accessToken)
@@ -106,7 +133,7 @@ export function useKeycloakAuth(baseUrl: string): UseKeycloakAuthResult {
     useEffect(() => {
         if (!token) return
 
-        const expiresAt = getExpiresAt()
+        const expiresAt = keycloak.getExpiresAtSync()
         if (!expiresAt) return
 
         let isCancelled = false
@@ -140,13 +167,13 @@ export function useKeycloakAuth(baseUrl: string): UseKeycloakAuthResult {
     useEffect(() => {
         if (!token) return
 
-        const handleVisibilityChange = () => {
+        const handleVisibilityChange = async () => {
             if (document.visibilityState === 'visible') {
                 // Check if token is expired or close to expiry
-                if (isTokenExpired()) {
+                if (keycloak.isTokenExpiredSync()) {
                     void refreshAuth()
                 } else {
-                    const expiresAt = getExpiresAt()
+                    const expiresAt = keycloak.getExpiresAtSync()
                     if (expiresAt && Date.now() >= expiresAt - 5 * 60 * 1000) {
                         void refreshAuth()
                     }
@@ -178,8 +205,8 @@ export function useKeycloakAuth(baseUrl: string): UseKeycloakAuthResult {
     }, [token, baseUrl, refreshAuth])
 
     // Logout handler
-    const logout = useCallback(() => {
-        clearTokens()
+    const logout = useCallback(async () => {
+        await keycloak.clearTokens()
         setToken(null)
         setUser(null)
         setError(null)

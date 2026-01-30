@@ -157,46 +157,11 @@ export default defineConfig({
                 // 不要对 /api/ 路径使用 navigateFallback
                 navigateFallbackDenylist: [/^\/api\//],
                 runtimeCaching: [
-                    // 认证 API 不缓存，始终走网络，避免 PWA 中认证状态失效
+                    // 所有 API 请求都不缓存，始终走网络
+                    // Service Worker 无法访问 IndexedDB 中的 token，无法正确处理认证请求
                     {
-                        urlPattern: /^\/api\/auth\//,
+                        urlPattern: /^\/api\//,
                         handler: 'NetworkOnly',
-                    },
-                    {
-                        urlPattern: /^\/api\/sessions$/,
-                        handler: 'NetworkFirst',
-                        options: {
-                            cacheName: 'api-sessions',
-                            expiration: {
-                                maxEntries: 10,
-                                maxAgeSeconds: 60 * 5
-                            },
-                            networkTimeoutSeconds: 10
-                        }
-                    },
-                    {
-                        urlPattern: /^\/api\/sessions\/[^/]+$/,
-                        handler: 'NetworkFirst',
-                        options: {
-                            cacheName: 'api-session-detail',
-                            expiration: {
-                                maxEntries: 20,
-                                maxAgeSeconds: 60 * 5
-                            },
-                            networkTimeoutSeconds: 10
-                        }
-                    },
-                    {
-                        urlPattern: /^\/api\/machines$/,
-                        handler: 'NetworkFirst',
-                        options: {
-                            cacheName: 'api-machines',
-                            expiration: {
-                                maxEntries: 5,
-                                maxAgeSeconds: 60 * 10
-                            },
-                            networkTimeoutSeconds: 10
-                        }
                     },
                     {
                         urlPattern: /^https:\/\/cdn\.socket\.io\/.*/,

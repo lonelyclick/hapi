@@ -32,7 +32,7 @@ export function AuthCallbackPage() {
             try {
                 const redirectUri = `${window.location.origin}/auth/callback`
                 const authResponse = await exchangeCodeForToken(baseUrl, code, redirectUri)
-                saveTokens(authResponse)
+                await saveTokens(authResponse)
 
                 // Force page reload to ensure KeycloakAuthProvider re-initializes with new token
                 // This fixes the issue where isAuthenticated state isn't updated immediately after login
