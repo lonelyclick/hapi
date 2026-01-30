@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiClient } from '@/api/client'
 import * as keycloak from '@/services/keycloak'
+import { isStorageInitialized } from '@/services/tokenStorage'
 import type { KeycloakUser } from '@/services/keycloak'
 
 export interface UseKeycloakAuthResult {
@@ -30,6 +31,7 @@ export function useKeycloakAuth(baseUrl: string): UseKeycloakAuthResult {
     const [user, setUser] = useState<KeycloakUser | null>(() => keycloak.getCurrentUserSync())
     const [isLoading, setIsLoading] = useState<boolean>(true)
     const [error, setError] = useState<string | null>(null)
+    const [storageInitDone, setStorageInitDone] = useState(false)
     const tokenRef = useRef<string | null>(token)
     const refreshPromiseRef = useRef<Promise<string | null> | null>(null)
 
@@ -71,11 +73,13 @@ export function useKeycloakAuth(baseUrl: string): UseKeycloakAuthResult {
                         setToken(null)
                         setUser(null)
                     }
+                    setStorageInitDone(true)
                     setIsLoading(false)
                 }
             } catch (err) {
                 console.error('[Keycloak] Failed to load auth state:', err)
                 if (!isCancelled) {
+                    setStorageInitDone(true)
                     setIsLoading(false)
                 }
             }
@@ -217,7 +221,8 @@ export function useKeycloakAuth(baseUrl: string): UseKeycloakAuthResult {
         token,
         user,
         api,
-        isLoading,
+        // 如果存储还没初始化完成，继续显示loading状态
+        isLoading: isLoading || !storageInitDone,
         isAuthenticated: Boolean(token && user),
         error,
         logout,

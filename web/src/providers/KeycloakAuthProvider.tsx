@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { ApiClient } from '@/api/client'
 import { getClientId } from '@/lib/client-identity'
 import * as keycloak from '@/services/keycloak'
+import { isStorageInitialized } from '@/services/tokenStorage'
 import type { KeycloakUser } from '@/services/keycloak'
 
 interface AuthContextValue {
@@ -25,6 +26,7 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
     const [user, setUser] = useState<KeycloakUser | null>(() => keycloak.getCurrentUserSync())
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [storageInitDone, setStorageInitDone] = useState(false)
     const tokenRef = useRef<string | null>(null)
 
     // Check authentication status on mount
@@ -57,6 +59,7 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
                 setUser(null)
             } finally {
                 if (!isCancelled) {
+                    setStorageInitDone(true)
                     setIsLoading(false)
                 }
             }
@@ -162,7 +165,8 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
     const value: AuthContextValue = {
         user,
         isAuthenticated: !!user && keycloak.isAuthenticatedSync(),
-        isLoading,
+        // 如果存储还没初始化完成，继续显示loading状态
+        isLoading: isLoading || !storageInitDone,
         error,
         api,
         login,

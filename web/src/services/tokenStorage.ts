@@ -133,6 +133,8 @@ const syncCache = {
 
 // Initialize sync cache from IndexedDB
 let initPromise: Promise<void> | null = null
+let isInitialized = false
+
 function ensureInitialized(): Promise<void> {
     if (!initPromise) {
         initPromise = (async () => {
@@ -146,10 +148,17 @@ function ensureInitialized(): Promise<void> {
                 }
             } catch (error) {
                 console.error('[TokenStorage] Failed to initialize cache:', error)
+            } finally {
+                isInitialized = true
             }
         })()
     }
     return initPromise
+}
+
+// Export for checking if initialization is complete
+export function isStorageInitialized(): boolean {
+    return isInitialized
 }
 
 /**
