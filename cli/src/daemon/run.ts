@@ -11,7 +11,7 @@ import { configuration } from '@/configuration';
 import packageJson from '../../package.json';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
-import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, readSettings, applyPathMapping } from '@/persistence';
+import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, readSettings, applyPathMapping, acquireDaemonLock, releaseDaemonLock } from '@/persistence';
 import { isProcessAlive, isWindows, killProcess, killProcessByChildProcess } from '@/utils/process';
 
 import { cleanupDaemonState, getInstalledCliMtimeMs, isDaemonRunningCurrentlyInstalledHappyVersion, stopDaemon } from './controlClient';

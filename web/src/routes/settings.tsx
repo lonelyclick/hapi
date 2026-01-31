@@ -194,7 +194,7 @@ function ProjectForm(props: {
 
     const handleSubmit = useCallback((e: React.FormEvent) => {
         e.preventDefault()
-        if (!name.trim() || !path.trim()) return
+        if (!name.trim() || !path.trim() || !machineId) return
         props.onSubmit({ name: name.trim(), path: path.trim(), description: description.trim(), machineId })
     }, [name, path, description, machineId, props])
 
@@ -206,6 +206,20 @@ function ProjectForm(props: {
 
     return (
         <form onSubmit={handleSubmit} className="px-3 py-2 space-y-2 border-b border-[var(--app-divider)]">
+            {/* Machine selector - first */}
+            <select
+                value={machineId ?? ''}
+                onChange={(e) => setMachineId(e.target.value || null)}
+                disabled={props.isPending}
+                className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] disabled:opacity-50"
+            >
+                <option value="" disabled>Select machine...</option>
+                {props.machines.map((m) => (
+                    <option key={m.id} value={m.id}>
+                        {getMachineTitle(m)}{m.metadata?.platform ? ` (${m.metadata.platform})` : ''}
+                    </option>
+                ))}
+            </select>
             <input
                 type="text"
                 value={name}
@@ -230,22 +244,6 @@ function ProjectForm(props: {
                 className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
                 disabled={props.isPending}
             />
-            <select
-                value={machineId ?? ''}
-                onChange={(e) => setMachineId(e.target.value || null)}
-                disabled={props.isPending}
-                className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] disabled:opacity-50"
-            >
-                <option value="">All machines (global)</option>
-                {props.machines.map((m) => (
-                    <option key={m.id} value={m.id}>
-                        {getMachineTitle(m)}{m.metadata?.platform ? ` (${m.metadata.platform})` : ''}
-                    </option>
-                ))}
-            </select>
-            <div className="text-[11px] text-[var(--app-hint)] -mt-1">
-                {machineId ? 'Project available only on selected machine' : 'Project available on all machines'}
-            </div>
             <div className="flex justify-end gap-2 pt-1">
                 <button
                     type="button"
@@ -257,7 +255,7 @@ function ProjectForm(props: {
                 </button>
                 <button
                     type="submit"
-                    disabled={props.isPending || !name.trim() || !path.trim()}
+                    disabled={props.isPending || !name.trim() || !path.trim() || !machineId}
                     className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] disabled:opacity-50 hover:opacity-90 transition-opacity"
                 >
                     {props.isPending && <Spinner size="sm" label={null} />}
@@ -295,12 +293,15 @@ export default function SettingsPage() {
     })
     const machines = machinesData?.machines ?? []
 
+    // Machine filter for projects
+    const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null)
+
     // Projects
     const { data: projectsData, isLoading: projectsLoading } = useQuery({
-        queryKey: ['projects'],
+        queryKey: ['projects', selectedMachineId],
         queryFn: async () => {
             if (!api) throw new Error('API unavailable')
-            return await api.getProjects()
+            return await api.getProjects(selectedMachineId ?? undefined)
         },
         enabled: Boolean(api)
     })
@@ -999,14 +1000,28 @@ export default function SettingsPage() {
                                 </p>
                             </div>
                             {!showAddProject && !editingProject && (
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAddProject(true)}
-                                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] hover:opacity-90 transition-opacity"
-                                >
-                                    <PlusIcon className="w-3 h-3" />
-                                    Add
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        value={selectedMachineId ?? ''}
+                                        onChange={(e) => setSelectedMachineId(e.target.value || null)}
+                                        className="text-xs px-2 py-1 rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                                    >
+                                        <option value="">All machines</option>
+                                        {machines.map((m) => (
+                                            <option key={m.id} value={m.id}>
+                                                {m.metadata?.displayName || m.metadata?.host || m.id.slice(0, 8)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAddProject(true)}
+                                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] hover:opacity-90 transition-opacity"
+                                    >
+                                        <PlusIcon className="w-3 h-3" />
+                                        Add
+                                    </button>
+                                </div>
                             )}
                         </div>
 
