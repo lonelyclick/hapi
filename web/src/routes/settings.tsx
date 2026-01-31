@@ -596,7 +596,36 @@ export default function SettingsPage() {
         }
     }, [baseUrl])
 
-    const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
+    // Filter projects by platform for global projects (machineId = null)
+    const projects = useMemo(() => {
+        const allProjects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
+
+        // If no machine filter selected, return all projects
+        if (!selectedMachineId) {
+            return allProjects
+        }
+
+        // Find the selected machine's platform
+        const selectedMachine = machines.find(m => m.id === selectedMachineId)
+        const platform = selectedMachine?.metadata?.platform ?? ''
+
+        return allProjects.filter(project => {
+            // If project has machineId, only show if it matches selected machine
+            if (project.machineId) {
+                return project.machineId === selectedMachineId
+            }
+            // Global project: check if path is compatible with selected platform
+            if (platform === 'darwin') {
+                // macOS: paths start with /Users
+                return project.path.startsWith('/Users/')
+            } else {
+                // Linux: paths start with /home or /root or /opt
+                return project.path.startsWith('/home/') ||
+                       project.path.startsWith('/root/') ||
+                       project.path.startsWith('/opt/')
+            }
+        })
+    }, [projectsData, selectedMachineId, machines])
 
     // Notification settings
     const {
