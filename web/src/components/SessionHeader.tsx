@@ -427,21 +427,27 @@ export function SessionHeader(props: {
                         <BackIcon />
                     </button>
                     <div className="min-w-0 flex-1 relative" ref={agentDetailsRef}>
-                        <div className="max-w-[180px] truncate font-medium text-sm sm:max-w-none">
+                        {/* 移动端：标题和agentMeta在同一行 */}
+                        <div className="sm:hidden flex items-center gap-1.5 min-w-0">
+                            <div className="truncate font-medium text-sm">
+                                {title}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowAgentDetails(!showAgentDetails)}
+                                className="text-[10px] text-[var(--app-hint)] truncate text-left"
+                            >
+                                {[agentLabel, project?.name].filter(Boolean).join(' · ')}
+                            </button>
+                        </div>
+                        {/* PC端：标题 */}
+                        <div className="hidden sm:block max-w-[180px] truncate font-medium text-sm sm:max-w-none">
                             {title}
                         </div>
                         {/* PC端：显示完整 agentMeta */}
                         <div className="hidden sm:block text-[10px] text-[var(--app-hint)] truncate">
                             {agentMeta}
                         </div>
-                        {/* 移动端：显示 agent · project，点击弹出详情 */}
-                        <button
-                            type="button"
-                            onClick={() => setShowAgentDetails(!showAgentDetails)}
-                            className="sm:hidden text-[10px] text-[var(--app-hint)] truncate max-w-[180px] text-left"
-                        >
-                            {[agentLabel, project?.name].filter(Boolean).join(' · ')}
-                        </button>
                         {/* 移动端详情弹出框 */}
                         {showAgentDetails && (
                             <div className="sm:hidden absolute left-0 top-full z-30 mt-1 min-w-[200px] max-w-[280px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-2 px-3 shadow-lg">
