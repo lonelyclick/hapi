@@ -225,9 +225,15 @@ function getCreatorDisplayName(email: string | undefined | null): string | null 
 function SessionItem(props: {
     session: SessionSummary
     project: Project | null
+    currentUserEmail: string | null
     onSelect: (sessionId: string) => void
 }) {
-    const { session: s, project, onSelect } = props
+    const { session: s, project, currentUserEmail, onSelect } = props
+
+    // Check if session was created by current user
+    const isMySession = currentUserEmail && s.createdBy
+        ? s.createdBy.toLowerCase() === currentUserEmail.toLowerCase()
+        : false
     const progress = getTodoProgress(s)
     const hasPending = s.pendingRequestsCount > 0
     const runtimeAgent = s.metadata?.runtimeAgent?.trim()
@@ -295,16 +301,16 @@ function SessionItem(props: {
                             </span>
                         </>
                     )}
-                    {s.createdBy && (
-                        <>
-                            <span className="opacity-50">·</span>
-                            <span className="shrink-0" title={s.createdBy}>{getCreatorDisplayName(s.createdBy)}</span>
-                        </>
-                    )}
                     {project && (
                         <>
                             <span className="opacity-50">·</span>
                             <span className="truncate" title={project.path}>{project.name}</span>
+                        </>
+                    )}
+                    {!isMySession && s.createdBy && (
+                        <>
+                            <span className="opacity-50">·</span>
+                            <span className="shrink-0" title={s.createdBy}>{getCreatorDisplayName(s.createdBy)}</span>
                         </>
                     )}
                 </div>
@@ -418,6 +424,7 @@ export function SessionList(props: {
                             key={session.id}
                             session={session}
                             project={sessionProjectMap.get(session.id) ?? null}
+                            currentUserEmail={props.currentUserEmail}
                             onSelect={props.onSelect}
                         />
                     ))
