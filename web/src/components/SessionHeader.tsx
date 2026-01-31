@@ -390,7 +390,7 @@ export function SessionHeader(props: {
                                 onClick={props.onRefreshAccount}
                                 disabled={props.refreshAccountDisabled}
                                 className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-green-500/10 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Refresh account (keep context)"
+                                title="Refresh session (keep context)"
                             >
                                 <RefreshAccountIcon />
                             </button>
@@ -495,7 +495,7 @@ export function SessionHeader(props: {
                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <RefreshAccountIcon className="shrink-0" />
-                                        <span className="whitespace-nowrap">Refresh Account</span>
+                                        <span className="whitespace-nowrap">Refresh Session</span>
                                     </button>
                                 ) : null}
                                 {/* 删除会话 - 只有创建者可见 */}
