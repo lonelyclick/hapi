@@ -380,6 +380,14 @@ export type StoredAllowedEmail = {
     createdAt: number
 }
 
+// Session 共享类型
+export type StoredSessionShare = {
+    sessionId: string
+    sharedWithEmail: string
+    sharedByEmail: string
+    createdAt: number
+}
+
 // PostgreSQL 配置类型
 export type PostgresConfig = {
     host: string

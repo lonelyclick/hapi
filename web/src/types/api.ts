@@ -212,6 +212,19 @@ export type AuthResponse = {
 export type SessionsResponse = { sessions: SessionSummary[] }
 export type SessionResponse = { session: Session }
 export type DeleteSessionResponse = { ok: true }
+
+// Session Shares 类型
+export type SessionShare = {
+    sessionId: string
+    sharedWithEmail: string
+    sharedByEmail: string
+    createdAt: number
+}
+
+export type SessionSharesResponse = { shares: SessionShare[] }
+export type AddSessionShareResponse = { ok: true }
+export type RemoveSessionShareResponse = { ok: true }
+export type AllowedUsersResponse = { users: { email: string; role: string }[] }
 export type MessageCountResponse = { count: number }
 export type MessagesResponse = {
     messages: DecryptedMessage[]

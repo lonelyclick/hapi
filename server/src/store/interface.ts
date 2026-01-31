@@ -53,6 +53,8 @@ import type {
     AutoIterNotificationLevel,
 } from './types'
 
+export type { StoredSessionShare } from './types'
+
 export interface IStore {
     // === Session 操作 ===
     getOrCreateSession(tag: string, metadata: unknown, agentState: unknown, namespace: string): Promise<StoredSession>
@@ -105,6 +107,13 @@ export interface IStore {
     removeAllowedEmail(email: string): Promise<boolean>
     isEmailAllowed(email: string): Promise<boolean>
     getEmailRole(email: string): Promise<UserRole | null>
+
+    // === Session Shares 操作 (Keycloak用户之间的session共享) ===
+    getSessionShares(sessionId: string): Promise<StoredSessionShare[]>
+    addSessionShare(sessionId: string, sharedWithEmail: string, sharedByEmail: string): Promise<boolean>
+    removeSessionShare(sessionId: string, sharedWithEmail: string): Promise<boolean>
+    getSessionsSharedWithUser(email: string): Promise<string[]>  // 返回session IDs
+    isSessionSharedWith(sessionId: string, email: string): Promise<boolean>
 
     // === Project 操作 ===
     getProjects(): Promise<StoredProject[]>

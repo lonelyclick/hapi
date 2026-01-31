@@ -161,6 +161,18 @@ export class PostgresStore implements IStore {
                 created_at BIGINT NOT NULL
             );
 
+            -- Session Shares 表 (Keycloak用户之间的session共享)
+            CREATE TABLE IF NOT EXISTS session_shares (
+                id SERIAL PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                shared_with_email TEXT NOT NULL,
+                shared_by_email TEXT NOT NULL,
+                created_at BIGINT NOT NULL,
+                UNIQUE(session_id, shared_with_email)
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_shares_session_id ON session_shares(session_id);
+            CREATE INDEX IF NOT EXISTS idx_session_shares_shared_with ON session_shares(shared_with_email);
+
             -- Projects 表
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
@@ -960,6 +972,58 @@ export class PostgresStore implements IStore {
     async getEmailRole(email: string): Promise<UserRole | null> {
         const result = await this.pool.query('SELECT role FROM allowed_emails WHERE email = $1', [email])
         return result.rows.length > 0 ? result.rows[0].role as UserRole : null
+    }
+
+    // ========== Session Shares 操作 ==========
+
+    async getSessionShares(sessionId: string): Promise<StoredSessionShare[]> {
+        const result = await this.pool.query(
+            'SELECT session_id, shared_with_email, shared_by_email, created_at FROM session_shares WHERE session_id = $1',
+            [sessionId]
+        )
+        return result.rows.map(row => ({
+            sessionId: row.session_id,
+            sharedWithEmail: row.shared_with_email,
+            sharedByEmail: row.shared_by_email,
+            createdAt: Number(row.created_at)
+        }))
+    }
+
+    async addSessionShare(sessionId: string, sharedWithEmail: string, sharedByEmail: string): Promise<boolean> {
+        const now = Date.now()
+        try {
+            await this.pool.query(
+                'INSERT INTO session_shares (session_id, shared_with_email, shared_by_email, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT (session_id, shared_with_email) DO NOTHING',
+                [sessionId, sharedWithEmail, sharedByEmail, now]
+            )
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    async removeSessionShare(sessionId: string, sharedWithEmail: string): Promise<boolean> {
+        const result = await this.pool.query(
+            'DELETE FROM session_shares WHERE session_id = $1 AND shared_with_email = $2',
+            [sessionId, sharedWithEmail]
+        )
+        return (result.rowCount ?? 0) > 0
+    }
+
+    async getSessionsSharedWithUser(email: string): Promise<string[]> {
+        const result = await this.pool.query(
+            'SELECT DISTINCT session_id FROM session_shares WHERE shared_with_email = $1',
+            [email]
+        )
+        return result.rows.map(row => row.session_id as string)
+    }
+
+    async isSessionSharedWith(sessionId: string, email: string): Promise<boolean> {
+        const result = await this.pool.query(
+            'SELECT 1 FROM session_shares WHERE session_id = $1 AND shared_with_email = $2 LIMIT 1',
+            [sessionId, email]
+        )
+        return result.rows.length > 0
     }
 
     // ========== Project 操作 ==========

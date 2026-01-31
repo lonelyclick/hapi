@@ -492,7 +492,12 @@ export function createSessionsRoutes(
 
         // Filter by created_by for Keycloak users
         if (isKeycloakUser && email) {
-            storedSessions = storedSessions.filter(s => !s.createdBy || s.createdBy === email)
+            // Keycloak用户看到：1) 自己创建的session 2) 被共享给自己的session
+            const sharedWithMe = await store.getSessionsSharedWithUser(email)
+            const sharedSet = new Set(sharedWithMe)
+            storedSessions = storedSessions.filter(s =>
+                !s.createdBy || s.createdBy === email || sharedSet.has(s.id)
+            )
         }
 
         // Get sessions from memory (SyncEngine) - these have live data
@@ -1219,6 +1224,121 @@ export function createSessionsRoutes(
                 creator: true
             }
         })
+    })
+
+    // ==================== Session Shares (Keycloak用户之间的session共享) ====================
+
+    /**
+     * 获取session的共享列表
+     * GET /sessions/:id/shares
+     */
+    app.get('/sessions/:id/shares', async (c) => {
+        const sessionId = c.req.param('id')
+        const email = c.get('email')
+
+        // 验证session存在且用户有权限（是创建者或已被共享）
+        const storedSession = await store.getSession(sessionId)
+        if (!storedSession) {
+            return c.json({ error: 'Session not found' }, 404)
+        }
+
+        // 检查权限：必须是创建者或已被共享的用户
+        if (storedSession.createdBy !== email) {
+            const isShared = await store.isSessionSharedWith(sessionId, email)
+            if (!isShared) {
+                return c.json({ error: 'Forbidden' }, 403)
+            }
+        }
+
+        const shares = await store.getSessionShares(sessionId)
+        return c.json({ shares })
+    })
+
+    /**
+     * 添加session共享
+     * POST /sessions/:id/shares
+     * Body: { email: string }
+     */
+    app.post('/sessions/:id/shares', async (c) => {
+        const sessionId = c.req.param('id')
+        const email = c.get('email')
+
+        if (!email) {
+            return c.json({ error: 'Email required' }, 400)
+        }
+
+        const body = await c.req.json().catch(() => null)
+        if (!body || typeof body.email !== 'string') {
+            return c.json({ error: 'Invalid body, expected { email: string }' }, 400)
+        }
+
+        const sharedWithEmail = body.email.trim()
+
+        // 验证session存在
+        const storedSession = await store.getSession(sessionId)
+        if (!storedSession) {
+            return c.json({ error: 'Session not found' }, 404)
+        }
+
+        // 只有创建者可以分享
+        if (storedSession.createdBy !== email) {
+            return c.json({ error: 'Only session owner can share' }, 403)
+        }
+
+        // 不能分享给自己
+        if (sharedWithEmail === email) {
+            return c.json({ error: 'Cannot share with yourself' }, 400)
+        }
+
+        // 验证被分享用户存在于allowed_emails中
+        const isAllowed = await store.isEmailAllowed(sharedWithEmail)
+        if (!isAllowed) {
+            return c.json({ error: 'User not found' }, 404)
+        }
+
+        const success = await store.addSessionShare(sessionId, sharedWithEmail, email)
+        if (!success) {
+            return c.json({ error: 'Failed to share session' }, 500)
+        }
+
+        return c.json({ ok: true })
+    })
+
+    /**
+     * 移除session共享
+     * DELETE /sessions/:id/shares/:email
+     */
+    app.delete('/sessions/:id/shares/:email', async (c) => {
+        const sessionId = c.req.param('id')
+        const email = c.get('email')
+        const sharedWithEmail = c.req.param('email')
+
+        if (!email) {
+            return c.json({ error: 'Email required' }, 400)
+        }
+
+        // 验证session存在
+        const storedSession = await store.getSession(sessionId)
+        if (!storedSession) {
+            return c.json({ error: 'Session not found' }, 404)
+        }
+
+        // 只有创建者可以移除共享
+        if (storedSession.createdBy !== email) {
+            return c.json({ error: 'Only session owner can unshare' }, 403)
+        }
+
+        const success = await store.removeSessionShare(sessionId, sharedWithEmail)
+        return c.json({ ok: success })
+    })
+
+    /**
+     * 获取所有允许的用户列表（用于分享时选择）
+     * GET /users/allowed
+     */
+    app.get('/users/allowed', async (c) => {
+        const allowedUsers = await store.getAllowedUsers()
+        return c.json({ users: allowedUsers.map(u => ({ email: u.email, role: u.role })) })
     })
 
     return app

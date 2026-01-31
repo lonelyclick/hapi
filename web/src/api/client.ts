@@ -3,6 +3,7 @@ import type {
     AddMemberResponse,
     AddProjectResponse,
     AgentGroupType,
+    AllowedUsersResponse,
     AuthResponse,
     BroadcastResponse,
     CreateGroupResponse,
@@ -31,11 +32,15 @@ import type {
     ResumeSessionResponse,
     RolePromptsResponse,
     SendGroupMessageResponse,
+    SessionShare,
+    SessionSharesResponse,
     SetRolePromptResponse,
     SlashCommandsResponse,
     SpeechToTextStreamRequest,
     SpeechToTextStreamResponse,
     SpawnResponse,
+    AddSessionShareResponse,
+    RemoveSessionShareResponse,
     SessionResponse,
     SessionsResponse,
     UpdateGroupResponse,
@@ -240,6 +245,29 @@ export class ApiClient {
         return await this.request<DeleteSessionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}`, {
             method: 'DELETE'
         })
+    }
+
+    // ========== Session Shares ==========
+
+    async getSessionShares(sessionId: string): Promise<SessionSharesResponse> {
+        return await this.request<SessionSharesResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/shares`)
+    }
+
+    async addSessionShare(sessionId: string, email: string): Promise<AddSessionShareResponse> {
+        return await this.request<AddSessionShareResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/shares`, {
+            method: 'POST',
+            body: JSON.stringify({ email })
+        })
+    }
+
+    async removeSessionShare(sessionId: string, email: string): Promise<RemoveSessionShareResponse> {
+        return await this.request<RemoveSessionShareResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/shares/${encodeURIComponent(email)}`, {
+            method: 'DELETE'
+        })
+    }
+
+    async getAllowedUsers(): Promise<AllowedUsersResponse> {
+        return await this.request<AllowedUsersResponse>('/api/users/allowed')
     }
 
     async getMessages(sessionId: string, options: { beforeSeq?: number | null; limit?: number }): Promise<MessagesResponse> {
