@@ -1,11 +1,43 @@
 /**
  * IndexedDB-based token storage for PWA support
  * Service Workers can access IndexedDB but not localStorage
+ * Falls back to localStorage if IndexedDB is unavailable
  */
 
 const DB_NAME = 'hapi-auth'
 const DB_VERSION = 1
 const STORE_NAME = 'tokens'
+const LOCAL_STORAGE_KEY = 'hapi-auth-tokens'
+
+// Check if IndexedDB is available
+let indexedDBAvailable = true
+
+// Fallback to localStorage when IndexedDB fails
+function saveTokensToLocal(data: TokenData): void {
+    try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data))
+    } catch (e) {
+        console.error('[TokenStorage] Failed to save to localStorage:', e)
+    }
+}
+
+function getTokensFromLocal(): TokenData | null {
+    try {
+        const data = localStorage.getItem(LOCAL_STORAGE_KEY)
+        return data ? JSON.parse(data) : null
+    } catch (e) {
+        console.error('[TokenStorage] Failed to read from localStorage:', e)
+        return null
+    }
+}
+
+function clearTokensFromLocal(): void {
+    try {
+        localStorage.removeItem(LOCAL_STORAGE_KEY)
+    } catch (e) {
+        console.error('[TokenStorage] Failed to clear from localStorage:', e)
+    }
+}
 
 interface TokenData {
     accessToken: string
@@ -20,37 +52,57 @@ interface TokenData {
 
 let db: IDBDatabase | null = null
 
+// Timeout for IndexedDB operations (3 seconds)
+const INIT_TIMEOUT = 3000
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        )
+    ])
+}
+
 /**
  * Open IndexedDB database
  */
 async function openDB(): Promise<IDBDatabase> {
     if (db) return db
 
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION)
+    return withTimeout(
+        new Promise<IDBDatabase>((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION)
 
-        request.onerror = () => {
-            reject(new Error(`Failed to open IndexedDB: ${request.error}`))
-        }
-
-        request.onsuccess = () => {
-            db = request.result
-            resolve(db)
-        }
-
-        request.onupgradeneeded = (event) => {
-            const database = (event.target as IDBOpenDBRequest).result
-            if (!database.objectStoreNames.contains(STORE_NAME)) {
-                database.createObjectStore(STORE_NAME)
+            request.onerror = () => {
+                reject(new Error(`Failed to open IndexedDB: ${request.error}`))
             }
-        }
-    })
+
+            request.onsuccess = () => {
+                db = request.result
+                resolve(db)
+            }
+
+            request.onupgradeneeded = (event) => {
+                const database = (event.target as IDBOpenDBRequest).result
+                if (!database.objectStoreNames.contains(STORE_NAME)) {
+                    database.createObjectStore(STORE_NAME)
+                }
+            }
+        }),
+        INIT_TIMEOUT,
+        'IndexedDB open timeout'
+    )
 }
 
 /**
- * Get token data from IndexedDB
+ * Get token data from IndexedDB (with localStorage fallback)
  */
 async function getTokens(): Promise<TokenData | null> {
+    if (!indexedDBAvailable) {
+        return getTokensFromLocal()
+    }
+
     try {
         const database = await openDB()
         return new Promise((resolve, reject) => {
@@ -67,15 +119,21 @@ async function getTokens(): Promise<TokenData | null> {
             }
         })
     } catch (error) {
-        console.error('[TokenStorage] Failed to get tokens:', error)
-        return null
+        console.warn('[TokenStorage] IndexedDB unavailable, falling back to localStorage:', error)
+        indexedDBAvailable = false
+        return getTokensFromLocal()
     }
 }
 
 /**
- * Save token data to IndexedDB
+ * Save token data to IndexedDB (with localStorage fallback)
  */
 async function saveTokenData(data: TokenData): Promise<void> {
+    if (!indexedDBAvailable) {
+        saveTokensToLocal(data)
+        return
+    }
+
     try {
         const database = await openDB()
         return new Promise((resolve, reject) => {
@@ -92,15 +150,21 @@ async function saveTokenData(data: TokenData): Promise<void> {
             }
         })
     } catch (error) {
-        console.error('[TokenStorage] Failed to save tokens:', error)
-        throw error
+        console.warn('[TokenStorage] IndexedDB unavailable, falling back to localStorage:', error)
+        indexedDBAvailable = false
+        saveTokensToLocal(data)
     }
 }
 
 /**
- * Clear all tokens from IndexedDB
+ * Clear all tokens from IndexedDB (with localStorage fallback)
  */
 async function clearTokenData(): Promise<void> {
+    if (!indexedDBAvailable) {
+        clearTokensFromLocal()
+        return
+    }
+
     try {
         const database = await openDB()
         return new Promise((resolve, reject) => {
@@ -117,8 +181,9 @@ async function clearTokenData(): Promise<void> {
             }
         })
     } catch (error) {
-        console.error('[TokenStorage] Failed to clear tokens:', error)
-        throw error
+        console.warn('[TokenStorage] IndexedDB unavailable, falling back to localStorage:', error)
+        indexedDBAvailable = false
+        clearTokensFromLocal()
     }
 }
 
@@ -139,7 +204,12 @@ function ensureInitialized(): Promise<void> {
     if (!initPromise) {
         initPromise = (async () => {
             try {
-                const data = await getTokens()
+                // Add timeout to prevent hanging
+                const data = await withTimeout(
+                    getTokens(),
+                    INIT_TIMEOUT,
+                    'Token storage initialization timeout'
+                )
                 if (data) {
                     syncCache.accessToken = data.accessToken
                     syncCache.refreshToken = data.refreshToken
@@ -148,6 +218,7 @@ function ensureInitialized(): Promise<void> {
                 }
             } catch (error) {
                 console.error('[TokenStorage] Failed to initialize cache:', error)
+                // If IndexedDB fails, continue with empty cache (user will need to login)
             } finally {
                 isInitialized = true
             }
