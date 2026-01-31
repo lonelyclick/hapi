@@ -4,7 +4,6 @@ import { ViewersBadge } from './ViewersBadge'
 import { LoadingState } from './LoadingState'
 
 // Filter types
-type CreatorFilter = 'mine' | 'others'
 type ArchiveFilter = boolean  // true = show archived (offline) sessions only
 
 function getSessionPath(session: SessionSummary): string | null {
@@ -33,13 +32,6 @@ function matchSessionToProject(session: SessionSummary, projects: Project[]): Pr
     return null
 }
 
-// Check if session was created by current user
-function isMySession(session: SessionSummary, currentUserEmail: string | null): boolean {
-    if (!currentUserEmail) return false
-    if (!session.createdBy) return false
-    return session.createdBy.toLowerCase() === currentUserEmail.toLowerCase()
-}
-
 // Get agent type (used for OpenCode display logic)
 function getAgentType(session: SessionSummary): 'claude' | 'codex' | 'opencode' | 'other' {
     const flavor = session.metadata?.flavor?.trim()?.toLowerCase()
@@ -63,15 +55,9 @@ function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
 // Filter sessions
 function filterSessions(
     sessions: SessionSummary[],
-    creatorFilter: CreatorFilter,
-    archiveFilter: ArchiveFilter,
-    currentUserEmail: string | null
+    archiveFilter: ArchiveFilter
 ): SessionSummary[] {
     return sessions.filter(session => {
-        // Creator filter
-        if (creatorFilter === 'mine' && !isMySession(session, currentUserEmail)) return false
-        if (creatorFilter === 'others' && isMySession(session, currentUserEmail)) return false
-
         // Archive filter: if true, show only offline sessions; if false, show only active sessions
         if (archiveFilter && session.active) return false
         if (!archiveFilter && !session.active) return false
@@ -239,10 +225,9 @@ function getCreatorDisplayName(email: string | undefined | null): string | null 
 function SessionItem(props: {
     session: SessionSummary
     project: Project | null
-    showCreator: boolean
     onSelect: (sessionId: string) => void
 }) {
-    const { session: s, project, showCreator, onSelect } = props
+    const { session: s, project, onSelect } = props
     const progress = getTodoProgress(s)
     const hasPending = s.pendingRequestsCount > 0
     const runtimeAgent = s.metadata?.runtimeAgent?.trim()
@@ -310,7 +295,7 @@ function SessionItem(props: {
                             </span>
                         </>
                     )}
-                    {showCreator && s.createdBy && (
+                    {s.createdBy && (
                         <>
                             <span className="opacity-50">·</span>
                             <span className="shrink-0" title={s.createdBy}>{getCreatorDisplayName(s.createdBy)}</span>
@@ -343,31 +328,6 @@ function SessionItem(props: {
     )
 }
 
-// Filter button component
-function FilterButton<T extends string>(props: {
-    value: T
-    current: T
-    label: string
-    onClick: (value: T) => void
-}) {
-    const isActive = props.value === props.current
-    return (
-        <button
-            type="button"
-            onClick={() => props.onClick(props.value)}
-            className={`
-                px-2 py-1 text-xs rounded-md transition-colors
-                ${isActive
-                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
-                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
-                }
-            `}
-        >
-            {props.label}
-        </button>
-    )
-}
-
 export function SessionList(props: {
     sessions: SessionSummary[]
     projects: Project[]
@@ -378,10 +338,9 @@ export function SessionList(props: {
     isLoading: boolean
     renderHeader?: boolean
 }) {
-    const { renderHeader = true, currentUserEmail } = props
+    const { renderHeader = true } = props
 
-    // Filter state - defaults: mine, not archived
-    const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>('mine')
+    // Filter state - defaults: not archived
     const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>(false)
 
     // Build session to project mapping (still used for display)
@@ -397,9 +356,9 @@ export function SessionList(props: {
 
     // Filter and sort sessions (flat display)
     const filteredSessions = useMemo(() => {
-        const filtered = filterSessions(props.sessions, creatorFilter, archiveFilter, currentUserEmail)
+        const filtered = filterSessions(props.sessions, archiveFilter)
         return sortSessions(filtered)
-    }, [props.sessions, creatorFilter, archiveFilter, currentUserEmail])
+    }, [props.sessions, archiveFilter])
 
     // Statistics
     const activeCount = filteredSessions.filter(s => s.active).length
@@ -426,24 +385,20 @@ export function SessionList(props: {
             {/* Filters */}
             <div className="flex items-center gap-4 px-3 py-2 border-b border-[var(--app-divider)]">
                 <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-xs text-[var(--app-hint)] shrink-0">Creator:</span>
-                    <div className="flex gap-1">
-                        <FilterButton value="mine" current={creatorFilter} label="Mine" onClick={setCreatorFilter} />
-                        <FilterButton value="others" current={creatorFilter} label="Others" onClick={setCreatorFilter} />
-                        <button
-                            type="button"
-                            onClick={() => setArchiveFilter(!archiveFilter)}
-                            className={`
-                                px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
-                                ${archiveFilter
-                                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
-                                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
-                                }
-                            `}
-                        >
-                            Archive
-                        </button>
-                    </div>
+                    <span className="text-xs text-[var(--app-hint)] shrink-0">Filter:</span>
+                    <button
+                        type="button"
+                        onClick={() => setArchiveFilter(!archiveFilter)}
+                        className={`
+                            px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                            ${archiveFilter
+                                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                            }
+                        `}
+                    >
+                        {archiveFilter ? 'Archive' : 'Active'}
+                    </button>
                 </div>
             </div>
 
@@ -463,7 +418,6 @@ export function SessionList(props: {
                             key={session.id}
                             session={session}
                             project={sessionProjectMap.get(session.id) ?? null}
-                            showCreator={creatorFilter !== 'mine'}
                             onSelect={props.onSelect}
                         />
                     ))
