@@ -310,7 +310,7 @@ function SessionItem(props: {
                     {!isMySession && s.createdBy && (
                         <>
                             <span className="opacity-50">·</span>
-                            <span className="shrink-0" title={s.createdBy}>{getCreatorDisplayName(s.createdBy)}</span>
+                            <span className="shrink-0" title={s.createdBy}>share by {getCreatorDisplayName(s.createdBy)}</span>
                         </>
                     )}
                 </div>
