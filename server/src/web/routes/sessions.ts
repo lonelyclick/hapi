@@ -473,22 +473,33 @@ export function createSessionsRoutes(
         const getPendingCount = (s: Session) => s.agentState?.requests ? Object.keys(s.agentState.requests).length : 0
 
         const namespace = c.get('namespace')
+        const email = c.get('email')
         const sseManager = getSseManager()
 
-        // Keycloak users (using default namespace) see all sessions across all namespaces
-        // CLI users (with custom namespace) see only their own namespace
+        // Keycloak users (namespace='default') see only their own sessions (created_by matches their email)
+        // CLI users (with custom namespace) see only sessions in their namespace
         const isKeycloakUser = namespace === 'default'
+
+        // Get sessions from database
+        let storedSessions: StoredSession[]
+        if (isKeycloakUser) {
+            // Keycloak users see all sessions (filter by created_by after fetching)
+            storedSessions = await store.getSessions()
+        } else {
+            // CLI users see only their namespace
+            storedSessions = await store.getSessionsByNamespace(namespace)
+        }
+
+        // Filter by created_by for Keycloak users
+        if (isKeycloakUser && email) {
+            storedSessions = storedSessions.filter(s => !s.createdBy || s.createdBy === email)
+        }
 
         // Get sessions from memory (SyncEngine) - these have live data
         const memorySessions = isKeycloakUser
             ? engine.getSessions()
             : engine.getSessionsByNamespace(namespace)
         const memorySessionMap = new Map(memorySessions.map(s => [s.id, s]))
-
-        // Get all sessions from database (Keycloak sees all, CLI sees only their namespace)
-        const storedSessions = isKeycloakUser
-            ? await store.getSessions()
-            : await store.getSessionsByNamespace(namespace)
 
         // Determine if a session is truly active:
         // - Database active=false means session is archived (source of truth for offline state)
