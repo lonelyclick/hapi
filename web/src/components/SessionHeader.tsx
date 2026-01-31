@@ -4,6 +4,7 @@ import type { Project, Session, SessionViewer } from '@/types/api'
 import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
 import { getClientId } from '@/lib/client-identity'
 import { ViewersBadge } from './ViewersBadge'
+import { ShareDialog } from './ShareDialog'
 import { useAppContext } from '@/lib/app-context'
 import { JoinReviewButton } from './Review'
 
@@ -191,6 +192,29 @@ function RefreshAccountIcon(props: { className?: string }) {
     )
 }
 
+function ShareIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+    )
+}
+
 function getAgentLabel(session: Session): string {
     const flavor = session.metadata?.flavor?.trim()
     if (flavor === 'claude') return 'Claude'
@@ -233,6 +257,9 @@ export function SessionHeader(props: {
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
     const runtimeAgent = props.session.metadata?.runtimeAgent?.trim() || null
     const runtimeModel = useMemo(() => formatRuntimeModel(props.session), [props.session])
+
+    // 分享对话框状态
+    const [showShareDialog, setShowShareDialog] = useState(false)
 
     // 查询项目列表
     const { data: projectsData } = useQuery({
@@ -567,6 +594,17 @@ export function SessionHeader(props: {
                     </div>}
                     {/* PC端：独立按钮 */}
                     <div className="hidden sm:flex items-center gap-1.5">
+                        {/* Share button - 只有创建者可以分享 */}
+                        {isCreator && (
+                            <button
+                                type="button"
+                                onClick={() => setShowShareDialog(true)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-purple-500/10 hover:text-purple-600"
+                                title="Share session"
+                            >
+                                <ShareIcon />
+                            </button>
+                        )}
                         {props.onRefreshAccount ? (
                             <button
                                 type="button"
@@ -673,6 +711,20 @@ export function SessionHeader(props: {
                                         )}
                                     </button>
                                 )}
+                                {/* 分享会话 - 只有创建者可以分享 */}
+                                {isCreator && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false)
+                                            setShowShareDialog(true)
+                                        }}
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
+                                    >
+                                        <ShareIcon className="shrink-0" />
+                                        <span>Share Session</span>
+                                    </button>
+                                )}
                                 {/* 刷新账号 */}
                                 {props.onRefreshAccount ? (
                                     <button
@@ -708,6 +760,13 @@ export function SessionHeader(props: {
                     </div>
                 </div>
             </div>
+            {/* Share Dialog */}
+            {showShareDialog && (
+                <ShareDialog
+                    sessionId={props.session.id}
+                    onClose={() => setShowShareDialog(false)}
+                />
+            )}
         </div>
     )
 }
