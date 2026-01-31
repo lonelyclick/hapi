@@ -137,12 +137,13 @@ export function NewSession(props: {
     const [isCustomPath, setIsCustomPath] = useState(false)
     const [spawnLogs, setSpawnLogs] = useState<SpawnLogEntry[]>([])
 
-    // Fetch projects
+    // Fetch projects for selected machine (includes global projects where machineId is null)
     const { data: projectsData, isLoading: projectsLoading } = useQuery({
-        queryKey: ['projects'],
+        queryKey: ['projects', machineId],
         queryFn: async () => {
-            return await props.api.getProjects()
-        }
+            return await props.api.getProjects(machineId ?? undefined)
+        },
+        enabled: machineId !== null
     })
 
     const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
@@ -169,14 +170,15 @@ export function NewSession(props: {
         }
     }, [props.machines, machineId])
 
-    // Initialize with first available project
+    // Reset project path when machine changes (different machine may have different projects)
     useEffect(() => {
-        if (projectPath.trim()) return
-
+        // When machine changes, reset to first available project for that machine
         if (projects.length > 0) {
             setProjectPath(projects[0].path)
+        } else {
+            setProjectPath('')
         }
-    }, [projectPath, projects])
+    }, [machineId, projects])
 
     const handleMachineChange = useCallback((newMachineId: string) => {
         setMachineId(newMachineId)

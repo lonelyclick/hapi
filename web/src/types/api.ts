@@ -130,6 +130,7 @@ export type Project = {
     name: string
     path: string
     description: string | null
+    machineId: string | null  // 关联的机器 ID，null 表示通用项目
     createdAt: number
     updatedAt: number
 }

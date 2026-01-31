@@ -116,10 +116,10 @@ export interface IStore {
     isSessionSharedWith(sessionId: string, email: string): Promise<boolean>
 
     // === Project 操作 ===
-    getProjects(): Promise<StoredProject[]>
+    getProjects(machineId?: string | null): Promise<StoredProject[]>  // 按 machineId 过滤，null 或不传则返回所有
     getProject(id: string): Promise<StoredProject | null>
-    addProject(name: string, path: string, description?: string): Promise<StoredProject | null>
-    updateProject(id: string, name: string, path: string, description?: string): Promise<StoredProject | null>
+    addProject(name: string, path: string, description?: string, machineId?: string | null): Promise<StoredProject | null>
+    updateProject(id: string, name: string, path: string, description?: string, machineId?: string | null): Promise<StoredProject | null>
     removeProject(id: string): Promise<boolean>
 
     // === Role Prompt 操作 ===

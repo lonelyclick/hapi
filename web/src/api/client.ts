@@ -546,21 +546,24 @@ export class ApiClient {
     }
 
     // 项目管理
-    async getProjects(): Promise<ProjectsResponse> {
-        return await this.request<ProjectsResponse>('/api/settings/projects')
+    async getProjects(machineId?: string | null): Promise<ProjectsResponse> {
+        const url = machineId !== undefined
+            ? `/api/settings/projects?machineId=${encodeURIComponent(machineId)}`
+            : '/api/settings/projects'
+        return await this.request<ProjectsResponse>(url)
     }
 
-    async addProject(name: string, path: string, description?: string): Promise<AddProjectResponse> {
+    async addProject(name: string, path: string, description?: string, machineId?: string | null): Promise<AddProjectResponse> {
         return await this.request<AddProjectResponse>('/api/settings/projects', {
             method: 'POST',
-            body: JSON.stringify({ name, path, description })
+            body: JSON.stringify({ name, path, description, machineId })
         })
     }
 
-    async updateProject(id: string, name: string, path: string, description?: string): Promise<UpdateProjectResponse> {
+    async updateProject(id: string, name: string, path: string, description?: string, machineId?: string | null): Promise<UpdateProjectResponse> {
         return await this.request<UpdateProjectResponse>(`/api/settings/projects/${encodeURIComponent(id)}`, {
             method: 'PUT',
-            body: JSON.stringify({ name, path, description })
+            body: JSON.stringify({ name, path, description, machineId })
         })
     }
 

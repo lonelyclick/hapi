@@ -12,6 +12,13 @@ import * as z from 'zod';
 import { encodeBase64 } from '@/api/encryption';
 import { isProcessAlive } from '@/utils/process';
 
+interface PathMapping {
+  /** Source path prefix (e.g., "/home/guang") */
+  source: string
+  /** Target path prefix (e.g., "/Users/guang") */
+  target: string
+}
+
 interface Settings {
   // This ID is used as the actual database ID on the server
   // All machine operations use this ID
@@ -19,9 +26,55 @@ interface Settings {
   machineIdConfirmedByServer?: boolean
   daemonAutoStartWhenRunningHappy?: boolean
   cliApiToken?: string
+  /** Path mapping for cross-platform project directories */
+  pathMapping?: Record<string, string>
 }
 
 const defaultSettings: Settings = {}
+
+/**
+ * Apply path mapping to a given path
+ * Finds the longest matching source prefix and replaces it with the target
+ * @param path The original path (e.g., "/home/guang/happy/yoho-cbeta")
+ * @param pathMapping Path mapping configuration (e.g., { "/home/guang": "/Users/guang" })
+ * @returns The mapped path (e.g., "/Users/guang/happy/yoho-cbeta")
+ */
+export function applyPathMapping(
+  path: string,
+  pathMapping: Record<string, string> | undefined
+): string {
+  if (!pathMapping || Object.keys(pathMapping).length === 0) {
+    return path
+  }
+
+  // Find the longest matching source prefix
+  let matchedSource: string | null = null
+  let matchedTarget: string | null = null
+
+  for (const [source, target] of Object.entries(pathMapping)) {
+    // Normalize paths for comparison
+    const normalizedSource = source.endsWith('/') ? source : source + '/'
+    const normalizedPath = path + '/'
+
+    if (normalizedPath.startsWith(normalizedSource)) {
+      // Prefer longer (more specific) matches
+      if (!matchedSource || source.length > matchedSource.length) {
+        matchedSource = source
+        matchedTarget = target
+      }
+    }
+  }
+
+  if (matchedSource && matchedTarget) {
+    const relativePath = path.slice(matchedSource.length)
+    const mappedPath = matchedTarget.endsWith('/')
+      ? matchedTarget + relativePath.slice(1)
+      : matchedTarget + relativePath
+    return mappedPath
+  }
+
+  return path
+}
 
 /**
  * Daemon state persisted locally (different from API DaemonState)

@@ -6,13 +6,15 @@ import type { IStore, UserRole } from '../../store'
 const addProjectSchema = z.object({
     name: z.string().min(1).max(100),
     path: z.string().min(1).max(500),
-    description: z.string().max(500).optional()
+    description: z.string().max(500).optional(),
+    machineId: z.string().nullable().optional()
 })
 
 const updateProjectSchema = z.object({
     name: z.string().min(1).max(100),
     path: z.string().min(1).max(500),
-    description: z.string().max(500).optional()
+    description: z.string().max(500).optional(),
+    machineId: z.string().nullable().optional()
 })
 
 const setRolePromptSchema = z.object({
@@ -38,9 +40,12 @@ export function createSettingsRoutes(
 
     // ==================== 项目管理 ====================
 
-    // 获取所有项目
+    // 获取所有项目（支持按 machineId 过滤）
     app.get('/settings/projects', async (c) => {
-        const projects = await store.getProjects()
+        const machineId = c.req.query('machineId')
+        // machineId 参数为空字符串时当作 null 处理（获取通用项目）
+        const filterMachineId = machineId === '' ? null : machineId
+        const projects = await store.getProjects(filterMachineId)
         return c.json({ projects })
     })
 
@@ -52,7 +57,12 @@ export function createSettingsRoutes(
             return c.json({ error: 'Invalid project data' }, 400)
         }
 
-        const project = await store.addProject(parsed.data.name, parsed.data.path, parsed.data.description)
+        const project = await store.addProject(
+            parsed.data.name,
+            parsed.data.path,
+            parsed.data.description,
+            parsed.data.machineId
+        )
         if (!project) {
             return c.json({ error: 'Failed to add project. Path may already exist.' }, 400)
         }
@@ -70,7 +80,13 @@ export function createSettingsRoutes(
             return c.json({ error: 'Invalid project data' }, 400)
         }
 
-        const project = await store.updateProject(id, parsed.data.name, parsed.data.path, parsed.data.description)
+        const project = await store.updateProject(
+            id,
+            parsed.data.name,
+            parsed.data.path,
+            parsed.data.description,
+            parsed.data.machineId
+        )
         if (!project) {
             return c.json({ error: 'Project not found or path already exists' }, 404)
         }

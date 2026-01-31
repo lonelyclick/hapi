@@ -177,11 +177,18 @@ export class PostgresStore implements IStore {
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
-                path TEXT NOT NULL UNIQUE,
+                path TEXT NOT NULL,
                 description TEXT,
+                machine_id TEXT,
                 created_at BIGINT NOT NULL,
-                updated_at BIGINT NOT NULL
+                updated_at BIGINT NOT NULL,
+                UNIQUE(path, machine_id)
             );
+            CREATE INDEX IF NOT EXISTS idx_projects_machine_id ON projects(machine_id);
+            -- Migration: Add machine_id column if not exists (for existing databases)
+            ALTER TABLE projects ADD COLUMN IF NOT EXISTS machine_id TEXT;
+            -- Drop old unique constraint on path only (if exists)
+            -- Note: PostgreSQL doesn't support IF EXISTS for constraints, so we use DO block
 
             -- Role Prompts 表
             CREATE TABLE IF NOT EXISTS role_prompts (
@@ -1028,13 +1035,32 @@ export class PostgresStore implements IStore {
 
     // ========== Project 操作 ==========
 
-    async getProjects(): Promise<StoredProject[]> {
-        const result = await this.pool.query('SELECT * FROM projects ORDER BY name')
+    async getProjects(machineId?: string | null): Promise<StoredProject[]> {
+        // 获取指定机器的项目 + 通用项目（machine_id IS NULL）
+        let query = 'SELECT * FROM projects'
+        const params: (string | null)[] = []
+
+        if (machineId !== undefined) {
+            // machineId 传入时：返回该机器的项目 + 通用项目
+            // machineId 传入 null：只返回通用项目
+            // machineId 不传入：返回所有项目
+            if (machineId === null) {
+                query += ' WHERE machine_id IS NULL'
+            } else {
+                query += ' WHERE machine_id = $1 OR machine_id IS NULL ORDER BY machine_id NULLS LAST, name'
+                params.push(machineId)
+            }
+        } else {
+            query += ' ORDER BY name'
+        }
+
+        const result = await this.pool.query(query, params)
         return result.rows.map(row => ({
             id: row.id,
             name: row.name,
             path: row.path,
             description: row.description,
+            machineId: row.machine_id as string | null,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }))
@@ -1049,30 +1075,31 @@ export class PostgresStore implements IStore {
             name: row.name,
             path: row.path,
             description: row.description,
+            machineId: row.machine_id as string | null,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }
     }
 
-    async addProject(name: string, path: string, description?: string): Promise<StoredProject | null> {
+    async addProject(name: string, path: string, description?: string, machineId?: string | null): Promise<StoredProject | null> {
         const id = randomUUID()
         const now = Date.now()
         try {
             await this.pool.query(
-                'INSERT INTO projects (id, name, path, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)',
-                [id, name, path, description || null, now, now]
+                'INSERT INTO projects (id, name, path, description, machine_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                [id, name, path, description || null, machineId || null, now, now]
             )
-            return { id, name, path, description: description || null, createdAt: now, updatedAt: now }
+            return { id, name, path, description: description || null, machineId: machineId || null, createdAt: now, updatedAt: now }
         } catch {
             return null
         }
     }
 
-    async updateProject(id: string, name: string, path: string, description?: string): Promise<StoredProject | null> {
+    async updateProject(id: string, name: string, path: string, description?: string, machineId?: string | null): Promise<StoredProject | null> {
         const now = Date.now()
         const result = await this.pool.query(
-            'UPDATE projects SET name = $1, path = $2, description = $3, updated_at = $4 WHERE id = $5 RETURNING *',
-            [name, path, description || null, now, id]
+            'UPDATE projects SET name = $1, path = $2, description = $3, machine_id = $4, updated_at = $5 WHERE id = $6 RETURNING *',
+            [name, path, description || null, machineId || null, now, id]
         )
         if (result.rows.length === 0) return null
         const row = result.rows[0]
@@ -1081,6 +1108,7 @@ export class PostgresStore implements IStore {
             name: row.name,
             path: row.path,
             description: row.description,
+            machineId: row.machine_id as string | null,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }

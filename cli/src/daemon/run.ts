@@ -11,7 +11,7 @@ import { configuration } from '@/configuration';
 import packageJson from '../../package.json';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
-import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, acquireDaemonLock, releaseDaemonLock } from '@/persistence';
+import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, readSettings, applyPathMapping } from '@/persistence';
 import { isProcessAlive, isWindows, killProcess, killProcessByChildProcess } from '@/utils/process';
 
 import { cleanupDaemonState, getInstalledCliMtimeMs, isDaemonRunningCurrentlyInstalledHappyVersion, stopDaemon } from './controlClient';
@@ -194,7 +194,8 @@ export async function startDaemon(): Promise<void> {
         logger.debug(`[SPAWN LOG] [${step}] ${message} (${status})`);
       };
 
-      const { directory, sessionId, machineId, approvedNewDirectoryCreation = true } = options;
+      let { directory } = options;
+      const { sessionId, machineId, approvedNewDirectoryCreation = true } = options;
       const agent = options.agent ?? 'claude';
       const yolo = options.yolo === true;
       const sessionType = options.sessionType ?? 'simple';
@@ -203,6 +204,22 @@ export async function startDaemon(): Promise<void> {
       let spawnDirectory = directory;
       let worktreeInfo: WorktreeInfo | null = null;
       let happyProcess: ReturnType<typeof spawnHappyCLI> | null = null;
+
+      // Apply path mapping if configured
+      try {
+        const settings = await readSettings();
+        if (settings.pathMapping && Object.keys(settings.pathMapping).length > 0) {
+          const originalDirectory = directory;
+          directory = applyPathMapping(directory, settings.pathMapping);
+          spawnDirectory = directory;
+          if (originalDirectory !== directory) {
+            addLog('path-mapping', `Path mapped: ${originalDirectory} -> ${directory}`, 'success');
+            logger.debug(`[DAEMON RUN] Path mapped: ${originalDirectory} -> ${directory}`);
+          }
+        }
+      } catch (error) {
+        logger.debug(`[DAEMON RUN] Failed to read settings for path mapping:`, error);
+      }
 
       addLog('init', `Starting session spawn: agent=${agent}, directory=${directory}, sessionType=${sessionType}`, 'running');
 

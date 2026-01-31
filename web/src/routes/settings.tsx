@@ -95,6 +95,7 @@ type ProjectFormData = {
     name: string
     path: string
     description: string
+    machineId: string | null
 }
 
 type PresetFormData = {
@@ -184,16 +185,24 @@ function ProjectForm(props: {
     onCancel: () => void
     isPending: boolean
     submitLabel: string
+    machines: Machine[]
 }) {
     const [name, setName] = useState(props.initial?.name ?? '')
     const [path, setPath] = useState(props.initial?.path ?? '')
     const [description, setDescription] = useState(props.initial?.description ?? '')
+    const [machineId, setMachineId] = useState<string | null>(props.initial?.machineId ?? null)
 
     const handleSubmit = useCallback((e: React.FormEvent) => {
         e.preventDefault()
         if (!name.trim() || !path.trim()) return
-        props.onSubmit({ name: name.trim(), path: path.trim(), description: description.trim() })
-    }, [name, path, description, props])
+        props.onSubmit({ name: name.trim(), path: path.trim(), description: description.trim(), machineId })
+    }, [name, path, description, machineId, props])
+
+    const getMachineTitle = (machine: Machine): string => {
+        if (machine.metadata?.displayName) return machine.metadata.displayName
+        if (machine.metadata?.host) return machine.metadata.host
+        return machine.id.slice(0, 8)
+    }
 
     return (
         <form onSubmit={handleSubmit} className="px-3 py-2 space-y-2 border-b border-[var(--app-divider)]">
@@ -221,6 +230,22 @@ function ProjectForm(props: {
                 className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
                 disabled={props.isPending}
             />
+            <select
+                value={machineId ?? ''}
+                onChange={(e) => setMachineId(e.target.value || null)}
+                disabled={props.isPending}
+                className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] disabled:opacity-50"
+            >
+                <option value="">All machines (global)</option>
+                {props.machines.map((m) => (
+                    <option key={m.id} value={m.id}>
+                        {getMachineTitle(m)}{m.metadata?.platform ? ` (${m.metadata.platform})` : ''}
+                    </option>
+                ))}
+            </select>
+            <div className="text-[11px] text-[var(--app-hint)] -mt-1">
+                {machineId ? 'Project available only on selected machine' : 'Project available on all machines'}
+            </div>
             <div className="flex justify-end gap-2 pt-1">
                 <button
                     type="button"
@@ -259,6 +284,17 @@ export default function SettingsPage() {
         deviceType: getDeviceType()
     }), [])
 
+    // Machines (for project form)
+    const { data: machinesData } = useQuery({
+        queryKey: ['machines'],
+        queryFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.getMachines()
+        },
+        enabled: Boolean(api)
+    })
+    const machines = machinesData?.machines ?? []
+
     // Projects
     const { data: projectsData, isLoading: projectsLoading } = useQuery({
         queryKey: ['projects'],
@@ -272,7 +308,7 @@ export default function SettingsPage() {
     const addProjectMutation = useMutation({
         mutationFn: async (data: ProjectFormData) => {
             if (!api) throw new Error('API unavailable')
-            return await api.addProject(data.name, data.path, data.description || undefined)
+            return await api.addProject(data.name, data.path, data.description || undefined, data.machineId)
         },
         onSuccess: (result) => {
             queryClient.setQueryData(['projects'], { projects: result.projects })
@@ -287,7 +323,7 @@ export default function SettingsPage() {
     const updateProjectMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: ProjectFormData }) => {
             if (!api) throw new Error('API unavailable')
-            return await api.updateProject(id, data.name, data.path, data.description || undefined)
+            return await api.updateProject(id, data.name, data.path, data.description || undefined, data.machineId)
         },
         onSuccess: (result) => {
             queryClient.setQueryData(['projects'], { projects: result.projects })
@@ -984,6 +1020,7 @@ export default function SettingsPage() {
                                 }}
                                 isPending={addProjectMutation.isPending}
                                 submitLabel="Add Project"
+                                machines={machines}
                             />
                         )}
 
@@ -1011,7 +1048,8 @@ export default function SettingsPage() {
                                             initial={{
                                                 name: project.name,
                                                 path: project.path,
-                                                description: project.description ?? ''
+                                                description: project.description ?? '',
+                                                machineId: project.machineId
                                             }}
                                             onSubmit={handleUpdateProject}
                                             onCancel={() => {
@@ -1020,6 +1058,7 @@ export default function SettingsPage() {
                                             }}
                                             isPending={updateProjectMutation.isPending}
                                             submitLabel="Save"
+                                            machines={machines}
                                         />
                                     ) : (
                                         <div
