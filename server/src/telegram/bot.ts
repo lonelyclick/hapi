@@ -341,6 +341,8 @@ export class HappyBot {
 
     /**
      * 自动批准权限请求
+     *
+     * 注意：AskUserQuestion 不会被自动批准，需要用户手动选择答案
      */
     private async autoApprovePermissions(
         sessionId: string,
@@ -354,12 +356,28 @@ export class HappyBot {
 
         const sessionName = session.metadata?.name || 'Unknown session'
 
+        // 分离需要用户交互的工具和可以自动批准的工具
+        const needsUserInteraction: string[] = []
+        const canAutoApprove: string[] = []
+
         for (const requestId of requestIds) {
             const request = requests[requestId]
             if (!request) continue
 
+            // AskUserQuestion 需要用户手动选择，不能自动批准
+            if (request.tool === 'AskUserQuestion') {
+                needsUserInteraction.push(requestId)
+            } else {
+                canAutoApprove.push(requestId)
+            }
+        }
+
+        // 自动批准非交互式权限请求
+        for (const requestId of canAutoApprove) {
+            const request = requests[requestId]
+            if (!request) continue
+
             try {
-                // 自动批准权限请求
                 await this.syncEngine.approvePermission(sessionId, requestId, undefined, undefined, 'approved')
                 console.log(`[HAPIBot] Auto-approved permission request ${requestId} for tool ${request.tool}`)
             } catch (error) {
@@ -367,23 +385,48 @@ export class HappyBot {
             }
         }
 
-        // 发送 Telegram 通知（告知已自动批准）
-        const recipientChatIds = await this.store.getSessionNotificationRecipients(sessionId)
-        if (recipientChatIds.length === 0) return
+        // 如果有需要用户交互的请求，发送通知让用户去Web界面处理
+        if (needsUserInteraction.length > 0) {
+            const recipientChatIds = await this.store.getSessionNotificationRecipients(sessionId)
+            if (recipientChatIds.length > 0) {
+                const toolNames = needsUserInteraction.map(id => requests[id]?.tool).filter(Boolean).join(', ')
+                const text = `❓ <b>${this.escapeHtml(sessionName)}</b>\n\n` +
+                    `有 ${needsUserInteraction.length} 个权限请求需要您处理\n` +
+                    `工具: ${this.escapeHtml(toolNames)}\n\n` +
+                    `请在 Web 界面上选择答案`
 
-        const toolNames = requestIds.map(id => requests[id]?.tool).filter(Boolean).join(', ')
-        const text = `🤖 <b>${this.escapeHtml(sessionName)}</b>\n\n` +
-            `已自动批准 ${requestIds.length} 个权限请求\n` +
-            `工具: ${this.escapeHtml(toolNames)}`
+                for (const chatIdStr of recipientChatIds) {
+                    const chatId = Number(chatIdStr)
+                    if (!Number.isFinite(chatId)) continue
 
-        for (const chatIdStr of recipientChatIds) {
-            const chatId = Number(chatIdStr)
-            if (!Number.isFinite(chatId)) continue
+                    try {
+                        await this.bot.api.sendMessage(chatId, text, { parse_mode: 'HTML' })
+                    } catch (error) {
+                        console.error(`[HAPIBot] Failed to send notification to chat ${chatId}:`, error)
+                    }
+                }
+            }
+        }
 
-            try {
-                await this.bot.api.sendMessage(chatId, text, { parse_mode: 'HTML' })
-            } catch (error) {
-                console.error(`[HAPIBot] Failed to send auto-approve notification to chat ${chatId}:`, error)
+        // 如果有自动批准的请求，也发送通知
+        if (canAutoApprove.length > 0) {
+            const recipientChatIds = await this.store.getSessionNotificationRecipients(sessionId)
+            if (recipientChatIds.length === 0) return
+
+            const toolNames = canAutoApprove.map(id => requests[id]?.tool).filter(Boolean).join(', ')
+            const text = `🤖 <b>${this.escapeHtml(sessionName)}</b>\n\n` +
+                `已自动批准 ${canAutoApprove.length} 个权限请求\n` +
+                `工具: ${this.escapeHtml(toolNames)}`
+
+            for (const chatIdStr of recipientChatIds) {
+                const chatId = Number(chatIdStr)
+                if (!Number.isFinite(chatId)) continue
+
+                try {
+                    await this.bot.api.sendMessage(chatId, text, { parse_mode: 'HTML' })
+                } catch (error) {
+                    console.error(`[HAPIBot] Failed to send auto-approve notification to chat ${chatId}:`, error)
+                }
             }
         }
     }
