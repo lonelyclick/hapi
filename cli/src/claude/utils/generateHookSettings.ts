@@ -6,6 +6,7 @@
  */
 
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { writeFileSync, mkdirSync, unlinkSync, existsSync, readFileSync } from 'node:fs';
 import { configuration } from '@/configuration';
 import { logger } from '@/ui/logger';
@@ -18,7 +19,7 @@ import { getHappyCliCommand } from '@/utils/spawnHappyCLI';
  */
 export function setupClaudeSettings(claudeSettingsType?: 'litellm' | 'claude'): boolean {
     try {
-        const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || join(configuration.happyHomeDir, '.claude');
+        const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
         const settingsPath = join(claudeConfigDir, 'settings.json');
 
         // If claudeSettingsType is specified, copy the appropriate settings file
