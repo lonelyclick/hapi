@@ -475,12 +475,20 @@ export function createSessionsRoutes(
         const namespace = c.get('namespace')
         const sseManager = getSseManager()
 
+        // Keycloak users (using default namespace) see all sessions across all namespaces
+        // CLI users (with custom namespace) see only their own namespace
+        const isKeycloakUser = namespace === 'default'
+
         // Get sessions from memory (SyncEngine) - these have live data
-        const memorySessions = engine.getSessionsByNamespace(namespace)
+        const memorySessions = isKeycloakUser
+            ? engine.getSessions()
+            : engine.getSessionsByNamespace(namespace)
         const memorySessionMap = new Map(memorySessions.map(s => [s.id, s]))
 
-        // Get all sessions from database
-        const storedSessions = await store.getSessionsByNamespace(namespace)
+        // Get all sessions from database (Keycloak sees all, CLI sees only their namespace)
+        const storedSessions = isKeycloakUser
+            ? await store.getSessions()
+            : await store.getSessionsByNamespace(namespace)
 
         // Determine if a session is truly active:
         // - Database active=false means session is archived (source of truth for offline state)
