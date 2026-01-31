@@ -37,10 +37,6 @@ export function App() {
 
     const hasUpdate = hasApiUpdate || hasSwUpdate
 
-    const handleRefresh = useCallback(() => {
-        refreshApp()
-    }, [refreshApp])
-
     const handleDismiss = useCallback(() => {
         setHasSwUpdate(false)
         dismissUpdate()
@@ -400,7 +396,7 @@ export function App() {
 
     return (
         <AppContextProvider value={{ api, token: token ?? '', userEmail: user?.email ?? null }}>
-            {hasUpdate && <UpdateBanner onRefresh={handleRefresh} onDismiss={handleDismiss} />}
+            {hasUpdate && <UpdateBanner onDismiss={handleDismiss} />}
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />
             <div className="h-full flex flex-col">

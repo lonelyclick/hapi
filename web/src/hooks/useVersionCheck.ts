@@ -2,6 +2,14 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 
 const CACHED_VERSION_KEY = 'hapi-cached-version'
 
+/**
+ * 共享的应用刷新函数
+ * 用于版本更新后的页面刷新
+ */
+export function refreshApp(): void {
+    window.location.reload()
+}
+
 // Get the current version from the build-time injected JS bundle filename
 function getCurrentVersion(): string {
     // Look for the index-*.js script tag
@@ -92,7 +100,7 @@ export function useVersionCheck(options: UseVersionCheckOptions): UseVersionChec
 
     // 用户点击刷新时调用
     const refresh = useCallback(() => {
-        window.location.reload()
+        refreshApp()
     }, [])
 
     const dismiss = useCallback(() => {
