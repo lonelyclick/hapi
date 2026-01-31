@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import type { Project, Session, SessionViewer } from '@/types/api'
 import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
 import { getClientId } from '@/lib/client-identity'
@@ -90,25 +90,6 @@ function TrashIcon(props: { className?: string }) {
     )
 }
 
-function BellIcon(props: { className?: string; subscribed?: boolean }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill={props.subscribed ? 'currentColor' : 'none'}
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={props.className}
-        >
-            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-        </svg>
-    )
-}
 
 function XIcon(props: { className?: string }) {
     return (
@@ -126,25 +107,6 @@ function XIcon(props: { className?: string }) {
         >
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-    )
-}
-
-function ChevronDownIcon(props: { className?: string }) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={props.className}
-        >
-            <polyline points="6 9 12 15 18 9" />
         </svg>
     )
 }
@@ -251,7 +213,6 @@ export function SessionHeader(props: {
     refreshAccountDisabled?: boolean
 }) {
     const { api, userEmail } = useAppContext()
-    const queryClient = useQueryClient()
     const title = useMemo(() => getSessionTitle(props.session), [props.session])
     const worktreeBranch = props.session.metadata?.worktree?.branch
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
@@ -306,60 +267,6 @@ export function SessionHeader(props: {
         return props.viewers.filter(v => v.clientId !== currentClientId)
     }, [props.viewers, currentClientId])
 
-    const subscribersQueryKey = ['session-subscribers', props.session.id]
-    const { data: subscribersData } = useQuery({
-        queryKey: subscribersQueryKey,
-        queryFn: async () => {
-            return await api.getSessionSubscribers(props.session.id)
-        },
-        staleTime: 30000
-    })
-
-    const isSubscribed = useMemo(() => {
-        if (!subscribersData) return false
-        // Check via chatId (Telegram users)
-        if (currentChatId) {
-            if (subscribersData.creatorChatId === currentChatId ||
-                subscribersData.subscribers.includes(currentChatId)) {
-                return true
-            }
-        }
-        // Check via clientId (non-Telegram users)
-        if (currentClientId && subscribersData.clientIdSubscribers?.includes(currentClientId)) {
-            return true
-        }
-        return false
-    }, [currentChatId, currentClientId, subscribersData])
-
-    const toggleSubscriptionMutation = useMutation({
-        mutationFn: async (subscribe: boolean) => {
-            // Prefer chatId if available (Telegram), otherwise use clientId
-            const options = currentChatId ? { chatId: currentChatId } : { clientId: currentClientId }
-            if (subscribe) {
-                return await api.subscribeToSession(props.session.id, options)
-            } else {
-                return await api.unsubscribeFromSession(props.session.id, options)
-            }
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: subscribersQueryKey })
-        }
-    })
-
-    // 移除订阅者的 mutation
-    const removeSubscriberMutation = useMutation({
-        mutationFn: async ({ subscriberId, type }: { subscriberId: string; type: 'chatId' | 'clientId' }) => {
-            return await api.removeSessionSubscriber(props.session.id, subscriberId, type)
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: subscribersQueryKey })
-        }
-    })
-
-    // 订阅者下拉菜单状态
-    const [showSubscribersMenu, setShowSubscribersMenu] = useState(false)
-    const subscribersMenuRef = useRef<HTMLDivElement>(null)
-
     // 移动端更多菜单状态
     const [showMoreMenu, setShowMoreMenu] = useState(false)
     const moreMenuRef = useRef<HTMLDivElement>(null)
@@ -371,9 +278,6 @@ export function SessionHeader(props: {
     // 点击外部关闭菜单
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (subscribersMenuRef.current && !subscribersMenuRef.current.contains(event.target as Node)) {
-                setShowSubscribersMenu(false)
-            }
             if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
                 setShowMoreMenu(false)
             }
@@ -381,30 +285,15 @@ export function SessionHeader(props: {
                 setShowAgentDetails(false)
             }
         }
-        if (showSubscribersMenu || showMoreMenu || showAgentDetails) {
+        if (showMoreMenu || showAgentDetails) {
             document.addEventListener('mousedown', handleClickOutside)
         }
         return () => {
             document.removeEventListener('mousedown', handleClickOutside)
         }
-    }, [showSubscribersMenu, showMoreMenu, showAgentDetails])
-
-    // 计算订阅者总数
-    const totalSubscribers = useMemo(() => {
-        if (!subscribersData) return 0
-        let count = 0
-        if (subscribersData.creatorChatId) count++
-        count += subscribersData.subscribers.length
-        count += (subscribersData.clientIdSubscribers?.length ?? 0)
-        // 去重 creator 和 subscribers 中的重复
-        if (subscribersData.creatorChatId && subscribersData.subscribers.includes(subscribersData.creatorChatId)) {
-            count--
-        }
-        return count
-    }, [subscribersData])
+    }, [showMoreMenu, showAgentDetails])
 
     useEffect(() => {
-        setShowSubscribersMenu(false)
         setShowMoreMenu(false)
         setShowAgentDetails(false)
     }, [props.session.id])
@@ -465,8 +354,8 @@ export function SessionHeader(props: {
 
                 {/* Right side: Viewers + Action buttons */}
                 <div className="flex shrink-0 items-center gap-1.5">
-                    {/* Join Review AI 按钮 (试验性功能) - PC端显示 */}
-                    {props.session.active && (
+                    {/* Join Review AI 按钮 (试验性功能) - PC端显示，只有创建者可见 */}
+                    {isCreator && props.session.active && (
                         <div className="hidden sm:block">
                             <JoinReviewButton
                                 sessionId={props.session.id}
@@ -482,122 +371,6 @@ export function SessionHeader(props: {
                             <ViewersBadge viewers={otherViewers} compact buttonClassName="h-7 leading-none" />
                         </div>
                     )}
-                    {/* Subscription toggle with dropdown menu - PC端显示 (hide if creator) */}
-                    {!isCreator && <div className="hidden sm:block relative" ref={subscribersMenuRef}>
-                        <div className="flex items-center">
-                            {/* 主按钮：切换自己的订阅 */}
-                            <button
-                                type="button"
-                                onClick={() => toggleSubscriptionMutation.mutate(!isSubscribed)}
-                                disabled={toggleSubscriptionMutation.isPending}
-                                className={`flex h-7 items-center justify-center rounded-l-md pl-2 pr-1 transition-colors ${
-                                    isSubscribed
-                                        ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
-                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]'
-                                } disabled:opacity-50`}
-                                title={isSubscribed ? 'Subscribed (click to unsubscribe)' : 'Subscribe'}
-                            >
-                                <BellIcon subscribed={isSubscribed} />
-                                {totalSubscribers > 0 && (
-                                    <span className="ml-1 text-[10px] font-medium">{totalSubscribers}</span>
-                                )}
-                            </button>
-                            {/* 下拉按钮：显示订阅者列表 */}
-                            <button
-                                type="button"
-                                onClick={() => setShowSubscribersMenu(!showSubscribersMenu)}
-                                className={`flex h-7 w-5 items-center justify-center rounded-r-md border-l transition-colors ${
-                                    isSubscribed
-                                        ? 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20'
-                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] border-[var(--app-divider)]'
-                                }`}
-                                title="Manage subscribers"
-                            >
-                                <ChevronDownIcon />
-                            </button>
-                        </div>
-                        {/* 订阅者下拉菜单 */}
-                        {showSubscribersMenu && subscribersData && (
-                            <div className="absolute right-0 top-full z-30 mt-1 min-w-[200px] max-w-[280px] rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] py-1 shadow-lg">
-                                <div className="px-3 py-1.5 text-[10px] font-medium text-[var(--app-hint)] uppercase tracking-wider">
-                                    Subscribers ({totalSubscribers})
-                                </div>
-                                {totalSubscribers === 0 ? (
-                                    <div className="px-3 py-2 text-xs text-[var(--app-hint)]">
-                                        No subscribers
-                                    </div>
-                                ) : (
-                                    <div className="max-h-[200px] overflow-y-auto">
-                                        {/* Creator */}
-                                        {subscribersData.creatorChatId && !subscribersData.subscribers.includes(subscribersData.creatorChatId) && (
-                                            <div className="flex items-center justify-between px-3 py-1.5 hover:bg-[var(--app-subtle-bg)]">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <span className="text-xs truncate">
-                                                        {subscribersData.creatorChatId === currentChatId ? 'Me (creator)' : `TG: ${subscribersData.creatorChatId}`}
-                                                    </span>
-                                                    <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600">
-                                                        Creator
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeSubscriberMutation.mutate({ subscriberId: subscribersData.creatorChatId!, type: 'chatId' })}
-                                                    disabled={removeSubscriberMutation.isPending}
-                                                    className="shrink-0 p-1 rounded hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
-                                                    title="Remove"
-                                                >
-                                                    <XIcon />
-                                                </button>
-                                            </div>
-                                        )}
-                                        {/* ChatId subscribers */}
-                                        {subscribersData.subscribers.map((chatId) => (
-                                            <div key={`chat-${chatId}`} className="flex items-center justify-between px-3 py-1.5 hover:bg-[var(--app-subtle-bg)]">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <span className="text-xs truncate">
-                                                        {chatId === currentChatId ? 'Me' : `TG: ${chatId}`}
-                                                    </span>
-                                                    {chatId === subscribersData.creatorChatId && (
-                                                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600">
-                                                            Creator
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeSubscriberMutation.mutate({ subscriberId: chatId, type: 'chatId' })}
-                                                    disabled={removeSubscriberMutation.isPending}
-                                                    className="shrink-0 p-1 rounded hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
-                                                    title="Remove"
-                                                >
-                                                    <XIcon />
-                                                </button>
-                                            </div>
-                                        ))}
-                                        {/* ClientId subscribers */}
-                                        {subscribersData.clientIdSubscribers?.map((clientId) => (
-                                            <div key={`client-${clientId}`} className="flex items-center justify-between px-3 py-1.5 hover:bg-[var(--app-subtle-bg)]">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <span className="text-xs truncate">
-                                                        {clientId === currentClientId ? 'Me (Web)' : `Web: ${clientId.slice(0, 8)}...`}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeSubscriberMutation.mutate({ subscriberId: clientId, type: 'clientId' })}
-                                                    disabled={removeSubscriberMutation.isPending}
-                                                    className="shrink-0 p-1 rounded hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
-                                                    title="Remove"
-                                                >
-                                                    <XIcon />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>}
                     {/* PC端：独立按钮 */}
                     <div className="hidden sm:flex items-center gap-1.5">
                         {/* Share button - 只有创建者可以分享 */}
@@ -622,7 +395,8 @@ export function SessionHeader(props: {
                                 <RefreshAccountIcon />
                             </button>
                         ) : null}
-                        {props.onDelete ? (
+                        {/* Delete button - 只有创建者可见 */}
+                        {isCreator && props.onDelete ? (
                             <button
                                 type="button"
                                 onClick={props.onDelete}
@@ -663,8 +437,8 @@ export function SessionHeader(props: {
                                         <div className="my-1 border-t border-[var(--app-divider)]" />
                                     </>
                                 )}
-                                {/* Review 按钮 */}
-                                {props.session.active && props.onToggleReviewPanel && (
+                                {/* Review 按钮 - 只有创建者可见 */}
+                                {isCreator && props.session.active && props.onToggleReviewPanel && (
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -693,28 +467,6 @@ export function SessionHeader(props: {
                                             <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                                         </svg>
                                         <span>Review</span>
-                                    </button>
-                                )}
-                                {/* 订阅按钮 (hide if creator) */}
-                                {!isCreator && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            toggleSubscriptionMutation.mutate(!isSubscribed)
-                                            setShowMoreMenu(false)
-                                        }}
-                                        disabled={toggleSubscriptionMutation.isPending}
-                                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                                            isSubscribed
-                                                ? 'text-blue-600 bg-blue-500/10'
-                                                : 'text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
-                                        } disabled:opacity-50`}
-                                    >
-                                        <BellIcon subscribed={isSubscribed} className="shrink-0" />
-                                        <span>{isSubscribed ? 'Unsubscribe' : 'Subscribe'}</span>
-                                        {totalSubscribers > 0 && (
-                                            <span className="ml-auto text-[10px] text-[var(--app-hint)]">{totalSubscribers}</span>
-                                        )}
                                     </button>
                                 )}
                                 {/* 分享会话 - 只有创建者可以分享 */}
@@ -746,8 +498,8 @@ export function SessionHeader(props: {
                                         <span className="whitespace-nowrap">Refresh Account</span>
                                     </button>
                                 ) : null}
-                                {/* 删除会话 */}
-                                {props.onDelete ? (
+                                {/* 删除会话 - 只有创建者可见 */}
+                                {isCreator && props.onDelete ? (
                                     <button
                                         type="button"
                                         onClick={() => {
