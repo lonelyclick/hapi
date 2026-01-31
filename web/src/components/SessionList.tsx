@@ -6,8 +6,6 @@ import { LoadingState } from './LoadingState'
 // Filter types
 type CreatorFilter = 'mine' | 'others'
 type ArchiveFilter = boolean  // true = show archived (offline) sessions only
-type AgentFilter = 'claude' | 'codex' | 'opencode'
-type ProjectFilter = string | null  // project id or null for all
 
 function getSessionPath(session: SessionSummary): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -42,7 +40,7 @@ function isMySession(session: SessionSummary, currentUserEmail: string | null): 
     return session.createdBy.toLowerCase() === currentUserEmail.toLowerCase()
 }
 
-// Get agent type
+// Get agent type (used for OpenCode display logic)
 function getAgentType(session: SessionSummary): 'claude' | 'codex' | 'opencode' | 'other' {
     const flavor = session.metadata?.flavor?.trim()?.toLowerCase()
     if (flavor === 'claude') return 'claude'
@@ -67,10 +65,7 @@ function filterSessions(
     sessions: SessionSummary[],
     creatorFilter: CreatorFilter,
     archiveFilter: ArchiveFilter,
-    agentFilter: AgentFilter,
-    projectFilter: ProjectFilter,
-    currentUserEmail: string | null,
-    sessionProjectMap: Map<string, Project | null>
+    currentUserEmail: string | null
 ): SessionSummary[] {
     return sessions.filter(session => {
         // Creator filter
@@ -80,18 +75,6 @@ function filterSessions(
         // Archive filter: if true, show only offline sessions; if false, show only active sessions
         if (archiveFilter && session.active) return false
         if (!archiveFilter && !session.active) return false
-
-        // Agent type filter
-        const agentType = getAgentType(session)
-        if (agentFilter === 'claude' && agentType !== 'claude') return false
-        if (agentFilter === 'codex' && agentType !== 'codex') return false
-        if (agentFilter === 'opencode' && agentType !== 'opencode') return false
-
-        // Project filter
-        if (projectFilter !== null) {
-            const project = sessionProjectMap.get(session.id)
-            if (project?.id !== projectFilter) return false
-        }
 
         return true
     })
@@ -397,13 +380,11 @@ export function SessionList(props: {
 }) {
     const { renderHeader = true, currentUserEmail } = props
 
-    // Filter state - defaults: mine, not archived, Claude, all projects
+    // Filter state - defaults: mine, not archived
     const [creatorFilter, setCreatorFilter] = useState<CreatorFilter>('mine')
     const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>(false)
-    const [agentFilter, setAgentFilter] = useState<AgentFilter>('claude')
-    const [projectFilter, setProjectFilter] = useState<ProjectFilter>(null)
 
-    // Build session to project mapping
+    // Build session to project mapping (still used for display)
     const sessionProjectMap = useMemo(() => {
         const map = new Map<string, Project | null>()
         if (Array.isArray(props.sessions) && Array.isArray(props.projects)) {
@@ -414,20 +395,11 @@ export function SessionList(props: {
         return map
     }, [props.sessions, props.projects])
 
-    // Get projects that have sessions (for filter options)
-    const projectsWithSessions = useMemo(() => {
-        const projectSet = new Set<string>()
-        sessionProjectMap.forEach((project) => {
-            if (project) projectSet.add(project.id)
-        })
-        return props.projects.filter(p => projectSet.has(p.id))
-    }, [props.projects, sessionProjectMap])
-
     // Filter and sort sessions (flat display)
     const filteredSessions = useMemo(() => {
-        const filtered = filterSessions(props.sessions, creatorFilter, archiveFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap)
+        const filtered = filterSessions(props.sessions, creatorFilter, archiveFilter, currentUserEmail)
         return sortSessions(filtered)
-    }, [props.sessions, creatorFilter, archiveFilter, agentFilter, projectFilter, currentUserEmail, sessionProjectMap])
+    }, [props.sessions, creatorFilter, archiveFilter, currentUserEmail])
 
     // Statistics
     const activeCount = filteredSessions.filter(s => s.active).length
@@ -452,65 +424,26 @@ export function SessionList(props: {
             ) : null}
 
             {/* Filters */}
-            <div className="flex flex-col gap-2 px-3 py-2 border-b border-[var(--app-divider)]">
-                {/* First row: Creator filter + Project filter (PC only) */}
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-xs text-[var(--app-hint)] shrink-0">Creator:</span>
-                        <div className="flex gap-1">
-                            <FilterButton value="mine" current={creatorFilter} label="Mine" onClick={setCreatorFilter} />
-                            <FilterButton value="others" current={creatorFilter} label="Others" onClick={setCreatorFilter} />
-                            <button
-                                type="button"
-                                onClick={() => setArchiveFilter(!archiveFilter)}
-                                className={`
-                                    px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
-                                    ${archiveFilter
-                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
-                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
-                                    }
-                                `}
-                            >
-                                Archive
-                            </button>
-                        </div>
-                    </div>
-                    {/* Project filter - right aligned, PC only */}
-                    {projectsWithSessions.length > 0 && (
-                        <select
-                            value={projectFilter ?? ''}
-                            onChange={(e) => setProjectFilter(e.target.value || null)}
-                            className="hidden sm:block ml-auto text-xs px-2 py-1 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-fg)] border border-[var(--app-divider)] focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        >
-                            <option value="">All Projects</option>
-                            {projectsWithSessions.map(project => (
-                                <option key={project.id} value={project.id}>{project.name}</option>
-                            ))}
-                        </select>
-                    )}
-                </div>
-
-                {/* Second row: Agent type filter + Project filter (mobile) */}
-                <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-[var(--app-hint)] shrink-0">Agent:</span>
+            <div className="flex items-center gap-4 px-3 py-2 border-b border-[var(--app-divider)]">
+                <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-xs text-[var(--app-hint)] shrink-0">Creator:</span>
                     <div className="flex gap-1">
-                        <FilterButton value="claude" current={agentFilter} label="Claude" onClick={setAgentFilter} />
-                        <FilterButton value="codex" current={agentFilter} label="Codex" onClick={setAgentFilter} />
-                        <FilterButton value="opencode" current={agentFilter} label="OpenCode" onClick={setAgentFilter} />
-                    </div>
-                    {/* Project filter - mobile only */}
-                    {projectsWithSessions.length > 0 && (
-                        <select
-                            value={projectFilter ?? ''}
-                            onChange={(e) => setProjectFilter(e.target.value || null)}
-                            className="sm:hidden ml-auto text-xs px-2 py-1 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-fg)] border border-[var(--app-divider)] focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-[120px]"
+                        <FilterButton value="mine" current={creatorFilter} label="Mine" onClick={setCreatorFilter} />
+                        <FilterButton value="others" current={creatorFilter} label="Others" onClick={setCreatorFilter} />
+                        <button
+                            type="button"
+                            onClick={() => setArchiveFilter(!archiveFilter)}
+                            className={`
+                                px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                                ${archiveFilter
+                                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                    : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                }
+                            `}
                         >
-                            <option value="">All Projects</option>
-                            {projectsWithSessions.map(project => (
-                                <option key={project.id} value={project.id}>{project.name}</option>
-                            ))}
-                        </select>
-                    )}
+                            Archive
+                        </button>
+                    </div>
                 </div>
             </div>
 
