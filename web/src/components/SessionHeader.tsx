@@ -428,7 +428,7 @@ export function SessionHeader(props: {
                     </button>
                     <div className="min-w-0 flex-1 relative" ref={agentDetailsRef}>
                         {/* 移动端：标题和agentMeta，两行挨着 */}
-                        <div className="sm:hidden -space-y-0.5">
+                        <div className="sm:hidden -space-y-1">
                             <div className="truncate font-medium text-sm leading-none">
                                 {title}
                             </div>
