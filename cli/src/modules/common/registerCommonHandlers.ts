@@ -147,13 +147,13 @@ export interface SpawnSessionOptions {
     sessionId?: string;
     resumeSessionId?: string;
     approvedNewDirectoryCreation?: boolean;
-    agent?: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli' | 'opencode';
+    agent?: 'claude' | 'opencode';
     yolo?: boolean;
     token?: string;
     sessionType?: 'simple' | 'worktree';
     worktreeName?: string;
+    claudeSettingsType?: 'litellm' | 'claude';
     claudeAgent?: string;
-    openrouterModel?: string;
     opencodeModel?: string;
     opencodeVariant?: string;
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo';

@@ -375,19 +375,16 @@ export async function startDaemon(): Promise<void> {
         if (sessionSource) {
           extraEnv = { ...extraEnv, HAPI_SESSION_SOURCE: sessionSource };
         }
+        // Pass Claude settings type (litellm or claude)
+        if (options.claudeSettingsType) {
+          extraEnv = { ...extraEnv, HAPI_CLAUDE_SETTINGS_TYPE: options.claudeSettingsType };
+        }
 
         addLog('env', `Environment prepared successfully`, 'success');
 
         // Construct arguments for the CLI
         const agentCommand = (() => {
           switch (agent) {
-            case 'codex': return 'codex';
-            case 'gemini': return 'gemini';
-            case 'glm': return 'glm';
-            case 'minimax': return 'minimax';
-            case 'grok': return 'grok';
-            case 'openrouter': return 'openrouter';
-            case 'aider-cli': return 'aider-cli';
             case 'opencode': return 'opencode';
             default: return 'claude';
           }
@@ -400,10 +397,6 @@ export async function startDaemon(): Promise<void> {
         const claudeAgent = typeof options.claudeAgent === 'string' ? options.claudeAgent.trim() : '';
         if (agent === 'claude' && claudeAgent) {
           args.push('--agent', claudeAgent);
-        }
-        const openrouterModel = typeof options.openrouterModel === 'string' ? options.openrouterModel.trim() : '';
-        if (agent === 'openrouter' && openrouterModel) {
-          args.push('--model', openrouterModel);
         }
         const opencodeModel = typeof options.opencodeModel === 'string' ? options.opencodeModel.trim() : '';
         if (agent === 'opencode' && opencodeModel) {

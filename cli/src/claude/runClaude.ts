@@ -26,6 +26,7 @@ import { resolve } from 'node:path';
 import type { Session } from './session';
 import { readWorktreeEnv } from '@/utils/worktreeEnv';
 import { readModeEnv } from '@/utils/modeEnv';
+import { setupClaudeSettings } from './utils/generateHookSettings';
 
 const INIT_PROMPT_PREFIX = '#InitPrompt-';
 
@@ -232,6 +233,12 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
 
     const hookSettingsPath = generateHookSettingsFile(hookServer.port, hookServer.token);
     logger.debug(`[START] Generated hook settings file: ${hookSettingsPath}`);
+
+    // Setup Claude settings based on claudeSettingsType (litellm or claude)
+    const claudeSettingsType = process.env.HAPI_CLAUDE_SETTINGS_TYPE as 'litellm' | 'claude' | undefined;
+    if (claudeSettingsType) {
+        setupClaudeSettings(claudeSettingsType);
+    }
 
     // Print log file path
     const logPath = logger.logFilePath;

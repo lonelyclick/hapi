@@ -6,10 +6,44 @@
  */
 
 import { join } from 'node:path';
-import { writeFileSync, mkdirSync, unlinkSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, unlinkSync, existsSync, readFileSync } from 'node:fs';
 import { configuration } from '@/configuration';
 import { logger } from '@/ui/logger';
 import { getHappyCliCommand } from '@/utils/spawnHappyCLI';
+
+/**
+ * Copy the appropriate settings file based on claudeSettingsType.
+ * @param claudeSettingsType - 'litellm' or 'claude'
+ * @returns true if copied successfully, false otherwise
+ */
+export function setupClaudeSettings(claudeSettingsType?: 'litellm' | 'claude'): boolean {
+    try {
+        const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || join(configuration.happyHomeDir, '.claude');
+        const settingsPath = join(claudeConfigDir, 'settings.json');
+
+        // If claudeSettingsType is specified, copy the appropriate settings file
+        if (claudeSettingsType) {
+            const sourceFileName = claudeSettingsType === 'litellm' ? 'settings.litellm.json' : 'settings.claude.json';
+            const sourcePath = join(claudeConfigDir, sourceFileName);
+
+            if (existsSync(sourcePath)) {
+                const sourceContent = readFileSync(sourcePath, 'utf-8');
+                writeFileSync(settingsPath, sourceContent);
+                logger.info(`[setupClaudeSettings] Copied ${sourceFileName} to settings.json`);
+                return true;
+            } else {
+                logger.warn(`[setupClaudeSettings] Source file not found: ${sourcePath}`);
+                return false;
+            }
+        }
+
+        // No claudeSettingsType specified, keep existing settings.json as-is
+        return true;
+    } catch (error) {
+        logger.error(`[setupClaudeSettings] Error: ${error}`);
+        return false;
+    }
+}
 
 function shellQuote(value: string): string {
     if (value.length === 0) {

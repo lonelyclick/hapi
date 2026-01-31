@@ -1344,7 +1344,7 @@ export class SyncEngine {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent: 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli' | 'opencode' = 'claude',
+        agent: 'claude' | 'opencode' = 'claude',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
@@ -1352,9 +1352,8 @@ export class SyncEngine {
             sessionId?: string
             resumeSessionId?: string
             token?: string
+            claudeSettingsType?: 'litellm' | 'claude'
             claudeAgent?: string
-            codexModel?: string
-            openrouterModel?: string
             opencodeModel?: string
             opencodeVariant?: string
             permissionMode?: Session['permissionMode']
@@ -1377,9 +1376,8 @@ export class SyncEngine {
                     sessionId: options?.sessionId,
                     resumeSessionId: options?.resumeSessionId,
                     token: options?.token,
+                    claudeSettingsType: options?.claudeSettingsType,
                     claudeAgent: options?.claudeAgent,
-                    codexModel: options?.codexModel,
-                    openrouterModel: options?.openrouterModel,
                     opencodeModel: options?.opencodeModel,
                     opencodeVariant: options?.opencodeVariant,
                     permissionMode: options?.permissionMode,
