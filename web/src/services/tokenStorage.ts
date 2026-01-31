@@ -52,8 +52,8 @@ interface TokenData {
 
 let db: IDBDatabase | null = null
 
-// Timeout for IndexedDB operations (3 seconds)
-const INIT_TIMEOUT = 3000
+// Timeout for IndexedDB operations (1 second for faster fallback)
+const INIT_TIMEOUT = 1000
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
     return Promise.race([
@@ -105,19 +105,24 @@ async function getTokens(): Promise<TokenData | null> {
 
     try {
         const database = await openDB()
-        return new Promise((resolve, reject) => {
-            const transaction = database.transaction([STORE_NAME], 'readonly')
-            const store = transaction.objectStore(STORE_NAME)
-            const request = store.get('auth')
+        const result = await withTimeout(
+            new Promise<TokenData | null>((resolve, reject) => {
+                const transaction = database.transaction([STORE_NAME], 'readonly')
+                const store = transaction.objectStore(STORE_NAME)
+                const request = store.get('auth')
 
-            request.onsuccess = () => {
-                resolve(request.result as TokenData | null ?? null)
-            }
+                request.onsuccess = () => {
+                    resolve(request.result as TokenData | null ?? null)
+                }
 
-            request.onerror = () => {
-                reject(new Error(`Failed to get tokens: ${request.error}`))
-            }
-        })
+                request.onerror = () => {
+                    reject(new Error(`Failed to get tokens: ${request.error}`))
+                }
+            }),
+            INIT_TIMEOUT,
+            'IndexedDB get timeout'
+        )
+        return result
     } catch (error) {
         console.warn('[TokenStorage] IndexedDB unavailable, falling back to localStorage:', error)
         indexedDBAvailable = false
@@ -136,19 +141,23 @@ async function saveTokenData(data: TokenData): Promise<void> {
 
     try {
         const database = await openDB()
-        return new Promise((resolve, reject) => {
-            const transaction = database.transaction([STORE_NAME], 'readwrite')
-            const store = transaction.objectStore(STORE_NAME)
-            const request = store.put(data, 'auth')
+        await withTimeout(
+            new Promise<void>((resolve, reject) => {
+                const transaction = database.transaction([STORE_NAME], 'readwrite')
+                const store = transaction.objectStore(STORE_NAME)
+                const request = store.put(data, 'auth')
 
-            request.onsuccess = () => {
-                resolve()
-            }
+                request.onsuccess = () => {
+                    resolve()
+                }
 
-            request.onerror = () => {
-                reject(new Error(`Failed to save tokens: ${request.error}`))
-            }
-        })
+                request.onerror = () => {
+                    reject(new Error(`Failed to save tokens: ${request.error}`))
+                }
+            }),
+            INIT_TIMEOUT,
+            'IndexedDB save timeout'
+        )
     } catch (error) {
         console.warn('[TokenStorage] IndexedDB unavailable, falling back to localStorage:', error)
         indexedDBAvailable = false
@@ -167,19 +176,23 @@ async function clearTokenData(): Promise<void> {
 
     try {
         const database = await openDB()
-        return new Promise((resolve, reject) => {
-            const transaction = database.transaction([STORE_NAME], 'readwrite')
-            const store = transaction.objectStore(STORE_NAME)
-            const request = store.delete('auth')
+        await withTimeout(
+            new Promise<void>((resolve, reject) => {
+                const transaction = database.transaction([STORE_NAME], 'readwrite')
+                const store = transaction.objectStore(STORE_NAME)
+                const request = store.delete('auth')
 
-            request.onsuccess = () => {
-                resolve()
-            }
+                request.onsuccess = () => {
+                    resolve()
+                }
 
-            request.onerror = () => {
-                reject(new Error(`Failed to clear tokens: ${request.error}`))
-            }
-        })
+                request.onerror = () => {
+                    reject(new Error(`Failed to clear tokens: ${request.error}`))
+                }
+            }),
+            INIT_TIMEOUT,
+            'IndexedDB clear timeout'
+        )
     } catch (error) {
         console.warn('[TokenStorage] IndexedDB unavailable, falling back to localStorage:', error)
         indexedDBAvailable = false
