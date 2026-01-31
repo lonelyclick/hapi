@@ -7,35 +7,8 @@ import { Spinner } from '@/components/Spinner'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 
-type AgentType = 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli' | 'opencode'
-
-// OpenAI Codex CLI models (gpt-5.x series)
-const CODEX_MODELS = [
-    { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex (Recommended)' },
-    { value: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
-    { value: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini' },
-    { value: 'gpt-5.2', label: 'GPT-5.2 (General)' },
-    { value: 'gpt-5.1', label: 'GPT-5.1' },
-    { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
-    { value: 'gpt-5-codex-mini', label: 'GPT-5 Codex Mini' },
-    { value: 'gpt-5', label: 'GPT-5' },
-]
-
-// Popular OpenRouter models
-const OPENROUTER_MODELS = [
-    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
-    { value: 'anthropic/claude-opus-4', label: 'Claude Opus 4' },
-    { value: 'anthropic/claude-3.7-sonnet', label: 'Claude 3.7 Sonnet' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o' },
-    { value: 'openai/o1', label: 'OpenAI o1' },
-    { value: 'openai/o3-mini', label: 'OpenAI o3-mini' },
-    { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    { value: 'deepseek/deepseek-chat', label: 'DeepSeek V3' },
-    { value: 'deepseek/deepseek-r1', label: 'DeepSeek R1' },
-    { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
-    { value: 'qwen/qwen-2.5-coder-32b-instruct', label: 'Qwen 2.5 Coder 32B' },
-]
+type AgentType = 'claude' | 'opencode'
+type ClaudeSettingsType = 'litellm' | 'claude'
 
 // OpenCode supported models - using OpenCode's native model ID format
 const OPENCODE_MODELS = [
@@ -157,9 +130,8 @@ export function NewSession(props: {
     const [machineId, setMachineId] = useState<string | null>(null)
     const [projectPath, setProjectPath] = useState('')
     const [agent, setAgent] = useState<AgentType>('claude')
+    const [claudeSettingsType, setClaudeSettingsType] = useState<ClaudeSettingsType>('litellm')
     const [claudeAgent, setClaudeAgent] = useState('')
-    const [codexModel, setCodexModel] = useState(CODEX_MODELS[0].value)
-    const [openrouterModel, setOpenrouterModel] = useState(OPENROUTER_MODELS[0].value)
     const [opencodeModel, setOpencodeModel] = useState(OPENCODE_MODELS[0].value)
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
@@ -231,9 +203,8 @@ export function NewSession(props: {
                 agent,
                 yolo: true,
                 sessionType: 'simple',
+                claudeSettingsType: agent === 'claude' ? claudeSettingsType : undefined,
                 claudeAgent: agent === 'claude' ? (claudeAgent.trim() || undefined) : undefined,
-                codexModel: agent === 'codex' ? codexModel : undefined,
-                openrouterModel: agent === 'openrouter' ? openrouterModel : undefined,
                 opencodeModel: agent === 'opencode' ? opencodeModel : undefined
             })
 
@@ -345,10 +316,10 @@ export function NewSession(props: {
             {/* Agent Selector */}
             <div className="flex flex-col gap-1.5 px-3 py-3">
                 <label className="text-xs font-medium text-[var(--app-hint)]">
-                    Agents
+                    Agent
                 </label>
                 <div className="flex flex-wrap gap-x-3 gap-y-2">
-                    {(['claude', 'codex', 'gemini', 'opencode', 'aider-cli'] as const).map((agentType) => (
+                    {(['claude', 'opencode'] as const).map((agentType) => (
                         <label
                             key={agentType}
                             className="flex items-center gap-1 cursor-pointer"
@@ -368,31 +339,35 @@ export function NewSession(props: {
                 </div>
             </div>
 
-            {/* Chat Models Selector */}
-            <div className="flex flex-col gap-1.5 px-3 py-3">
-                <label className="text-xs font-medium text-[var(--app-hint)]">
-                    Chat Models
-                </label>
-                <div className="flex flex-wrap gap-x-3 gap-y-2">
-                    {(['glm', 'minimax', 'grok', 'openrouter'] as const).map((agentType) => (
-                        <label
-                            key={agentType}
-                            className="flex items-center gap-1 cursor-pointer"
-                        >
-                            <input
-                                type="radio"
-                                name="agent"
-                                value={agentType}
-                                checked={agent === agentType}
-                                onChange={() => setAgent(agentType)}
-                                disabled={isFormDisabled}
-                                className="accent-[var(--app-link)] w-3.5 h-3.5"
-                            />
-                            <span className="text-xs capitalize">{agentType}</span>
-                        </label>
-                    ))}
+            {/* Claude Settings Type Selector */}
+            {agent === 'claude' ? (
+                <div className="flex flex-col gap-1.5 px-3 py-3">
+                    <label className="text-xs font-medium text-[var(--app-hint)]">
+                        Settings
+                    </label>
+                    <div className="flex flex-wrap gap-x-3 gap-y-2">
+                        {(['litellm', 'claude'] as const).map((settingsType) => (
+                            <label
+                                key={settingsType}
+                                className="flex items-center gap-1 cursor-pointer"
+                            >
+                                <input
+                                    type="radio"
+                                    name="claudeSettings"
+                                    value={settingsType}
+                                    checked={claudeSettingsType === settingsType}
+                                    onChange={() => setClaudeSettingsType(settingsType)}
+                                    disabled={isFormDisabled}
+                                    className="accent-[var(--app-link)] w-3.5 h-3.5"
+                                />
+                                <span className="text-xs">{settingsType === 'litellm' ? 'LiteLLM' : 'Claude'}</span>
+                            </label>
+                        ))}
+                    </div>
                 </div>
-            </div>
+            ) : null}
+
+            {/* Claude Agent (optional) */}
             {agent === 'claude' ? (
                 <div className="flex flex-col gap-1.5 px-3 pb-3">
                     <label className="text-xs font-medium text-[var(--app-hint)]">
@@ -411,50 +386,8 @@ export function NewSession(props: {
                     </div>
                 </div>
             ) : null}
-            {agent === 'codex' ? (
-                <div className="flex flex-col gap-1.5 px-3 pb-3">
-                    <label className="text-xs font-medium text-[var(--app-hint)]">
-                        Model (OpenAI Codex)
-                    </label>
-                    <select
-                        value={codexModel}
-                        onChange={(e) => setCodexModel(e.target.value)}
-                        disabled={isFormDisabled}
-                        className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
-                    >
-                        {CODEX_MODELS.map((model) => (
-                            <option key={model.value} value={model.value}>
-                                {model.label}
-                            </option>
-                        ))}
-                    </select>
-                    <div className="text-[11px] text-[var(--app-hint)]">
-                        GPT-5.2-Codex is the most advanced model for agentic coding.
-                    </div>
-                </div>
-            ) : null}
-            {agent === 'openrouter' ? (
-                <div className="flex flex-col gap-1.5 px-3 pb-3">
-                    <label className="text-xs font-medium text-[var(--app-hint)]">
-                        Model (OpenRouter)
-                    </label>
-                    <select
-                        value={openrouterModel}
-                        onChange={(e) => setOpenrouterModel(e.target.value)}
-                        disabled={isFormDisabled}
-                        className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
-                    >
-                        {OPENROUTER_MODELS.map((model) => (
-                            <option key={model.value} value={model.value}>
-                                {model.label}
-                            </option>
-                        ))}
-                    </select>
-                    <div className="text-[11px] text-[var(--app-hint)]">
-                        Select model from OpenRouter. Requires OPENROUTER_API_KEY.
-                    </div>
-                </div>
-            ) : null}
+
+            {/* OpenCode Model Selector */}
             {agent === 'opencode' ? (
                 <div className="flex flex-col gap-1.5 px-3 pb-3">
                     <label className="text-xs font-medium text-[var(--app-hint)]">
