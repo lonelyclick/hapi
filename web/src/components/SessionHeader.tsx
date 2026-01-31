@@ -427,15 +427,15 @@ export function SessionHeader(props: {
                         <BackIcon />
                     </button>
                     <div className="min-w-0 flex-1 relative" ref={agentDetailsRef}>
-                        {/* 移动端：标题和agentMeta在同一行 */}
-                        <div className="sm:hidden flex items-center gap-1.5 min-w-0">
+                        {/* 移动端：标题和agentMeta，两行挨着 */}
+                        <div className="sm:hidden">
                             <div className="truncate font-medium text-sm">
                                 {title}
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setShowAgentDetails(!showAgentDetails)}
-                                className="text-[10px] text-[var(--app-hint)] truncate text-left"
+                                className="text-[10px] text-[var(--app-hint)] truncate text-left mt-0.5"
                             >
                                 {[agentLabel, project?.name].filter(Boolean).join(' · ')}
                             </button>
