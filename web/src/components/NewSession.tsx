@@ -146,7 +146,34 @@ export function NewSession(props: {
         enabled: machineId !== null
     })
 
-    const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
+    // Get current machine's platform
+    const currentMachine = useMemo(
+        () => props.machines.find(m => m.id === machineId) ?? null,
+        [props.machines, machineId]
+    )
+
+    // Filter projects: machine-specific projects + platform-compatible global projects
+    const projects = useMemo(() => {
+        const allProjects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
+        const platform = currentMachine?.metadata?.platform ?? ''
+
+        return allProjects.filter(project => {
+            // If project has machineId, only show if it matches current machine
+            if (project.machineId) {
+                return project.machineId === machineId
+            }
+            // Global project: check if path is compatible with current platform
+            if (platform === 'darwin') {
+                // macOS: paths start with /Users
+                return project.path.startsWith('/Users/')
+            } else {
+                // Linux: paths start with /home or /root or /opt
+                return project.path.startsWith('/home/') ||
+                       project.path.startsWith('/root/') ||
+                       project.path.startsWith('/opt/')
+            }
+        })
+    }, [projectsData, machineId, currentMachine])
 
     const selectedProject = useMemo(
         () => projects.find((p) => p.path === projectPath.trim()) ?? null,
