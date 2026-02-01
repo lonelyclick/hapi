@@ -474,7 +474,12 @@ export function useWebPushSubscription(apiClient: ApiClient | null) {
                 return false
             }
         } catch (error) {
-            console.error('[webpush] subscription failed:', error)
+            // Only log for unexpected errors, not abort errors which are common when push service is unavailable
+            if (error instanceof Error && error.name === 'AbortError') {
+                console.log('[webpush] subscription aborted (push service unavailable)')
+            } else {
+                console.warn('[webpush] subscription failed:', error)
+            }
             setState('error')
             return false
         } finally {

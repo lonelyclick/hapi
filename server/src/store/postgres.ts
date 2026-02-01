@@ -714,14 +714,26 @@ export class PostgresStore implements IStore {
     }
 
     async updateMachineMetadata(id: string, metadata: unknown, expectedVersion: number, namespace: string): Promise<VersionedUpdateResult<unknown | null>> {
+        // Preserve displayName from existing metadata if not provided in new metadata
+        const currentMetadata = await this.pool.query('SELECT metadata FROM machines WHERE id = $1 AND namespace = $2', [id, namespace])
+        let finalMetadata = metadata
+
+        if (currentMetadata.rows.length > 0 && metadata && typeof metadata === 'object') {
+            const existing = currentMetadata.rows[0].metadata
+            if (existing && typeof existing === 'object' && 'displayName' in existing && !('displayName' in metadata)) {
+                // Preserve displayName from existing metadata
+                finalMetadata = { ...metadata as Record<string, unknown>, displayName: existing.displayName }
+            }
+        }
+
         const result = await this.pool.query(`
             UPDATE machines SET metadata = $1, metadata_version = metadata_version + 1, updated_at = $2, seq = seq + 1
             WHERE id = $3 AND namespace = $4 AND metadata_version = $5
             RETURNING metadata_version
-        `, [JSON.stringify(metadata), Date.now(), id, namespace, expectedVersion])
+        `, [JSON.stringify(finalMetadata), Date.now(), id, namespace, expectedVersion])
 
         if ((result.rowCount ?? 0) === 1) {
-            return { result: 'success', version: expectedVersion + 1, value: metadata }
+            return { result: 'success', version: expectedVersion + 1, value: finalMetadata }
         }
 
         const current = await this.pool.query('SELECT metadata, metadata_version FROM machines WHERE id = $1 AND namespace = $2', [id, namespace])

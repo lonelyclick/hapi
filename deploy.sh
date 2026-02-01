@@ -10,13 +10,52 @@ DAEMON_EXE="cli/dist-exe/bun-linux-x64/hapi-daemon"
 
 # 解析参数
 BUILD_DAEMON=false
+MACMINO_ONLY=false
 for arg in "$@"; do
     case $arg in
         --daemon)
             BUILD_DAEMON=true
             ;;
+        --macmini)
+            MACMINO_ONLY=true
+            ;;
     esac
 done
+
+# 如果是 --macmini 模式，跳过本地构建，只部署到 macmini
+if [[ "$MACMINO_ONLY" == "true" ]]; then
+    echo "=== Deploying to macmini only (skipping local builds)..."
+
+    # 同步 daemon 到 macmini
+    echo "=== Syncing source files to macmini..."
+    sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 'mkdir -p ~/softwares/hapi'
+
+    # 同步修改后的源文件
+    rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
+        --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
+        --exclude='.git' --exclude='cli/test-fixtures' --exclude='.cache' \
+        cli/src/daemon/run.ts cli/src/persistence.ts \
+        guang@192.168.0.236:~/softwares/hapi/cli/src/ 2>/dev/null || true
+
+    rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
+        --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
+        --exclude='.git' --exclude='cli/test-fixtures' --exclude='.cache' \
+        server/src/store/ \
+        guang@192.168.0.236:~/softwares/hapi/server/src/ 2>/dev/null || true
+
+    # 在 macmini 上重新构建 daemon
+    echo "=== Building daemon on macmini..."
+    sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 \
+        'cd ~/softwares/hapi/cli && ~/.bun/bin/bun run build:exe:daemon'
+
+    # 重启 macmini 上的 daemon
+    echo "=== Restarting daemon on macmini..."
+    sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 \
+        'pkill -f hapi-daemon || true; sleep 1; ~/softwares/hapi/start-daemon.sh > /dev/null 2>&1 &'
+
+    echo "=== macmini daemon updated and restarted"
+    exit 0
+fi
 
 echo "=== Committing and pushing changes..."
 git add -A
@@ -89,6 +128,33 @@ if [[ "$BUILD_DAEMON" == "true" ]]; then
     fi
 
     echo "=== Daemon build verified (age: ${DAEMON_AGE}s)"
+
+    # 同步 daemon 到 macmini
+    echo "=== Deploying daemon to macmini..."
+    sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 'mkdir -p ~/softwares/hapi'
+
+    # 同步修改后的源文件
+    rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
+        --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
+        --exclude='.git' --exclude='cli/test-fixtures' --exclude='.cache' \
+        cli/src/daemon/run.ts cli/src/persistence.ts \
+        guang@192.168.0.236:~/softwares/hapi/cli/src/ 2>/dev/null || true
+
+    rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
+        --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
+        --exclude='.git' --exclude='cli/test-fixtures' --exclude='.cache' \
+        server/src/store/ \
+        guang@192.168.0.236:~/softwares/hapi/server/src/ 2>/dev/null || true
+
+    # 在 macmini 上重新构建 daemon
+    sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 \
+        'cd ~/softwares/hapi/cli && ~/.bun/bin/bun run build:exe:daemon'
+
+    # 重启 macmini 上的 daemon
+    sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 \
+        'pkill -f hapi-daemon || true; sleep 1; ~/softwares/hapi/start-daemon.sh > /dev/null 2>&1 &'
+
+    echo "=== macmini daemon updated and restarted"
 fi
 
 echo "=== Killing old processes..."
