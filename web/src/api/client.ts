@@ -1129,7 +1129,6 @@ export class ApiClient {
     // ==================== Yoho Credentials ====================
 
     async searchYohoCredentials(filters?: {
-        type?: string
         name?: string
         limit?: number
     }): Promise<{
@@ -1139,12 +1138,12 @@ export class ApiClient {
             name: string
             fullPath: string
             relativePath: string
+            displayName: string
         }>
         availableTypes?: string[]
         error?: string
     }> {
         const params = new URLSearchParams()
-        if (filters?.type) params.set('type', filters.type)
         if (filters?.name) params.set('name', filters.name)
         if (filters?.limit) params.set('limit', String(filters.limit))
 

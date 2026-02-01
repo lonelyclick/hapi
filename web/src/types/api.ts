@@ -413,6 +413,7 @@ export type YohoCredentialFile = {
     name: string
     fullPath: string
     relativePath: string
+    displayName: string
 }
 
 export type YohoCredentialsResponse = {

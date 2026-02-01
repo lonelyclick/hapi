@@ -6,7 +6,6 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import type { WebAppEnv } from '../middleware/auth'
 
 const searchCredentialsSchema = z.object({
-    type: z.string().optional(),
     name: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(500).optional()
 })
@@ -16,6 +15,7 @@ type CredentialFile = {
     name: string
     fullPath: string
     relativePath: string
+    displayName: string
 }
 
 type CredentialsResponse = {
@@ -45,26 +45,28 @@ function getAvailableTypes(): string[] {
     }
 }
 
-function listCredentials(filters: { type?: string; name?: string; limit?: number }): CredentialFile[] {
+function listCredentials(filters: { name?: string; limit?: number }): CredentialFile[] {
     if (!credentialsDirectoryExists()) return []
 
     const limit = filters.limit ?? 100
     const results: CredentialFile[] = []
-    const typesToSearch = filters.type ? [filters.type] : getAvailableTypes()
+    const allTypes = getAvailableTypes()
 
-    for (const type of typesToSearch) {
+    for (const type of allTypes) {
         const typeDir = join(CREDENTIALS_ROOT, type)
         try {
             const files = readdirSync(typeDir)
             for (const file of files) {
                 if (!file.endsWith('.json')) continue
                 const name = file.replace(/\.json$/, '')
-                if (filters.name && !name.toLowerCase().includes(filters.name.toLowerCase())) {
+                // Search by type/name or just name
+                const displayName = `${type}.${name}`
+                if (filters.name && !displayName.toLowerCase().includes(filters.name.toLowerCase())) {
                     continue
                 }
                 const fullPath = join(typeDir, file)
                 const relativePath = join(type, file)
-                results.push({ type, name, fullPath, relativePath })
+                results.push({ type, name, fullPath, relativePath, displayName })
                 if (results.length >= limit) {
                     return results
                 }
@@ -95,7 +97,6 @@ export function createYohoCredentialsRoutes(): Hono<WebAppEnv> {
         }
 
         const files = listCredentials({
-            type: parsed.data.type,
             name: parsed.data.name,
             limit: parsed.data.limit
         })

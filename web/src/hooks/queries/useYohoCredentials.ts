@@ -4,7 +4,6 @@ import type { YohoCredentialFile } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 
 interface UseYohoCredentialsOptions {
-    type?: string
     name?: string
     limit?: number
     enabled?: boolean
@@ -20,15 +19,15 @@ export function useYohoCredentials(
     error: string | null
     refetch: () => Promise<unknown>
 } {
-    const { type, name, limit = 100, enabled = true } = options
+    const { name, limit = 100, enabled = true } = options
 
     const query = useQuery({
-        queryKey: queryKeys.yohoCredentials(type, name, limit),
+        queryKey: queryKeys.yohoCredentials(name, limit),
         queryFn: async () => {
             if (!api) {
                 throw new Error('API unavailable')
             }
-            return await api.searchYohoCredentials({ type, name, limit })
+            return await api.searchYohoCredentials({ name, limit })
         },
         enabled: Boolean(api) && enabled,
     })
