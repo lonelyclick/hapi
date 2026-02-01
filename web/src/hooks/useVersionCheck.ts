@@ -5,8 +5,30 @@ const CACHED_VERSION_KEY = 'hapi-cached-version'
 /**
  * 共享的应用刷新函数
  * 用于版本更新后的页面刷新
+ * 使用暴力刷新：清除 Service Worker 和所有缓存
  */
-export function refreshApp(): void {
+export async function refreshApp(): Promise<void> {
+    try {
+        // 清除所有 Service Worker
+        const registrations = await navigator.serviceWorker?.getRegistrations()
+        if (registrations) {
+            for (const registration of registrations) {
+                await registration.unregister()
+            }
+        }
+
+        // 清除所有缓存
+        const cacheNames = await caches?.keys()
+        if (cacheNames) {
+            for (const cacheName of cacheNames) {
+                await caches.delete(cacheName)
+            }
+        }
+    } catch (error) {
+        console.error('Force refresh failed:', error)
+    }
+
+    // 刷新页面
     window.location.reload()
 }
 
