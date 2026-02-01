@@ -25,7 +25,7 @@ type CredentialsResponse = {
     error?: string
 }
 
-const CREDENTIALS_ROOT = join(homedir(), 'yoho-task-v2', 'data', 'credentials')
+const CREDENTIALS_ROOT = join(homedir(), 'happy', 'yoho-task-v2', 'data', 'credentials')
 
 function credentialsDirectoryExists(): boolean {
     return existsSync(CREDENTIALS_ROOT)
