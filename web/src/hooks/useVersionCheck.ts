@@ -28,7 +28,7 @@ export async function refreshApp(): Promise<void> {
         console.error('Force refresh failed:', error)
     }
 
-    // 刷新页面
+    // 确保页面一定会刷新
     window.location.reload()
 }
 
