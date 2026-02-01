@@ -16,4 +16,7 @@ export const queryKeys = {
     slashCommands: (sessionId: string) => ['slash-commands', sessionId] as const,
     typing: (sessionId: string) => ['typing', sessionId] as const,
     inputPresets: () => ['input-presets'] as const,
+    yohoCredentials: (type?: string, name?: string, limit?: number) =>
+        ['yoho-credentials', type, name, limit] as const,
+    yohoCredentialTypes: () => ['yoho-credential-types'] as const,
 }

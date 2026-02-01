@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
+import { YohoCredentialFinder } from '@/components/YohoCredentialFinder'
 import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
 import { useNotificationPermission, useWebPushSubscription } from '@/hooks/useNotification'
 import { useServerUrl } from '@/hooks/useServerUrl'
@@ -1252,6 +1253,13 @@ export default function SettingsPage() {
                                 ))}
                             </div>
                         )}
+                    </div>
+
+                    {/* Yoho Credentials Section */}
+                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                        <div className="p-3">
+                            <YohoCredentialFinder api={api} />
+                        </div>
                     </div>
 
                 </div>

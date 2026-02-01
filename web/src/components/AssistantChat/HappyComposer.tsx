@@ -28,6 +28,7 @@ import { FloatingOverlay } from '@/components/ChatInput/FloatingOverlay'
 import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { StatusBar } from '@/components/AssistantChat/StatusBar'
 import { ComposerButtons } from '@/components/AssistantChat/ComposerButtons'
+import { YohoCredentialPicker } from '@/components/AssistantChat/YohoCredentialPicker'
 import { FileIcon } from '@/components/FileIcon'
 import type { ApiClient } from '@/api/client'
 
@@ -348,6 +349,7 @@ export function HappyComposer(props: {
         return false
     })
     const [optimizePreview, setOptimizePreview] = useState<{ original: string; optimized: string } | null>(null)
+    const [showYohoCredentialPicker, setShowYohoCredentialPicker] = useState(false)
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)
@@ -873,6 +875,38 @@ export function HappyComposer(props: {
         haptic('light')
         setShowSettings(prev => !prev)
     }, [haptic])
+
+    const handleYohoCredentialPickerToggle = useCallback(() => {
+        haptic('light')
+        setShowYohoCredentialPicker(prev => !prev)
+    }, [haptic])
+
+    const handleYohoCredentialSelect = useCallback((fullPath: string) => {
+        // Insert the path at cursor position or at end
+        const currentText = composerText
+        const cursorPos = inputState.selection.start
+        const beforeText = currentText.slice(0, cursorPos)
+        const afterText = currentText.slice(cursorPos)
+
+        // Add space before if needed
+        const needsSpace = beforeText.length > 0 && !/\s$/.test(beforeText)
+        const spacer = needsSpace ? ' ' : ''
+        const newText = `${beforeText}${spacer}${fullPath}${afterText}`
+
+        assistantApi.composer().setText(newText)
+        const newCursorPos = (beforeText + spacer + fullPath).length
+        setInputState({
+            text: newText,
+            selection: { start: newCursorPos, end: newCursorPos }
+        })
+
+        // Focus back to textarea
+        setTimeout(() => {
+            textareaRef.current?.focus()
+        }, 0)
+
+        haptic('success')
+    }, [composerText, inputState.selection, assistantApi, haptic])
 
     const handleSubmit = useCallback(() => {
         setShowContinueHint(false)
@@ -1524,11 +1558,26 @@ export function HappyComposer(props: {
             )
         }
 
+        if (showYohoCredentialPicker) {
+            return (
+                <div className="absolute bottom-[100%] mb-2 w-full">
+                    <FloatingOverlay>
+                        <YohoCredentialPicker
+                            api={apiClient}
+                            onSelect={handleYohoCredentialSelect}
+                            onClose={() => setShowYohoCredentialPicker(false)}
+                        />
+                    </FloatingOverlay>
+                </div>
+            )
+        }
+
         return null
     }, [
         showSettings,
         showPermissionSettings,
         showModelSettings,
+        showYohoCredentialPicker,
         suggestions,
         selectedIndex,
         controlsDisabled,
@@ -1544,6 +1593,8 @@ export function HappyComposer(props: {
         handlePermissionChange,
         handleModelChange,
         handleSuggestionSelect,
+        handleYohoCredentialSelect,
+        apiClient,
         autoOptimize,
         handleAutoOptimizeToggle
     ])
@@ -1753,6 +1804,9 @@ export function HappyComposer(props: {
                             onOptimizeSend={handleOptimizeForPreview}
                             hasAttachments={hasAttachments}
                             onSendWithAttachments={handleSendWithAttachments}
+                            showYohoCredentialButton={active}
+                            yohoCredentialDisabled={controlsDisabled}
+                            onYohoCredentialClick={handleYohoCredentialPickerToggle}
                         />
                         {/* Hidden image input */}
                         <input

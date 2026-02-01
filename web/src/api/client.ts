@@ -1125,6 +1125,40 @@ export class ApiClient {
             `/api/review/sessions/${encodeURIComponent(reviewId)}/applied-suggestions`
         )
     }
+
+    // ==================== Yoho Credentials ====================
+
+    async searchYohoCredentials(filters?: {
+        type?: string
+        name?: string
+        limit?: number
+    }): Promise<{
+        success: boolean
+        files?: Array<{
+            type: string
+            name: string
+            fullPath: string
+            relativePath: string
+        }>
+        availableTypes?: string[]
+        error?: string
+    }> {
+        const params = new URLSearchParams()
+        if (filters?.type) params.set('type', filters.type)
+        if (filters?.name) params.set('name', filters.name)
+        if (filters?.limit) params.set('limit', String(filters.limit))
+
+        const qs = params.toString()
+        return await this.request(`/api/yoho-credentials${qs ? `?${qs}` : ''}`)
+    }
+
+    async getYohoCredentialTypes(): Promise<{
+        success: boolean
+        types?: string[]
+        rootPath?: string
+    }> {
+        return await this.request('/api/yoho-credentials/types')
+    }
 }
 
 // Types for Review (试验性功能)

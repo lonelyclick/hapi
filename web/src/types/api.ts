@@ -406,3 +406,24 @@ export type BroadcastResponse = {
         results: Array<{ sessionId: string; success: boolean; error?: string }>
     }
 }
+
+// Yoho Credentials 相关类型
+export type YohoCredentialFile = {
+    type: string
+    name: string
+    fullPath: string
+    relativePath: string
+}
+
+export type YohoCredentialsResponse = {
+    success: boolean
+    files?: YohoCredentialFile[]
+    availableTypes?: string[]
+    error?: string
+}
+
+export type YohoCredentialTypesResponse = {
+    success: boolean
+    types?: string[]
+    rootPath?: string
+}
