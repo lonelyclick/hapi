@@ -57,9 +57,12 @@ export function App() {
     const isPublicRoute = pathname === '/login' || pathname.startsWith('/auth/')
     useEffect(() => {
         if (!isAuthLoading && !isAuthenticated && !isPublicRoute) {
-            navigate({ to: '/login', replace: true })
+            // Use window.location.href instead of navigate() to force a real page navigation
+            // This bypasses Service Worker cache in PWA mode where client-side navigation
+            // can get stuck serving cached "Redirecting..." state
+            window.location.href = '/login'
         }
-    }, [isAuthLoading, isAuthenticated, isPublicRoute, navigate])
+    }, [isAuthLoading, isAuthenticated, isPublicRoute])
 
     useEffect(() => {
         const preventDefault = (event: Event) => {
