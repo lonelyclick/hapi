@@ -121,6 +121,10 @@ export interface IStore {
     getSessionsSharedWithUser(email: string): Promise<string[]>  // 返回session IDs
     isSessionSharedWith(sessionId: string, email: string): Promise<boolean>
 
+    // === Session Privacy Mode 操作 ===
+    getSessionPrivacyMode(sessionId: string): Promise<boolean>  // 返回 true 表示私密模式
+    setSessionPrivacyMode(sessionId: string, privacyMode: boolean, namespace: string): Promise<boolean>
+
     // === Project 操作 ===
     getProjects(machineId?: string | null): Promise<StoredProject[]>  // 按 machineId 过滤，null 或不传则返回所有
     getProject(id: string): Promise<StoredProject | null>

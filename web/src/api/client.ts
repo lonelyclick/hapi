@@ -34,6 +34,8 @@ import type {
     SendGroupMessageResponse,
     SessionShare,
     SessionSharesResponse,
+    SessionPrivacyModeResponse,
+    UpdateSessionPrivacyModeResponse,
     SetRolePromptResponse,
     SlashCommandsResponse,
     SpeechToTextStreamRequest,
@@ -265,6 +267,17 @@ export class ApiClient {
     async removeSessionShare(sessionId: string, email: string): Promise<RemoveSessionShareResponse> {
         return await this.request<RemoveSessionShareResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/shares/${encodeURIComponent(email)}`, {
             method: 'DELETE'
+        })
+    }
+
+    async getSessionPrivacyMode(sessionId: string): Promise<SessionPrivacyModeResponse> {
+        return await this.request<SessionPrivacyModeResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/privacy-mode`)
+    }
+
+    async setSessionPrivacyMode(sessionId: string, privacyMode: boolean): Promise<UpdateSessionPrivacyModeResponse> {
+        return await this.request<UpdateSessionPrivacyModeResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/privacy-mode`, {
+            method: 'PUT',
+            body: JSON.stringify({ privacyMode })
         })
     }
 

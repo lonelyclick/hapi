@@ -1087,6 +1087,43 @@ export class PostgresStore implements IStore {
         return result.rows.length > 0
     }
 
+    // ========== Session Privacy Mode 操作 ==========
+
+    async getSessionPrivacyMode(sessionId: string): Promise<boolean> {
+        const result = await this.pool.query(
+            'SELECT metadata FROM sessions WHERE id = $1',
+            [sessionId]
+        )
+        if (result.rows.length === 0) return false
+        const metadata = result.rows[0].metadata as { privacyMode?: boolean } | null
+        return metadata?.privacyMode === true
+    }
+
+    async setSessionPrivacyMode(sessionId: string, privacyMode: boolean, namespace: string): Promise<boolean> {
+        // 首先获取当前 session 和 metadata 版本
+        const currentResult = await this.pool.query(
+            'SELECT metadata, metadata_version, namespace FROM sessions WHERE id = $1',
+            [sessionId]
+        )
+        if (currentResult.rows.length === 0) return false
+
+        const current = currentResult.rows[0]
+        if (current.namespace !== namespace) return false
+
+        const metadata = (current.metadata as { privacyMode?: boolean } | null) || {}
+        const newMetadata = { ...metadata, privacyMode }
+        const expectedVersion = current.metadata_version as number
+
+        const result = await this.pool.query(
+            `UPDATE sessions
+             SET metadata = $1, metadata_version = metadata_version + 1, updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
+             WHERE id = $2 AND metadata_version = $3
+             RETURNING metadata_version`,
+            [JSON.stringify(newMetadata), sessionId, expectedVersion]
+        )
+        return (result.rowCount ?? 0) > 0
+    }
+
     // ========== Project 操作 ==========
 
     async getProjects(machineId?: string | null): Promise<StoredProject[]> {

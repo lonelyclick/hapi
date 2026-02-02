@@ -108,6 +108,7 @@ export type SessionSummaryMetadata = {
     runtimeModelReasoningEffort?: ModelReasoningEffort
     worktree?: WorktreeMetadata
     source?: string
+    privacyMode?: boolean  // true = 私密模式，不分享给其他人
 }
 
 export type SessionViewer = {
@@ -235,6 +236,10 @@ export type SessionSharesResponse = { shares: SessionShare[] }
 export type AddSessionShareResponse = { ok: true }
 export type RemoveSessionShareResponse = { ok: true }
 export type AllowedUsersResponse = { users: { email: string; role: string }[] }
+
+// Session Privacy Mode 类型
+export type SessionPrivacyModeResponse = { privacyMode: boolean }
+export type UpdateSessionPrivacyModeResponse = { ok: true; privacyMode: boolean }
 export type MessageCountResponse = { count: number }
 export type MessagesResponse = {
     messages: DecryptedMessage[]

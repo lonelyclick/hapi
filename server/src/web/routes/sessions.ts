@@ -37,6 +37,7 @@ type SessionSummaryMetadata = {
         lastActivity?: number
         errorCount?: number
     }
+    privacyMode?: boolean  // 私密模式，true表示不分享给其他人
 }
 
 type SessionViewer = {
@@ -76,7 +77,8 @@ function toSessionSummary(session: Session): SessionSummary {
         worktree: session.metadata.worktree,
         // OpenCode 特有字段
         opencodeCapabilities: session.metadata.opencodeCapabilities,
-        opencodeStatus: session.metadata.opencodeStatus
+        opencodeStatus: session.metadata.opencodeStatus,
+        privacyMode: session.metadata.privacyMode
     } : null
 
     const todoProgress = session.todos?.length ? {
@@ -526,6 +528,12 @@ export function createSessionsRoutes(
                 }
                 // 如果我开启了 viewOthersSessions，且 session 来自开启了 shareAllSessions 的用户
                 if (viewOthersEnabled && shareAllUsersSet.has(s.createdBy)) {
+                    // 检查是否开启了私密模式
+                    const meta = s.metadata as { privacyMode?: boolean } | null
+                    if (meta?.privacyMode === true) {
+                        // 私密模式，不显示
+                        return false
+                    }
                     // 记录这个 session 的来源用户
                     sessionOwnerMap.set(s.id, s.createdBy)
                     return true
@@ -1379,6 +1387,69 @@ export function createSessionsRoutes(
     app.get('/users/allowed', async (c) => {
         const allowedUsers = await store.getAllowedUsers()
         return c.json({ users: allowedUsers.map(u => ({ email: u.email, role: u.role })) })
+    })
+
+    // ==================== Session Privacy Mode (私密模式) ====================
+
+    /**
+     * 获取session的隐私模式
+     * GET /sessions/:id/privacy-mode
+     */
+    app.get('/sessions/:id/privacy-mode', async (c) => {
+        const sessionId = c.req.param('id')
+        const email = c.get('email')
+
+        // 验证session存在
+        const storedSession = await store.getSession(sessionId)
+        if (!storedSession) {
+            return c.json({ error: 'Session not found' }, 404)
+        }
+
+        // 检查权限：必须是创建者
+        if (storedSession.createdBy !== email) {
+            return c.json({ error: 'Forbidden' }, 403)
+        }
+
+        const privacyMode = await store.getSessionPrivacyMode(sessionId)
+        return c.json({ privacyMode })
+    })
+
+    /**
+     * 设置session的隐私模式
+     * PUT /sessions/:id/privacy-mode
+     * Body: { privacyMode: boolean }
+     */
+    app.put('/sessions/:id/privacy-mode', async (c) => {
+        const sessionId = c.req.param('id')
+        const email = c.get('email')
+        const namespace = c.get('namespace')
+
+        if (!email) {
+            return c.json({ error: 'Email required' }, 400)
+        }
+
+        const body = await c.req.json().catch(() => null)
+        if (!body || typeof body.privacyMode !== 'boolean') {
+            return c.json({ error: 'Invalid body, expected { privacyMode: boolean }' }, 400)
+        }
+
+        // 验证session存在
+        const storedSession = await store.getSession(sessionId)
+        if (!storedSession) {
+            return c.json({ error: 'Session not found' }, 404)
+        }
+
+        // 只有创建者可以设置隐私模式
+        if (storedSession.createdBy !== email) {
+            return c.json({ error: 'Only session owner can set privacy mode' }, 403)
+        }
+
+        const success = await store.setSessionPrivacyMode(sessionId, body.privacyMode, namespace)
+        if (!success) {
+            return c.json({ error: 'Failed to set privacy mode' }, 500)
+        }
+
+        return c.json({ ok: true, privacyMode: body.privacyMode })
     })
 
     return app

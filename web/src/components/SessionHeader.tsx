@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project, Session, SessionViewer } from '@/types/api'
 import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
 import { getClientId } from '@/lib/client-identity'
@@ -7,6 +7,7 @@ import { ViewersBadge } from './ViewersBadge'
 import { ShareDialog } from './ShareDialog'
 import { useAppContext } from '@/lib/app-context'
 import { JoinReviewButton } from './Review'
+import { queryKeys } from '@/lib/query-keys'
 
 function getSessionPath(session: Session): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -177,6 +178,26 @@ function ShareIcon(props: { className?: string }) {
     )
 }
 
+function PrivacyIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+    )
+}
+
 function getAgentLabel(session: Session): string {
     const flavor = session.metadata?.flavor?.trim()
     if (flavor === 'claude') return 'Claude'
@@ -213,6 +234,7 @@ export function SessionHeader(props: {
     refreshAccountDisabled?: boolean
 }) {
     const { api, userEmail } = useAppContext()
+    const queryClient = useQueryClient()
     const title = useMemo(() => getSessionTitle(props.session), [props.session])
     const worktreeBranch = props.session.metadata?.worktree?.branch
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
@@ -221,6 +243,34 @@ export function SessionHeader(props: {
 
     // 分享对话框状态
     const [showShareDialog, setShowShareDialog] = useState(false)
+
+    // 获取用户偏好设置
+    const { data: userPreferences } = useQuery({
+        queryKey: queryKeys.userPreferences,
+        queryFn: async () => api.getUserPreferences()
+    })
+
+    // 获取 session 隐私模式
+    const { data: privacyModeData } = useQuery({
+        queryKey: ['session-privacy-mode', props.session.id],
+        queryFn: async () => api.getSessionPrivacyMode(props.session.id),
+        enabled: isCreator && userPreferences?.shareAllSessions === true
+    })
+    const privacyMode = privacyModeData?.privacyMode ?? false
+
+    // 设置隐私模式的 mutation
+    const setPrivacyModeMutation = useMutation({
+        mutationFn: async (enabled: boolean) => {
+            return await api.setSessionPrivacyMode(props.session.id, enabled)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(['session-privacy-mode', props.session.id], {
+                privacyMode: result.privacyMode
+            })
+            // 刷新 session 列表以更新显示
+            queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+        }
+    })
 
     // 查询项目列表
     const { data: projectsData } = useQuery({
@@ -373,16 +423,34 @@ export function SessionHeader(props: {
                     )}
                     {/* PC端：独立按钮 */}
                     <div className="hidden sm:flex items-center gap-1.5">
-                        {/* Share button - 只有创建者可以分享 */}
-                        {isCreator && (
+                        {/* Privacy Mode toggle - 当全局开启 Share My Sessions 时显示 */}
+                        {isCreator && userPreferences?.shareAllSessions === true ? (
                             <button
                                 type="button"
-                                onClick={() => setShowShareDialog(true)}
-                                className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-purple-500/10 hover:text-purple-600"
-                                title="Share session"
+                                onClick={() => setPrivacyModeMutation.mutate(!privacyMode)}
+                                disabled={setPrivacyModeMutation.isPending}
+                                className={`flex h-7 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium transition-colors ${
+                                    privacyMode
+                                        ? 'bg-red-500/10 text-red-600 hover:bg-red-500/20'
+                                        : 'bg-green-500/10 text-green-600 hover:bg-green-500/20'
+                                } ${setPrivacyModeMutation.isPending ? 'opacity-50' : ''}`}
+                                title={privacyMode ? '关闭隐私模式 (别人可以看到)' : '开启隐私模式 (别人看不到)'}
                             >
-                                <ShareIcon />
+                                <PrivacyIcon />
+                                <span className="hidden md:inline">{privacyMode ? '私密' : '公开'}</span>
                             </button>
+                        ) : (
+                            /* Share button - 只有创建者可以分享 */
+                            isCreator && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowShareDialog(true)}
+                                    className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-purple-500/10 hover:text-purple-600"
+                                    title="Share session"
+                                >
+                                    <ShareIcon />
+                                </button>
+                            )
                         )}
                         {props.onRefreshAccount ? (
                             <button
@@ -470,7 +538,24 @@ export function SessionHeader(props: {
                                     </button>
                                 )}
                                 {/* 分享会话 - 只有创建者可以分享 */}
-                                {isCreator && (
+                                {isCreator && userPreferences?.shareAllSessions === true ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false)
+                                            setPrivacyModeMutation.mutate(!privacyMode)
+                                        }}
+                                        disabled={setPrivacyModeMutation.isPending}
+                                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                                            privacyMode
+                                                ? 'text-red-600 bg-red-500/10'
+                                                : 'text-green-600 bg-green-500/10'
+                                        } ${setPrivacyModeMutation.isPending ? 'opacity-50' : ''}`}
+                                    >
+                                        <PrivacyIcon className="shrink-0" />
+                                        <span>{privacyMode ? '关闭隐私模式' : '开启隐私模式'}</span>
+                                    </button>
+                                ) : isCreator && (
                                     <button
                                         type="button"
                                         onClick={() => {
