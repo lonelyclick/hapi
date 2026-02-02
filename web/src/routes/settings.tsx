@@ -651,12 +651,15 @@ export default function SettingsPage() {
     })
 
     const updatePreferencesMutation = useMutation({
-        mutationFn: async (preferences: { shareAllSessions: boolean }) => {
+        mutationFn: async (preferences: { shareAllSessions?: boolean; viewOthersSessions?: boolean }) => {
             if (!api) throw new Error('API unavailable')
             return await api.updateUserPreferences(preferences)
         },
         onSuccess: (result) => {
-            queryClient.setQueryData(queryKeys.userPreferences, { shareAllSessions: result.shareAllSessions })
+            queryClient.setQueryData(queryKeys.userPreferences, {
+                shareAllSessions: result.shareAllSessions,
+                viewOthersSessions: result.viewOthersSessions
+            })
         }
     })
 
@@ -664,6 +667,11 @@ export default function SettingsPage() {
         const newValue = !userPreferences?.shareAllSessions
         updatePreferencesMutation.mutate({ shareAllSessions: newValue })
     }, [userPreferences?.shareAllSessions, updatePreferencesMutation])
+
+    const handleToggleViewOthersSessions = useCallback(() => {
+        const newValue = !userPreferences?.viewOthersSessions
+        updatePreferencesMutation.mutate({ viewOthersSessions: newValue })
+    }, [userPreferences?.viewOthersSessions, updatePreferencesMutation])
 
     const handleNotificationToggle = useCallback(async () => {
         if (notificationPermission === 'default') {
@@ -740,9 +748,9 @@ export default function SettingsPage() {
                         <div className="divide-y divide-[var(--app-divider)]">
                             <div className="px-3 py-2.5 flex items-center justify-between gap-3">
                                 <div className="flex-1">
-                                    <div className="text-sm">Share All Sessions</div>
+                                    <div className="text-sm">Share My Sessions</div>
                                     <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                        Allow all team members to view and interact with your sessions
+                                        Allow team members to view and interact with your sessions
                                     </div>
                                 </div>
                                 <button
@@ -756,6 +764,28 @@ export default function SettingsPage() {
                                     <span
                                         className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                                             userPreferences?.shareAllSessions ? 'translate-x-5' : 'translate-x-0'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+                            <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                                <div className="flex-1">
+                                    <div className="text-sm">View Others' Sessions</div>
+                                    <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                        Show sessions shared by other team members
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleToggleViewOthersSessions}
+                                    disabled={preferencesLoading || updatePreferencesMutation.isPending}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                                        userPreferences?.viewOthersSessions ? 'bg-green-500' : 'bg-[var(--app-secondary-bg)]'
+                                    }`}
+                                >
+                                    <span
+                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                            userPreferences?.viewOthersSessions ? 'translate-x-5' : 'translate-x-0'
                                         }`}
                                     />
                                 </button>

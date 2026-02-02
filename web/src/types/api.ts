@@ -218,9 +218,10 @@ export type DeleteSessionResponse = { ok: true }
 // 用户设置类型
 export type UserPreferences = {
     shareAllSessions: boolean
+    viewOthersSessions: boolean
 }
 export type UserPreferencesResponse = UserPreferences
-export type UpdateUserPreferencesResponse = { ok: true; shareAllSessions: boolean }
+export type UpdateUserPreferencesResponse = { ok: true; shareAllSessions: boolean; viewOthersSessions: boolean }
 
 // Session Shares 类型
 export type SessionShare = {

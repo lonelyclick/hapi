@@ -379,6 +379,7 @@ export type StoredAllowedEmail = {
     email: string
     role: UserRole
     shareAllSessions: boolean
+    viewOthersSessions: boolean
     createdAt: number
 }
 

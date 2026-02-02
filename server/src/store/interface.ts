@@ -111,6 +111,8 @@ export interface IStore {
     getShareAllSessions(email: string): Promise<boolean>
     setShareAllSessions(email: string, enabled: boolean): Promise<boolean>
     getUsersWithShareAllSessions(): Promise<string[]>
+    getViewOthersSessions(email: string): Promise<boolean>
+    setViewOthersSessions(email: string, enabled: boolean): Promise<boolean>
 
     // === Session Shares 操作 (Keycloak用户之间的session共享) ===
     getSessionShares(sessionId: string): Promise<StoredSessionShare[]>

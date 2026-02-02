@@ -499,15 +499,21 @@ export function createSessionsRoutes(
             // Keycloak用户看到：
             // 1) 自己创建的 session
             // 2) 被共享给自己的 session
-            // 3) 开启了 shareAllSessions 的用户的所有 session
+            // 3) 如果我开启了 viewOthersSessions，则看到开启了 shareAllSessions 的用户的所有 session
             const sharedWithMe = await store.getSessionsSharedWithUser(email)
             const sharedSet = new Set(sharedWithMe)
 
-            // 获取开启了 shareAllSessions 的用户列表
-            const usersWithShareAll = await store.getUsersWithShareAllSessions()
-            const shareAllUsersSet = new Set(usersWithShareAll)
-            // 排除自己（不需要标记自己的 session）
-            shareAllUsersSet.delete(email)
+            // 检查当前用户是否开启了"查看别人 session"
+            const viewOthersEnabled = await store.getViewOthersSessions(email)
+
+            // 获取开启了 shareAllSessions 的用户列表（只有当我开启了 viewOthersSessions 才需要查询）
+            let shareAllUsersSet = new Set<string>()
+            if (viewOthersEnabled) {
+                const usersWithShareAll = await store.getUsersWithShareAllSessions()
+                shareAllUsersSet = new Set(usersWithShareAll)
+                // 排除自己（不需要标记自己的 session）
+                shareAllUsersSet.delete(email)
+            }
 
             storedSessions = storedSessions.filter(s => {
                 // 自己创建的，或者没有 createdBy 的 session
@@ -518,8 +524,8 @@ export function createSessionsRoutes(
                 if (sharedSet.has(s.id)) {
                     return true
                 }
-                // 来自开启了 shareAllSessions 的用户
-                if (shareAllUsersSet.has(s.createdBy)) {
+                // 如果我开启了 viewOthersSessions，且 session 来自开启了 shareAllSessions 的用户
+                if (viewOthersEnabled && shareAllUsersSet.has(s.createdBy)) {
                     // 记录这个 session 的来源用户
                     sessionOwnerMap.set(s.id, s.createdBy)
                     return true

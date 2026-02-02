@@ -216,18 +216,21 @@ export function createSettingsRoutes(
 
     // ==================== 用户隐私设置 ====================
 
-    // 获取当前用户的 shareAllSessions 设置
+    // 获取当前用户的设置
     app.get('/settings/user-preferences', async (c) => {
         const email = c.get('email')
         if (!email) {
             return c.json({ error: 'Unauthorized' }, 401)
         }
 
-        const shareAllSessions = await store.getShareAllSessions(email)
-        return c.json({ shareAllSessions })
+        const [shareAllSessions, viewOthersSessions] = await Promise.all([
+            store.getShareAllSessions(email),
+            store.getViewOthersSessions(email)
+        ])
+        return c.json({ shareAllSessions, viewOthersSessions })
     })
 
-    // 设置当前用户的 shareAllSessions 开关
+    // 设置当前用户的偏好
     app.put('/settings/user-preferences', async (c) => {
         const email = c.get('email')
         if (!email) {
@@ -235,16 +238,33 @@ export function createSettingsRoutes(
         }
 
         const json = await c.req.json().catch(() => null)
-        if (!json || typeof json.shareAllSessions !== 'boolean') {
+        if (!json) {
             return c.json({ error: 'Invalid data' }, 400)
         }
 
-        const success = await store.setShareAllSessions(email, json.shareAllSessions)
-        if (!success) {
+        const updates: Promise<boolean>[] = []
+        if (typeof json.shareAllSessions === 'boolean') {
+            updates.push(store.setShareAllSessions(email, json.shareAllSessions))
+        }
+        if (typeof json.viewOthersSessions === 'boolean') {
+            updates.push(store.setViewOthersSessions(email, json.viewOthersSessions))
+        }
+
+        if (updates.length === 0) {
+            return c.json({ error: 'No valid fields to update' }, 400)
+        }
+
+        const results = await Promise.all(updates)
+        if (results.some(r => !r)) {
             return c.json({ error: 'Failed to update settings' }, 500)
         }
 
-        return c.json({ ok: true, shareAllSessions: json.shareAllSessions })
+        // 返回更新后的值
+        const [shareAllSessions, viewOthersSessions] = await Promise.all([
+            store.getShareAllSessions(email),
+            store.getViewOthersSessions(email)
+        ])
+        return c.json({ ok: true, shareAllSessions, viewOthersSessions })
     })
 
     return app

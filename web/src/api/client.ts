@@ -278,7 +278,7 @@ export class ApiClient {
         return await this.request<UserPreferencesResponse>('/api/settings/user-preferences')
     }
 
-    async updateUserPreferences(preferences: { shareAllSessions: boolean }): Promise<UpdateUserPreferencesResponse> {
+    async updateUserPreferences(preferences: { shareAllSessions?: boolean; viewOthersSessions?: boolean }): Promise<UpdateUserPreferencesResponse> {
         return await this.request<UpdateUserPreferencesResponse>('/api/settings/user-preferences', {
             method: 'PUT',
             body: JSON.stringify(preferences)
