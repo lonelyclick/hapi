@@ -655,11 +655,15 @@ export default function SettingsPage() {
             if (!api) throw new Error('API unavailable')
             return await api.updateUserPreferences(preferences)
         },
-        onSuccess: (result) => {
+        onSuccess: (result, variables) => {
             queryClient.setQueryData(queryKeys.userPreferences, {
                 shareAllSessions: result.shareAllSessions,
                 viewOthersSessions: result.viewOthersSessions
             })
+            // 如果修改了 viewOthersSessions，需要刷新 session 列表
+            if (variables.viewOthersSessions !== undefined) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+            }
         }
     })
 
