@@ -423,34 +423,32 @@ export function SessionHeader(props: {
                     )}
                     {/* PC端：独立按钮 */}
                     <div className="hidden sm:flex items-center gap-1.5">
-                        {/* Privacy Mode toggle - 当全局开启 Share My Sessions 时显示 */}
-                        {isCreator && userPreferences?.shareAllSessions === true ? (
+                        {/* Privacy Mode icon - 当全局开启 Share My Sessions 时显示 (仅图标) */}
+                        {isCreator && userPreferences?.shareAllSessions === true && (
                             <button
                                 type="button"
                                 onClick={() => setPrivacyModeMutation.mutate(!privacyMode)}
                                 disabled={setPrivacyModeMutation.isPending}
-                                className={`flex h-7 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium transition-colors ${
+                                className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
                                     privacyMode
                                         ? 'bg-red-500/10 text-red-600 hover:bg-red-500/20'
                                         : 'bg-green-500/10 text-green-600 hover:bg-green-500/20'
                                 } ${setPrivacyModeMutation.isPending ? 'opacity-50' : ''}`}
-                                title={privacyMode ? '关闭隐私模式 (别人可以看到)' : '开启隐私模式 (别人看不到)'}
+                                title={privacyMode ? 'Private Mode' : 'Public Mode'}
                             >
                                 <PrivacyIcon />
-                                <span className="hidden md:inline">{privacyMode ? 'Private' : 'Public'}</span>
                             </button>
-                        ) : (
-                            /* Share button - 只有创建者可以分享 */
-                            isCreator && (
-                                <button
-                                    type="button"
-                                    onClick={() => setShowShareDialog(true)}
-                                    className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-purple-500/10 hover:text-purple-600"
-                                    title="Share session"
-                                >
-                                    <ShareIcon />
-                                </button>
-                            )
+                        )}
+                        {/* Share button - 只有创建者可以分享 (未开启 Share My Sessions 时显示) */}
+                        {isCreator && userPreferences?.shareAllSessions !== true && (
+                            <button
+                                type="button"
+                                onClick={() => setShowShareDialog(true)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-purple-500/10 hover:text-purple-600"
+                                title="Share session"
+                            >
+                                <ShareIcon />
+                            </button>
                         )}
                         {props.onRefreshAccount ? (
                             <button
