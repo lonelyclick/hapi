@@ -178,7 +178,7 @@ function ShareIcon(props: { className?: string }) {
     )
 }
 
-function PrivacyIcon(props: { className?: string }) {
+function LockIcon(props: { className?: string }) {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -194,6 +194,26 @@ function PrivacyIcon(props: { className?: string }) {
         >
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+    )
+}
+
+function UnlockIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 9.9-1" />
         </svg>
     )
 }
@@ -436,7 +456,7 @@ export function SessionHeader(props: {
                                 } ${setPrivacyModeMutation.isPending ? 'opacity-50' : ''}`}
                                 title={privacyMode ? 'Private Mode' : 'Public Mode'}
                             >
-                                <PrivacyIcon />
+                                {privacyMode ? <LockIcon /> : <UnlockIcon />}
                             </button>
                         )}
                         {/* Share button - 只有创建者可以分享 (未开启 Share My Sessions 时显示) */}
@@ -550,7 +570,7 @@ export function SessionHeader(props: {
                                                 : 'text-green-600 bg-green-500/10'
                                         } ${setPrivacyModeMutation.isPending ? 'opacity-50' : ''}`}
                                     >
-                                        <PrivacyIcon className="shrink-0" />
+                                        {privacyMode ? <LockIcon className="shrink-0" /> : <UnlockIcon className="shrink-0" />}
                                         <span>{privacyMode ? 'Private Mode' : 'Public Mode'}</span>
                                     </button>
                                 ) : isCreator && (
