@@ -130,6 +130,12 @@ function SessionsPage() {
     })
     const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
 
+    // Fetch user preferences to check if viewOthersSessions is enabled
+    const { data: userPreferences } = useQuery({
+        queryKey: queryKeys.userPreferences,
+        queryFn: async () => api.getUserPreferences()
+    })
+
     const handleRefresh = useCallback(() => {
         void refetch()
     }, [refetch])
@@ -245,6 +251,7 @@ function SessionsPage() {
                     sessions={sessions}
                     projects={projects}
                     currentUserEmail={userEmail}
+                    viewOthersSessions={userPreferences?.viewOthersSessions}
                     onSelect={(sessionId) => navigate({
                         to: '/sessions/$sessionId',
                         params: { sessionId },

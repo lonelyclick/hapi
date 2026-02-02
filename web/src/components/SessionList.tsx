@@ -5,6 +5,7 @@ import { LoadingState } from './LoadingState'
 
 // Filter types
 type ArchiveFilter = boolean  // true = show archived (offline) sessions only
+type OwnerFilter = 'all' | 'mine' | 'others'
 
 function getSessionPath(session: SessionSummary): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -55,12 +56,23 @@ function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
 // Filter sessions
 function filterSessions(
     sessions: SessionSummary[],
-    archiveFilter: ArchiveFilter
+    archiveFilter: ArchiveFilter,
+    ownerFilter: OwnerFilter,
+    currentUserEmail: string | null
 ): SessionSummary[] {
     return sessions.filter(session => {
         // Archive filter: if true, show only offline sessions; if false, show only active sessions
         if (archiveFilter && session.active) return false
         if (!archiveFilter && !session.active) return false
+
+        // Owner filter
+        if (ownerFilter === 'mine') {
+            // Show only my sessions (no ownerEmail means it's mine)
+            if (session.ownerEmail) return false
+        } else if (ownerFilter === 'others') {
+            // Show only others' sessions (has ownerEmail)
+            if (!session.ownerEmail) return false
+        }
 
         return true
     })
@@ -344,16 +356,18 @@ export function SessionList(props: {
     sessions: SessionSummary[]
     projects: Project[]
     currentUserEmail: string | null
+    viewOthersSessions?: boolean
     onSelect: (sessionId: string) => void
     onNewSession: () => void
     onRefresh: () => void
     isLoading: boolean
     renderHeader?: boolean
 }) {
-    const { renderHeader = true } = props
+    const { renderHeader = true, viewOthersSessions = false } = props
 
     // Filter state - defaults: not archived
     const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>(false)
+    const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all')
 
     // Build session to project mapping (still used for display)
     const sessionProjectMap = useMemo(() => {
@@ -368,9 +382,9 @@ export function SessionList(props: {
 
     // Filter and sort sessions (flat display)
     const filteredSessions = useMemo(() => {
-        const filtered = filterSessions(props.sessions, archiveFilter)
+        const filtered = filterSessions(props.sessions, archiveFilter, ownerFilter, props.currentUserEmail)
         return sortSessions(filtered)
-    }, [props.sessions, archiveFilter])
+    }, [props.sessions, archiveFilter, ownerFilter, props.currentUserEmail])
 
     // Statistics
     const activeCount = filteredSessions.filter(s => s.active).length
@@ -412,6 +426,52 @@ export function SessionList(props: {
                         {archiveFilter ? 'Archive' : 'Active'}
                     </button>
                 </div>
+                {viewOthersSessions && (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-xs text-[var(--app-hint)] shrink-0">Owner:</span>
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setOwnerFilter('all')}
+                                className={`
+                                    px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                                    ${ownerFilter === 'all'
+                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                    }
+                                `}
+                            >
+                                All
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setOwnerFilter('mine')}
+                                className={`
+                                    px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                                    ${ownerFilter === 'mine'
+                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                    }
+                                `}
+                            >
+                                Mine
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setOwnerFilter('others')}
+                                className={`
+                                    px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                                    ${ownerFilter === 'others'
+                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                    }
+                                `}
+                            >
+                                Others
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Sessions list */}
