@@ -960,17 +960,14 @@ export default function SettingsPage() {
                                     type="button"
                                     onClick={() => handleToggleAutoRotate(!autoRotateEnabled)}
                                     disabled={updateAccountConfigMutation.isPending}
-                                    className={`
-                                        relative w-11 h-6 rounded-full transition-colors duration-200
-                                        ${autoRotateEnabled ? 'bg-emerald-500' : 'bg-[var(--app-border)]'}
-                                        ${updateAccountConfigMutation.isPending ? 'opacity-50' : ''}
-                                    `}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                                        autoRotateEnabled ? 'bg-green-500' : 'bg-[var(--app-secondary-bg)]'
+                                    }`}
                                 >
                                     <span
-                                        className={`
-                                            absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200
-                                            ${autoRotateEnabled ? 'translate-x-5' : 'translate-x-0'}
-                                        `}
+                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                            autoRotateEnabled ? 'translate-x-5' : 'translate-x-0'
+                                        }`}
                                     />
                                 </button>
                             </div>
@@ -1088,21 +1085,16 @@ export default function SettingsPage() {
                                         type="button"
                                         onClick={handleNotificationToggle}
                                         disabled={notificationPermission === 'denied'}
-                                        className={`
-                                            relative w-11 h-6 rounded-full transition-colors duration-200
-                                            ${notificationPermission === 'denied'
-                                                ? 'bg-[var(--app-border)] cursor-not-allowed opacity-50'
-                                                : notificationPermission === 'granted' && notificationEnabled
-                                                    ? 'bg-emerald-500'
-                                                    : 'bg-[var(--app-border)]'
-                                            }
-                                        `}
+                                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                                            notificationPermission === 'granted' && notificationEnabled
+                                                ? 'bg-green-500'
+                                                : 'bg-[var(--app-secondary-bg)]'
+                                        }`}
                                     >
                                         <span
-                                            className={`
-                                                absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200
-                                                ${notificationPermission === 'granted' && notificationEnabled ? 'translate-x-5' : 'translate-x-0'}
-                                            `}
+                                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                                notificationPermission === 'granted' && notificationEnabled ? 'translate-x-5' : 'translate-x-0'
+                                            }`}
                                         />
                                     </button>
                                 </div>
