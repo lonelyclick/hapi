@@ -5,7 +5,7 @@ import { LoadingState } from './LoadingState'
 
 // Filter types
 type ArchiveFilter = boolean  // true = show archived (offline) sessions only
-type OwnerFilter = 'all' | 'mine' | 'others'
+type OwnerFilter = 'mine' | 'others'
 
 function getSessionPath(session: SessionSummary): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -57,8 +57,7 @@ function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
 function filterSessions(
     sessions: SessionSummary[],
     archiveFilter: ArchiveFilter,
-    ownerFilter: OwnerFilter,
-    currentUserEmail: string | null
+    ownerFilter: OwnerFilter
 ): SessionSummary[] {
     return sessions.filter(session => {
         // Archive filter: if true, show only offline sessions; if false, show only active sessions
@@ -365,9 +364,9 @@ export function SessionList(props: {
 }) {
     const { renderHeader = true, viewOthersSessions = false } = props
 
-    // Filter state - defaults: not archived
+    // Filter state - defaults: not archived, show mine by default
     const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>(false)
-    const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all')
+    const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('mine')
 
     // Build session to project mapping (still used for display)
     const sessionProjectMap = useMemo(() => {
@@ -382,9 +381,9 @@ export function SessionList(props: {
 
     // Filter and sort sessions (flat display)
     const filteredSessions = useMemo(() => {
-        const filtered = filterSessions(props.sessions, archiveFilter, ownerFilter, props.currentUserEmail)
+        const filtered = filterSessions(props.sessions, archiveFilter, ownerFilter)
         return sortSessions(filtered)
-    }, [props.sessions, archiveFilter, ownerFilter, props.currentUserEmail])
+    }, [props.sessions, archiveFilter, ownerFilter])
 
     // Statistics
     const activeCount = filteredSessions.filter(s => s.active).length
@@ -430,19 +429,6 @@ export function SessionList(props: {
                     <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-xs text-[var(--app-hint)] shrink-0">Owner:</span>
                         <div className="flex items-center gap-1">
-                            <button
-                                type="button"
-                                onClick={() => setOwnerFilter('all')}
-                                className={`
-                                    px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
-                                    ${ownerFilter === 'all'
-                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
-                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
-                                    }
-                                `}
-                            >
-                                All
-                            </button>
                             <button
                                 type="button"
                                 onClick={() => setOwnerFilter('mine')}
