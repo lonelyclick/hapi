@@ -241,6 +241,12 @@ export function SessionHeader(props: {
     const runtimeAgent = props.session.metadata?.runtimeAgent?.trim() || null
     const runtimeModel = useMemo(() => formatRuntimeModel(props.session), [props.session])
 
+    // Check if current user is the creator of this session (must be defined before queries that use it)
+    const isCreator = useMemo(() => {
+        if (!userEmail) return false
+        return props.session.createdBy === userEmail
+    }, [userEmail, props.session.createdBy])
+
     // 分享对话框状态
     const [showShareDialog, setShowShareDialog] = useState(false)
 
@@ -304,12 +310,6 @@ export function SessionHeader(props: {
     const tg = getTelegramWebApp()
     const currentChatId = tg?.initDataUnsafe?.user?.id?.toString() ?? null
     const currentClientId = getClientId()
-
-    // Check if current user is the creator of this session
-    const isCreator = useMemo(() => {
-        if (!userEmail) return false
-        return props.session.createdBy === userEmail
-    }, [userEmail, props.session.createdBy])
 
     // 过滤掉自己，只显示其他在线用户
     const otherViewers = useMemo(() => {
