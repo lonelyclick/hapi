@@ -437,7 +437,7 @@ export function SessionHeader(props: {
                                 title={privacyMode ? '关闭隐私模式 (别人可以看到)' : '开启隐私模式 (别人看不到)'}
                             >
                                 <PrivacyIcon />
-                                <span className="hidden md:inline">{privacyMode ? '私密' : '公开'}</span>
+                                <span className="hidden md:inline">{privacyMode ? 'Private' : 'Public'}</span>
                             </button>
                         ) : (
                             /* Share button - 只有创建者可以分享 */
@@ -553,7 +553,7 @@ export function SessionHeader(props: {
                                         } ${setPrivacyModeMutation.isPending ? 'opacity-50' : ''}`}
                                     >
                                         <PrivacyIcon className="shrink-0" />
-                                        <span>{privacyMode ? '关闭隐私模式' : '开启隐私模式'}</span>
+                                        <span>{privacyMode ? 'Private Mode' : 'Public Mode'}</span>
                                     </button>
                                 ) : isCreator && (
                                     <button
