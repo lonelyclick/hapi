@@ -762,7 +762,7 @@ export default function SettingsPage() {
                                     onClick={handleToggleShareAllSessions}
                                     disabled={preferencesLoading || updatePreferencesMutation.isPending}
                                     className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                                        userPreferences?.shareAllSessions ? 'bg-green-500' : 'bg-[var(--app-secondary-bg)]'
+                                        userPreferences?.shareAllSessions ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
                                     }`}
                                 >
                                     <span
@@ -784,7 +784,7 @@ export default function SettingsPage() {
                                     onClick={handleToggleViewOthersSessions}
                                     disabled={preferencesLoading || updatePreferencesMutation.isPending}
                                     className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                                        userPreferences?.viewOthersSessions ? 'bg-green-500' : 'bg-[var(--app-secondary-bg)]'
+                                        userPreferences?.viewOthersSessions ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
                                     }`}
                                 >
                                     <span
@@ -961,7 +961,7 @@ export default function SettingsPage() {
                                     onClick={() => handleToggleAutoRotate(!autoRotateEnabled)}
                                     disabled={updateAccountConfigMutation.isPending}
                                     className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                                        autoRotateEnabled ? 'bg-green-500' : 'bg-[var(--app-secondary-bg)]'
+                                        autoRotateEnabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
                                     }`}
                                 >
                                     <span
@@ -1088,7 +1088,7 @@ export default function SettingsPage() {
                                         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
                                             notificationPermission === 'granted' && notificationEnabled
                                                 ? 'bg-green-500'
-                                                : 'bg-[var(--app-secondary-bg)]'
+                                                : 'bg-gray-300 dark:bg-gray-600'
                                         }`}
                                     >
                                         <span
