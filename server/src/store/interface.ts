@@ -27,6 +27,7 @@ import type {
     StoredRolePrompt,
     StoredInputPreset,
     StoredAllowedEmail,
+    StoredSessionShare,
     UserRole,
     VersionedUpdateResult,
     SuggestionStatus,
@@ -107,6 +108,9 @@ export interface IStore {
     removeAllowedEmail(email: string): Promise<boolean>
     isEmailAllowed(email: string): Promise<boolean>
     getEmailRole(email: string): Promise<UserRole | null>
+    getShareAllSessions(email: string): Promise<boolean>
+    setShareAllSessions(email: string, enabled: boolean): Promise<boolean>
+    getUsersWithShareAllSessions(): Promise<string[]>
 
     // === Session Shares 操作 (Keycloak用户之间的session共享) ===
     getSessionShares(sessionId: string): Promise<StoredSessionShare[]>

@@ -214,5 +214,38 @@ export function createSettingsRoutes(
         return c.json({ ok: true, presets })
     })
 
+    // ==================== 用户隐私设置 ====================
+
+    // 获取当前用户的 shareAllSessions 设置
+    app.get('/settings/user-preferences', async (c) => {
+        const email = c.get('email')
+        if (!email) {
+            return c.json({ error: 'Unauthorized' }, 401)
+        }
+
+        const shareAllSessions = await store.getShareAllSessions(email)
+        return c.json({ shareAllSessions })
+    })
+
+    // 设置当前用户的 shareAllSessions 开关
+    app.put('/settings/user-preferences', async (c) => {
+        const email = c.get('email')
+        if (!email) {
+            return c.json({ error: 'Unauthorized' }, 401)
+        }
+
+        const json = await c.req.json().catch(() => null)
+        if (!json || typeof json.shareAllSessions !== 'boolean') {
+            return c.json({ error: 'Invalid data' }, 400)
+        }
+
+        const success = await store.setShareAllSessions(email, json.shareAllSessions)
+        if (!success) {
+            return c.json({ error: 'Failed to update settings' }, 500)
+        }
+
+        return c.json({ ok: true, shareAllSessions: json.shareAllSessions })
+    })
+
     return app
 }

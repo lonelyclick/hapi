@@ -45,7 +45,9 @@ import type {
     SessionsResponse,
     UpdateGroupResponse,
     UpdateInputPresetResponse,
-    UpdateProjectResponse
+    UpdateProjectResponse,
+    UpdateUserPreferencesResponse,
+    UserPreferencesResponse
 } from '@/types/api'
 
 type ApiClientOptions = {
@@ -268,6 +270,19 @@ export class ApiClient {
 
     async getAllowedUsers(): Promise<AllowedUsersResponse> {
         return await this.request<AllowedUsersResponse>('/api/users/allowed')
+    }
+
+    // ========== User Preferences ==========
+
+    async getUserPreferences(): Promise<UserPreferencesResponse> {
+        return await this.request<UserPreferencesResponse>('/api/settings/user-preferences')
+    }
+
+    async updateUserPreferences(preferences: { shareAllSessions: boolean }): Promise<UpdateUserPreferencesResponse> {
+        return await this.request<UpdateUserPreferencesResponse>('/api/settings/user-preferences', {
+            method: 'PUT',
+            body: JSON.stringify(preferences)
+        })
     }
 
     async getMessages(sessionId: string, options: { beforeSeq?: number | null; limit?: number }): Promise<MessagesResponse> {

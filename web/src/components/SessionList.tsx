@@ -307,7 +307,13 @@ function SessionItem(props: {
                             <span className="truncate" title={project.path}>{project.name}</span>
                         </>
                     )}
-                    {!isMySession && s.createdBy && (
+                    {s.ownerEmail && (
+                        <>
+                            <span className="opacity-50">·</span>
+                            <span className="shrink-0 text-blue-500" title={s.ownerEmail}>@ {getCreatorDisplayName(s.ownerEmail)}</span>
+                        </>
+                    )}
+                    {!isMySession && s.createdBy && !s.ownerEmail && (
                         <>
                             <span className="opacity-50">·</span>
                             <span className="shrink-0" title={s.createdBy}>share by {getCreatorDisplayName(s.createdBy)}</span>

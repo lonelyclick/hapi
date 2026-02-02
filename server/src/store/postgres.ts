@@ -30,6 +30,7 @@ import type {
     StoredRolePrompt,
     StoredInputPreset,
     StoredAllowedEmail,
+    StoredSessionShare,
     UserRole,
     VersionedUpdateResult,
     SuggestionStatus,
@@ -158,8 +159,11 @@ export class PostgresStore implements IStore {
                 id SERIAL PRIMARY KEY,
                 email TEXT NOT NULL UNIQUE,
                 role TEXT NOT NULL DEFAULT 'developer',
+                share_all_sessions BOOLEAN NOT NULL DEFAULT TRUE,
                 created_at BIGINT NOT NULL
             );
+            -- Migration: Add share_all_sessions column if not exists (default TRUE for team sharing)
+            ALTER TABLE allowed_emails ADD COLUMN IF NOT EXISTS share_all_sessions BOOLEAN NOT NULL DEFAULT TRUE;
 
             -- Session Shares 表 (Keycloak用户之间的session共享)
             CREATE TABLE IF NOT EXISTS session_shares (
@@ -953,10 +957,11 @@ export class PostgresStore implements IStore {
     }
 
     async getAllowedUsers(): Promise<StoredAllowedEmail[]> {
-        const result = await this.pool.query('SELECT email, role, created_at FROM allowed_emails')
+        const result = await this.pool.query('SELECT email, role, share_all_sessions, created_at FROM allowed_emails')
         return result.rows.map(row => ({
             email: row.email,
             role: row.role as UserRole,
+            shareAllSessions: row.share_all_sessions ?? true,  // 默认为 true
             createdAt: Number(row.created_at)
         }))
     }
@@ -991,6 +996,25 @@ export class PostgresStore implements IStore {
     async getEmailRole(email: string): Promise<UserRole | null> {
         const result = await this.pool.query('SELECT role FROM allowed_emails WHERE email = $1', [email])
         return result.rows.length > 0 ? result.rows[0].role as UserRole : null
+    }
+
+    async getShareAllSessions(email: string): Promise<boolean> {
+        const result = await this.pool.query('SELECT share_all_sessions FROM allowed_emails WHERE email = $1', [email])
+        // 默认为 true（团队共享模式）
+        return result.rows.length > 0 ? (result.rows[0].share_all_sessions ?? true) : true
+    }
+
+    async setShareAllSessions(email: string, enabled: boolean): Promise<boolean> {
+        const result = await this.pool.query(
+            'UPDATE allowed_emails SET share_all_sessions = $1 WHERE email = $2',
+            [enabled, email]
+        )
+        return (result.rowCount ?? 0) > 0
+    }
+
+    async getUsersWithShareAllSessions(): Promise<string[]> {
+        const result = await this.pool.query('SELECT email FROM allowed_emails WHERE share_all_sessions = TRUE')
+        return result.rows.map(row => row.email)
     }
 
     // ========== Session Shares 操作 ==========

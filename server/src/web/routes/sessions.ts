@@ -4,7 +4,7 @@ import type { DecryptedMessage, Session, SyncEngine } from '../../sync/syncEngin
 import type { SSEManager } from '../../sse/sseManager'
 import type { IStore, UserRole, StoredSession } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireMachine, requireSessionFromParam, requireSyncEngine } from './guards'
+import { requireMachine, requireSessionFromParam, requireSessionFromParamWithShareCheck, requireSyncEngine } from './guards'
 import { buildInitPrompt } from '../prompts/initPrompt'
 
 type SessionSummaryMetadata = {
@@ -51,6 +51,7 @@ type SessionSummary = {
     activeAt: number
     updatedAt: number
     createdBy?: string
+    ownerEmail?: string  // 当 session 来自其他用户时，显示来源用户
     metadata: SessionSummaryMetadata | null
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number
@@ -491,13 +492,40 @@ export function createSessionsRoutes(
         }
 
         // Filter by created_by for Keycloak users
+        // 用于标记 session 来自哪个用户（如果来自开启了 shareAllSessions 的其他用户）
+        const sessionOwnerMap = new Map<string, string>()
+
         if (isKeycloakUser && email) {
-            // Keycloak用户看到：1) 自己创建的session 2) 被共享给自己的session
+            // Keycloak用户看到：
+            // 1) 自己创建的 session
+            // 2) 被共享给自己的 session
+            // 3) 开启了 shareAllSessions 的用户的所有 session
             const sharedWithMe = await store.getSessionsSharedWithUser(email)
             const sharedSet = new Set(sharedWithMe)
-            storedSessions = storedSessions.filter(s =>
-                !s.createdBy || s.createdBy === email || sharedSet.has(s.id)
-            )
+
+            // 获取开启了 shareAllSessions 的用户列表
+            const usersWithShareAll = await store.getUsersWithShareAllSessions()
+            const shareAllUsersSet = new Set(usersWithShareAll)
+            // 排除自己（不需要标记自己的 session）
+            shareAllUsersSet.delete(email)
+
+            storedSessions = storedSessions.filter(s => {
+                // 自己创建的，或者没有 createdBy 的 session
+                if (!s.createdBy || s.createdBy === email) {
+                    return true
+                }
+                // 被共享给自己的 session
+                if (sharedSet.has(s.id)) {
+                    return true
+                }
+                // 来自开启了 shareAllSessions 的用户
+                if (shareAllUsersSet.has(s.createdBy)) {
+                    // 记录这个 session 的来源用户
+                    sessionOwnerMap.set(s.id, s.createdBy)
+                    return true
+                }
+                return false
+            })
         }
 
         // Get sessions from memory (SyncEngine) - these have live data
@@ -531,6 +559,12 @@ export function createSessionsRoutes(
 
             // Start with database data
             const summary = storedSessionToSummary(stored)
+
+            // 如果这是来自其他用户（开启了 shareAllSessions）的 session，标注来源
+            const ownerEmail = sessionOwnerMap.get(stored.id)
+            if (ownerEmail) {
+                summary.ownerEmail = ownerEmail
+            }
 
             // Override active status based on combined memory + DB state
             summary.active = trulyActive
@@ -578,13 +612,13 @@ export function createSessionsRoutes(
         return c.json({ sessions: allSessions })
     })
 
-    app.get('/sessions/:id', (c) => {
+    app.get('/sessions/:id', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) {
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store)
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -598,7 +632,7 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store)
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -624,7 +658,7 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store, { requireActive: true })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -639,7 +673,7 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store, { requireActive: true })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -654,7 +688,7 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store)
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -787,7 +821,7 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store)
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -876,7 +910,7 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store, { requireActive: true })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -915,7 +949,7 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store, { requireActive: true })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -982,7 +1016,7 @@ export function createSessionsRoutes(
         }
 
         // Session must exist but doesn't need to be active
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store)
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -1020,7 +1054,7 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store)
         if (sessionResult instanceof Response) {
             return sessionResult
         }

@@ -640,6 +640,31 @@ export default function SettingsPage() {
     // Web Push subscription
     const { subscribe: subscribePush, unsubscribe: unsubscribePush } = useWebPushSubscription(api)
 
+    // User Preferences (Privacy Settings)
+    const { data: userPreferences, isLoading: preferencesLoading } = useQuery({
+        queryKey: queryKeys.userPreferences,
+        queryFn: async () => {
+            if (!api) throw new Error('API unavailable')
+            return await api.getUserPreferences()
+        },
+        enabled: Boolean(api)
+    })
+
+    const updatePreferencesMutation = useMutation({
+        mutationFn: async (preferences: { shareAllSessions: boolean }) => {
+            if (!api) throw new Error('API unavailable')
+            return await api.updateUserPreferences(preferences)
+        },
+        onSuccess: (result) => {
+            queryClient.setQueryData(queryKeys.userPreferences, { shareAllSessions: result.shareAllSessions })
+        }
+    })
+
+    const handleToggleShareAllSessions = useCallback(() => {
+        const newValue = !userPreferences?.shareAllSessions
+        updatePreferencesMutation.mutate({ shareAllSessions: newValue })
+    }, [userPreferences?.shareAllSessions, updatePreferencesMutation])
+
     const handleNotificationToggle = useCallback(async () => {
         if (notificationPermission === 'default') {
             const result = await requestPermission()
@@ -702,6 +727,37 @@ export default function SettingsPage() {
                                     className="w-full px-3 py-2 text-sm font-medium rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
                                 >
                                     Logout
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Privacy Settings Section */}
+                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                        <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                            <h2 className="text-sm font-medium">Privacy</h2>
+                        </div>
+                        <div className="divide-y divide-[var(--app-divider)]">
+                            <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                                <div className="flex-1">
+                                    <div className="text-sm">Share All Sessions</div>
+                                    <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                        Allow all team members to view and interact with your sessions
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleToggleShareAllSessions}
+                                    disabled={preferencesLoading || updatePreferencesMutation.isPending}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                                        userPreferences?.shareAllSessions ? 'bg-green-500' : 'bg-[var(--app-secondary-bg)]'
+                                    }`}
+                                >
+                                    <span
+                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                            userPreferences?.shareAllSessions ? 'translate-x-5' : 'translate-x-0'
+                                        }`}
+                                    />
                                 </button>
                             </div>
                         </div>

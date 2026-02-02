@@ -378,6 +378,7 @@ export type StoredInputPreset = {
 export type StoredAllowedEmail = {
     email: string
     role: UserRole
+    shareAllSessions: boolean
     createdAt: number
 }
 

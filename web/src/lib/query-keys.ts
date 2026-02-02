@@ -19,4 +19,5 @@ export const queryKeys = {
     yohoCredentials: (name?: string, limit?: number) =>
         ['yoho-credentials', name, limit] as const,
     yohoCredentialTypes: () => ['yoho-credential-types'] as const,
+    userPreferences: ['user-preferences'] as const,
 }

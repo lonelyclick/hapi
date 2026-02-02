@@ -169,6 +169,7 @@ export type SessionSummary = {
     activeAt: number
     updatedAt: number
     createdBy?: string
+    ownerEmail?: string  // 当 session 来自其他用户（开启了 shareAllSessions）时显示
     metadata: SessionSummaryMetadata | null
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number
@@ -213,6 +214,13 @@ export type AuthResponse = {
 export type SessionsResponse = { sessions: SessionSummary[] }
 export type SessionResponse = { session: Session }
 export type DeleteSessionResponse = { ok: true }
+
+// 用户设置类型
+export type UserPreferences = {
+    shareAllSessions: boolean
+}
+export type UserPreferencesResponse = UserPreferences
+export type UpdateUserPreferencesResponse = { ok: true; shareAllSessions: boolean }
 
 // Session Shares 类型
 export type SessionShare = {
