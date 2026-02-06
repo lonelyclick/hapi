@@ -693,7 +693,7 @@ export class AutoBrainService {
                 brainSessionId: brainSession.id,
                 ...data
             }
-        } as SyncEvent)
+        } as unknown as SyncEvent)
     }
 
     async triggerSync(mainSessionId: string): Promise<void> {

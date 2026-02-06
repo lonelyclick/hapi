@@ -133,7 +133,7 @@ export async function generateSummariesWithGlm(
 
     // 找到 save_round_summaries 的调用
     for (const call of toolCalls) {
-        if (call.function?.name === 'save_round_summaries') {
+        if (call.function?.name === 'save_round_summaries' && call.function.arguments) {
             try {
                 const args = JSON.parse(call.function.arguments)
                 let summaries = args.summaries

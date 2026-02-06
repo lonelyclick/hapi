@@ -16,7 +16,7 @@ import type { AutoBrainService } from './autoBrain'
 const BRAIN_CONTEXT_MAX_MESSAGES = 10
 
 // 支持的 Brain 模型
-const brainModelValues = ['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok', 'openrouter'] as const
+const brainModelValues = ['claude', 'codex', 'gemini', 'glm', 'grok', 'openrouter'] as const
 const brainModelVariantValues = ['opus', 'sonnet', 'haiku', 'gpt-5.2-codex', 'gpt-5.1-codex-max'] as const
 
 const createBrainSessionSchema = z.object({
@@ -339,7 +339,7 @@ export function createBrainRoutes(
         const spawnResult = await engine.spawnSession(
             machineId,
             directory,
-            brainModel as 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter',
+            brainModel as 'claude' | 'opencode',
             false,  // 不使用 yolo 模式
             'simple',
             undefined,
@@ -845,8 +845,8 @@ ${batchRounds.map(r => `  {
         // 创建执行记录（记录本次 brain 的轮次号）
         const execution = await brainStore.createBrainExecution({
             brainSessionId: id,
-            roundsBrained: unbrainedRounds.length,
-            brainedRoundNumbers: unbrainedRoundNumbers,
+            roundsReviewed: unbrainedRounds.length,
+            reviewedRoundNumbers: unbrainedRoundNumbers,
             timeRangeStart: timeRange?.start ?? Date.now(),
             timeRangeEnd: timeRange?.end ?? Date.now(),
             prompt: brainPrompt
@@ -1158,52 +1158,6 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             success: true,
             brainResult: latestBrain
         })
-    })
-
-    // 发送用户选择的建议到主 Session
-    app.post('/brain/sessions/:id/apply', async (c) => {
-        const id = c.req.param('id')
-        const engine = getSyncEngine()
-
-        if (!engine) {
-            return c.json({ error: 'Sync engine not available' }, 503)
-        }
-
-        const body = await c.req.json().catch(() => null) as { action?: string; suggestionIds?: string[] } | null
-        if (!body?.action) {
-            return c.json({ error: 'action is required' }, 400)
-        }
-
-        const brainSession = await brainStore.getBrainSession(id)
-        if (!brainSession) {
-            return c.json({ error: 'Brain session not found' }, 404)
-        }
-
-        // 发送建议的 action 到主 Session
-        await engine.sendMessage(brainSession.mainSessionId, {
-            text: body.action,
-            sentFrom: 'webapp'
-        })
-
-        // 保存已发送的建议 ID（如果提供了）
-        if (body.suggestionIds && body.suggestionIds.length > 0) {
-            await brainStore.addAppliedSuggestionIds(id, body.suggestionIds)
-        }
-
-        return c.json({ success: true })
-    })
-
-    // 获取已发送的建议 ID
-    app.get('/brain/sessions/:id/applied-suggestions', async (c) => {
-        const id = c.req.param('id')
-
-        const brainSession = await brainStore.getBrainSession(id)
-        if (!brainSession) {
-            return c.json({ error: 'Brain session not found' }, 404)
-        }
-
-        const appliedIds = await brainStore.getAppliedSuggestionIds(id)
-        return c.json({ appliedIds })
     })
 
     return app
