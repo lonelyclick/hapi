@@ -92,7 +92,7 @@ export interface Session {
     thinkingAt: number
     todos?: TodoItem[]
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-    modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+    modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
 }
 
@@ -654,7 +654,7 @@ export class SyncEngine {
         thinking?: boolean
         mode?: 'local' | 'remote'
         permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-        modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+        modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
         modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     }): Promise<void> {
         if (this.deletingSessions.has(payload.sid)) {
@@ -1279,7 +1279,7 @@ export class SyncEngine {
 
     async setModelMode(
         sessionId: string,
-        model: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2',
+        model: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2',
         modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     ): Promise<void> {
         const session = this.sessions.get(sessionId)
@@ -1296,7 +1296,7 @@ export class SyncEngine {
         sessionId: string,
         config: {
             permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-            modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+            modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
             modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
         }
     ): Promise<{
@@ -1344,7 +1344,7 @@ export class SyncEngine {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent: 'claude' | 'opencode' = 'claude',
+        agent: 'claude' | 'codex' | 'opencode' = 'claude',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
@@ -1354,6 +1354,7 @@ export class SyncEngine {
             token?: string
             claudeSettingsType?: 'litellm' | 'claude'
             claudeAgent?: string
+            codexModel?: string
             opencodeModel?: string
             opencodeVariant?: string
             permissionMode?: Session['permissionMode']
@@ -1378,6 +1379,7 @@ export class SyncEngine {
                     token: options?.token,
                     claudeSettingsType: options?.claudeSettingsType,
                     claudeAgent: options?.claudeAgent,
+                    codexModel: options?.codexModel,
                     opencodeModel: options?.opencodeModel,
                     opencodeVariant: options?.opencodeVariant,
                     permissionMode: options?.permissionMode,

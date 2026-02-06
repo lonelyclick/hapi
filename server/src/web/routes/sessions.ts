@@ -56,7 +56,7 @@ type SessionSummary = {
     metadata: SessionSummaryMetadata | null
     todoProgress: { completed: number; total: number } | null
     pendingRequestsCount: number
-    modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+    modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     viewers?: SessionViewer[]
 }
@@ -123,7 +123,7 @@ function storedSessionToSummary(stored: StoredSession): SessionSummary {
 }
 
 const permissionModeValues = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'read-only', 'safe-yolo', 'yolo'] as const
-const modelModeValues = ['default', 'sonnet', 'opus', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'] as const
+const modelModeValues = ['default', 'sonnet', 'opus', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'] as const
 const reasoningEffortValues = ['low', 'medium', 'high', 'xhigh'] as const
 
 const permissionModeSchema = z.object({
@@ -999,7 +999,7 @@ export function createSessionsRoutes(
         }
 
         const claudeModels = new Set(['default', 'sonnet', 'opus'])
-        const codexModels = new Set(['gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'])
+        const codexModels = new Set(['gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'])
         const grokModels = new Set(['grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-code-fast-1', 'grok-4-fast-reasoning', 'grok-4-fast-non-reasoning', 'grok-4-0709', 'grok-3-mini', 'grok-3'])
         const reasoningLevels = new Set(['low', 'medium', 'high', 'xhigh'])
 

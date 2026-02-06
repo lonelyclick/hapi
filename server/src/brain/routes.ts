@@ -19,7 +19,7 @@ const BRAIN_CONTEXT_MAX_MESSAGES = 10
 
 // 支持的 Brain 模型
 const brainModelValues = ['claude', 'codex', 'gemini', 'glm', 'grok', 'openrouter'] as const
-const brainModelVariantValues = ['opus', 'sonnet', 'haiku', 'gpt-5.2-codex', 'gpt-5.1-codex-max'] as const
+const brainModelVariantValues = ['opus', 'sonnet', 'haiku', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max'] as const
 
 const createBrainSessionSchema = z.object({
     mainSessionId: z.string().min(1),

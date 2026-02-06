@@ -12,8 +12,9 @@ type ClaudeSettingsType = 'litellm' | 'claude'
 
 // Codex models
 const CODEX_MODELS = [
-    { value: 'openai/gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max (Highest)' },
+    { value: 'openai/gpt-5.3-codex', label: 'GPT-5.3 Codex' },
     { value: 'openai/gpt-5.2-codex', label: 'GPT-5.2 Codex' },
+    { value: 'openai/gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
     { value: 'openai/gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini' },
 ]
 

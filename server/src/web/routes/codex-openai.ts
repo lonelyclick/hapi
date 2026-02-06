@@ -102,7 +102,8 @@ const AVAILABLE_MODELS = [
     // 默认模型（使用 ~/.codex/config.toml 中配置的模型）
     { id: 'default', name: 'Default', description: 'Use default model from Codex config (~/.codex/config.toml)' },
     // 推荐模型
-    { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', description: 'Most advanced agentic coding model for real-world engineering' },
+    { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', description: 'Latest frontier agentic coding model' },
+    { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', description: 'Previous generation agentic coding model' },
     { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', description: 'Smaller, more cost-effective version of GPT-5.1-Codex' },
     // 替代模型
     { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', description: 'Optimized for long-horizon, agentic coding tasks' },

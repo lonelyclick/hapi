@@ -58,9 +58,14 @@ const MODEL_MODE_LABELS: Record<string, string> = {
 
 const CODEX_MODELS = [
     {
+        id: 'gpt-5.3-codex',
+        label: 'gpt-5.3-codex',
+        description: 'Latest frontier agentic coding model.'
+    },
+    {
         id: 'gpt-5.2-codex',
         label: 'gpt-5.2-codex',
-        description: 'Latest frontier agentic coding model.'
+        description: 'Previous generation agentic coding model.'
     },
     {
         id: 'gpt-5.1-codex-max',
@@ -1138,11 +1143,11 @@ export function HappyComposer(props: {
     const isCodex = agentFlavor === 'codex'
     const isGrok = agentFlavor === 'grok'
     const isOpenRouter = agentFlavor === 'openrouter'
-    const codexModel = isCodex && isCodexModel(modelMode) ? modelMode : 'gpt-5.2-codex'
+    const codexModel = isCodex && isCodexModel(modelMode) ? modelMode : 'gpt-5.3-codex'
     const grokModel = isGrok ? (modelMode as string || 'grok-code-fast-1') : 'grok-code-fast-1'
     const openrouterModel = isOpenRouter ? (modelMode as string || 'anthropic/claude-sonnet-4') : 'anthropic/claude-sonnet-4'
     const codexReasoningEffort: ModelReasoningEffort = modelReasoningEffort ?? 'medium'
-    const shouldShowCodexReasoning = isCodex && codexModel === 'gpt-5.2-codex'
+    const shouldShowCodexReasoning = isCodex && (codexModel === 'gpt-5.3-codex' || codexModel === 'gpt-5.2-codex')
     const speechToText = useSpeechToText({
         onPartial: (text) => {
             const prefix = sttPrefixRef.current
@@ -1492,7 +1497,7 @@ export function HappyComposer(props: {
                                 {shouldShowCodexReasoning ? (
                                     <div className="mt-2 border-t border-[var(--app-divider)] pt-2">
                                         <div className="px-3 pb-1 text-xs font-semibold text-[var(--app-hint)]">
-                                            Select Reasoning Level for gpt-5.2-codex
+                                            Select Reasoning Level for {codexModel}
                                         </div>
                                         <div className="space-y-1">
                                             {CODEX_REASONING_LEVELS.map((level) => (

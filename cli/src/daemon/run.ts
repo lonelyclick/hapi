@@ -402,6 +402,7 @@ export async function startDaemon(): Promise<void> {
         // Construct arguments for the CLI
         const agentCommand = (() => {
           switch (agent) {
+            case 'codex': return 'codex';
             case 'opencode': return 'opencode';
             default: return 'claude';
           }

@@ -4,7 +4,7 @@ import type { ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/ap
 import { queryKeys } from '@/lib/query-keys'
 
 type PermissionModeValue = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
-type ModelModeValue = 'default' | 'sonnet' | 'opus' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
+type ModelModeValue = 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
 type ModelConfig = { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }
 
 function toPermissionMode(mode: PermissionMode): PermissionModeValue {
@@ -18,7 +18,7 @@ function toModelMode(mode: ModelMode): ModelModeValue {
     if (mode === 'sonnet' || mode === 'opus') {
         return mode
     }
-    if (mode === 'gpt-5.2-codex' || mode === 'gpt-5.1-codex-max' || mode === 'gpt-5.1-codex-mini' || mode === 'gpt-5.2') {
+    if (mode === 'gpt-5.3-codex' || mode === 'gpt-5.2-codex' || mode === 'gpt-5.1-codex-max' || mode === 'gpt-5.1-codex-mini' || mode === 'gpt-5.2') {
         return mode
     }
     return 'default'

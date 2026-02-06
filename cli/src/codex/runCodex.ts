@@ -250,6 +250,7 @@ export async function runCodex(opts: {
         if (config.modelMode !== undefined) {
             const validModels: SessionModelMode[] = [
                 'default',
+                'gpt-5.3-codex',
                 'gpt-5.2-codex',
                 'gpt-5.1-codex-max',
                 'gpt-5.1-codex-mini',
