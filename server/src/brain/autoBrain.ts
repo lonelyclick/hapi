@@ -859,9 +859,32 @@ export class AutoBrainService {
                 // 将审查结果转换成消息发送到主 session
                 // 这样前端就能看到审查结果，无需修改前端代码
                 try {
-                    const jsonMatch = result.output.match(/```json\s*([\s\S]*?)\s*```/)
-                    if (jsonMatch) {
-                        const parsed = JSON.parse(jsonMatch[1])
+                    // 找到所有 ```json 代码块，取最后一个（通常是最终结果）
+                    const jsonBlocks = [...result.output.matchAll(/```json\s*([\s\S]*?)\s*```/g)]
+                    if (jsonBlocks.length > 0) {
+                        const lastBlock = jsonBlocks[jsonBlocks.length - 1]
+                        let jsonStr = lastBlock[1]
+
+                        let parsed = null
+                        try {
+                            parsed = JSON.parse(jsonStr)
+                        } catch {
+                            // 尝试修复截断的 JSON
+                            const openBraces = (jsonStr.match(/\{/g) || []).length
+                            const closeBraces = (jsonStr.match(/\}/g) || []).length
+                            const openBrackets = (jsonStr.match(/\[/g) || []).length
+                            const closeBrackets = (jsonStr.match(/\]/g) || []).length
+
+                            while (closeBrackets < openBrackets) jsonStr += ']'
+                            while (closeBraces < openBraces) jsonStr += '}'
+
+                            try {
+                                parsed = JSON.parse(jsonStr)
+                            } catch {
+                                throw new Error('Failed to parse JSON even after attempted repair')
+                            }
+                        }
+
                         if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
                             console.log('[BrainSync] Parsed', parsed.suggestions.length, 'suggestions from SDK')
 

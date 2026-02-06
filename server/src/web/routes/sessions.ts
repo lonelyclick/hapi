@@ -138,16 +138,20 @@ const modelModeSchema = z.object({
 const createSessionSchema = z.object({
     machineId: z.string().min(1),
     directory: z.string().min(1),
-    agent: z.enum(['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok', 'openrouter', 'aider-cli']).optional(),
+    agent: z.enum(['claude', 'codex', 'opencode', 'gemini', 'glm', 'minimax', 'grok', 'openrouter', 'aider-cli']).optional(),
     yolo: z.boolean().optional(),
     sessionType: z.enum(['simple', 'worktree']).optional(),
     worktreeName: z.string().optional(),
+    claudeSettingsType: z.enum(['litellm', 'claude']).optional(),
     claudeAgent: z.string().min(1).optional(),
+    opencodeModel: z.string().min(1).optional(),
+    codexModel: z.string().min(1).optional(),
     openrouterModel: z.string().min(1).optional(),
     permissionMode: z.enum(permissionModeValues).optional(),
     modelMode: z.enum(modelModeValues).optional(),
     modelReasoningEffort: z.enum(reasoningEffortValues).optional(),
-    source: z.string().min(1).max(100).optional()
+    source: z.string().min(1).max(100).optional(),
+    enableBrain: z.boolean().optional()
 })
 
 const RESUME_TIMEOUT_MS = 60_000
@@ -420,6 +424,16 @@ export function createSessionsRoutes(
         const rawSource = parsed.data.source?.trim()
         const source = rawSource ? rawSource : 'external-api'
 
+        // 将 opencodeModel/codexModel 转换为 modelMode
+        let modelMode = parsed.data.modelMode
+        if (parsed.data.opencodeModel) {
+            modelMode = parsed.data.opencodeModel as any
+        } else if (parsed.data.codexModel) {
+            // codex 模型值如 'openai/gpt-5.2-codex' -> 'gpt-5.2-codex'
+            const codexModelValue = parsed.data.codexModel.replace('openai/', '') as any
+            modelMode = codexModelValue
+        }
+
         const result = await engine.spawnSession(
             parsed.data.machineId,
             parsed.data.directory,
@@ -429,11 +443,13 @@ export function createSessionsRoutes(
             parsed.data.worktreeName,
             {
                 claudeAgent: parsed.data.claudeAgent,
+                claudeSettingsType: parsed.data.claudeSettingsType,
                 openrouterModel: parsed.data.openrouterModel,
                 permissionMode: parsed.data.permissionMode,
-                modelMode: parsed.data.modelMode,
+                modelMode,
                 modelReasoningEffort: parsed.data.modelReasoningEffort,
-                source
+                source,
+                enableBrain: parsed.data.enableBrain
             }
         )
 

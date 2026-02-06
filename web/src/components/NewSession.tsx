@@ -7,8 +7,15 @@ import { Spinner } from '@/components/Spinner'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 
-type AgentType = 'claude' | 'opencode'
+type AgentType = 'claude' | 'codex' | 'opencode'
 type ClaudeSettingsType = 'litellm' | 'claude'
+
+// Codex models
+const CODEX_MODELS = [
+    { value: 'openai/gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max (Highest)' },
+    { value: 'openai/gpt-5.2-codex', label: 'GPT-5.2 Codex' },
+    { value: 'openai/gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini' },
+]
 
 // OpenCode supported models - using OpenCode's native model ID format
 const OPENCODE_MODELS = [
@@ -20,9 +27,6 @@ const OPENCODE_MODELS = [
     { value: 'anthropic.claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku', provider: 'Anthropic' },
     { value: 'anthropic.claude-3-opus-latest', label: 'Claude 3 Opus', provider: 'Anthropic' },
     // OpenAI (from `opencode models openai`)
-    { value: 'openai/gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max (Highest)', provider: 'OpenAI' },
-    { value: 'openai/gpt-5.2-codex', label: 'GPT-5.2 Codex', provider: 'OpenAI' },
-    { value: 'openai/gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini', provider: 'OpenAI' },
     { value: 'openai/gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI' },
     // Google Gemini
     { value: 'gemini.gemini-2.5', label: 'Gemini 2.5', provider: 'Google' },
@@ -133,6 +137,7 @@ export function NewSession(props: {
     const [claudeSettingsType, setClaudeSettingsType] = useState<ClaudeSettingsType>('litellm')
     const [claudeAgent, setClaudeAgent] = useState('')
     const [opencodeModel, setOpencodeModel] = useState(OPENCODE_MODELS[0].value)
+    const [codexModel, setCodexModel] = useState(CODEX_MODELS[0].value)
     const [enableBrain, setEnableBrain] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
@@ -236,6 +241,7 @@ export function NewSession(props: {
                 claudeSettingsType: agent === 'claude' ? claudeSettingsType : undefined,
                 claudeAgent: agent === 'claude' ? (claudeAgent.trim() || undefined) : undefined,
                 opencodeModel: agent === 'opencode' ? opencodeModel : undefined,
+                codexModel: agent === 'codex' ? codexModel : undefined,
                 enableBrain: enableBrain || undefined
             })
 
@@ -350,7 +356,7 @@ export function NewSession(props: {
                     Agent
                 </label>
                 <div className="flex flex-wrap gap-x-3 gap-y-2">
-                    {(['claude', 'opencode'] as const).map((agentType) => (
+                    {(['claude', 'codex', 'opencode'] as const).map((agentType) => (
                         <label
                             key={agentType}
                             className="flex items-center gap-1 cursor-pointer"
@@ -414,6 +420,30 @@ export function NewSession(props: {
                     />
                     <div className="text-[11px] text-[var(--app-hint)]">
                         Matches the name from Claude Code (--agent).
+                    </div>
+                </div>
+            ) : null}
+
+            {/* Codex Model Selector */}
+            {agent === 'codex' ? (
+                <div className="flex flex-col gap-1.5 px-3 pb-3">
+                    <label className="text-xs font-medium text-[var(--app-hint)]">
+                        Model (Codex)
+                    </label>
+                    <select
+                        value={codexModel}
+                        onChange={(e) => setCodexModel(e.target.value)}
+                        disabled={isFormDisabled}
+                        className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
+                    >
+                        {CODEX_MODELS.map((model) => (
+                            <option key={model.value} value={model.value}>
+                                {model.label}
+                            </option>
+                        ))}
+                    </select>
+                    <div className="text-[11px] text-[var(--app-hint)]">
+                        Codex models optimized for coding tasks via OpenAI.
                     </div>
                 </div>
             ) : null}
