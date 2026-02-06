@@ -23,14 +23,14 @@ const pathsExistsSchema = z.object({
     paths: z.array(z.string().min(1)).max(1000)
 })
 
-async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole): Promise<void> {
+async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null): Promise<void> {
     try {
         const session = engine.getSession(sessionId)
         const projectRoot = session?.metadata?.path?.trim()
             || session?.metadata?.worktree?.basePath?.trim()
             || null
-        console.log(`[machines/sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}`)
-        const prompt = await buildInitPrompt(role, { projectRoot })
+        console.log(`[machines/sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}, userName=${userName}`)
+        const prompt = await buildInitPrompt(role, { projectRoot, userName })
         if (!prompt.trim()) {
             console.warn(`[machines/sendInitPrompt] Empty prompt for session ${sessionId}, skipping`)
             return
@@ -137,6 +137,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             const email = c.get('email')
             const namespace = c.get('namespace')
             const role = c.get('role')  // Role from Keycloak token
+            const userName = c.get('name')
             // Wait for session to be online, then set createdBy and send init prompt
             void (async () => {
                 console.log(`[machines/spawn] Waiting for session ${result.sessionId} to come online...`)
@@ -156,7 +157,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
-                await sendInitPrompt(engine, result.sessionId, role)
+                await sendInitPrompt(engine, result.sessionId, role, userName)
             })()
         }
 

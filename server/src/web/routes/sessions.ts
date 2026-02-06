@@ -197,14 +197,14 @@ async function waitForSessionOnline(engine: SyncEngine, sessionId: string, timeo
     })
 }
 
-async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole): Promise<void> {
+async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null): Promise<void> {
     try {
         const session = engine.getSession(sessionId)
         const projectRoot = session?.metadata?.path?.trim()
             || session?.metadata?.worktree?.basePath?.trim()
             || null
-        console.log(`[sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}`)
-        const prompt = await buildInitPrompt(role, { projectRoot })
+        console.log(`[sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}, userName=${userName}`)
+        const prompt = await buildInitPrompt(role, { projectRoot, userName })
         if (!prompt.trim()) {
             console.warn(`[sendInitPrompt] Empty prompt for session ${sessionId}, skipping`)
             return
@@ -220,12 +220,12 @@ async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserR
     }
 }
 
-async function sendInitPromptAfterOnline(engine: SyncEngine, sessionId: string, role: UserRole): Promise<void> {
+async function sendInitPromptAfterOnline(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null): Promise<void> {
     const isOnline = await waitForSessionOnline(engine, sessionId, 60_000)
     if (!isOnline) {
         return
     }
-    await sendInitPrompt(engine, sessionId, role)
+    await sendInitPrompt(engine, sessionId, role, userName)
 }
 
 async function resolveSpawnTarget(
@@ -441,6 +441,7 @@ export function createSessionsRoutes(
             const email = c.get('email')
             const namespace = c.get('namespace')
             const role = c.get('role')  // Role from Keycloak token
+            const userName = c.get('name')
             // Wait for session to be online, then set createdBy and send init prompt
             void (async () => {
                 console.log(`[spawnSession] Waiting for session ${result.sessionId} to come online...`)
@@ -460,7 +461,7 @@ export function createSessionsRoutes(
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
-                await sendInitPrompt(engine, result.sessionId, role)
+                await sendInitPrompt(engine, result.sessionId, role, userName)
             })()
         }
 
@@ -810,7 +811,8 @@ export function createSessionsRoutes(
         }
 
         const role = c.get('role')  // Role from Keycloak token
-        await sendInitPrompt(engine, newSessionId, role)
+        const userName = c.get('name')
+        await sendInitPrompt(engine, newSessionId, role, userName)
 
         if (!resumeSessionId) {
             const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
@@ -902,7 +904,8 @@ export function createSessionsRoutes(
 
         // Send init prompt
         const role = c.get('role')  // Role from Keycloak token
-        await sendInitPrompt(engine, newSessionId, role)
+        const userName = c.get('name')
+        await sendInitPrompt(engine, newSessionId, role, userName)
 
         // Transfer context from old session
         const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
