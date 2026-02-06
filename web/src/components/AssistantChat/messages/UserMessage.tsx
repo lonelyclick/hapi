@@ -4,7 +4,6 @@ import { useHappyChatContext } from '@/components/AssistantChat/context'
 import type { HappyChatMessageMetadata } from '@/lib/assistant-runtime'
 import { MessageStatusIndicator } from '@/components/AssistantChat/messages/MessageStatusIndicator'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
-import { isBrainSummaryTask, BrainSummaryTaskBlock } from '@/components/Brain/BrainMessageBlocks'
 
 export function HappyUserMessage() {
     const ctx = useHappyChatContext()
@@ -32,12 +31,6 @@ export function HappyUserMessage() {
         if (custom?.kind !== 'cli-output') return ''
         return message.content.find((part) => part.type === 'text')?.text ?? ''
     })
-    const isBrainTask = useAssistantState(({ message }) => {
-        if (message.role !== 'user') return false
-        const textPart = message.content.find((part) => part.type === 'text')
-        return textPart ? isBrainSummaryTask(textPart.text) : false
-    })
-
     if (role !== 'user') return null
     const canRetry = status === 'failed' && typeof localId === 'string' && Boolean(ctx.onRetryMessage)
     const onRetry = canRetry ? () => ctx.onRetryMessage!(localId) : undefined
@@ -50,14 +43,6 @@ export function HappyUserMessage() {
                 <div className="ml-auto w-full max-w-[92%]">
                     <CliOutputBlock text={cliText} />
                 </div>
-            </MessagePrimitive.Root>
-        )
-    }
-
-    if (isBrainTask) {
-        return (
-            <MessagePrimitive.Root className="px-1 min-w-0 max-w-full overflow-x-hidden">
-                <BrainSummaryTaskBlock text={text} />
             </MessagePrimitive.Root>
         )
     }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
 import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session, SessionViewer, TypingUser } from '@/types/api'
@@ -13,7 +13,6 @@ import { HappyComposer } from '@/components/AssistantChat/HappyComposer'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { SessionHeader } from '@/components/SessionHeader'
-import { BrainPanel } from '@/components/Brain'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
@@ -73,61 +72,14 @@ export function SessionChat(props: {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [isResuming, setIsResuming] = useState(false)
     const [resumeError, setResumeError] = useState<string | null>(null)
-    // Brain 面板状态 (试验性功能)
-    const [brainSessionId, setBrainSessionId] = useState<string | null>(null)
-    // 用户手动关闭的标记，防止 activeBrainSession 重新设置 brainSessionId
-    const userClosedBrainRef = useRef(false)
     const pendingMessageRef = useRef<string | null>(null)
     const composerSetTextRef = useRef<((text: string) => void) | null>(null)
-
-    // 移动端检测 - 初始值使用 window.innerWidth 检测（SSR 安全）
-    const [isMobile, setIsMobile] = useState(() => {
-        if (typeof window === 'undefined') return false
-        return window.innerWidth < 768
-    })
-    useEffect(() => {
-        const checkMobile = () => setIsMobile(window.innerWidth < 768)
-        window.addEventListener('resize', checkMobile)
-        return () => window.removeEventListener('resize', checkMobile)
-    }, [])
-
-    // 查询当前 Session 的活跃 Brain Session（试验性功能）
-    const { data: activeBrainSession } = useQuery({
-        queryKey: ['brain-sessions', 'active', props.session.id],
-        queryFn: async () => {
-            try {
-                return await props.api.getActiveBrainSession(props.session.id)
-            } catch {
-                return null
-            }
-        },
-        staleTime: 10_000  // 10 秒内不重复请求，避免频繁刷新
-    })
-
-    // 如果有活跃的 Brain Session，自动显示面板（移动端不自动打开）
-    useEffect(() => {
-        // 移动端不自动打开 Brain 面板
-        if (isMobile) return
-        // 用户手动关闭后，不再自动恢复
-        if (userClosedBrainRef.current) return
-        // 当 activeBrainSession 数据返回时，设置或清除 brainSessionId
-        if (activeBrainSession?.brainSessionId) {
-            setBrainSessionId(activeBrainSession.brainSessionId)
-        } else if (activeBrainSession === null) {
-            // 明确没有活跃的 Brain Session 时清除
-            setBrainSessionId(null)
-        }
-        // 注意：activeBrainSession 为 undefined 时（加载中）不做任何操作
-    }, [activeBrainSession, isMobile])
 
     useEffect(() => {
         normalizedCacheRef.current.clear()
         blocksByIdRef.current.clear()
         setIsResuming(false)
         setResumeError(null)
-        // 不在这里清除 brainSessionId，让它由 activeBrainSession 数据控制
-        // setBrainSessionId(null)
-        userClosedBrainRef.current = false  // 切换 session 时重置
         pendingMessageRef.current = null
     }, [props.session.id])
 
@@ -347,25 +299,6 @@ export function SessionChat(props: {
     const resolvedReasoningEffort = props.session.modelReasoningEffort
         ?? props.session.metadata?.runtimeModelReasoningEffort
 
-    // 处理 Brain 创建
-    const handleBrainCreated = useCallback((newBrainSessionId: string) => {
-        userClosedBrainRef.current = false  // 创建新 Brain 时重置关闭标记
-        setBrainSessionId(newBrainSessionId)
-    }, [])
-
-    // 切换 Brain 面板
-    const handleToggleBrainPanel = useCallback(() => {
-        if (brainSessionId) {
-            // 有面板打开，关闭它
-            userClosedBrainRef.current = true
-            setBrainSessionId(null)
-        } else if (activeBrainSession?.brainSessionId) {
-            // 有活跃 Brain Session，打开面板
-            userClosedBrainRef.current = false
-            setBrainSessionId(activeBrainSession.brainSessionId)
-        }
-    }, [brainSessionId, activeBrainSession?.brainSessionId])
-
     return (
         <div className="flex h-full">
             {/* 主聊天区域 */}
@@ -376,9 +309,6 @@ export function SessionChat(props: {
                     onBack={props.onBack}
                     onDelete={handleDeleteClick}
                     onRefreshAccount={props.session.metadata?.flavor === 'claude' ? handleRefreshAccount : undefined}
-                    onBrainCreated={handleBrainCreated}
-                    isBrainPanelOpen={Boolean(brainSessionId)}
-                    onToggleBrainPanel={handleToggleBrainPanel}
                     deleteDisabled={isPending}
                     refreshAccountDisabled={isPending}
                 />
@@ -472,18 +402,6 @@ export function SessionChat(props: {
                 </div>
             </AssistantRuntimeProvider>
             </div>
-
-            {/* Brain 面板 */}
-            {brainSessionId && (
-                <BrainPanel
-                    mainSessionId={props.session.id}
-                    brainSessionId={brainSessionId}
-                    onClose={() => {
-                        userClosedBrainRef.current = true
-                        setBrainSessionId(null)
-                    }}
-                />
-            )}
         </div>
     )
 }

@@ -6,7 +6,6 @@ import { getClientId } from '@/lib/client-identity'
 import { ViewersBadge } from './ViewersBadge'
 import { ShareDialog } from './ShareDialog'
 import { useAppContext } from '@/lib/app-context'
-import { JoinBrainButton } from './Brain'
 import { queryKeys } from '@/lib/query-keys'
 
 function getSessionPath(session: Session): string | null {
@@ -245,11 +244,6 @@ export function SessionHeader(props: {
     onBack: () => void
     onDelete?: () => void
     onRefreshAccount?: () => void
-    onBrainCreated?: (brainSessionId: string) => void
-    /** 是否已打开 Brain 面板 */
-    isBrainPanelOpen?: boolean
-    /** 切换 Brain 面板 */
-    onToggleBrainPanel?: () => void
     deleteDisabled?: boolean
     refreshAccountDisabled?: boolean
 }) {
@@ -424,17 +418,6 @@ export function SessionHeader(props: {
 
                 {/* Right side: Viewers + Action buttons */}
                 <div className="flex shrink-0 items-center gap-1.5">
-                    {/* Join Brain AI 按钮 (试验性功能) - PC端显示，只有创建者可见 */}
-                    {isCreator && props.session.active && (
-                        <div className="hidden sm:block">
-                            <JoinBrainButton
-                                sessionId={props.session.id}
-                                isBrainPanelOpen={props.isBrainPanelOpen}
-                                onToggleBrainPanel={props.onToggleBrainPanel}
-                                onBrainCreated={props.onBrainCreated}
-                            />
-                        </div>
-                    )}
                     {/* PC端：在线用户（排除自己） */}
                     {otherViewers.length > 0 && (
                         <div className="hidden sm:block">
@@ -522,38 +505,6 @@ export function SessionHeader(props: {
                                         ))}
                                         <div className="my-1 border-t border-[var(--app-divider)]" />
                                     </>
-                                )}
-                                {/* Brain 按钮 - 只有创建者可见 */}
-                                {isCreator && props.session.active && props.onToggleBrainPanel && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setShowMoreMenu(false)
-                                            props.onToggleBrainPanel?.()
-                                        }}
-                                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                                            props.isBrainPanelOpen
-                                                ? 'text-purple-600 bg-purple-500/10'
-                                                : 'text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
-                                        }`}
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            width="16"
-                                            height="16"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            className="shrink-0"
-                                        >
-                                            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-                                            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-                                        </svg>
-                                        <span>Brain</span>
-                                    </button>
                                 )}
                                 {/* 分享会话 - 只有创建者可以分享 */}
                                 {isCreator && userPreferences?.shareAllSessions === true ? (
