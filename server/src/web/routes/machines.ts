@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { IStore, UserRole } from '../../store'
+import type { BrainStore } from '../../brain/store'
+import type { AutoBrainService } from '../../brain/autoBrain'
 import type { WebAppEnv } from '../middleware/auth'
 import { buildInitPrompt } from '../prompts/initPrompt'
 import { requireMachine } from './guards'
@@ -16,6 +18,7 @@ const spawnBodySchema = z.object({
     claudeAgent: z.string().min(1).optional(),
     opencodeModel: z.string().min(1).optional(),
     opencodeVariant: z.string().min(1).optional(),
+    enableBrain: z.boolean().optional(),
     source: z.string().min(1).max(100).optional()
 })
 
@@ -87,7 +90,7 @@ async function waitForSessionOnline(engine: SyncEngine, sessionId: string, timeo
 }
 
 
-export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore): Hono<WebAppEnv> {
+export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore, brainStore?: BrainStore, autoBrainService?: AutoBrainService): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/machines', (c) => {
@@ -158,6 +161,64 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
                 await sendInitPrompt(engine, result.sessionId, role, userName)
+
+                // 如果启用 Brain，异步创建 Brain session
+                if (parsed.data.enableBrain && brainStore) {
+                    try {
+                        console.log(`[machines/spawn] Creating Brain session for ${result.sessionId}...`)
+                        const mainSession = engine.getSession(result.sessionId)
+                        const directory = mainSession?.metadata?.path
+                        if (directory) {
+                            const brainSpawnResult = await engine.spawnSession(
+                                machineId,
+                                directory,
+                                'claude',
+                                false,
+                                'simple',
+                                undefined,
+                                { source: 'brain' }
+                            )
+                            if (brainSpawnResult.type === 'success') {
+                                const brainOnline = await waitForSessionOnline(engine, brainSpawnResult.sessionId, 60_000)
+                                if (brainOnline) {
+                                    // 构建上下文
+                                    const page = await engine.getMessagesPage(result.sessionId, { limit: 20, beforeSeq: null })
+                                    const contextMessages = page.messages.map(m => {
+                                        const content = m.content as Record<string, unknown>
+                                        if (content?.role === 'user' && typeof content.content === 'string') {
+                                            return content.content
+                                        }
+                                        return null
+                                    }).filter(Boolean)
+                                    const contextSummary = contextMessages.join('\n') || 'New session'
+
+                                    await brainStore.createBrainSession({
+                                        namespace,
+                                        mainSessionId: result.sessionId,
+                                        brainSessionId: brainSpawnResult.sessionId,
+                                        brainModel: 'claude',
+                                        contextSummary
+                                    })
+                                    console.log(`[machines/spawn] Brain session created: ${brainSpawnResult.sessionId}`)
+
+                                    if (autoBrainService) {
+                                        setTimeout(() => {
+                                            autoBrainService.triggerSync(result.sessionId).catch(err => {
+                                                console.error('[machines/spawn] Failed to trigger brain sync:', err)
+                                            })
+                                        }, 3000)
+                                    }
+                                } else {
+                                    console.warn(`[machines/spawn] Brain session did not come online`)
+                                }
+                            } else {
+                                console.warn(`[machines/spawn] Failed to spawn Brain session:`, brainSpawnResult.message)
+                            }
+                        }
+                    } catch (err) {
+                        console.error(`[machines/spawn] Failed to create Brain session:`, err)
+                    }
+                }
             })()
         }
 

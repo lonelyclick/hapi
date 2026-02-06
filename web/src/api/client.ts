@@ -541,11 +541,12 @@ export class ApiClient {
         worktreeName?: string,
         claudeSettingsType?: 'litellm' | 'claude',
         claudeAgent?: string,
-        opencodeModel?: string
+        opencodeModel?: string,
+        enableBrain?: boolean
     ): Promise<SpawnResponse> {
         return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn`, {
             method: 'POST',
-            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeSettingsType, claudeAgent, opencodeModel, source: 'webapp' })
+            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeSettingsType, claudeAgent, opencodeModel, enableBrain, source: 'webapp' })
         })
     }
 

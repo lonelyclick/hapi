@@ -13,6 +13,7 @@ type SpawnInput = {
     claudeSettingsType?: 'litellm' | 'claude'
     claudeAgent?: string
     opencodeModel?: string
+    enableBrain?: boolean
 }
 
 export function useSpawnSession(api: ApiClient | null): {
@@ -36,7 +37,8 @@ export function useSpawnSession(api: ApiClient | null): {
                 input.worktreeName,
                 input.claudeSettingsType,
                 input.claudeAgent,
-                input.opencodeModel
+                input.opencodeModel,
+                input.enableBrain
             )
         },
         onSuccess: () => {

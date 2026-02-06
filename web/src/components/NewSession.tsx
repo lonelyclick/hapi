@@ -133,6 +133,7 @@ export function NewSession(props: {
     const [claudeSettingsType, setClaudeSettingsType] = useState<ClaudeSettingsType>('litellm')
     const [claudeAgent, setClaudeAgent] = useState('')
     const [opencodeModel, setOpencodeModel] = useState(OPENCODE_MODELS[0].value)
+    const [enableBrain, setEnableBrain] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
     const [spawnLogs, setSpawnLogs] = useState<SpawnLogEntry[]>([])
@@ -234,7 +235,8 @@ export function NewSession(props: {
                 sessionType: 'simple',
                 claudeSettingsType: agent === 'claude' ? claudeSettingsType : undefined,
                 claudeAgent: agent === 'claude' ? (claudeAgent.trim() || undefined) : undefined,
-                opencodeModel: agent === 'opencode' ? opencodeModel : undefined
+                opencodeModel: agent === 'opencode' ? opencodeModel : undefined,
+                enableBrain: enableBrain || undefined
             })
 
             // Update logs from server response
@@ -439,6 +441,21 @@ export function NewSession(props: {
                     </div>
                 </div>
             ) : null}
+
+            {/* Enable Brain */}
+            <div className="flex items-center gap-2 px-3 py-3">
+                <input
+                    type="checkbox"
+                    id="enableBrain"
+                    checked={enableBrain}
+                    onChange={(e) => setEnableBrain(e.target.checked)}
+                    disabled={isFormDisabled}
+                    className="accent-[var(--app-link)] w-3.5 h-3.5"
+                />
+                <label htmlFor="enableBrain" className="text-xs cursor-pointer">
+                    Enable Brain
+                </label>
+            </div>
 
             {/* Spawn Logs */}
             {spawnLogs.length > 0 && (
