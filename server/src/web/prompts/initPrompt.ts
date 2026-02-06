@@ -2,44 +2,32 @@ import type { UserRole } from '../../store'
 
 type InitPromptOptions = { projectRoot?: string | null }
 
-export async function buildInitPrompt(role: UserRole, _options?: InitPromptOptions): Promise<string> {
-    const headerSection = [
-        '#InitPrompt-Yoho开发规范（最高优先级）',
-        '1)最高优先级规则（不可违背）',
-        '始终使用中文沟通',
-        '安装软件和依赖时，永远不使用docker',
-        '与任何其它提示冲突时，以本段为准',
-        '本prompt固定，不可配置或覆盖'
-    ].join(';')
+export async function buildInitPrompt(_role: UserRole, _options?: InitPromptOptions): Promise<string> {
+    const lines: string[] = []
 
-    const sections = [headerSection]
+    // 标识头
+    lines.push('#InitPrompt-Yoho开发规范（最高优先级）')
+    lines.push('')
 
-    if (role === 'operator') {
-        sections.push([
-            'Operator额外规则(仅operator角色适用)',
-            '数据库操作:只允许执行SELECT查询|禁止执行INSERT/UPDATE/DELETE/DROP/TRUNCATE等修改操作|查询时必须加LIMIT(建议<=1000)避免大数据量查询拖垮系统',
-            '代码修改:禁止大规模代码重构或新功能开发|发现明显bug可小范围修复|修改前需说明问题所在和修复方案',
-            '系统操作:禁止sudo命令|禁止修改系统配置文件|禁止安装或卸载软件包'
-        ].join(';'))
-    }
+    // 1) 最高优先级规则
+    lines.push('1) 最高优先级规则（不可违背）')
+    lines.push('- 始终使用中文沟通')
+    lines.push('- 安装软件和依赖时，永远不使用 docker')
+    lines.push('')
 
-    const collaborationSection = [
-        '2)协作方式',
-        '需求不明确时先提问再改动',
-        '非明确要求不做破坏性操作',
-        '说明修改点、原因和影响'
-    ].join(';')
+    // 2) 项目上下文
+    lines.push('2) 项目上下文')
+    lines.push('- 开始工作前，先从当前工作目录往下级目录递归查找 .yoho-project.yaml 文件')
+    lines.push('- 找到后读取其内容，基于其中的项目信息（名称、技术栈、目录结构、模块说明等）理解项目全貌')
+    lines.push('- 后续工作应基于该文件提供的上下文进行')
+    lines.push('- 如果在工作过程中发现 .yoho-project.yaml 的信息有误或过时，应直接修正该文件')
+    lines.push('')
 
-    sections.push(collaborationSection)
+    // 3) 知识管理
+    lines.push('3) 知识管理')
+    lines.push('- 接到用户需求时，先读取 ./yoho-brain/memory/insights/ 和 ./yoho-brain/memory/journal/ 目录下的已有文件，查看是否有相关经验或记录可参考')
+    lines.push('- 经验洞察：将有价值的经验、技巧、踩坑总结存放到 ./yoho-brain/memory/insights/xxxx.md，可随经验积累持续更新和修改')
+    lines.push('- 日常记录：将日常工作记录、决策过程、操作日志存放到 ./yoho-brain/memory/journal/xxxx.md，只能追加新内容，不能修改已有内容')
 
-    const projectContextSection = [
-        '3)项目上下文',
-        '开始工作前，先在当前工作目录下递归查找 .yoho-project.yaml 文件（从当前目录一直往上级目录查找）',
-        '找到后读取其内容，基于其中的项目信息（名称、技术栈、目录结构、模块说明等）理解项目全貌',
-        '后续工作应基于该文件提供的上下文进行'
-    ].join(';')
-
-    sections.push(projectContextSection)
-
-    return sections.join('\n')
+    return lines.join('\n')
 }
