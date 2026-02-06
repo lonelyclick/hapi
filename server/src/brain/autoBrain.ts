@@ -819,7 +819,9 @@ export class AutoBrainService {
                 {
                     cwd: projectPath,
                     systemPrompt,
-                    maxTurns: 30
+                    maxTurns: 30,
+                    // 指定 SDK 内置的 Claude Code 可执行文件路径
+                    pathToClaudeCodeExecutable: '/home/guang/softwares/hapi/server/node_modules/@anthropic-ai/claude-agent-sdk/cli.js'
                 },
                 {
                     onProgress: (type, data) => {

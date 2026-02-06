@@ -13,6 +13,8 @@ import { query as sdkQuery, type Query as SDKQuery, type SDKMessage } from '@ant
 export interface BrainQueryOptions {
     // 工作目录
     cwd: string
+    // Claude Code 可执行文件路径 (可选，默认使用 SDK 内置的 cli.js)
+    pathToClaudeCodeExecutable?: string
     // 模型 (默认 sonnet，也可以用 opus、haiku)
     model?: string
     // 系统提示词
@@ -100,7 +102,9 @@ export async function executeBrainQuery(
             allowedTools,
             disallowedTools,
             permissionMode,
-            abortController
+            abortController,
+            // 指定 SDK 内置的 Claude Code 可执行文件路径
+            pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable
         }
     })
 
