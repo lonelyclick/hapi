@@ -11,6 +11,8 @@ import type { SSEManager } from '../sse/sseManager'
 import type { BrainStore } from './store'
 import type { StoredBrainSession } from './types'
 import { generateSummariesWithGlm, parseBrainResultWithGlm, type BrainResult } from './glmSync'
+import { BrainSdkService, buildBrainSystemPrompt, buildReviewPrompt } from './brainSdkService'
+import type { BrainQueryOptions, MessageCallbacks } from './sdkAdapter'
 
 // 同步配置
 const MAX_BATCH_CHARS = 50000  // 每批最大字符数
@@ -177,14 +179,27 @@ export class AutoBrainService {
     private sseManager: SSEManager | null = null
     private syncingBrainIds: Set<string> = new Set()
     private brainToMainMap: Map<string, string> = new Map()
+    private brainSdkService: BrainSdkService | null = null
 
-    constructor(engine: SyncEngine, brainStore: BrainStore) {
+    constructor(engine: SyncEngine, brainStore: BrainStore, brainSdkService?: BrainSdkService) {
         this.engine = engine
         this.brainStore = brainStore
+        this.brainSdkService = brainSdkService || null
     }
 
     setSseManager(sseManager: SSEManager): void {
         this.sseManager = sseManager
+    }
+
+    setBrainSdkService(brainSdkService: BrainSdkService): void {
+        this.brainSdkService = brainSdkService
+    }
+
+    /**
+     * 检查 Brain session 是否使用 SDK 模式
+     */
+    private isSdkMode(brainSession: StoredBrainSession): boolean {
+        return !brainSession.brainSessionId
     }
 
     start(): void {
@@ -471,37 +486,47 @@ export class AutoBrainService {
                     }
                 }
 
-                // 将汇总内容作为用户消息发送到 Brain session
+                // 将汇总内容发送到 Brain session（CLI 模式）或使用 SDK 处理（SDK 模式）
                 if (savedSummaries.length > 0) {
                     try {
-                        const brainSessionObj = this.engine.getSession(brainSession.brainSessionId)
-                        if (brainSessionObj?.active) {
-                            // 获取主 session 的项目路径
-                            const mainSessionObj = this.engine.getSession(mainSessionId)
-                            const projectPath = mainSessionObj?.metadata?.path || '(未知)'
+                        const mainSessionObj = this.engine.getSession(mainSessionId)
+                        const projectPath = mainSessionObj?.metadata?.path || '(未知)'
 
-                            const messageLines: string[] = [
-                                '## 对话汇总同步\n',
-                                `**项目路径：** \`${projectPath}\``,
-                                `**记忆目录：** \`${projectPath}/.yoho-brain/\``,
-                                ''
-                            ]
-                            for (const s of savedSummaries) {
-                                messageLines.push(`### 第 ${s.round} 轮`)
-                                messageLines.push(s.summary)
-                                messageLines.push('')
+                        if (this.isSdkMode(brainSession)) {
+                            // SDK 模式：直接使用 SDK 进行代码审查
+                            if (this.brainSdkService) {
+                                console.log('[BrainSync] Using SDK mode for brain analysis')
+                                await this.triggerSdkReview(brainSession, savedSummaries, projectPath)
+                            } else {
+                                console.warn('[BrainSync] SDK mode requested but brainSdkService not available')
                             }
-                            messageLines.push('---')
-                            messageLines.push('请先读取 `.yoho-brain/MEMORY.md` 了解之前的上下文，然后分析以上对话内容。')
-                            messageLines.push('分析完成后，将重要发现更新到 `.yoho-brain/` 记忆文件中。')
-
-                            await this.engine.sendMessage(brainSession.brainSessionId, {
-                                text: messageLines.join('\n'),
-                                sentFrom: 'webapp'
-                            })
-                            console.log('[BrainSync] Sent', savedSummaries.length, 'round summaries to brain session', brainSession.brainSessionId)
                         } else {
-                            console.warn('[BrainSync] Brain session not active, skipping message send')
+                            // CLI 模式：发送到 Brain CLI session
+                            const brainSessionObj = this.engine.getSession(brainSession.brainSessionId!)
+                            if (brainSessionObj?.active) {
+                                const messageLines: string[] = [
+                                    '## 对话汇总同步\n',
+                                    `**项目路径：** \`${projectPath}\``,
+                                    `**记忆目录：** \`${projectPath}/.yoho-brain/\``,
+                                    ''
+                                ]
+                                for (const s of savedSummaries) {
+                                    messageLines.push(`### 第 ${s.round} 轮`)
+                                    messageLines.push(s.summary)
+                                    messageLines.push('')
+                                }
+                                messageLines.push('---')
+                                messageLines.push('请先读取 `.yoho-brain/MEMORY.md` 了解之前的上下文，然后分析以上对话内容。')
+                                messageLines.push('分析完成后，将重要发现更新到 `.yoho-brain/` 记忆文件中。')
+
+                                await this.engine.sendMessage(brainSession.brainSessionId!, {
+                                    text: messageLines.join('\n'),
+                                    sentFrom: 'webapp'
+                                })
+                                console.log('[BrainSync] Sent', savedSummaries.length, 'round summaries to brain session', brainSession.brainSessionId)
+                            } else {
+                                console.warn('[BrainSync] Brain session not active, skipping message send')
+                            }
                         }
                     } catch (sendErr) {
                         console.error('[BrainSync] Failed to send summaries to brain session:', sendErr)
@@ -708,7 +733,7 @@ export class AutoBrainService {
     }
 
     private broadcastSyncStatus(brainSession: StoredBrainSession, data: {
-        status: 'checking' | 'syncing' | 'complete'
+        status: 'checking' | 'syncing' | 'complete' | 'analyzing'
         totalRounds: number
         summarizedRounds: number
         pendingRounds: number
@@ -716,6 +741,8 @@ export class AutoBrainService {
         savedRounds?: number[]
         savedSummaries?: Array<{ round: number; summary: string }>
         unbrainedRounds?: number
+        suggestions?: unknown[]
+        summary?: string
     }): void {
         if (!this.sseManager) return
 
@@ -738,8 +765,118 @@ export class AutoBrainService {
         const brainSession = await this.brainStore.getActiveBrainSession(mainSessionId)
         console.log('[BrainSync] triggerSync brainSession:', brainSession?.id ?? 'null')
         if (brainSession) {
-            this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
+            // SDK 模式下 brainSessionId 为 null，不需要设置映射
+            if (brainSession.brainSessionId) {
+                this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
+            }
             await this.syncRounds(brainSession)
+        }
+    }
+
+    /**
+     * 使用 SDK 触发代码审查
+     */
+    private async triggerSdkReview(
+        brainSession: StoredBrainSession,
+        summaries: Array<{ round: number; summary: string }>,
+        projectPath: string
+    ): Promise<void> {
+        if (!this.brainSdkService) {
+            console.warn('[BrainSync] SDK service not available')
+            return
+        }
+
+        const brainId = brainSession.id
+        const mainSessionId = brainSession.mainSessionId
+
+        console.log('[BrainSync] Triggering SDK review for', summaries.length, 'rounds')
+
+        // 构建审查提示词
+        const roundsSummary = summaries.map(s => `### 第 ${s.round} 轮\n${s.summary}`).join('\n\n')
+        const contextSummary = brainSession.contextSummary || '(无上下文)'
+
+        const reviewPrompt = buildReviewPrompt(contextSummary, roundsSummary)
+
+        const systemPrompt = buildBrainSystemPrompt()
+
+        // 广播开始状态
+        this.broadcastSyncStatus(brainSession, {
+            status: 'analyzing',
+            totalRounds: summaries.length,
+            summarizedRounds: summaries.length,
+            pendingRounds: 0
+        })
+
+        try {
+            // 执行 SDK 审查
+            const result = await this.brainSdkService.executeBrainReview(
+                brainId,
+                reviewPrompt,
+                {
+                    cwd: projectPath,
+                    systemPrompt,
+                    maxTurns: 30
+                },
+                {
+                    onProgress: (type, data) => {
+                        // 广播进度
+                        if (this.sseManager) {
+                            const mainSession = this.engine.getSession(mainSessionId)
+                            this.sseManager.broadcast({
+                                type: 'brain-sdk-progress',
+                                namespace: mainSession?.namespace,
+                                sessionId: mainSessionId,
+                                data: {
+                                    brainSessionId: brainId,
+                                    progressType: type,
+                                    data
+                                }
+                            } as unknown as SyncEvent)
+                        }
+                    }
+                }
+            )
+
+            if (result.status === 'completed' && result.output) {
+                console.log('[BrainSync] SDK review completed, output length:', result.output.length)
+
+                // 创建执行记录
+                await this.brainStore.createBrainExecution({
+                    brainSessionId: brainId,
+                    roundsReviewed: summaries.length,
+                    reviewedRoundNumbers: summaries.map(s => s.round),
+                    timeRangeStart: Date.now(),
+                    timeRangeEnd: Date.now(),
+                    prompt: reviewPrompt
+                })
+
+                // 尝试解析结果
+                try {
+                    const jsonMatch = result.output.match(/```json\s*([\s\S]*?)\s*```/)
+                    if (jsonMatch) {
+                        const parsed = JSON.parse(jsonMatch[1])
+                        if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+                            console.log('[BrainSync] Parsed', parsed.suggestions.length, 'suggestions from SDK')
+
+                            // 广播完成状态
+                            this.broadcastSyncStatus(brainSession, {
+                                status: 'complete',
+                                totalRounds: summaries.length,
+                                summarizedRounds: summaries.length,
+                                pendingRounds: 0,
+                                suggestions: parsed.suggestions,
+                                summary: parsed.summary
+                            })
+                        }
+                    }
+                } catch (parseErr) {
+                    console.error('[BrainSync] Failed to parse SDK output:', parseErr)
+                }
+            } else if (result.status === 'error') {
+                console.error('[BrainSync] SDK review failed:', result.error)
+            }
+        } catch (err) {
+            console.error('[BrainSync] SDK review error:', err)
         }
     }
 }

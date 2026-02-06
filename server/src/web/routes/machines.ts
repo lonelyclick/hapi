@@ -162,98 +162,49 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 }
                 await sendInitPrompt(engine, result.sessionId, role, userName)
 
-                // 如果启用 Brain，异步创建 Brain session
+                // 如果启用 Brain，创建 Brain session（使用 SDK 方式，不依赖 CLI daemon）
                 if (parsed.data.enableBrain && brainStore) {
                     try {
-                        console.log(`[machines/spawn] Creating Brain session for ${result.sessionId}...`)
+                        console.log(`[machines/spawn] Creating Brain session for ${result.sessionId} (SDK mode)...`)
                         const mainSession = engine.getSession(result.sessionId)
                         const directory = mainSession?.metadata?.path
                         if (directory) {
-                            const brainSpawnResult = await engine.spawnSession(
-                                machineId,
-                                directory,
-                                'claude',
-                                false,
-                                'simple',
-                                undefined,
-                                { source: 'brain' }
-                            )
-                            if (brainSpawnResult.type === 'success') {
-                                const brainOnline = await waitForSessionOnline(engine, brainSpawnResult.sessionId, 60_000)
-                                if (brainOnline) {
-                                    // 发送 Brain 初始化 Prompt
-                                    await engine.sendMessage(brainSpawnResult.sessionId, {
-                                        text: [
-                                            '你是一个「大脑」角色，负责审查和分析另一个编程 Session 的对话内容。',
-                                            '',
-                                            `## 项目信息`,
-                                            `- 项目路径：\`${directory}\``,
-                                            `- 主 Session ID：${result.sessionId}`,
-                                            '',
-                                            '## 你的职责',
-                                            '- 你会持续收到来自主 Session 的对话汇总（用户提问 + AI 回复摘要）',
-                                            '- 请从全局视角审查代码变更，发现潜在的 bug、安全问题、性能问题和改进建议',
-                                            '- 每次收到汇总后，给出简洁的分析和建议',
-                                            '',
-                                            '## 记忆系统',
-                                            `你有一个持久化记忆目录：\`${directory}/.yoho-brain/\``,
-                                            '- **每次收到对话汇总时，先读取该目录下的记忆文件**（尤其是 `MEMORY.md`），了解之前的上下文和已知问题',
-                                            '- 分析完成后，将重要的发现、决策、架构变更等写入记忆文件，供后续参考',
-                                            '- 建议的记忆文件结构：',
-                                            '  - `MEMORY.md` — 总体记忆索引，记录关键决策和架构概览（保持简洁，不超过 200 行）',
-                                            '  - `issues.md` — 发现的问题和跟踪状态',
-                                            '  - `architecture.md` — 项目架构和重要设计决策',
-                                            '',
-                                            '## 回复格式',
-                                            '- 如果发现问题，列出具体的建议（类型、严重程度、描述）',
-                                            '- 如果没有问题，简短回复即可',
-                                            '- 使用中文回复',
-                                            '',
-                                            '等待接收对话汇总...'
-                                        ].join('\n'),
-                                        sentFrom: 'webapp'
-                                    })
-                                    console.log(`[machines/spawn] Sent brain init prompt to ${brainSpawnResult.sessionId}`)
-
-                                    // 构建上下文（复用 brain 模块的消息解析逻辑）
-                                    const page = await engine.getMessagesPage(result.sessionId, { limit: 20, beforeSeq: null })
-                                    const contextMessages: string[] = []
-                                    for (const m of page.messages) {
-                                        const content = m.content as Record<string, unknown> | null
-                                        if (!content || content.role !== 'user') continue
-                                        const body = content.content as Record<string, unknown> | string | undefined
-                                        if (!body) continue
-                                        if (typeof body === 'string') {
-                                            const trimmed = body.trim()
-                                            if (trimmed) contextMessages.push(trimmed)
-                                        } else if (typeof body === 'object' && body.type === 'text' && typeof body.text === 'string') {
-                                            const trimmed = (body.text as string).trim()
-                                            if (trimmed) contextMessages.push(trimmed)
-                                        }
-                                    }
-                                    const contextSummary = contextMessages.join('\n') || 'New session'
-
-                                    await brainStore.createBrainSession({
-                                        namespace,
-                                        mainSessionId: result.sessionId,
-                                        brainSessionId: brainSpawnResult.sessionId,
-                                        brainModel: 'claude',
-                                        contextSummary
-                                    })
-                                    console.log(`[machines/spawn] Brain session created: ${brainSpawnResult.sessionId}`)
-
-                                    if (autoBrainService) {
-                                        setTimeout(() => {
-                                            autoBrainService.triggerSync(result.sessionId).catch(err => {
-                                                console.error('[machines/spawn] Failed to trigger brain sync:', err)
-                                            })
-                                        }, 3000)
-                                    }
-                                } else {
-                                    console.warn(`[machines/spawn] Brain session did not come online`)
+                            // 构建上下文（复用 brain 模块的消息解析逻辑）
+                            const page = await engine.getMessagesPage(result.sessionId, { limit: 20, beforeSeq: null })
+                            const contextMessages: string[] = []
+                            for (const m of page.messages) {
+                                const content = m.content as Record<string, unknown> | null
+                                if (!content || content.role !== 'user') continue
+                                const body = content.content as Record<string, unknown> | string | undefined
+                                if (!body) continue
+                                if (typeof body === 'string') {
+                                    const trimmed = body.trim()
+                                    if (trimmed) contextMessages.push(trimmed)
+                                } else if (typeof body === 'object' && body.type === 'text' && typeof body.text === 'string') {
+                                    const trimmed = (body.text as string).trim()
+                                    if (trimmed) contextMessages.push(trimmed)
                                 }
-                            } else {
-                                console.warn(`[machines/spawn] Failed to spawn Brain session:`, brainSpawnResult.message)
+                            }
+                            const contextSummary = contextMessages.join('\n') || 'New session'
+
+                            // 创建 Brain session（不使用 CLI daemon，brainSessionId 为 null）
+                            const brainSession = await brainStore.createBrainSession({
+                                namespace,
+                                mainSessionId: result.sessionId,
+                                brainSessionId: null,  // SDK 模式：不关联 CLI session
+                                brainModel: 'claude',
+                                contextSummary,
+                                status: 'active'
+                            })
+                            console.log(`[machines/spawn] Brain session created (SDK mode): ${brainSession.id}`)
+
+                            // 触发初始 Brain 分析
+                            if (autoBrainService) {
+                                setTimeout(() => {
+                                    autoBrainService.triggerSync(result.sessionId).catch(err => {
+                                        console.error('[machines/spawn] Failed to trigger brain sync:', err)
+                                    })
+                                }, 3000)
                             }
                         }
                     } catch (err) {

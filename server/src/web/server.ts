@@ -24,7 +24,7 @@ import { createUsageRoutes } from './routes/usage'
 import { createGroupRoutes } from './routes/groups'
 import { createClaudeAccountsRoutes } from './routes/claude-accounts'
 import { createYohoCredentialsRoutes } from './routes/yoho-credentials'
-import { createBrainRoutes, type BrainStore, type AutoBrainService } from '../brain'
+import { createBrainRoutes, type BrainStore, type AutoBrainService, type BrainSdkService } from '../brain'
 import { createOpenCodeRoutes } from './routes/opencode'
 import { createCodexOpenAIRoutes } from './routes/codex-openai'
 import type { SSEManager } from '../sse/sseManager'
@@ -80,6 +80,7 @@ function createWebApp(options: {
     store: IStore
     brainStore: BrainStore
     autoBrainService?: AutoBrainService
+    brainSdkService?: BrainSdkService
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
@@ -122,7 +123,7 @@ function createWebApp(options: {
     app.route('/api', createGroupRoutes(options.store, options.getSyncEngine(), options.getSseManager()))
     app.route('/api', createClaudeAccountsRoutes())
     app.route('/api', createYohoCredentialsRoutes())
-    app.route('/api', createBrainRoutes(options.brainStore, options.getSyncEngine, options.getSseManager, options.autoBrainService))
+    app.route('/api', createBrainRoutes(options.brainStore, options.getSyncEngine, () => options.getSseManager(), options.autoBrainService, options.brainSdkService))
     app.route('/api', createOpenCodeRoutes(options.getSyncEngine, options.getSseManager()))
 
     if (options.embeddedAssetMap) {
@@ -248,6 +249,7 @@ export async function startWebServer(options: {
     store: IStore
     brainStore: BrainStore
     autoBrainService?: AutoBrainService
+    brainSdkService?: BrainSdkService
     socketEngine: SocketEngine
 }): Promise<BunServer<WebSocketData>> {
     const isCompiled = isBunCompiled()
@@ -258,6 +260,7 @@ export async function startWebServer(options: {
         store: options.store,
         brainStore: options.brainStore,
         autoBrainService: options.autoBrainService,
+        brainSdkService: options.brainSdkService,
         embeddedAssetMap
     })
 
