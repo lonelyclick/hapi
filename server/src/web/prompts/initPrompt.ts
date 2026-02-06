@@ -32,5 +32,14 @@ export async function buildInitPrompt(role: UserRole, _options?: InitPromptOptio
 
     sections.push(collaborationSection)
 
+    const projectContextSection = [
+        '3)项目上下文',
+        '开始工作前，先在当前工作目录下递归查找 .yoho-project.yaml 文件（从当前目录一直往上级目录查找）',
+        '找到后读取其内容，基于其中的项目信息（名称、技术栈、目录结构、模块说明等）理解项目全貌',
+        '后续工作应基于该文件提供的上下文进行'
+    ].join(';')
+
+    sections.push(projectContextSection)
+
     return sections.join('\n')
 }
