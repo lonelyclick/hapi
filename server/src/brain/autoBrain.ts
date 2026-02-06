@@ -476,14 +476,24 @@ export class AutoBrainService {
                     try {
                         const brainSessionObj = this.engine.getSession(brainSession.brainSessionId)
                         if (brainSessionObj?.active) {
-                            const messageLines: string[] = ['## 对话汇总同步\n']
+                            // 获取主 session 的项目路径
+                            const mainSessionObj = this.engine.getSession(mainSessionId)
+                            const projectPath = mainSessionObj?.metadata?.path || '(未知)'
+
+                            const messageLines: string[] = [
+                                '## 对话汇总同步\n',
+                                `**项目路径：** \`${projectPath}\``,
+                                `**记忆目录：** \`${projectPath}/.yoho-brain/\``,
+                                ''
+                            ]
                             for (const s of savedSummaries) {
                                 messageLines.push(`### 第 ${s.round} 轮`)
                                 messageLines.push(s.summary)
                                 messageLines.push('')
                             }
                             messageLines.push('---')
-                            messageLines.push('请分析以上对话内容，如果发现潜在问题或有改进建议，请指出。')
+                            messageLines.push('请先读取 `.yoho-brain/MEMORY.md` 了解之前的上下文，然后分析以上对话内容。')
+                            messageLines.push('分析完成后，将重要发现更新到 `.yoho-brain/` 记忆文件中。')
 
                             await this.engine.sendMessage(brainSession.brainSessionId, {
                                 text: messageLines.join('\n'),
