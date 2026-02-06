@@ -17,7 +17,7 @@ import { startWebServer } from './web/server'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
-import { ReviewStore, AutoReviewService } from './review'
+import { BrainStore, AutoBrainService } from './brain'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -94,10 +94,10 @@ async function main() {
     console.log(`[Server] Store: PostgreSQL (${pgConfig.host}/${pgConfig.database})`)
     const store = await PostgresStore.create(pgConfig)
 
-    // 初始化 Review Store（试验性功能）
-    const reviewStore = new ReviewStore(store.getPool())
-    await reviewStore.initSchema()
-    console.log('[Server] Review: enabled (experimental)')
+    // 初始化 Brain Store
+    const brainStore = new BrainStore(store.getPool())
+    await brainStore.initSchema()
+    console.log('[Server] Brain: enabled')
 
     // Initialize Web Push service
     const webPushConfig = config.webPushVapidPublicKey && config.webPushVapidPrivateKey && config.webPushVapidSubject
@@ -129,10 +129,10 @@ async function main() {
 
     syncEngine = new SyncEngine(store, socketServer.io, socketServer.rpcRegistry, sseManager)
 
-    // Initialize Review Sync Service
-    const autoReviewService = new AutoReviewService(syncEngine, reviewStore)
-    autoReviewService.setSseManager(sseManager)
-    autoReviewService.start()
+    // Initialize Brain Sync Service
+    const autoBrainService = new AutoBrainService(syncEngine, brainStore)
+    autoBrainService.setSseManager(sseManager)
+    autoBrainService.start()
 
     // Initialize Telegram bot (optional)
     if (config.telegramEnabled && config.telegramBotToken) {
@@ -149,8 +149,8 @@ async function main() {
         getSyncEngine: () => syncEngine,
         getSseManager: () => sseManager,
         store,
-        reviewStore,
-        autoReviewService,
+        brainStore,
+        autoBrainService,
         socketEngine: socketServer.engine
     })
 

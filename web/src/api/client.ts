@@ -1013,50 +1013,50 @@ export class ApiClient {
         return await this.request('/api/claude-accounts/usage')
     }
 
-    // ==================== Review (试验性功能) ====================
+    // ==================== Brain (试验性功能) ====================
 
-    async createReviewSession(data: {
+    async createBrainSession(data: {
         mainSessionId: string
-        reviewModel: string
-        reviewModelVariant?: string
-    }): Promise<ReviewSession> {
-        return await this.request<ReviewSession>('/api/review/sessions', {
+        brainModel: string
+        brainModelVariant?: string
+    }): Promise<BrainSession> {
+        return await this.request<BrainSession>('/api/brain/sessions', {
             method: 'POST',
             body: JSON.stringify(data)
         })
     }
 
-    async getReviewSessions(mainSessionId: string): Promise<{ reviewSessions: ReviewSession[] }> {
-        return await this.request<{ reviewSessions: ReviewSession[] }>(
-            `/api/review/sessions?mainSessionId=${encodeURIComponent(mainSessionId)}`
+    async getBrainSessions(mainSessionId: string): Promise<{ brainSessions: BrainSession[] }> {
+        return await this.request<{ brainSessions: BrainSession[] }>(
+            `/api/brain/sessions?mainSessionId=${encodeURIComponent(mainSessionId)}`
         )
     }
 
-    async getActiveReviewSession(mainSessionId: string): Promise<ReviewSession> {
-        return await this.request<ReviewSession>(
-            `/api/review/sessions/active/${encodeURIComponent(mainSessionId)}`
+    async getActiveBrainSession(mainSessionId: string): Promise<BrainSession> {
+        return await this.request<BrainSession>(
+            `/api/brain/sessions/active/${encodeURIComponent(mainSessionId)}`
         )
     }
 
-    async syncReviewRounds(reviewId: string): Promise<{ success: boolean; error?: string; syncingRound?: number; totalRounds?: number; summarizedRounds?: number; pendingRounds?: number; message?: string }> {
+    async syncBrainRounds(brainId: string): Promise<{ success: boolean; error?: string; syncingRound?: number; totalRounds?: number; summarizedRounds?: number; pendingRounds?: number; message?: string }> {
         try {
             return await this.request<{ success: boolean; syncingRound?: number; totalRounds: number; summarizedRounds: number; pendingRounds: number; message: string }>(
-                `/api/review/sessions/${encodeURIComponent(reviewId)}/sync`,
+                `/api/brain/sessions/${encodeURIComponent(brainId)}/sync`,
                 { method: 'POST' }
             )
         } catch (e) {
             // 409 Conflict 表示 AI 正忙，返回 busy 状态而不是抛出异常
             if (e instanceof ApiError && e.status === 409) {
-                return { success: false, error: 'busy', message: 'Review AI 正在处理中' }
+                return { success: false, error: 'busy', message: 'Brain AI 正在处理中' }
             }
             throw e
         }
     }
 
-    async saveReviewSummary(reviewId: string): Promise<{ success: boolean; savedRound?: number; summary?: string; message?: string; alreadyExists?: boolean; noSummary?: boolean; error?: string }> {
+    async saveBrainSummary(brainId: string): Promise<{ success: boolean; savedRound?: number; summary?: string; message?: string; alreadyExists?: boolean; noSummary?: boolean; error?: string }> {
         try {
             return await this.request<{ success: boolean; savedRound?: number; summary?: string; message: string; alreadyExists?: boolean; noSummary?: boolean }>(
-                `/api/review/sessions/${encodeURIComponent(reviewId)}/save-summary`,
+                `/api/brain/sessions/${encodeURIComponent(brainId)}/save-summary`,
                 { method: 'POST' }
             )
         } catch (e) {
@@ -1068,25 +1068,17 @@ export class ApiClient {
         }
     }
 
-    async startReviewSession(reviewId: string, previousSuggestions?: Array<{
-        id: string
-        type: string
-        severity: string
-        title: string
-        detail: string
-        applied: boolean
-        deleted?: boolean
-    }>): Promise<{ success: boolean; status: string; roundsReviewed?: number }> {
+    async startBrainSession(brainId: string): Promise<{ success: boolean; status: string; roundsReviewed?: number }> {
         return await this.request<{ success: boolean; status: string; roundsReviewed?: number }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}/start`,
+            `/api/brain/sessions/${encodeURIComponent(brainId)}/start`,
             {
                 method: 'POST',
-                body: JSON.stringify({ previousSuggestions })
+                body: JSON.stringify({})
             }
         )
     }
 
-    async getReviewPendingRounds(reviewId: string): Promise<{
+    async getBrainPendingRounds(brainId: string): Promise<{
         totalRounds: number
         summarizedRounds: number
         pendingRounds: number
@@ -1106,51 +1098,35 @@ export class ApiClient {
             hasUnreviewedRounds: boolean
             savedSummaries?: Array<{ round: number; summary: string }>
         }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}/pending-rounds`
+            `/api/brain/sessions/${encodeURIComponent(brainId)}/pending-rounds`
         )
     }
 
-    async cancelReviewSession(reviewId: string): Promise<{ success: boolean }> {
+    async cancelBrainSession(brainId: string): Promise<{ success: boolean }> {
         return await this.request<{ success: boolean }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}/cancel`,
+            `/api/brain/sessions/${encodeURIComponent(brainId)}/cancel`,
             { method: 'POST' }
         )
     }
 
-    async deleteReviewSession(reviewId: string): Promise<{ success: boolean }> {
+    async deleteBrainSession(brainId: string): Promise<{ success: boolean }> {
         return await this.request<{ success: boolean }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}`,
+            `/api/brain/sessions/${encodeURIComponent(brainId)}`,
             { method: 'DELETE' }
         )
     }
 
-    async sendReviewSummary(reviewId: string): Promise<{ success: boolean }> {
+    async sendBrainSummary(brainId: string): Promise<{ success: boolean }> {
         return await this.request<{ success: boolean }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}/summarize`,
+            `/api/brain/sessions/${encodeURIComponent(brainId)}/summarize`,
             { method: 'POST' }
         )
     }
 
-    async executeReview(reviewId: string): Promise<{ success: boolean }> {
+    async executeBrain(brainId: string): Promise<{ success: boolean }> {
         return await this.request<{ success: boolean }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}/execute`,
+            `/api/brain/sessions/${encodeURIComponent(brainId)}/execute`,
             { method: 'POST' }
-        )
-    }
-
-    async applyReviewSuggestion(reviewId: string, action: string, suggestionIds?: string[]): Promise<{ success: boolean }> {
-        return await this.request<{ success: boolean }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}/apply`,
-            {
-                method: 'POST',
-                body: JSON.stringify({ action, suggestionIds })
-            }
-        )
-    }
-
-    async getAppliedSuggestionIds(reviewId: string): Promise<{ appliedIds: string[] }> {
-        return await this.request<{ appliedIds: string[] }>(
-            `/api/review/sessions/${encodeURIComponent(reviewId)}/applied-suggestions`
         )
     }
 
@@ -1188,16 +1164,16 @@ export class ApiClient {
     }
 }
 
-// Types for Review (试验性功能)
-export interface ReviewSession {
+// Types for Brain (试验性功能)
+export interface BrainSession {
     id: string
     mainSessionId: string
-    reviewSessionId: string
-    reviewModel: string
-    reviewModelVariant?: string
+    brainSessionId: string
+    brainModel: string
+    brainModelVariant?: string
     status: 'pending' | 'active' | 'completed' | 'cancelled'
     contextSummary: string
-    reviewResult?: string
+    brainResult?: string
     createdAt: number
     updatedAt: number
     completedAt?: number

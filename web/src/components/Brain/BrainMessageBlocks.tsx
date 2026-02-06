@@ -1,5 +1,5 @@
 /**
- * Review AI 专用消息块组件
+ * Brain AI 专用消息块组件
  *
  * 用于展示：
  * 1. 汇总任务请求（发送给 AI 的汇总提示）
@@ -9,10 +9,10 @@
 import { useState } from 'react'
 
 /**
- * 检测是否为 Review 汇总任务消息
+ * 检测是否为 Brain 汇总任务消息
  * 支持批量格式（多轮）和单轮格式
  */
-export function isReviewSummaryTask(text: string): boolean {
+export function isBrainSummaryTask(text: string): boolean {
     if (!text.includes('## 对话汇总任务')) return false
     // 批量格式: "请帮我汇总以下 X 轮对话的内容"
     // 单轮格式: "请帮我汇总以下这一轮对话的内容"
@@ -28,7 +28,7 @@ interface ParsedRound {
 /**
  * 从汇总任务消息中提取信息（支持多轮）
  */
-export function parseReviewSummaryTask(text: string): ParsedRound[] | null {
+export function parseBrainSummaryTask(text: string): ParsedRound[] | null {
     const rounds: ParsedRound[] = []
 
     // 只解析 "### 要求" 之前的内容
@@ -118,10 +118,10 @@ function looksLikeCompleteJson(jsonStr: string): boolean {
 }
 
 /**
- * 检测是否为 Review JSON 汇总结果
+ * 检测是否为 Brain JSON 汇总结果
  * 支持单个对象或数组格式，多种文本格式
  */
-export function isReviewSummaryResult(text: string): boolean {
+export function isBrainSummaryResult(text: string): boolean {
     const jsonStr = extractJsonFromText(text)
     if (!jsonStr) return false
 
@@ -148,7 +148,7 @@ interface ParsedSummary {
 /**
  * 从 JSON 汇总结果中提取信息（支持数组和单个对象，多种文本格式）
  */
-export function parseReviewSummaryResult(text: string): ParsedSummary[] | null {
+export function parseBrainSummaryResult(text: string): ParsedSummary[] | null {
     const jsonStr = extractJsonFromText(text)
     if (!jsonStr) return null
 
@@ -221,11 +221,11 @@ function SingleRoundTaskCard(props: { round: ParsedRound; expanded: boolean; onT
 }
 
 /**
- * Review 汇总任务消息组件（支持多轮）
+ * Brain 汇总任务消息组件（支持多轮）
  */
-export function ReviewSummaryTaskBlock(props: { text: string }) {
+export function BrainSummaryTaskBlock(props: { text: string }) {
     const [expandedRounds, setExpandedRounds] = useState<Set<number>>(new Set())
-    const parsed = parseReviewSummaryTask(props.text)
+    const parsed = parseBrainSummaryTask(props.text)
 
     if (!parsed || parsed.length === 0) {
         return <div className="text-sm text-[var(--app-hint)]">无法解析汇总任务</div>
@@ -303,10 +303,10 @@ function SingleSummaryResultCard(props: { summary: ParsedSummary }) {
 }
 
 /**
- * Review JSON 汇总结果组件（支持多轮）
+ * Brain JSON 汇总结果组件（支持多轮）
  */
-export function ReviewSummaryResultBlock(props: { text: string }) {
-    const parsed = parseReviewSummaryResult(props.text)
+export function BrainSummaryResultBlock(props: { text: string }) {
+    const parsed = parseBrainSummaryResult(props.text)
 
     if (!parsed || parsed.length === 0) {
         return <div className="text-sm text-[var(--app-hint)]">无法解析汇总结果</div>
@@ -349,167 +349,6 @@ export function ReviewSummaryResultBlock(props: { text: string }) {
                 <div className="p-2 space-y-2">
                     {parsed.map(summary => (
                         <SingleSummaryResultCard key={summary.round} summary={summary} />
-                    ))}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// ============================================
-// Review 建议结果相关组件
-// ============================================
-
-interface ReviewSuggestion {
-    id: string
-    type: 'bug' | 'security' | 'performance' | 'improvement'
-    severity: 'high' | 'medium' | 'low'
-    title: string
-    detail: string
-}
-
-interface ReviewSuggestionsResult {
-    suggestions: ReviewSuggestion[]
-    summary: string
-}
-
-/**
- * 检测是否为 Review 建议结果（包含 suggestions 数组）
- */
-export function isReviewSuggestionsResult(text: string): boolean {
-    const jsonStr = extractJsonFromText(text)
-    if (!jsonStr) return false
-    if (!looksLikeCompleteJson(jsonStr)) return false
-
-    try {
-        const parsed = JSON.parse(jsonStr)
-        return parsed && Array.isArray(parsed.suggestions) && parsed.suggestions.length > 0
-    } catch {
-        return false
-    }
-}
-
-/**
- * 解析 Review 建议结果
- */
-export function parseReviewSuggestionsResult(text: string): ReviewSuggestionsResult | null {
-    const jsonStr = extractJsonFromText(text)
-    if (!jsonStr) return null
-
-    try {
-        const parsed = JSON.parse(jsonStr)
-        if (parsed && Array.isArray(parsed.suggestions)) {
-            return {
-                suggestions: parsed.suggestions.filter((s: unknown) =>
-                    s && typeof s === 'object' &&
-                    'id' in s && 'title' in s && 'detail' in s
-                ),
-                summary: parsed.summary || ''
-            }
-        }
-    } catch {
-        // ignore
-    }
-    return null
-}
-
-// 类型颜色映射
-const suggestionTypeColors: Record<string, { bg: string; text: string; border: string }> = {
-    bug: { bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/30' },
-    security: { bg: 'bg-orange-500/10', text: 'text-orange-500', border: 'border-orange-500/30' },
-    performance: { bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/30' },
-    improvement: { bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/30' }
-}
-
-// 严重程度颜色
-const suggestionSeverityColors: Record<string, string> = {
-    high: 'text-red-500',
-    medium: 'text-yellow-500',
-    low: 'text-green-500'
-}
-
-// 类型中文
-const suggestionTypeLabels: Record<string, string> = {
-    bug: 'Bug',
-    security: '安全',
-    performance: '性能',
-    improvement: '改进'
-}
-
-// 严重程度中文
-const suggestionSeverityLabels: Record<string, string> = {
-    high: '高',
-    medium: '中',
-    low: '低'
-}
-
-/**
- * 单个建议卡片（只读展示）
- */
-function SuggestionDisplayCard(props: { suggestion: ReviewSuggestion }) {
-    const { suggestion } = props
-    const colors = suggestionTypeColors[suggestion.type] || suggestionTypeColors.improvement
-
-    return (
-        <div className={`p-3 rounded-lg border ${colors.border} ${colors.bg}`}>
-            {/* 标签 */}
-            <div className="flex items-center gap-2 mb-2">
-                <span className={`px-2 py-0.5 text-xs font-medium rounded ${colors.bg} ${colors.text}`}>
-                    {suggestionTypeLabels[suggestion.type] || suggestion.type}
-                </span>
-                <span className={`text-xs font-medium ${suggestionSeverityColors[suggestion.severity] || 'text-gray-500'}`}>
-                    {suggestionSeverityLabels[suggestion.severity] || suggestion.severity}
-                </span>
-            </div>
-
-            {/* 标题 */}
-            <h4 className="font-medium text-[var(--app-fg)] mb-1">
-                {suggestion.title}
-            </h4>
-
-            {/* 详情 */}
-            <p className="text-sm text-[var(--app-hint)]">
-                {suggestion.detail}
-            </p>
-        </div>
-    )
-}
-
-/**
- * Review 建议结果展示组件
- */
-export function ReviewSuggestionsResultBlock(props: { text: string }) {
-    const parsed = parseReviewSuggestionsResult(props.text)
-
-    if (!parsed || parsed.suggestions.length === 0) {
-        return <div className="text-sm text-[var(--app-hint)]">无法解析建议结果</div>
-    }
-
-    return (
-        <div className="w-full">
-            <div className="rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border border-blue-200 dark:border-blue-700 shadow-sm overflow-hidden">
-                {/* 头部 */}
-                <div className="flex items-center gap-2 px-3 py-2 bg-blue-100/50 dark:bg-blue-800/30 border-b border-blue-200 dark:border-blue-700">
-                    <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                        代码审查建议 ({parsed.suggestions.length} 条)
-                    </span>
-                </div>
-
-                {/* 总体评价 */}
-                {parsed.summary && (
-                    <div className="px-3 py-2 bg-white/50 dark:bg-slate-800/50 border-b border-blue-100 dark:border-blue-800">
-                        <div className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">总体评价</div>
-                        <p className="text-sm text-[var(--app-fg)]">{parsed.summary}</p>
-                    </div>
-                )}
-
-                {/* 建议列表 */}
-                <div className="p-2 space-y-2">
-                    {parsed.suggestions.map(suggestion => (
-                        <SuggestionDisplayCard key={suggestion.id} suggestion={suggestion} />
                     ))}
                 </div>
             </div>

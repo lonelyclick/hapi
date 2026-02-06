@@ -6,7 +6,7 @@ import { getClientId } from '@/lib/client-identity'
 import { ViewersBadge } from './ViewersBadge'
 import { ShareDialog } from './ShareDialog'
 import { useAppContext } from '@/lib/app-context'
-import { JoinReviewButton } from './Review'
+import { JoinBrainButton } from './Brain'
 import { queryKeys } from '@/lib/query-keys'
 
 function getSessionPath(session: Session): string | null {
@@ -245,11 +245,11 @@ export function SessionHeader(props: {
     onBack: () => void
     onDelete?: () => void
     onRefreshAccount?: () => void
-    onReviewCreated?: (reviewSessionId: string) => void
-    /** 是否已打开 Review 面板 */
-    isReviewPanelOpen?: boolean
-    /** 切换 Review 面板 */
-    onToggleReviewPanel?: () => void
+    onBrainCreated?: (brainSessionId: string) => void
+    /** 是否已打开 Brain 面板 */
+    isBrainPanelOpen?: boolean
+    /** 切换 Brain 面板 */
+    onToggleBrainPanel?: () => void
     deleteDisabled?: boolean
     refreshAccountDisabled?: boolean
 }) {
@@ -424,14 +424,14 @@ export function SessionHeader(props: {
 
                 {/* Right side: Viewers + Action buttons */}
                 <div className="flex shrink-0 items-center gap-1.5">
-                    {/* Join Review AI 按钮 (试验性功能) - PC端显示，只有创建者可见 */}
+                    {/* Join Brain AI 按钮 (试验性功能) - PC端显示，只有创建者可见 */}
                     {isCreator && props.session.active && (
                         <div className="hidden sm:block">
-                            <JoinReviewButton
+                            <JoinBrainButton
                                 sessionId={props.session.id}
-                                isReviewPanelOpen={props.isReviewPanelOpen}
-                                onToggleReviewPanel={props.onToggleReviewPanel}
-                                onReviewCreated={props.onReviewCreated}
+                                isBrainPanelOpen={props.isBrainPanelOpen}
+                                onToggleBrainPanel={props.onToggleBrainPanel}
+                                onBrainCreated={props.onBrainCreated}
                             />
                         </div>
                     )}
@@ -523,16 +523,16 @@ export function SessionHeader(props: {
                                         <div className="my-1 border-t border-[var(--app-divider)]" />
                                     </>
                                 )}
-                                {/* Review 按钮 - 只有创建者可见 */}
-                                {isCreator && props.session.active && props.onToggleReviewPanel && (
+                                {/* Brain 按钮 - 只有创建者可见 */}
+                                {isCreator && props.session.active && props.onToggleBrainPanel && (
                                     <button
                                         type="button"
                                         onClick={() => {
                                             setShowMoreMenu(false)
-                                            props.onToggleReviewPanel?.()
+                                            props.onToggleBrainPanel?.()
                                         }}
                                         className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                                            props.isReviewPanelOpen
+                                            props.isBrainPanelOpen
                                                 ? 'text-purple-600 bg-purple-500/10'
                                                 : 'text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
                                         }`}
@@ -552,7 +552,7 @@ export function SessionHeader(props: {
                                             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
                                             <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                                         </svg>
-                                        <span>Review</span>
+                                        <span>Brain</span>
                                     </button>
                                 )}
                                 {/* 分享会话 - 只有创建者可以分享 */}

@@ -4,7 +4,7 @@ import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { HappyToolMessage } from '@/components/AssistantChat/messages/ToolMessage'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
 import type { HappyChatMessageMetadata } from '@/lib/assistant-runtime'
-import { isReviewSummaryResult, ReviewSummaryResultBlock } from '@/components/Review/ReviewMessageBlocks'
+import { isBrainSummaryResult, BrainSummaryResultBlock } from '@/components/Brain/BrainMessageBlocks'
 
 const TOOL_COMPONENTS = {
     Fallback: HappyToolMessage
@@ -32,12 +32,12 @@ export function HappyAssistantMessage() {
         const parts = message.content
         return parts.length > 0 && parts.every((part) => part.type === 'tool-call')
     })
-    const reviewSummaryText = useAssistantState(({ message }) => {
+    const brainSummaryText = useAssistantState(({ message }) => {
         if (message.role !== 'assistant') return null
         const textPart = message.content.find((part) => part.type === 'text')
         if (!textPart || textPart.type !== 'text') return null
         const text = textPart.text
-        return isReviewSummaryResult(text) ? text : null
+        return isBrainSummaryResult(text) ? text : null
     })
     const rootClass = toolOnly
         ? 'py-1 min-w-0 max-w-full overflow-x-hidden'
@@ -51,10 +51,10 @@ export function HappyAssistantMessage() {
         )
     }
 
-    if (reviewSummaryText) {
+    if (brainSummaryText) {
         return (
             <MessagePrimitive.Root className="px-1 min-w-0 max-w-full overflow-x-hidden">
-                <ReviewSummaryResultBlock text={reviewSummaryText} />
+                <BrainSummaryResultBlock text={brainSummaryText} />
             </MessagePrimitive.Root>
         )
     }

@@ -24,7 +24,7 @@ import { createUsageRoutes } from './routes/usage'
 import { createGroupRoutes } from './routes/groups'
 import { createClaudeAccountsRoutes } from './routes/claude-accounts'
 import { createYohoCredentialsRoutes } from './routes/yoho-credentials'
-import { createReviewRoutes, type ReviewStore, type AutoReviewService } from '../review'
+import { createBrainRoutes, type BrainStore, type AutoBrainService } from '../brain'
 import { createOpenCodeRoutes } from './routes/opencode'
 import { createCodexOpenAIRoutes } from './routes/codex-openai'
 import type { SSEManager } from '../sse/sseManager'
@@ -78,8 +78,8 @@ function createWebApp(options: {
     getSyncEngine: () => SyncEngine | null
     getSseManager: () => SSEManager | null
     store: IStore
-    reviewStore: ReviewStore
-    autoReviewService?: AutoReviewService
+    brainStore: BrainStore
+    autoBrainService?: AutoBrainService
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
 }): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
@@ -122,7 +122,7 @@ function createWebApp(options: {
     app.route('/api', createGroupRoutes(options.store, options.getSyncEngine(), options.getSseManager()))
     app.route('/api', createClaudeAccountsRoutes())
     app.route('/api', createYohoCredentialsRoutes())
-    app.route('/api', createReviewRoutes(options.reviewStore, options.getSyncEngine, options.getSseManager, options.autoReviewService))
+    app.route('/api', createBrainRoutes(options.brainStore, options.getSyncEngine, options.getSseManager, options.autoBrainService))
     app.route('/api', createOpenCodeRoutes(options.getSyncEngine, options.getSseManager()))
 
     if (options.embeddedAssetMap) {
@@ -246,8 +246,8 @@ export async function startWebServer(options: {
     getSyncEngine: () => SyncEngine | null
     getSseManager: () => SSEManager | null
     store: IStore
-    reviewStore: ReviewStore
-    autoReviewService?: AutoReviewService
+    brainStore: BrainStore
+    autoBrainService?: AutoBrainService
     socketEngine: SocketEngine
 }): Promise<BunServer<WebSocketData>> {
     const isCompiled = isBunCompiled()
@@ -256,8 +256,8 @@ export async function startWebServer(options: {
         getSyncEngine: options.getSyncEngine,
         getSseManager: options.getSseManager,
         store: options.store,
-        reviewStore: options.reviewStore,
-        autoReviewService: options.autoReviewService,
+        brainStore: options.brainStore,
+        autoBrainService: options.autoBrainService,
         embeddedAssetMap
     })
 

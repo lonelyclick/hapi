@@ -4,7 +4,7 @@ import { useHappyChatContext } from '@/components/AssistantChat/context'
 import type { HappyChatMessageMetadata } from '@/lib/assistant-runtime'
 import { MessageStatusIndicator } from '@/components/AssistantChat/messages/MessageStatusIndicator'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
-import { isReviewSummaryTask, ReviewSummaryTaskBlock } from '@/components/Review/ReviewMessageBlocks'
+import { isBrainSummaryTask, BrainSummaryTaskBlock } from '@/components/Brain/BrainMessageBlocks'
 
 export function HappyUserMessage() {
     const ctx = useHappyChatContext()
@@ -32,10 +32,10 @@ export function HappyUserMessage() {
         if (custom?.kind !== 'cli-output') return ''
         return message.content.find((part) => part.type === 'text')?.text ?? ''
     })
-    const isReviewTask = useAssistantState(({ message }) => {
+    const isBrainTask = useAssistantState(({ message }) => {
         if (message.role !== 'user') return false
         const textPart = message.content.find((part) => part.type === 'text')
-        return textPart ? isReviewSummaryTask(textPart.text) : false
+        return textPart ? isBrainSummaryTask(textPart.text) : false
     })
 
     if (role !== 'user') return null
@@ -54,10 +54,10 @@ export function HappyUserMessage() {
         )
     }
 
-    if (isReviewTask) {
+    if (isBrainTask) {
         return (
             <MessagePrimitive.Root className="px-1 min-w-0 max-w-full overflow-x-hidden">
-                <ReviewSummaryTaskBlock text={text} />
+                <BrainSummaryTaskBlock text={text} />
             </MessagePrimitive.Root>
         )
     }

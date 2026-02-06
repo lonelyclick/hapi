@@ -1,14 +1,14 @@
 /**
- * Review 模块 PostgreSQL Store 实现
+ * Brain 模块 PostgreSQL Store 实现
  *
  * 这是一个试验性功能，独立于主 Store
  */
 
 import { Pool } from 'pg'
 import { randomUUID } from 'node:crypto'
-import type { IReviewStore, StoredReviewSession, ReviewSessionStatus } from './types'
+import type { IBrainStore, StoredBrainSession, BrainSessionStatus } from './types'
 
-export class ReviewStore implements IReviewStore {
+export class BrainStore implements IBrainStore {
     private pool: Pool
 
     constructor(pool: Pool) {
@@ -17,8 +17,8 @@ export class ReviewStore implements IReviewStore {
 
     async initSchema(): Promise<void> {
         await this.pool.query(`
-            -- Review Sessions 表 (试验性功能)
-            CREATE TABLE IF NOT EXISTS review_sessions (
+            -- Brain Sessions 表 (试验性功能)
+            CREATE TABLE IF NOT EXISTS brain_sessions (
                 id TEXT PRIMARY KEY,
                 namespace TEXT NOT NULL,
                 main_session_id TEXT NOT NULL,
@@ -32,15 +32,15 @@ export class ReviewStore implements IReviewStore {
                 updated_at BIGINT NOT NULL,
                 completed_at BIGINT
             );
-            CREATE INDEX IF NOT EXISTS idx_review_sessions_main ON review_sessions(main_session_id);
-            CREATE INDEX IF NOT EXISTS idx_review_sessions_review ON review_sessions(review_session_id);
-            CREATE INDEX IF NOT EXISTS idx_review_sessions_namespace ON review_sessions(namespace);
-            CREATE INDEX IF NOT EXISTS idx_review_sessions_status ON review_sessions(status);
+            CREATE INDEX IF NOT EXISTS idx_brain_sessions_main ON brain_sessions(main_session_id);
+            CREATE INDEX IF NOT EXISTS idx_brain_sessions_review ON brain_sessions(review_session_id);
+            CREATE INDEX IF NOT EXISTS idx_brain_sessions_namespace ON brain_sessions(namespace);
+            CREATE INDEX IF NOT EXISTS idx_brain_sessions_status ON brain_sessions(status);
 
-            -- Review Rounds 表 - 存储每轮对话的汇总
-            CREATE TABLE IF NOT EXISTS review_rounds (
+            -- Brain Rounds 表 - 存储每轮对话的汇总
+            CREATE TABLE IF NOT EXISTS brain_rounds (
                 id TEXT PRIMARY KEY,
-                review_session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE,
+                review_session_id TEXT NOT NULL REFERENCES brain_sessions(id) ON DELETE CASCADE,
                 round_number INTEGER NOT NULL,
                 user_input TEXT NOT NULL,
                 ai_summary TEXT NOT NULL,
@@ -49,12 +49,12 @@ export class ReviewStore implements IReviewStore {
                 ended_at BIGINT,
                 created_at BIGINT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_review_rounds_session ON review_rounds(review_session_id);
+            CREATE INDEX IF NOT EXISTS idx_brain_rounds_session ON brain_rounds(review_session_id);
 
-            -- Review Executions 表 - 存储每次执行 review 的记录
-            CREATE TABLE IF NOT EXISTS review_executions (
+            -- Brain Executions 表 - 存储每次执行 brain 的记录
+            CREATE TABLE IF NOT EXISTS brain_executions (
                 id TEXT PRIMARY KEY,
-                review_session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE,
+                review_session_id TEXT NOT NULL REFERENCES brain_sessions(id) ON DELETE CASCADE,
                 rounds_reviewed INTEGER NOT NULL,
                 reviewed_round_numbers INTEGER[],
                 time_range_start BIGINT NOT NULL,
@@ -65,7 +65,7 @@ export class ReviewStore implements IReviewStore {
                 created_at BIGINT NOT NULL,
                 completed_at BIGINT
             );
-            CREATE INDEX IF NOT EXISTS idx_review_executions_session ON review_executions(review_session_id);
+            CREATE INDEX IF NOT EXISTS idx_brain_executions_session ON brain_executions(review_session_id);
         `)
 
         // 添加新字段（如果表已存在）
@@ -73,50 +73,50 @@ export class ReviewStore implements IReviewStore {
             DO $$
             BEGIN
                 -- 添加 started_at 字段
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_rounds' AND column_name = 'started_at') THEN
-                    ALTER TABLE review_rounds ADD COLUMN started_at BIGINT;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_rounds' AND column_name = 'started_at') THEN
+                    ALTER TABLE brain_rounds ADD COLUMN started_at BIGINT;
                 END IF;
                 -- 添加 ended_at 字段
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_rounds' AND column_name = 'ended_at') THEN
-                    ALTER TABLE review_rounds ADD COLUMN ended_at BIGINT;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_rounds' AND column_name = 'ended_at') THEN
+                    ALTER TABLE brain_rounds ADD COLUMN ended_at BIGINT;
                 END IF;
-                -- 添加 reviewed_round_numbers 字段到 review_executions
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_executions' AND column_name = 'reviewed_round_numbers') THEN
-                    ALTER TABLE review_executions ADD COLUMN reviewed_round_numbers INTEGER[];
+                -- 添加 reviewed_round_numbers 字段到 brain_executions
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_executions' AND column_name = 'reviewed_round_numbers') THEN
+                    ALTER TABLE brain_executions ADD COLUMN reviewed_round_numbers INTEGER[];
                 END IF;
-                -- 添加 applied_suggestion_ids 字段到 review_sessions（存储已发送的建议 ID）
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'review_sessions' AND column_name = 'applied_suggestion_ids') THEN
-                    ALTER TABLE review_sessions ADD COLUMN applied_suggestion_ids TEXT[] DEFAULT '{}';
+                -- 添加 applied_suggestion_ids 字段到 brain_sessions（存储已发送的建议 ID）
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_sessions' AND column_name = 'applied_suggestion_ids') THEN
+                    ALTER TABLE brain_sessions ADD COLUMN applied_suggestion_ids TEXT[] DEFAULT '{}';
                 END IF;
             END $$;
         `)
     }
 
-    async createReviewSession(data: {
+    async createBrainSession(data: {
         namespace: string
         mainSessionId: string
-        reviewSessionId: string
-        reviewModel: string
-        reviewModelVariant?: string
+        brainSessionId: string
+        brainModel: string
+        brainModelVariant?: string
         contextSummary: string
-    }): Promise<StoredReviewSession> {
+    }): Promise<StoredBrainSession> {
         const id = randomUUID()
         const now = Date.now()
 
         await this.pool.query(
-            `INSERT INTO review_sessions
+            `INSERT INTO brain_sessions
              (id, namespace, main_session_id, review_session_id, review_model, review_model_variant, status, context_summary, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $8)`,
-            [id, data.namespace, data.mainSessionId, data.reviewSessionId, data.reviewModel, data.reviewModelVariant ?? null, data.contextSummary, now]
+            [id, data.namespace, data.mainSessionId, data.brainSessionId, data.brainModel, data.brainModelVariant ?? null, data.contextSummary, now]
         )
 
         return {
             id,
             namespace: data.namespace,
             mainSessionId: data.mainSessionId,
-            reviewSessionId: data.reviewSessionId,
-            reviewModel: data.reviewModel,
-            reviewModelVariant: data.reviewModelVariant,
+            brainSessionId: data.brainSessionId,
+            brainModel: data.brainModel,
+            brainModelVariant: data.brainModelVariant,
             status: 'pending',
             contextSummary: data.contextSummary,
             createdAt: now,
@@ -124,9 +124,9 @@ export class ReviewStore implements IReviewStore {
         }
     }
 
-    async getReviewSession(id: string): Promise<StoredReviewSession | null> {
+    async getBrainSession(id: string): Promise<StoredBrainSession | null> {
         const result = await this.pool.query(
-            `SELECT * FROM review_sessions WHERE id = $1`,
+            `SELECT * FROM brain_sessions WHERE id = $1`,
             [id]
         )
 
@@ -134,21 +134,21 @@ export class ReviewStore implements IReviewStore {
             return null
         }
 
-        return this.rowToReviewSession(result.rows[0])
+        return this.rowToBrainSession(result.rows[0])
     }
 
-    async getReviewSessionsByMainSession(mainSessionId: string): Promise<StoredReviewSession[]> {
+    async getBrainSessionsByMainSession(mainSessionId: string): Promise<StoredBrainSession[]> {
         const result = await this.pool.query(
-            `SELECT * FROM review_sessions WHERE main_session_id = $1 ORDER BY created_at DESC`,
+            `SELECT * FROM brain_sessions WHERE main_session_id = $1 ORDER BY created_at DESC`,
             [mainSessionId]
         )
 
-        return result.rows.map(row => this.rowToReviewSession(row))
+        return result.rows.map(row => this.rowToBrainSession(row))
     }
 
-    async getActiveReviewSession(mainSessionId: string): Promise<StoredReviewSession | null> {
+    async getActiveBrainSession(mainSessionId: string): Promise<StoredBrainSession | null> {
         const result = await this.pool.query(
-            `SELECT * FROM review_sessions
+            `SELECT * FROM brain_sessions
              WHERE main_session_id = $1 AND status IN ('pending', 'active')
              ORDER BY created_at DESC LIMIT 1`,
             [mainSessionId]
@@ -158,61 +158,61 @@ export class ReviewStore implements IReviewStore {
             return null
         }
 
-        return this.rowToReviewSession(result.rows[0])
+        return this.rowToBrainSession(result.rows[0])
     }
 
-    async updateReviewSessionStatus(id: string, status: ReviewSessionStatus): Promise<boolean> {
+    async updateBrainSessionStatus(id: string, status: BrainSessionStatus): Promise<boolean> {
         const now = Date.now()
         const result = await this.pool.query(
-            `UPDATE review_sessions SET status = $1, updated_at = $2 WHERE id = $3`,
+            `UPDATE brain_sessions SET status = $1, updated_at = $2 WHERE id = $3`,
             [status, now, id]
         )
 
         return (result.rowCount ?? 0) > 0
     }
 
-    async updateReviewResult(id: string, result: string): Promise<boolean> {
+    async updateBrainResult(id: string, result: string): Promise<boolean> {
         const now = Date.now()
         const queryResult = await this.pool.query(
-            `UPDATE review_sessions SET review_result = $1, updated_at = $2 WHERE id = $3`,
+            `UPDATE brain_sessions SET review_result = $1, updated_at = $2 WHERE id = $3`,
             [result, now, id]
         )
 
         return (queryResult.rowCount ?? 0) > 0
     }
 
-    async completeReviewSession(id: string, result: string): Promise<boolean> {
+    async completeBrainSession(id: string, result: string): Promise<boolean> {
         const now = Date.now()
         const queryResult = await this.pool.query(
-            `UPDATE review_sessions SET status = 'completed', review_result = $1, updated_at = $2, completed_at = $2 WHERE id = $3`,
+            `UPDATE brain_sessions SET status = 'completed', review_result = $1, updated_at = $2, completed_at = $2 WHERE id = $3`,
             [result, now, id]
         )
 
         return (queryResult.rowCount ?? 0) > 0
     }
 
-    async deleteReviewSession(id: string): Promise<boolean> {
+    async deleteBrainSession(id: string): Promise<boolean> {
         const result = await this.pool.query(
-            `DELETE FROM review_sessions WHERE id = $1`,
+            `DELETE FROM brain_sessions WHERE id = $1`,
             [id]
         )
 
         return (result.rowCount ?? 0) > 0
     }
 
-    async deleteReviewSessionsByMainSession(mainSessionId: string): Promise<number> {
+    async deleteBrainSessionsByMainSession(mainSessionId: string): Promise<number> {
         const result = await this.pool.query(
-            `DELETE FROM review_sessions WHERE main_session_id = $1`,
+            `DELETE FROM brain_sessions WHERE main_session_id = $1`,
             [mainSessionId]
         )
 
         return result.rowCount ?? 0
     }
 
-    // ============ Review Rounds 相关方法 ============
+    // ============ Brain Rounds 相关方法 ============
 
-    async createReviewRound(data: {
-        reviewSessionId: string
+    async createBrainRound(data: {
+        brainSessionId: string
         roundNumber: number
         userInput: string
         aiSummary: string
@@ -224,16 +224,16 @@ export class ReviewStore implements IReviewStore {
         const now = Date.now()
 
         await this.pool.query(
-            `INSERT INTO review_rounds
+            `INSERT INTO brain_rounds
              (id, review_session_id, round_number, user_input, ai_summary, original_message_ids, started_at, ended_at, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [id, data.reviewSessionId, data.roundNumber, data.userInput, data.aiSummary, data.originalMessageIds ?? [], data.startedAt ?? null, data.endedAt ?? null, now]
+            [id, data.brainSessionId, data.roundNumber, data.userInput, data.aiSummary, data.originalMessageIds ?? [], data.startedAt ?? null, data.endedAt ?? null, now]
         )
 
         return { id }
     }
 
-    async getReviewRounds(reviewSessionId: string): Promise<Array<{
+    async getBrainRounds(brainSessionId: string): Promise<Array<{
         id: string
         roundNumber: number
         userInput: string
@@ -244,8 +244,8 @@ export class ReviewStore implements IReviewStore {
         createdAt: number
     }>> {
         const result = await this.pool.query(
-            `SELECT * FROM review_rounds WHERE review_session_id = $1 ORDER BY round_number ASC`,
-            [reviewSessionId]
+            `SELECT * FROM brain_rounds WHERE review_session_id = $1 ORDER BY round_number ASC`,
+            [brainSessionId]
         )
 
         return result.rows.map(row => ({
@@ -260,10 +260,10 @@ export class ReviewStore implements IReviewStore {
         }))
     }
 
-    // ============ Review Executions 相关方法 ============
+    // ============ Brain Executions 相关方法 ============
 
-    async createReviewExecution(data: {
-        reviewSessionId: string
+    async createBrainExecution(data: {
+        brainSessionId: string
         roundsReviewed: number
         reviewedRoundNumbers: number[]
         timeRangeStart: number
@@ -274,16 +274,16 @@ export class ReviewStore implements IReviewStore {
         const now = Date.now()
 
         await this.pool.query(
-            `INSERT INTO review_executions
+            `INSERT INTO brain_executions
              (id, review_session_id, rounds_reviewed, reviewed_round_numbers, time_range_start, time_range_end, prompt, status, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)`,
-            [id, data.reviewSessionId, data.roundsReviewed, data.reviewedRoundNumbers, data.timeRangeStart, data.timeRangeEnd, data.prompt, now]
+            [id, data.brainSessionId, data.roundsReviewed, data.reviewedRoundNumbers, data.timeRangeStart, data.timeRangeEnd, data.prompt, now]
         )
 
         return { id }
     }
 
-    async getReviewExecutions(reviewSessionId: string): Promise<Array<{
+    async getBrainExecutions(brainSessionId: string): Promise<Array<{
         id: string
         roundsReviewed: number
         reviewedRoundNumbers: number[]
@@ -296,8 +296,8 @@ export class ReviewStore implements IReviewStore {
         completedAt?: number
     }>> {
         const result = await this.pool.query(
-            `SELECT * FROM review_executions WHERE review_session_id = $1 ORDER BY created_at DESC`,
-            [reviewSessionId]
+            `SELECT * FROM brain_executions WHERE review_session_id = $1 ORDER BY created_at DESC`,
+            [brainSessionId]
         )
 
         return result.rows.map(row => ({
@@ -315,36 +315,36 @@ export class ReviewStore implements IReviewStore {
     }
 
     /**
-     * 获取已 review 过的轮次号集合
-     * 只要有执行记录就算已 review（因为 prompt 已发给 Review AI）
+     * 获取已 brain 过的轮次号集合
+     * 只要有执行记录就算已 brain（因为 prompt 已发给 Brain AI）
      */
-    async getReviewedRoundNumbers(reviewSessionId: string): Promise<Set<number>> {
-        const executions = await this.getReviewExecutions(reviewSessionId)
-        const reviewedRoundNumbers = new Set<number>()
+    async getBrainedRoundNumbers(brainSessionId: string): Promise<Set<number>> {
+        const executions = await this.getBrainExecutions(brainSessionId)
+        const brainedRoundNumbers = new Set<number>()
         for (const exec of executions) {
             if (exec.reviewedRoundNumbers) {
                 for (const roundNum of exec.reviewedRoundNumbers) {
-                    reviewedRoundNumbers.add(roundNum)
+                    brainedRoundNumbers.add(roundNum)
                 }
             }
         }
-        return reviewedRoundNumbers
+        return brainedRoundNumbers
     }
 
-    async completeReviewExecution(id: string, result: string): Promise<boolean> {
+    async completeBrainExecution(id: string, result: string): Promise<boolean> {
         const now = Date.now()
         const queryResult = await this.pool.query(
-            `UPDATE review_executions SET status = 'completed', result = $1, completed_at = $2 WHERE id = $3`,
+            `UPDATE brain_executions SET status = 'completed', result = $1, completed_at = $2 WHERE id = $3`,
             [result, now, id]
         )
 
         return (queryResult.rowCount ?? 0) > 0
     }
 
-    async failReviewExecution(id: string, error: string): Promise<boolean> {
+    async failBrainExecution(id: string, error: string): Promise<boolean> {
         const now = Date.now()
         const queryResult = await this.pool.query(
-            `UPDATE review_executions SET status = 'failed', result = $1, completed_at = $2 WHERE id = $3`,
+            `UPDATE brain_executions SET status = 'failed', result = $1, completed_at = $2 WHERE id = $3`,
             [error, now, id]
         )
 
@@ -353,10 +353,10 @@ export class ReviewStore implements IReviewStore {
 
     // ============ Applied Suggestions 相关方法 ============
 
-    async getAppliedSuggestionIds(reviewSessionId: string): Promise<string[]> {
+    async getAppliedSuggestionIds(brainSessionId: string): Promise<string[]> {
         const result = await this.pool.query(
-            `SELECT applied_suggestion_ids FROM review_sessions WHERE id = $1`,
-            [reviewSessionId]
+            `SELECT applied_suggestion_ids FROM brain_sessions WHERE id = $1`,
+            [brainSessionId]
         )
         if (result.rows.length === 0) {
             return []
@@ -364,41 +364,41 @@ export class ReviewStore implements IReviewStore {
         return (result.rows[0].applied_suggestion_ids as string[]) ?? []
     }
 
-    async addAppliedSuggestionIds(reviewSessionId: string, suggestionIds: string[]): Promise<boolean> {
+    async addAppliedSuggestionIds(brainSessionId: string, suggestionIds: string[]): Promise<boolean> {
         const now = Date.now()
         // 使用 array_cat 合并数组，然后用子查询去重
         const queryResult = await this.pool.query(
-            `UPDATE review_sessions
+            `UPDATE brain_sessions
              SET applied_suggestion_ids = (
                  SELECT ARRAY(SELECT DISTINCT unnest(array_cat(applied_suggestion_ids, $1::TEXT[])))
              ),
              updated_at = $2
              WHERE id = $3`,
-            [suggestionIds, now, reviewSessionId]
+            [suggestionIds, now, brainSessionId]
         )
         return (queryResult.rowCount ?? 0) > 0
     }
 
-    async deleteReviewRounds(reviewSessionId: string): Promise<number> {
+    async deleteBrainRounds(brainSessionId: string): Promise<number> {
         const result = await this.pool.query(
-            `DELETE FROM review_rounds WHERE review_session_id = $1`,
-            [reviewSessionId]
+            `DELETE FROM brain_rounds WHERE review_session_id = $1`,
+            [brainSessionId]
         )
 
         return result.rowCount ?? 0
     }
 
-    private rowToReviewSession(row: Record<string, unknown>): StoredReviewSession {
+    private rowToBrainSession(row: Record<string, unknown>): StoredBrainSession {
         return {
             id: row.id as string,
             namespace: row.namespace as string,
             mainSessionId: row.main_session_id as string,
-            reviewSessionId: row.review_session_id as string,
-            reviewModel: row.review_model as string,
-            reviewModelVariant: row.review_model_variant as string | undefined,
-            status: row.status as ReviewSessionStatus,
+            brainSessionId: row.review_session_id as string,
+            brainModel: row.review_model as string,
+            brainModelVariant: row.review_model_variant as string | undefined,
+            status: row.status as BrainSessionStatus,
             contextSummary: row.context_summary as string,
-            reviewResult: row.review_result as string | undefined,
+            brainResult: row.review_result as string | undefined,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at),
             completedAt: row.completed_at ? Number(row.completed_at) : undefined

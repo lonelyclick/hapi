@@ -231,10 +231,10 @@ export function useSSE(options: {
                 )
             }
 
-            // 处理 review-sync-status 事件，更新 Review 同步状态
-            if (event.type === 'review-sync-status' && 'data' in event && event.data) {
+            // 处理 brain-sync-status 事件，更新 Brain 同步状态
+            if (event.type === 'brain-sync-status' && 'data' in event && event.data) {
                 const data = event.data as {
-                    reviewSessionId?: string
+                    brainSessionId?: string
                     status?: string
                     totalRounds?: number
                     summarizedRounds?: number
@@ -246,13 +246,13 @@ export function useSSE(options: {
                 }
                 // event.sessionId 是 mainSessionId
                 const mainSessionId = 'sessionId' in event ? event.sessionId : undefined
-                if (data.reviewSessionId) {
+                if (data.brainSessionId) {
                     if (import.meta.env.DEV) {
-                        console.log('[sse] review-sync-status', data, 'mainSessionId:', mainSessionId)
+                        console.log('[sse] brain-sync-status', data, 'mainSessionId:', mainSessionId)
                     }
                     // 直接更新 pending rounds 数据（保留 savedSummaries）
                     queryClient.setQueryData(
-                        ['review-pending-rounds', data.reviewSessionId],
+                        ['brain-pending-rounds', data.brainSessionId],
                         (old: { unreviewedRounds?: number; hasUnreviewedRounds?: boolean; reviewedRounds?: number; savedSummaries?: Array<{ round: number; summary: string }> } | undefined) => ({
                             ...old,
                             totalRounds: data.totalRounds ?? 0,
@@ -271,7 +271,7 @@ export function useSSE(options: {
                     // 同时存储同步状态（用于显示 "正在同步..." 等）
                     // 累积 savedSummaries（因为可能分多批次同步）
                     queryClient.setQueryData(
-                        ['review-sync-status', data.reviewSessionId],
+                        ['brain-sync-status', data.brainSessionId],
                         (old: { savedSummaries?: Array<{ round: number; summary: string }> } | undefined) => {
                             // 累积保存的汇总内容
                             const existingSummaries = old?.savedSummaries ?? []
@@ -293,9 +293,9 @@ export function useSSE(options: {
                             }
                         }
                     )
-                    // 刷新 review-sessions 查询以更新状态
+                    // 刷新 brain-sessions 查询以更新状态
                     if (mainSessionId) {
-                        void queryClient.invalidateQueries({ queryKey: ['review-sessions', mainSessionId] })
+                        void queryClient.invalidateQueries({ queryKey: ['brain-sessions', mainSessionId] })
                     }
                 }
             }

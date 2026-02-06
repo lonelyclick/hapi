@@ -1,7 +1,7 @@
 /**
- * Review 面板组件
+ * Brain 面板组件
  *
- * 显示建议列表 + 完整对话界面
+ * 显示汇总卡片 + 完整对话界面
  */
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
@@ -15,11 +15,10 @@ import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import type { DecryptedMessage, Session } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
-import { ReviewSuggestions, parseReviewResult, getMergedSuggestions, type SuggestionWithStatus } from './ReviewSuggestions'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
 // Icons
-function ReviewIcon(props: { className?: string }) {
+function BrainIcon(props: { className?: string }) {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}>
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -199,9 +198,9 @@ function SummaryCards(props: { summaries: Array<{ round: number; summary: string
     )
 }
 
-export function ReviewPanel(props: {
+export function BrainPanel(props: {
     mainSessionId: string
-    reviewSessionId: string
+    brainSessionId: string
     onClose?: () => void
 }) {
     const { api } = useAppContext()
@@ -214,10 +213,7 @@ export function ReviewPanel(props: {
     const [panelWidth, setPanelWidth] = useState(500)
     const [panelX, setPanelX] = useState<number | null>(null)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-    const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())
-    const [appliedIdsInitialized, setAppliedIdsInitialized] = useState(false)
-    const [isReviewing, setIsReviewing] = useState(false)  // 追踪是否正在执行 Review
+    const [isBraining, setIsBraining] = useState(false)  // 追踪是否正在执行 Brain
 
     // 移动端检测
     const [isMobile, setIsMobile] = useState(false)
@@ -296,18 +292,18 @@ export function ReviewPanel(props: {
         }
     }, [dragMode, panelWidth])
 
-    // 获取 Review Session 详情
-    const { data: reviewSessions } = useQuery({
-        queryKey: ['review-sessions', props.mainSessionId],
+    // 获取 Brain Session 详情
+    const { data: brainSessions } = useQuery({
+        queryKey: ['brain-sessions', props.mainSessionId],
         queryFn: async () => {
-            const result = await api.getReviewSessions(props.mainSessionId)
-            return result.reviewSessions
+            const result = await api.getBrainSessions(props.mainSessionId)
+            return result.brainSessions
         },
         staleTime: 0  // 总是立即获取，确保从 session 列表点进来时能正确显示
     })
 
-    // 获取当前 Review Session 的 ID（用于检查未汇总轮次）
-    const currentReviewForPending = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
+    // 获取当前 Brain Session 的 ID（用于检查未汇总轮次）
+    const currentBrainForPending = brainSessions?.find(r => r.brainSessionId === props.brainSessionId)
 
     // 从 SSE 推送获取的自动同步状态
     const { data: autoSyncStatus } = useQuery<{
@@ -317,20 +313,20 @@ export function ReviewPanel(props: {
         savedSummaries?: Array<{ round: number; summary: string }>
         updatedAt?: number
     }>({
-        queryKey: ['review-sync-status', currentReviewForPending?.id],
-        enabled: Boolean(currentReviewForPending?.id),
+        queryKey: ['brain-sync-status', currentBrainForPending?.id],
+        enabled: Boolean(currentBrainForPending?.id),
         staleTime: Infinity
     })
 
     // 检查未汇总的轮次（pending 和 active 状态都需要查询）
     // 不需要轮询，只在用户点击同步或同步完成后手动刷新
-    const pendingRoundsEnabled = Boolean(currentReviewForPending?.id) && (currentReviewForPending?.status === 'pending' || currentReviewForPending?.status === 'active')
+    const pendingRoundsEnabled = Boolean(currentBrainForPending?.id) && (currentBrainForPending?.status === 'pending' || currentBrainForPending?.status === 'active')
 
     const { data: pendingRoundsData } = useQuery({
-        queryKey: ['review-pending-rounds', currentReviewForPending?.id],
+        queryKey: ['brain-pending-rounds', currentBrainForPending?.id],
         queryFn: async () => {
-            if (!currentReviewForPending?.id) throw new Error('No review ID')
-            return await api.getReviewPendingRounds(currentReviewForPending.id)
+            if (!currentBrainForPending?.id) throw new Error('No brain ID')
+            return await api.getBrainPendingRounds(currentBrainForPending.id)
         },
         enabled: pendingRoundsEnabled,
         staleTime: 30000  // 30 秒后重新获取，确保刷新页面后数据是最新的
@@ -366,53 +362,32 @@ export function ReviewPanel(props: {
         return merged
     }, [autoSyncStatus?.savedSummaries, pendingRoundsData?.savedSummaries])
 
-    // 获取已发送的建议 ID（从后端持久化数据）
-    const { data: appliedSuggestionsData } = useQuery({
-        queryKey: ['review-applied-suggestions', currentReviewForPending?.id],
-        queryFn: async () => {
-            if (!currentReviewForPending?.id) throw new Error('No review ID')
-            return await api.getAppliedSuggestionIds(currentReviewForPending.id)
-        },
-        enabled: Boolean(currentReviewForPending?.id),
-        staleTime: Infinity  // 只在首次加载时获取
-    })
-
-    // 初始化 appliedIds（只执行一次）
-    useEffect(() => {
-        if (appliedIdsInitialized) return
-        if (!appliedSuggestionsData?.appliedIds) return
-        if (appliedSuggestionsData.appliedIds.length > 0) {
-            setAppliedIds(new Set(appliedSuggestionsData.appliedIds))
-        }
-        setAppliedIdsInitialized(true)
-    }, [appliedSuggestionsData, appliedIdsInitialized])
-
     // 页面加载后，如果有 pendingRounds 且不在同步中，自动触发同步
     const autoSyncTriggeredRef = useRef(false)
     useEffect(() => {
         // 只触发一次
         if (autoSyncTriggeredRef.current) return
-        // 需要有 review session 和 pending rounds 数据
-        if (!currentReviewForPending?.id || !pendingRoundsData) return
+        // 需要有 brain session 和 pending rounds 数据
+        if (!currentBrainForPending?.id || !pendingRoundsData) return
         // 有待同步的轮次
         if (!pendingRoundsData.hasPendingRounds) return
         // 不在同步中
         if (autoSyncStatus?.status === 'syncing' || autoSyncStatus?.status === 'checking') return
 
         autoSyncTriggeredRef.current = true
-        console.log('[ReviewPanel] Auto triggering sync for pending rounds:', pendingRoundsData.pendingRounds)
-        api.syncReviewRounds(currentReviewForPending.id).catch(err => {
-            console.error('[ReviewPanel] Auto sync failed:', err)
+        console.log('[BrainPanel] Auto triggering sync for pending rounds:', pendingRoundsData.pendingRounds)
+        api.syncBrainRounds(currentBrainForPending.id).catch(err => {
+            console.error('[BrainPanel] Auto sync failed:', err)
         })
-    }, [currentReviewForPending?.id, pendingRoundsData, autoSyncStatus?.status, api])
+    }, [currentBrainForPending?.id, pendingRoundsData, autoSyncStatus?.status, api])
 
-    // 获取 Review Session 信息
-    const { data: reviewSession } = useQuery({
-        queryKey: ['session', props.reviewSessionId],
+    // 获取 Brain Session 信息
+    const { data: brainSession } = useQuery({
+        queryKey: ['session', props.brainSessionId],
         queryFn: async () => {
-            return await api.getSession(props.reviewSessionId)
+            return await api.getSession(props.brainSessionId)
         },
-        enabled: Boolean(props.reviewSessionId),
+        enabled: Boolean(props.brainSessionId),
         refetchInterval: (query) => {
             // 只在 AI 思考时快速轮询
             const thinking = query.state.data?.thinking
@@ -420,22 +395,22 @@ export function ReviewPanel(props: {
         }
     })
 
-    // 获取 Review Session 的消息
-    const { data: reviewMessagesData, isLoading: isLoadingMessages } = useQuery({
-        queryKey: ['messages', props.reviewSessionId],
+    // 获取 Brain Session 的消息
+    const { data: brainMessagesData, isLoading: isLoadingMessages } = useQuery({
+        queryKey: ['messages', props.brainSessionId],
         queryFn: async () => {
-            return await api.getMessages(props.reviewSessionId, { limit: 100 })
+            return await api.getMessages(props.brainSessionId, { limit: 100 })
         },
-        enabled: Boolean(props.reviewSessionId),
+        enabled: Boolean(props.brainSessionId),
         refetchInterval: (query) => {
             // 只在 AI 思考时快速轮询
-            const thinking = reviewSession?.thinking
+            const thinking = brainSession?.thinking
             return thinking ? 1000 : 5000
         }
     })
 
-    const currentReview = reviewSessions?.find(r => r.reviewSessionId === props.reviewSessionId)
-    const messages = (reviewMessagesData?.messages ?? []) as DecryptedMessage[]
+    const currentBrain = brainSessions?.find(r => r.brainSessionId === props.brainSessionId)
+    const messages = (brainMessagesData?.messages ?? []) as DecryptedMessage[]
 
     // 消息规范化管道
     const normalizedMessages: NormalizedMessage[] = useMemo(() => {
@@ -461,7 +436,7 @@ export function ReviewPanel(props: {
         return normalized
     }, [messages])
 
-    const session = reviewSession?.session
+    const session = brainSession?.session
     const reduced = useMemo(() => {
         return reduceChatBlocks(normalizedMessages, session?.agentState ?? null)
     }, [normalizedMessages, session?.agentState])
@@ -475,19 +450,19 @@ export function ReviewPanel(props: {
         blocksByIdRef.current = reconciled.byId
     }, [reconciled.byId])
 
-    // 发送消息到 Review Session
+    // 发送消息到 Brain Session
     const handleSendMessage = useCallback((text: string) => {
-        api.sendMessage(props.reviewSessionId, text)
-    }, [api, props.reviewSessionId])
+        api.sendMessage(props.brainSessionId, text)
+    }, [api, props.brainSessionId])
 
-    // 中止 Review Session
+    // 中止 Brain Session
     const handleAbort = useCallback(async () => {
-        await api.abortSession(props.reviewSessionId)
-    }, [api, props.reviewSessionId])
+        await api.abortSession(props.brainSessionId)
+    }, [api, props.brainSessionId])
 
     // 创建虚拟 Session 对象用于 Runtime
     const virtualSession: Session = useMemo(() => ({
-        id: props.reviewSessionId,
+        id: props.brainSessionId,
         active: session?.active ?? true,  // 默认 true，确保组件可用
         thinking: session?.thinking ?? false,
         agentState: session?.agentState ?? null,
@@ -497,7 +472,7 @@ export function ReviewPanel(props: {
         metadata: session?.metadata ?? null,
         createdAt: session?.createdAt ?? Date.now(),
         updatedAt: session?.updatedAt ?? Date.now()
-    }), [props.reviewSessionId, session])
+    }), [props.brainSessionId, session])
 
     // 创建 runtime
     const runtime = useHappyRuntime({
@@ -528,25 +503,25 @@ export function ReviewPanel(props: {
         stopSyncRef.current = true
         // 同时中止正在进行的 AI 请求
         try {
-            await api.abortSession(props.reviewSessionId)
+            await api.abortSession(props.brainSessionId)
         } catch {
             // 忽略中止错误
         }
         setSyncProgress(null)
-    }, [api, props.reviewSessionId])
+    }, [api, props.brainSessionId])
 
-    // 同步数据（发送给 Review AI 做汇总）- 自动循环直到完成
+    // 同步数据（发送给 Brain AI 做汇总）- 自动循环直到完成
     const syncRoundsMutation = useMutation({
         mutationFn: async () => {
-            if (!currentReview) {
-                throw new Error('No current review found')
+            if (!currentBrain) {
+                throw new Error('No current brain found')
             }
 
             // 重置停止标志
             stopSyncRef.current = false
 
             // 获取初始状态
-            const initialStatus = await api.getReviewPendingRounds(currentReview.id)
+            const initialStatus = await api.getBrainPendingRounds(currentBrain.id)
             if (!initialStatus.hasPendingRounds) {
                 return { success: true, message: '没有待汇总的轮次' }
             }
@@ -569,7 +544,7 @@ export function ReviewPanel(props: {
                 setSyncProgress(prev => prev ? { ...prev, currentBatch: batchCount } : null)
 
                 // 执行一次同步
-                const result = await api.syncReviewRounds(currentReview.id)
+                const result = await api.syncBrainRounds(currentBrain.id)
 
                 // 检查是否被停止
                 if (stopSyncRef.current) break
@@ -585,7 +560,7 @@ export function ReviewPanel(props: {
                 const maxWait = 120 // 最多等待 2 分钟
                 while (waitCount < maxWait && !stopSyncRef.current) {
                     if (!await interruptibleWait(1000)) break
-                    const sessionStatus = await api.getSession(props.reviewSessionId)
+                    const sessionStatus = await api.getSession(props.brainSessionId)
                     if (!sessionStatus?.session?.thinking) {
                         break
                     }
@@ -601,7 +576,7 @@ export function ReviewPanel(props: {
                 let saveSuccess = false
                 for (let saveAttempt = 0; saveAttempt < 15 && !stopSyncRef.current; saveAttempt++) {
                     try {
-                        const saveResult = await api.saveReviewSummary(currentReview.id)
+                        const saveResult = await api.saveBrainSummary(currentBrain.id)
                         if (saveResult.success || saveResult.alreadyExists) {
                             saveSuccess = true
                             break
@@ -622,10 +597,10 @@ export function ReviewPanel(props: {
                 }
 
                 // 刷新 pending rounds 数据
-                queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
+                queryClient.invalidateQueries({ queryKey: ['brain-pending-rounds', currentBrain?.id] })
 
                 // 检查是否还有待汇总的轮次
-                const status = await api.getReviewPendingRounds(currentReview.id)
+                const status = await api.getBrainPendingRounds(currentBrain.id)
 
                 // 更新进度
                 setSyncProgress(prev => prev ? {
@@ -648,7 +623,7 @@ export function ReviewPanel(props: {
         onSuccess: () => {
             setSyncProgress(null)
             stopSyncRef.current = false
-            queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
+            queryClient.invalidateQueries({ queryKey: ['brain-pending-rounds', currentBrain?.id] })
         },
         onError: () => {
             setSyncProgress(null)
@@ -666,84 +641,46 @@ export function ReviewPanel(props: {
         }
     }, [])
 
-    // 开始 Review（发送给 Review AI）
-    // 注意：Review AI 回复结束后，后端会自动用 MiniMax 解析结果并注入到 Review Session
-    const startReviewMutation = useMutation({
-        mutationFn: async (previousSuggestions?: SuggestionWithStatus[]) => {
-            if (!currentReview) {
-                throw new Error('No current review found')
+    // 开始 Brain（发送给 Brain AI）
+    const startBrainMutation = useMutation({
+        mutationFn: async () => {
+            if (!currentBrain) {
+                throw new Error('No current brain found')
             }
-            // 标记正在 Review
-            setIsReviewing(true)
-            // 转换 previousSuggestions 格式
-            const formattedSuggestions = previousSuggestions?.map(s => ({
-                id: s.id,
-                type: s.type,
-                severity: s.severity,
-                title: s.title,
-                detail: s.detail,
-                applied: s.applied,
-                deleted: s.deleted
-            }))
-            return await api.startReviewSession(currentReview.id, formattedSuggestions)
+            // 标记正在 Brain
+            setIsBraining(true)
+            return await api.startBrainSession(currentBrain.id)
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['review-sessions', props.mainSessionId] })
-            queryClient.invalidateQueries({ queryKey: ['review-pending-rounds', currentReview?.id] })
-            // 执行 review 时滚动到底部
+            queryClient.invalidateQueries({ queryKey: ['brain-sessions', props.mainSessionId] })
+            queryClient.invalidateQueries({ queryKey: ['brain-pending-rounds', currentBrain?.id] })
+            // 执行 brain 时滚动到底部
             scrollToBottom()
         },
         onError: () => {
             // 出错时重置状态
-            setIsReviewing(false)
+            setIsBraining(false)
         }
     })
 
-    // 从已处理的 blocks 中提取最后一个包含 suggestions JSON 的文本（覆盖而非累加）
-    const allReviewTexts = useMemo(() => {
-        // 倒序查找第一个有效的 review 结果
-        for (let i = reconciled.blocks.length - 1; i >= 0; i--) {
-            const block = reconciled.blocks[i]
-            if (block.kind !== 'agent-text') continue
+    // 追踪 Brain 开始时的状态（用于判断是否处理完成）
+    const brainStartTimeRef = useRef<number | null>(null)
 
-            const result = parseReviewResult(block.text)
-            // 只要能解析出 suggestions（包括空数组），就认为是有效结果
-            // 即使 suggestions 为空也返回，这样可以显示统计卡片
-            if (result && result.suggestions) {
-                return [block.text]
-            }
-        }
-        return []
-    }, [reconciled.blocks])
-
-    // 追踪 Review 开始时的 allReviewTexts 长度（用于判断 MiniMax 是否处理完成）
-    const reviewStartTextsLengthRef = useRef<number | null>(null)
-
-    // 当开始 Review 时，记录当前 allReviewTexts 的长度
+    // 当开始 Brain 时，记录开始时间
     useEffect(() => {
-        if (isReviewing && reviewStartTextsLengthRef.current === null) {
-            reviewStartTextsLengthRef.current = allReviewTexts.length
+        if (isBraining && brainStartTimeRef.current === null) {
+            brainStartTimeRef.current = Date.now()
         }
-    }, [isReviewing, allReviewTexts.length])
+    }, [isBraining])
 
-    // 当 MiniMax 处理完成（allReviewTexts 有新内容）且 AI 不再思考时，重置 isReviewing
-    // 这确保了整个流程（Review AI 回复 + MiniMax 解析）都完成后才重置状态
-    // 如果 AI 完成思考后 5 秒内 allReviewTexts 没有新内容，也重置（处理 MiniMax 失败的情况）
+    // 当 AI 完成思考后，重置 isBraining
     const thinkingEndTimeRef = useRef<number | null>(null)
     useEffect(() => {
-        if (!isReviewing) {
+        if (!isBraining) {
             thinkingEndTimeRef.current = null
             return
         }
-        if (reviewStartTextsLengthRef.current === null) return
-
-        // allReviewTexts 有新内容，说明 MiniMax 已处理完成
-        if (allReviewTexts.length > reviewStartTextsLengthRef.current) {
-            setIsReviewing(false)
-            reviewStartTextsLengthRef.current = null
-            thinkingEndTimeRef.current = null
-            return
-        }
+        if (brainStartTimeRef.current === null) return
 
         // AI 还在思考，记录结束时间为 null
         if (session?.thinking) {
@@ -756,43 +693,32 @@ export function ReviewPanel(props: {
             thinkingEndTimeRef.current = Date.now()
         }
 
-        // 如果 AI 完成思考后 5 秒内 allReviewTexts 没有新内容，重置状态
+        // 如果 AI 完成思考后 5 秒，重置状态
         const elapsed = Date.now() - thinkingEndTimeRef.current
         if (elapsed >= 5000) {
-            setIsReviewing(false)
-            reviewStartTextsLengthRef.current = null
+            setIsBraining(false)
+            brainStartTimeRef.current = null
             thinkingEndTimeRef.current = null
         }
-    }, [isReviewing, allReviewTexts.length, session?.thinking])
+    }, [isBraining, session?.thinking])
 
-    // 定时检查是否需要重置 isReviewing（处理 MiniMax 失败的情况）
+    // 定时检查是否需要重置 isBraining
     useEffect(() => {
-        if (!isReviewing || session?.thinking) return
+        if (!isBraining || session?.thinking) return
 
         const timer = setInterval(() => {
             if (thinkingEndTimeRef.current !== null) {
                 const elapsed = Date.now() - thinkingEndTimeRef.current
                 if (elapsed >= 5000) {
-                    setIsReviewing(false)
-                    reviewStartTextsLengthRef.current = null
+                    setIsBraining(false)
+                    brainStartTimeRef.current = null
                     thinkingEndTimeRef.current = null
                 }
             }
         }, 1000)
 
         return () => clearInterval(timer)
-    }, [isReviewing, session?.thinking])
-
-    // 计算选中的建议数量和详情
-    const { selectedCount, selectedDetails } = useMemo(() => {
-        if (allReviewTexts.length === 0) return { selectedCount: 0, selectedDetails: [] }
-        const suggestions = getMergedSuggestions(allReviewTexts)
-        const selected = suggestions.filter(s => selectedIds.has(s.id))
-        return {
-            selectedCount: selected.length,
-            selectedDetails: selected.map(s => s.detail)
-        }
-    }, [allReviewTexts, selectedIds])
+    }, [isBraining, session?.thinking])
 
     // 自动滚动到底部：当消息数量变化或 AI 正在思考时
     const prevMessagesCountRef = useRef(messages.length)
@@ -811,58 +737,31 @@ export function ReviewPanel(props: {
         }
     }, [messages.length, session?.thinking])
 
-    // 应用建议到主 Session
-    const applySuggestionsMutation = useMutation({
-        mutationFn: async (details: string[]) => {
-            if (!currentReview) {
-                throw new Error('No current review found')
-            }
-            // 合并所有选中的建议详情
-            const combined = details.join('\n\n---\n\n')
-            // 获取当前选中的 ID（在 mutationFn 中捕获，避免闭包问题）
-            const idsToApply = Array.from(selectedIds)
-            // 调用新 API，同时发送消息和保存已发送的建议 ID
-            await api.applyReviewSuggestion(currentReview.id, combined, idsToApply)
-        },
-        onSuccess: () => {
-            // 将已选中的 ID 加入已发送集合
-            setAppliedIds(prev => {
-                const next = new Set(prev)
-                for (const id of selectedIds) {
-                    next.add(id)
-                }
-                return next
-            })
-            // 清空选中状态
-            setSelectedIds(new Set())
-        }
-    })
-
-    // 关闭 Review Session（取消但保留数据）
-    const cancelReviewMutation = useMutation({
+    // 关闭 Brain Session（取消但保留数据）
+    const cancelBrainMutation = useMutation({
         mutationFn: async () => {
-            if (!currentReview) {
-                throw new Error('No current review found')
+            if (!currentBrain) {
+                throw new Error('No current brain found')
             }
-            // 先中止 Review AI
+            // 先中止 Brain AI
             try {
-                await api.abortSession(props.reviewSessionId)
+                await api.abortSession(props.brainSessionId)
             } catch {
                 // 忽略中止错误
             }
             // 将状态设为 cancelled
-            return await api.cancelReviewSession(currentReview.id)
+            return await api.cancelBrainSession(currentBrain.id)
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['review-sessions', props.mainSessionId] })
+            queryClient.invalidateQueries({ queryKey: ['brain-sessions', props.mainSessionId] })
             props.onClose?.()
         }
     })
 
     // 刷新
     const handleRefresh = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: ['messages', props.reviewSessionId] })
-    }, [queryClient, props.reviewSessionId])
+        queryClient.invalidateQueries({ queryKey: ['messages', props.brainSessionId] })
+    }, [queryClient, props.brainSessionId])
 
     // 移动端全屏，桌面端保持可拖拽
     const rightPos = isMobile ? 0 : (panelX === null ? 0 : undefined)
@@ -900,8 +799,8 @@ export function ReviewPanel(props: {
             >
                 <div className="flex items-center gap-2">
                     {!isMobile && <GripIcon className="w-4 h-4 text-[var(--app-hint)]" />}
-                    <ReviewIcon className="w-4 h-4 text-[var(--app-fg)]" />
-                    <span className="text-sm font-medium">Review AI</span>
+                    <BrainIcon className="w-4 h-4 text-[var(--app-fg)]" />
+                    <span className="text-sm font-medium">Brain AI</span>
                     {session?.thinking && (
                         <LoadingIcon className="w-4 h-4 text-green-500" />
                     )}
@@ -910,9 +809,9 @@ export function ReviewPanel(props: {
                     <button
                         type="button"
                         onClick={() => setDeleteDialogOpen(true)}
-                        disabled={cancelReviewMutation.isPending}
+                        disabled={cancelBrainMutation.isPending}
                         className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-[var(--app-hint)] hover:text-red-500 disabled:opacity-50"
-                        title="删除 Review"
+                        title="删除 Brain"
                     >
                         <TrashIcon />
                     </button>
@@ -939,9 +838,9 @@ export function ReviewPanel(props: {
                 {/* 可滚动的对话区域 */}
                 <div ref={threadContainerRef} className="min-h-0 flex-1 overflow-y-auto">
                     <HappyThread
-                        key={props.reviewSessionId}
+                        key={props.brainSessionId}
                         api={api}
-                        sessionId={props.reviewSessionId}
+                        sessionId={props.brainSessionId}
                         metadata={session?.metadata ?? null}
                         disabled={false}
                         onRefresh={handleRefresh}
@@ -957,64 +856,45 @@ export function ReviewPanel(props: {
                 </div>
             </AssistantRuntimeProvider>
 
-            {/* 固定在底部的建议列表/结果卡片 */}
-            {/* 有建议时显示建议列表，或者 Review 完成时显示完成卡片（正在 Review 时不显示完成卡片） */}
-            {(allReviewTexts.length > 0 || (!isReviewing && currentReview && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && pendingRoundsData?.summarizedRounds && pendingRoundsData.summarizedRounds > 0)) && (
+            {/* Brain 完成时显示完成卡片 */}
+            {(!isBraining && currentBrain && !pendingRoundsData?.hasUnreviewedRounds && !pendingRoundsData?.hasPendingRounds && pendingRoundsData?.summarizedRounds && pendingRoundsData.summarizedRounds > 0) && (
                 <div className="flex-shrink-0 border-t border-[var(--app-divider)] bg-[var(--app-bg)]">
                     <div className="px-3 py-2">
-                        {allReviewTexts.length > 0 ? (
-                            <ReviewSuggestions
-                                key={allReviewTexts.join('|').substring(0, 100)}
-                                reviewTexts={allReviewTexts}
-                                onApply={(details) => applySuggestionsMutation.mutate(details)}
-                                isApplying={applySuggestionsMutation.isPending}
-                                onReview={(previousSuggestions) => startReviewMutation.mutate(previousSuggestions)}
-                                isReviewing={startReviewMutation.isPending}
-                                reviewDisabled={pendingRoundsData?.hasPendingRounds || !pendingRoundsData?.hasUnreviewedRounds || session?.thinking || (autoSyncStatus?.status === 'syncing' && autoSyncStatus?.syncingRounds && autoSyncStatus.syncingRounds.length > 0)}
-                                unreviewedRounds={pendingRoundsData?.unreviewedRounds}
-                                selectedIds={selectedIds}
-                                onSelectedIdsChange={setSelectedIds}
-                                appliedIds={appliedIds}
-                                onAppliedIdsChange={setAppliedIds}
-                            />
-                        ) : (
-                            /* Review 完成但没有解析到建议时显示完成卡片 */
-                            <div className="rounded-md border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-2.5 py-1.5">
-                                <div className="flex items-center gap-2 text-xs">
-                                    <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span className="font-medium text-green-700 dark:text-green-300">
-                                        Review 完成
-                                    </span>
-                                    <span className="text-green-600 dark:text-green-400">
-                                        已审查 {pendingRoundsData?.summarizedRounds} 轮对话
-                                    </span>
-                                </div>
+                        <div className="rounded-md border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 px-2.5 py-1.5">
+                            <div className="flex items-center gap-2 text-xs">
+                                <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span className="font-medium text-green-700 dark:text-green-300">
+                                    Brain 完成
+                                </span>
+                                <span className="text-green-600 dark:text-green-400">
+                                    已审查 {pendingRoundsData?.summarizedRounds} 轮对话
+                                </span>
                             </div>
-                        )}
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* 底部状态栏 - 左侧 Review 按钮，中间状态信息，右侧发送按钮 */}
+            {/* 底部状态栏 - 左侧 Brain 按钮，中间状态信息 */}
             <div className="flex-shrink-0 px-3 py-1.5 border-t border-[var(--app-divider)] bg-[var(--app-subtle-bg)] pb-[calc(0.375rem+env(safe-area-inset-bottom))]">
                 <div className="flex items-center justify-between gap-2 text-xs">
-                    {/* 左侧：Review 按钮 */}
+                    {/* 左侧：Brain 按钮 */}
                     <div className="flex items-center gap-2">
-                        {/* Review 按钮：有待审轮次时显示 */}
-                        {currentReview && pendingRoundsData?.hasUnreviewedRounds && (
+                        {/* Brain 按钮：有待审轮次时显示 */}
+                        {currentBrain && pendingRoundsData?.hasUnreviewedRounds && (
                             <button
                                 type="button"
-                                onClick={() => startReviewMutation.mutate()}
-                                disabled={startReviewMutation.isPending || session?.thinking || autoSyncStatus?.status === 'syncing' || pendingRoundsData?.hasPendingRounds}
+                                onClick={() => startBrainMutation.mutate()}
+                                disabled={startBrainMutation.isPending || session?.thinking || autoSyncStatus?.status === 'syncing' || pendingRoundsData?.hasPendingRounds}
                                 className="px-2 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
-                                {startReviewMutation.isPending ? '执行中...' : `Review (${pendingRoundsData.unreviewedRounds})`}
+                                {startBrainMutation.isPending ? '执行中...' : `Brain (${pendingRoundsData.unreviewedRounds})`}
                             </button>
                         )}
                         {/* 完成状态：有对话轮次、没有待审轮次、没有待同步轮次、不在思考 */}
-                        {currentReview && pendingRoundsData && pendingRoundsData.totalRounds > 0 && !pendingRoundsData.hasUnreviewedRounds && !pendingRoundsData.hasPendingRounds && !session?.thinking && (
+                        {currentBrain && pendingRoundsData && pendingRoundsData.totalRounds > 0 && !pendingRoundsData.hasUnreviewedRounds && !pendingRoundsData.hasPendingRounds && !session?.thinking && (
                             <span className="text-green-500 flex items-center gap-1">
                                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1027,20 +907,20 @@ export function ReviewPanel(props: {
                     {/* 中间：状态信息 */}
                     <div className="flex-1 flex items-center justify-center gap-2 text-[var(--app-hint)]">
                         {/* 加载中 */}
-                        {!currentReview && reviewSessions === undefined && (
+                        {!currentBrain && brainSessions === undefined && (
                             <>
                                 <LoadingIcon className="w-3 h-3" />
                                 <span>加载中...</span>
                             </>
                         )}
 
-                        {/* 找不到 currentReview */}
-                        {!currentReview && reviewSessions !== undefined && (
-                            <span>未找到 Review 会话</span>
+                        {/* 找不到 currentBrain */}
+                        {!currentBrain && brainSessions !== undefined && (
+                            <span>未找到 Brain 会话</span>
                         )}
 
-                        {/* 同步/检查状态 - 优先显示同步进度，排除 Review 执行中 */}
-                        {currentReview && !isReviewing && (autoSyncStatus?.status === 'syncing' || (session?.thinking && pendingRoundsData?.hasPendingRounds)) && pendingRoundsData && (
+                        {/* 同步/检查状态 - 优先显示同步进度，排除 Brain 执行中 */}
+                        {currentBrain && !isBraining && (autoSyncStatus?.status === 'syncing' || (session?.thinking && pendingRoundsData?.hasPendingRounds)) && pendingRoundsData && (
                             <span className="flex items-center gap-1 text-blue-500">
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1049,7 +929,7 @@ export function ReviewPanel(props: {
                                 同步 {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds}
                             </span>
                         )}
-                        {currentReview && !isReviewing && autoSyncStatus?.status === 'checking' && !session?.thinking && (
+                        {currentBrain && !isBraining && autoSyncStatus?.status === 'checking' && !session?.thinking && (
                             <span className="flex items-center gap-1 text-blue-500">
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1058,19 +938,19 @@ export function ReviewPanel(props: {
                                 检查中
                             </span>
                         )}
-                        {/* Review 执行中状态 - 仅在 isReviewing 为 true 时显示 */}
-                        {currentReview && isReviewing && (
+                        {/* Brain 执行中状态 - 仅在 isBraining 为 true 时显示 */}
+                        {currentBrain && isBraining && (
                             <span className="flex items-center gap-1 text-green-500">
                                 <div className="flex gap-0.5">
                                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                                 </div>
-                                正在 Review
+                                正在 Brain
                             </span>
                         )}
                         {/* 空闲状态：显示轮次信息 */}
-                        {currentReview && !session?.thinking && !isReviewing && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && pendingRoundsData && (
+                        {currentBrain && !session?.thinking && !isBraining && autoSyncStatus?.status !== 'syncing' && autoSyncStatus?.status !== 'checking' && pendingRoundsData && (
                             <span>
                                 {pendingRoundsData.summarizedRounds}/{pendingRoundsData.totalRounds} 轮汇总
                                 {pendingRoundsData.hasUnreviewedRounds && (
@@ -1079,18 +959,6 @@ export function ReviewPanel(props: {
                             </span>
                         )}
                     </div>
-
-                    {/* 右侧：发送按钮 */}
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => applySuggestionsMutation.mutate(selectedDetails)}
-                            disabled={selectedCount === 0 || applySuggestionsMutation.isPending}
-                            className="px-2 py-1 text-xs font-medium rounded bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            {applySuggestionsMutation.isPending ? '发送中...' : `发送 (${selectedCount})`}
-                        </button>
-                    </div>
                 </div>
             </div>
 
@@ -1098,9 +966,9 @@ export function ReviewPanel(props: {
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>删除 Review</DialogTitle>
+                        <DialogTitle>删除 Brain</DialogTitle>
                         <DialogDescription>
-                            确定要删除此 Review 会话吗？此操作无法撤销。
+                            确定要删除此 Brain 会话吗？此操作无法撤销。
                         </DialogDescription>
                     </DialogHeader>
                     <div className="mt-4 flex justify-end gap-2">
@@ -1115,7 +983,7 @@ export function ReviewPanel(props: {
                             type="button"
                             onClick={() => {
                                 setDeleteDialogOpen(false)
-                                cancelReviewMutation.mutate()
+                                cancelBrainMutation.mutate()
                             }}
                             className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
                         >

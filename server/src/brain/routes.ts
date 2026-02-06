@@ -1,7 +1,7 @@
 /**
- * Review 模块 API 路由
+ * Brain 模块 API 路由
  *
- * 这是一个试验性功能，用于多 Session 协作 Review 模式
+ * 这是一个试验性功能，用于多 Session 协作 Brain 模式
  */
 
 import { Hono } from 'hono'
@@ -9,20 +9,20 @@ import { z } from 'zod'
 import type { SyncEngine, DecryptedMessage } from '../sync/syncEngine'
 import type { SSEManager } from '../sse/sseManager'
 import type { WebAppEnv } from '../web/middleware/auth'
-import type { ReviewStore } from './store'
-import type { AutoReviewService } from './autoReview'
+import type { BrainStore } from './store'
+import type { AutoBrainService } from './autoBrain'
 
-// Review 上下文最大消息数
-const REVIEW_CONTEXT_MAX_MESSAGES = 10
+// Brain 上下文最大消息数
+const BRAIN_CONTEXT_MAX_MESSAGES = 10
 
-// 支持的 Review 模型
-const reviewModelValues = ['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok', 'openrouter'] as const
-const reviewModelVariantValues = ['opus', 'sonnet', 'haiku', 'gpt-5.2-codex', 'gpt-5.1-codex-max'] as const
+// 支持的 Brain 模型
+const brainModelValues = ['claude', 'codex', 'gemini', 'glm', 'minimax', 'grok', 'openrouter'] as const
+const brainModelVariantValues = ['opus', 'sonnet', 'haiku', 'gpt-5.2-codex', 'gpt-5.1-codex-max'] as const
 
-const createReviewSessionSchema = z.object({
+const createBrainSessionSchema = z.object({
     mainSessionId: z.string().min(1),
-    reviewModel: z.enum(reviewModelValues),
-    reviewModelVariant: z.string().optional()
+    brainModel: z.enum(brainModelValues),
+    brainModelVariant: z.string().optional()
 })
 
 /**
@@ -50,10 +50,10 @@ function extractUserText(content: unknown): string | null {
 }
 
 /**
- * 从主 Session 的消息中构建 Review 上下文
+ * 从主 Session 的消息中构建 Brain 上下文
  * 提取最近 N 轮对话中所有用户的输入
  */
-function buildReviewContext(messages: DecryptedMessage[]): string {
+function buildBrainContext(messages: DecryptedMessage[]): string {
     const userMessages: string[] = []
 
     for (const message of messages) {
@@ -211,14 +211,14 @@ interface PreviousSuggestion {
 }
 
 /**
- * 构建 Review Prompt - 要求返回 JSON 格式的建议列表
+ * 构建 Brain Prompt - 要求返回 JSON 格式的建议列表
  */
-function buildReviewPrompt(
+function buildBrainPrompt(
     roundsSummary: string,
     timeRange?: { start: number; end: number },
     previousSuggestions?: PreviousSuggestion[]
 ): string {
-    // 只显示开发开始时间，让 Review AI 自行决定如何查看代码
+    // 只显示开发开始时间，让 Brain AI 自行决定如何查看代码
     const timeRangeInfo = timeRange
         ? `\n## 时间范围\n\n开发开始时间：${formatTimestamp(timeRange.start)}\n`
         : ''
@@ -277,28 +277,28 @@ ${timeRangeInfo}${previousSuggestionsInfo}
 `
 }
 
-export function createReviewRoutes(
-    reviewStore: ReviewStore,
+export function createBrainRoutes(
+    brainStore: BrainStore,
     getSyncEngine: () => SyncEngine | null,
     getSseManager: () => SSEManager | null,
-    autoReviewService?: AutoReviewService
+    autoBrainService?: AutoBrainService
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
-    // 创建 Review Session
-    app.post('/review/sessions', async (c) => {
+    // 创建 Brain Session
+    app.post('/brain/sessions', async (c) => {
         const engine = getSyncEngine()
         if (!engine) {
             return c.json({ error: 'Sync engine not available' }, 503)
         }
 
         const body = await c.req.json().catch(() => null)
-        const parsed = createReviewSessionSchema.safeParse(body)
+        const parsed = createBrainSessionSchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body', details: parsed.error.issues }, 400)
         }
 
-        const { mainSessionId, reviewModel, reviewModelVariant } = parsed.data
+        const { mainSessionId, brainModel, brainModelVariant } = parsed.data
         const namespace = c.get('namespace')
 
         // 获取主 Session
@@ -323,11 +323,11 @@ export function createReviewRoutes(
 
         // 获取主 Session 的最近消息，提取用户输入作为上下文
         const page = await engine.getMessagesPage(mainSessionId, {
-            limit: REVIEW_CONTEXT_MAX_MESSAGES * 2,  // 获取更多消息以确保有足够的用户消息
+            limit: BRAIN_CONTEXT_MAX_MESSAGES * 2,  // 获取更多消息以确保有足够的用户消息
             beforeSeq: null
         })
 
-        const contextSummary = buildReviewContext(page.messages)
+        const contextSummary = buildBrainContext(page.messages)
 
         // 获取主 Session 的工作目录
         const directory = mainSession.metadata?.path
@@ -335,17 +335,17 @@ export function createReviewRoutes(
             return c.json({ error: 'Main session has no working directory' }, 400)
         }
 
-        // 创建 Review Session（在同一目录下）
+        // 创建 Brain Session（在同一目录下）
         const spawnResult = await engine.spawnSession(
             machineId,
             directory,
-            reviewModel as 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter',
+            brainModel as 'claude' | 'codex' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter',
             false,  // 不使用 yolo 模式
             'simple',
             undefined,
             {
-                modelMode: reviewModelVariant as 'opus' | 'sonnet' | undefined,
-                source: 'review'
+                modelMode: brainModelVariant as 'opus' | 'sonnet' | undefined,
+                source: 'brain'
             }
         )
 
@@ -353,9 +353,9 @@ export function createReviewRoutes(
             return c.json({ error: spawnResult.message }, 500)
         }
 
-        const reviewSessionId = spawnResult.sessionId
+        const brainSessionId = spawnResult.sessionId
 
-        // 等待 Review Session 上线
+        // 等待 Brain Session 上线
         const waitForOnline = async (sessionId: string, timeoutMs: number): Promise<boolean> => {
             const start = Date.now()
             while (Date.now() - start < timeoutMs) {
@@ -368,95 +368,95 @@ export function createReviewRoutes(
             return false
         }
 
-        const isOnline = await waitForOnline(reviewSessionId, 60_000)
+        const isOnline = await waitForOnline(brainSessionId, 60_000)
         if (!isOnline) {
-            return c.json({ error: 'Review session failed to come online' }, 500)
+            return c.json({ error: 'Brain session failed to come online' }, 500)
         }
 
-        // 保存 Review Session 记录
-        const reviewSession = await reviewStore.createReviewSession({
+        // 保存 Brain Session 记录
+        const brainSession = await brainStore.createBrainSession({
             namespace,
             mainSessionId,
-            reviewSessionId,
-            reviewModel,
-            reviewModelVariant,
+            brainSessionId,
+            brainModel,
+            brainModelVariant,
             contextSummary
         })
 
         // 自动触发同步历史对话
-        if (autoReviewService) {
+        if (autoBrainService) {
             // 延迟触发，确保 CLI daemon 有时间 join socket room
             setTimeout(() => {
-                autoReviewService.triggerSync(mainSessionId).catch(err => {
-                    console.error('[Review] Failed to trigger auto sync:', err)
+                autoBrainService.triggerSync(mainSessionId).catch(err => {
+                    console.error('[Brain] Failed to trigger auto sync:', err)
                 })
             }, 3000)
         }
 
         return c.json({
-            id: reviewSession.id,
-            reviewSessionId,
+            id: brainSession.id,
+            brainSessionId,
             mainSessionId,
-            reviewModel,
-            reviewModelVariant,
+            brainModel,
+            brainModelVariant,
             status: 'pending'
         })
     })
 
-    // 获取主 Session 的 Review Sessions 列表
-    app.get('/review/sessions', async (c) => {
+    // 获取主 Session 的 Brain Sessions 列表
+    app.get('/brain/sessions', async (c) => {
         const mainSessionId = c.req.query('mainSessionId')
         if (!mainSessionId) {
             return c.json({ error: 'mainSessionId is required' }, 400)
         }
 
-        const reviewSessions = await reviewStore.getReviewSessionsByMainSession(mainSessionId)
+        const brainSessions = await brainStore.getBrainSessionsByMainSession(mainSessionId)
 
-        return c.json({ reviewSessions })
+        return c.json({ brainSessions })
     })
 
-    // 获取主 Session 当前活跃的 Review Session
-    // 注意：这个路由必须在 /review/sessions/:id 之前定义，否则 'active' 会被当作 id
-    app.get('/review/sessions/active/:mainSessionId', async (c) => {
+    // 获取主 Session 当前活跃的 Brain Session
+    // 注意：这个路由必须在 /brain/sessions/:id 之前定义，否则 'active' 会被当作 id
+    app.get('/brain/sessions/active/:mainSessionId', async (c) => {
         const mainSessionId = c.req.param('mainSessionId')
-        const reviewSession = await reviewStore.getActiveReviewSession(mainSessionId)
+        const brainSession = await brainStore.getActiveBrainSession(mainSessionId)
 
-        if (!reviewSession) {
-            return c.json({ error: 'No active review session' }, 404)
+        if (!brainSession) {
+            return c.json({ error: 'No active brain session' }, 404)
         }
 
-        return c.json(reviewSession)
+        return c.json(brainSession)
     })
 
-    // 获取单个 Review Session
-    app.get('/review/sessions/:id', async (c) => {
+    // 获取单个 Brain Session
+    app.get('/brain/sessions/:id', async (c) => {
         const id = c.req.param('id')
-        const reviewSession = await reviewStore.getReviewSession(id)
+        const brainSession = await brainStore.getBrainSession(id)
 
-        if (!reviewSession) {
-            return c.json({ error: 'Review session not found' }, 404)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
-        return c.json(reviewSession)
+        return c.json(brainSession)
     })
 
-    // 完成 Review Session
-    app.post('/review/sessions/:id/complete', async (c) => {
+    // 完成 Brain Session
+    app.post('/brain/sessions/:id/complete', async (c) => {
         const id = c.req.param('id')
         const body = await c.req.json().catch(() => ({})) as { result?: string }
 
-        const success = await reviewStore.completeReviewSession(id, body.result ?? '')
+        const success = await brainStore.completeBrainSession(id, body.result ?? '')
 
         if (!success) {
-            return c.json({ error: 'Review session not found' }, 404)
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
         return c.json({ success: true })
     })
 
-    // 同步汇总 - 发送每一轮对话给 Review AI 做汇总
+    // 同步汇总 - 发送每一轮对话给 Brain AI 做汇总
     // 每次最多处理 3 轮，批量发送给 AI 汇总
-    app.post('/review/sessions/:id/sync', async (c) => {
+    app.post('/brain/sessions/:id/sync', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
 
@@ -464,29 +464,29 @@ export function createReviewRoutes(
             return c.json({ error: 'Sync engine not available' }, 503)
         }
 
-        const reviewSession = await reviewStore.getReviewSession(id)
-        if (!reviewSession) {
-            return c.json({ error: 'Review session not found' }, 404)
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
-        // 检查 Review AI 是否正在处理中，避免重复发送
-        const reviewAISession = await engine.getSession(reviewSession.reviewSessionId)
-        if (reviewAISession?.thinking) {
+        // 检查 Brain AI 是否正在处理中，避免重复发送
+        const brainAISession = await engine.getSession(brainSession.brainSessionId)
+        if (brainAISession?.thinking) {
             return c.json({
                 success: false,
                 error: 'busy',
-                message: 'Review AI 正在处理中，请等待完成后再同步'
+                message: 'Brain AI 正在处理中，请等待完成后再同步'
             }, 409)
         }
 
         // 获取主 Session 所有消息
-        const allMessages = await engine.getAllMessages(reviewSession.mainSessionId)
+        const allMessages = await engine.getAllMessages(brainSession.mainSessionId)
 
         // 按轮次分组消息
         const allRounds = groupMessagesIntoRounds(allMessages)
 
         // 获取已汇总的轮次
-        const existingRounds = await reviewStore.getReviewRounds(id)
+        const existingRounds = await brainStore.getBrainRounds(id)
         const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
         // 找出未汇总的轮次（必须有 AI 回复，否则算作"未完成"的轮次）
@@ -566,15 +566,15 @@ ${batchRounds.map(r => `  {
 
 只输出 JSON 数组，不要输出其他内容。`
 
-        // 发送给 Review AI
-        await engine.sendMessage(reviewSession.reviewSessionId, {
+        // 发送给 Brain AI
+        await engine.sendMessage(brainSession.brainSessionId, {
             text: syncPrompt,
             sentFrom: 'webapp'
         })
 
         // 更新状态为 active（如果是 pending）
-        if (reviewSession.status === 'pending') {
-            await reviewStore.updateReviewSessionStatus(id, 'active')
+        if (brainSession.status === 'pending') {
+            await brainStore.updateBrainSessionStatus(id, 'active')
         }
 
         return c.json({
@@ -590,9 +590,9 @@ ${batchRounds.map(r => `  {
     })
 
     // 保存 AI 的汇总结果
-    // 从 Review Session 的最新消息中提取汇总并保存到数据库
+    // 从 Brain Session 的最新消息中提取汇总并保存到数据库
     // 支持单个 JSON 对象或 JSON 数组（批量汇总）
-    app.post('/review/sessions/:id/save-summary', async (c) => {
+    app.post('/brain/sessions/:id/save-summary', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
 
@@ -600,13 +600,13 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'Sync engine not available' }, 503)
         }
 
-        const reviewSession = await reviewStore.getReviewSession(id)
-        if (!reviewSession) {
-            return c.json({ error: 'Review session not found' }, 404)
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
-        // 获取 Review Session 的最新消息
-        const messagesResult = await engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 10, beforeSeq: null })
+        // 获取 Brain Session 的最新消息
+        const messagesResult = await engine.getMessagesPage(brainSession.brainSessionId, { limit: 10, beforeSeq: null })
 
         // 提取最新的 AI 回复 - 支持单个对象或数组
         let summaries: Array<{ round: number; summary: string }> = []
@@ -718,11 +718,11 @@ ${batchRounds.map(r => `  {
         }
 
         // 获取主 Session 所有消息以获取原始数据
-        const allMessages = await engine.getAllMessages(reviewSession.mainSessionId)
+        const allMessages = await engine.getAllMessages(brainSession.mainSessionId)
         const allRounds = groupMessagesIntoRounds(allMessages)
 
         // 获取已存在的轮次
-        const existingRounds = await reviewStore.getReviewRounds(id)
+        const existingRounds = await brainStore.getBrainRounds(id)
         const existingRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
         // 批量保存
@@ -743,8 +743,8 @@ ${batchRounds.map(r => `  {
             }
 
             // 保存到数据库
-            await reviewStore.createReviewRound({
-                reviewSessionId: id,
+            await brainStore.createBrainRound({
+                brainSessionId: id,
                 roundNumber: summary.round,
                 userInput: targetRound.userInput,
                 aiSummary: summary.summary,
@@ -774,8 +774,8 @@ ${batchRounds.map(r => `  {
         })
     })
 
-    // 执行 Review（读取所有已汇总的轮次，发给 Review AI）
-    app.post('/review/sessions/:id/start', async (c) => {
+    // 执行 Brain（读取所有已汇总的轮次，发给 Brain AI）
+    app.post('/brain/sessions/:id/start', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
 
@@ -789,45 +789,45 @@ ${batchRounds.map(r => `  {
         } | null
         const previousSuggestions = body?.previousSuggestions
 
-        const reviewSession = await reviewStore.getReviewSession(id)
-        if (!reviewSession) {
-            return c.json({ error: 'Review session not found' }, 404)
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
         // 只允许 pending 或 active 状态
-        if (reviewSession.status !== 'pending' && reviewSession.status !== 'active') {
-            return c.json({ error: 'Review session is not in pending or active status' }, 400)
+        if (brainSession.status !== 'pending' && brainSession.status !== 'active') {
+            return c.json({ error: 'Brain session is not in pending or active status' }, 400)
         }
 
         // 获取所有已汇总的轮次
-        const allSummarizedRounds = await reviewStore.getReviewRounds(id)
+        const allSummarizedRounds = await brainStore.getBrainRounds(id)
 
         if (allSummarizedRounds.length === 0) {
             return c.json({ error: 'No summarized rounds found. Please sync first.', noRounds: true }, 400)
         }
 
-        // 获取已经 review 过的轮次号
-        const reviewedRoundNumbers = await reviewStore.getReviewedRoundNumbers(id)
+        // 获取已经 brain 过的轮次号
+        const brainedRoundNumbers = await brainStore.getBrainedRoundNumbers(id)
 
-        // 过滤出未 review 过的轮次
-        const unreviewedRounds = allSummarizedRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber))
+        // 过滤出未 brain 过的轮次
+        const unbrainedRounds = allSummarizedRounds.filter(r => !brainedRoundNumbers.has(r.roundNumber))
 
-        if (unreviewedRounds.length === 0) {
+        if (unbrainedRounds.length === 0) {
             return c.json({
-                error: '所有轮次都已经 review 过了',
-                allReviewed: true,
+                error: '所有轮次都已经 brain 过了',
+                allBrained: true,
                 totalRounds: allSummarizedRounds.length,
-                reviewedRounds: reviewedRoundNumbers.size
+                brainedRounds: brainedRoundNumbers.size
             }, 400)
         }
 
-        // 构建对话汇总（只包含未 review 过的轮次）
-        const roundsSummary = unreviewedRounds.map(r => r.aiSummary).join('\n')
-        const unreviewedRoundNumbers = unreviewedRounds.map(r => r.roundNumber)
+        // 构建对话汇总（只包含未 brain 过的轮次）
+        const roundsSummary = unbrainedRounds.map(r => r.aiSummary).join('\n')
+        const unbrainedRoundNumbers = unbrainedRounds.map(r => r.roundNumber)
 
-        // 计算时间范围（只针对未 review 过的轮次）
+        // 计算时间范围（只针对未 brain 过的轮次）
         let timeRange: { start: number; end: number } | undefined
-        const roundsWithTime = unreviewedRounds.filter(r => r.startedAt && r.endedAt)
+        const roundsWithTime = unbrainedRounds.filter(r => r.startedAt && r.endedAt)
         if (roundsWithTime.length > 0) {
             const startTimes = roundsWithTime.map(r => r.startedAt!).filter(t => t > 0)
             const endTimes = roundsWithTime.map(r => r.endedAt!).filter(t => t > 0)
@@ -839,68 +839,68 @@ ${batchRounds.map(r => `  {
             }
         }
 
-        // 发送 Review Prompt（包含之前的建议上下文）
-        const reviewPrompt = buildReviewPrompt(roundsSummary, timeRange, previousSuggestions)
+        // 发送 Brain Prompt（包含之前的建议上下文）
+        const brainPrompt = buildBrainPrompt(roundsSummary, timeRange, previousSuggestions)
 
-        // 创建执行记录（记录本次 review 的轮次号）
-        const execution = await reviewStore.createReviewExecution({
-            reviewSessionId: id,
-            roundsReviewed: unreviewedRounds.length,
-            reviewedRoundNumbers: unreviewedRoundNumbers,
+        // 创建执行记录（记录本次 brain 的轮次号）
+        const execution = await brainStore.createBrainExecution({
+            brainSessionId: id,
+            roundsBrained: unbrainedRounds.length,
+            brainedRoundNumbers: unbrainedRoundNumbers,
             timeRangeStart: timeRange?.start ?? Date.now(),
             timeRangeEnd: timeRange?.end ?? Date.now(),
-            prompt: reviewPrompt
+            prompt: brainPrompt
         })
 
-        await engine.sendMessage(reviewSession.reviewSessionId, {
-            text: reviewPrompt,
+        await engine.sendMessage(brainSession.brainSessionId, {
+            text: brainPrompt,
             sentFrom: 'webapp'
         })
 
         // 更新状态为 active
-        if (reviewSession.status === 'pending') {
-            await reviewStore.updateReviewSessionStatus(id, 'active')
+        if (brainSession.status === 'pending') {
+            await brainStore.updateBrainSessionStatus(id, 'active')
         }
 
         return c.json({
             success: true,
             status: 'active',
-            roundsReviewed: unreviewedRounds.length,
-            reviewedRoundNumbers: unreviewedRoundNumbers,
-            skippedRounds: Array.from(reviewedRoundNumbers),
+            roundsBrained: unbrainedRounds.length,
+            brainedRoundNumbers: unbrainedRoundNumbers,
+            skippedRounds: Array.from(brainedRoundNumbers),
             executionId: execution.id,
             timeRange
         })
     })
 
-    // 取消 Review Session
-    app.post('/review/sessions/:id/cancel', async (c) => {
+    // 取消 Brain Session
+    app.post('/brain/sessions/:id/cancel', async (c) => {
         const id = c.req.param('id')
 
-        const success = await reviewStore.updateReviewSessionStatus(id, 'cancelled')
+        const success = await brainStore.updateBrainSessionStatus(id, 'cancelled')
 
         if (!success) {
-            return c.json({ error: 'Review session not found' }, 404)
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
         return c.json({ success: true })
     })
 
-    // 删除 Review Session
-    app.delete('/review/sessions/:id', async (c) => {
+    // 删除 Brain Session
+    app.delete('/brain/sessions/:id', async (c) => {
         const id = c.req.param('id')
 
-        const success = await reviewStore.deleteReviewSession(id)
+        const success = await brainStore.deleteBrainSession(id)
 
         if (!success) {
-            return c.json({ error: 'Review session not found' }, 404)
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
         return c.json({ success: true })
     })
 
     // 检查未汇总的轮次
-    app.get('/review/sessions/:id/pending-rounds', async (c) => {
+    app.get('/brain/sessions/:id/pending-rounds', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
 
@@ -908,29 +908,29 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'Sync engine not available' }, 503)
         }
 
-        const reviewSession = await reviewStore.getReviewSession(id)
-        if (!reviewSession) {
-            return c.json({ error: 'Review session not found' }, 404)
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
         // 获取主 Session 所有消息
-        const allMessages = await engine.getAllMessages(reviewSession.mainSessionId)
+        const allMessages = await engine.getAllMessages(brainSession.mainSessionId)
 
         // 按轮次分组消息
         const allRounds = groupMessagesIntoRounds(allMessages)
 
         // 获取已汇总的轮次
-        const existingRounds = await reviewStore.getReviewRounds(id)
+        const existingRounds = await brainStore.getBrainRounds(id)
         const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
         // 找出未汇总的轮次（必须有 AI 回复，否则算作"未完成"的轮次）
         const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber) && r.aiMessages.length > 0)
 
-        // 获取已经 review 过的轮次
-        const reviewedRoundNumbers = await reviewStore.getReviewedRoundNumbers(id)
+        // 获取已经 brain 过的轮次
+        const brainedRoundNumbers = await brainStore.getBrainedRoundNumbers(id)
 
-        // 计算待 review 的轮次（已汇总但未 review）
-        const unreviewedRounds = existingRounds.filter(r => !reviewedRoundNumbers.has(r.roundNumber))
+        // 计算待 brain 的轮次（已汇总但未 brain）
+        const unbrainedRounds = existingRounds.filter(r => !brainedRoundNumbers.has(r.roundNumber))
 
         // 返回已保存的汇总内容（用于刷新页面后恢复显示）
         const savedSummaries = existingRounds.map(r => ({
@@ -938,24 +938,24 @@ ${batchRounds.map(r => `  {
             summary: r.aiSummary
         })).sort((a, b) => a.round - b.round)
 
-        console.log('[pending-rounds] existingRounds:', existingRounds.length, 'reviewedRounds:', reviewedRoundNumbers.size, 'unreviewedRounds:', unreviewedRounds.length, 'pendingRounds:', pendingRounds.length)
+        console.log('[pending-rounds] existingRounds:', existingRounds.length, 'brainedRounds:', brainedRoundNumbers.size, 'unbrainedRounds:', unbrainedRounds.length, 'pendingRounds:', pendingRounds.length)
 
         return c.json({
             totalRounds: allRounds.length,
             summarizedRounds: existingRounds.length,
             pendingRounds: pendingRounds.length,
             hasPendingRounds: pendingRounds.length > 0,
-            // 新增：review 相关统计
-            reviewedRounds: reviewedRoundNumbers.size,
-            unreviewedRounds: unreviewedRounds.length,
-            hasUnreviewedRounds: unreviewedRounds.length > 0,
+            // 新增：brain 相关统计
+            brainedRounds: brainedRoundNumbers.size,
+            unbrainedRounds: unbrainedRounds.length,
+            hasUnbrainedRounds: unbrainedRounds.length > 0,
             // 已保存的汇总内容
             savedSummaries
         })
     })
 
-    // 发送对话摘要给 Review AI
-    app.post('/review/sessions/:id/summarize', async (c) => {
+    // 发送对话摘要给 Brain AI
+    app.post('/brain/sessions/:id/summarize', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
 
@@ -963,13 +963,13 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'Sync engine not available' }, 503)
         }
 
-        const reviewSession = await reviewStore.getReviewSession(id)
-        if (!reviewSession) {
-            return c.json({ error: 'Review session not found' }, 404)
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
         // 获取主 Session 所有消息以确保完整上下文
-        const allMessages = await engine.getAllMessages(reviewSession.mainSessionId)
+        const allMessages = await engine.getAllMessages(brainSession.mainSessionId)
 
         // 提取完整对话（用户和 AI 的消息都要）
         const dialogueMessages: Array<{ role: string; text: string }> = []
@@ -1037,7 +1037,7 @@ ${batchRounds.map(r => `  {
         // 只取最近的对话（最多 20 轮）
         const recentMessages = dialogueMessages.slice(-40)
 
-        const summary = `以下是主 Session 中的对话内容，请基于这些内容进行 Review：
+        const summary = `以下是主 Session 中的对话内容，请基于这些内容进行 Brain 分析：
 
 ---
 
@@ -1051,22 +1051,22 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
 3. 代码实现是否有问题或可以改进
 4. 有什么遗漏或需要注意的地方`
 
-        // 发送给 Review Session
-        await engine.sendMessage(reviewSession.reviewSessionId, {
+        // 发送给 Brain Session
+        await engine.sendMessage(brainSession.brainSessionId, {
             text: summary,
             sentFrom: 'webapp'
         })
 
         // 如果是 pending 状态，更新为 active
-        if (reviewSession.status === 'pending') {
-            await reviewStore.updateReviewSessionStatus(id, 'active')
+        if (brainSession.status === 'pending') {
+            await brainStore.updateBrainSessionStatus(id, 'active')
         }
 
         return c.json({ success: true })
     })
 
-    // 执行 Review 并发送结果到主 Session
-    app.post('/review/sessions/:id/execute', async (c) => {
+    // 执行 Brain 并发送结果到主 Session
+    app.post('/brain/sessions/:id/execute', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
 
@@ -1074,17 +1074,17 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             return c.json({ error: 'Sync engine not available' }, 503)
         }
 
-        const reviewSession = await reviewStore.getReviewSession(id)
-        if (!reviewSession) {
-            return c.json({ error: 'Review session not found' }, 404)
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
-        // 获取 Review Session 的最新 AI 回复
-        const messagesResult = await engine.getMessagesPage(reviewSession.reviewSessionId, { limit: 50, beforeSeq: null })
+        // 获取 Brain Session 的最新 AI 回复
+        const messagesResult = await engine.getMessagesPage(brainSession.brainSessionId, { limit: 50, beforeSeq: null })
 
         // 详细日志用于调试
-        console.log('[Review Execute] Session:', reviewSession.reviewSessionId)
-        console.log('[Review Execute] Messages count:', messagesResult.messages.length)
+        console.log('[Brain Execute] Session:', brainSession.brainSessionId)
+        console.log('[Brain Execute] Messages count:', messagesResult.messages.length)
 
         // 提取最新的 AI 回复
         const agentMessages: string[] = []
@@ -1134,34 +1134,34 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                 const c = m.content as Record<string, unknown>
                 return { role: c?.role, type: c?.type, content: JSON.stringify(c?.content).slice(0, 200) }
             })
-            console.log('[Review Execute] No agent messages found. Sample:', JSON.stringify(rawSample))
-            return c.json({ error: 'No review output found' }, 400)
+            console.log('[Brain Execute] No agent messages found. Sample:', JSON.stringify(rawSample))
+            return c.json({ error: 'No brain output found' }, 400)
         }
 
-        // 获取最新的 Review 输出
-        const latestReview = agentMessages[agentMessages.length - 1]
+        // 获取最新的 Brain 输出
+        const latestBrain = agentMessages[agentMessages.length - 1]
 
-        // 标记 Review 为完成
-        await reviewStore.updateReviewSessionStatus(id, 'completed')
+        // 标记 Brain 为完成
+        await brainStore.updateBrainSessionStatus(id, 'completed')
 
         // 更新最近的执行记录
-        const executions = await reviewStore.getReviewExecutions(id)
+        const executions = await brainStore.getBrainExecutions(id)
         if (executions.length > 0) {
             const latestExecution = executions[0]  // 已按 created_at DESC 排序
             if (latestExecution.status === 'pending') {
-                await reviewStore.completeReviewExecution(latestExecution.id, latestReview)
+                await brainStore.completeBrainExecution(latestExecution.id, latestBrain)
             }
         }
 
         // 只返回结果，不自动发送到主 Session
         return c.json({
             success: true,
-            reviewResult: latestReview
+            brainResult: latestBrain
         })
     })
 
     // 发送用户选择的建议到主 Session
-    app.post('/review/sessions/:id/apply', async (c) => {
+    app.post('/brain/sessions/:id/apply', async (c) => {
         const id = c.req.param('id')
         const engine = getSyncEngine()
 
@@ -1174,35 +1174,35 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             return c.json({ error: 'action is required' }, 400)
         }
 
-        const reviewSession = await reviewStore.getReviewSession(id)
-        if (!reviewSession) {
-            return c.json({ error: 'Review session not found' }, 404)
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
         // 发送建议的 action 到主 Session
-        await engine.sendMessage(reviewSession.mainSessionId, {
+        await engine.sendMessage(brainSession.mainSessionId, {
             text: body.action,
             sentFrom: 'webapp'
         })
 
         // 保存已发送的建议 ID（如果提供了）
         if (body.suggestionIds && body.suggestionIds.length > 0) {
-            await reviewStore.addAppliedSuggestionIds(id, body.suggestionIds)
+            await brainStore.addAppliedSuggestionIds(id, body.suggestionIds)
         }
 
         return c.json({ success: true })
     })
 
     // 获取已发送的建议 ID
-    app.get('/review/sessions/:id/applied-suggestions', async (c) => {
+    app.get('/brain/sessions/:id/applied-suggestions', async (c) => {
         const id = c.req.param('id')
 
-        const reviewSession = await reviewStore.getReviewSession(id)
-        if (!reviewSession) {
-            return c.json({ error: 'Review session not found' }, 404)
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
         }
 
-        const appliedIds = await reviewStore.getAppliedSuggestionIds(id)
+        const appliedIds = await brainStore.getAppliedSuggestionIds(id)
         return c.json({ appliedIds })
     })
 
