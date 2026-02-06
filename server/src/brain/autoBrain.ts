@@ -199,7 +199,8 @@ export class AutoBrainService {
      * 检查 Brain session 是否使用 SDK 模式
      */
     private isSdkMode(brainSession: StoredBrainSession): boolean {
-        return !brainSession.brainSessionId
+        // SDK 模式使用特殊值 'sdk-mode' 而非实际的 CLI session ID
+        return !brainSession.brainSessionId || brainSession.brainSessionId === 'sdk-mode'
     }
 
     start(): void {
@@ -235,7 +236,10 @@ export class AutoBrainService {
                 return
             }
 
-            this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
+            // SDK 模式下不需要设置映射（brainSessionId 为 'sdk-mode'）
+            if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
+                this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
+            }
 
             await this.syncRounds(brainSession)
         } catch (err) {
@@ -765,8 +769,8 @@ export class AutoBrainService {
         const brainSession = await this.brainStore.getActiveBrainSession(mainSessionId)
         console.log('[BrainSync] triggerSync brainSession:', brainSession?.id ?? 'null')
         if (brainSession) {
-            // SDK 模式下 brainSessionId 为 null，不需要设置映射
-            if (brainSession.brainSessionId) {
+            // SDK 模式下 brainSessionId 为 'sdk-mode'，不需要设置映射
+            if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
                 this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
             }
             await this.syncRounds(brainSession)

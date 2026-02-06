@@ -187,11 +187,11 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                             }
                             const contextSummary = contextMessages.join('\n') || 'New session'
 
-                            // 创建 Brain session（不使用 CLI daemon，brainSessionId 为 null）
+                            // 创建 Brain session（不使用 CLI daemon，brainSessionId 使用特殊值标识 SDK 模式）
                             const brainSession = await brainStore.createBrainSession({
                                 namespace,
                                 mainSessionId: result.sessionId,
-                                brainSessionId: null,  // SDK 模式：不关联 CLI session
+                                brainSessionId: 'sdk-mode',  // SDK 模式：使用特殊值而非 CLI session ID
                                 brainModel: 'claude',
                                 contextSummary,
                                 status: 'active'
