@@ -27,17 +27,24 @@ async function testBrainDirect() {
       cwd: testProjectPath,
       systemPrompt,
       maxTurns: 10,
+      // 允许读取工具，自动批准
       allowedTools: ['Read', 'Grep', 'Glob'],
-      disallowedTools: ['Bash', 'Edit', 'Write'],
-      permissionMode: 'plan',
+      permissionMode: 'acceptEdits',  // 使用 acceptEdits 模式，允许工具自动执行
       pathToClaudeCodeExecutable: '/home/guang/softwares/hapi/server/node_modules/@anthropic-ai/claude-agent-sdk/cli.js'
     },
     {
+      onSystemMessage: (msg) => {
+        console.log(`[系统] 类型: ${msg.type}, 子类型: ${msg.subtype || 'N/A'}`);
+      },
       onProgress: (type, data) => {
         console.log(`[进度] ${type}`, data ? JSON.stringify(data).substring(0, 80) : '');
       },
       onAssistantMessage: (msg) => {
+        console.log(`[AI] 消息片段 (${msg.content.length} 字符)`);
         output += msg.content + '\n\n';
+      },
+      onToolUse: (toolName, input) => {
+        console.log(`[工具] ${toolName}`, JSON.stringify(input).substring(0, 100));
       },
       onResult: (result) => {
         console.log('\n=== 审查结果 ===');

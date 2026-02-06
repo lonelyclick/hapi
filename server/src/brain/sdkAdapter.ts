@@ -94,8 +94,17 @@ export async function executeBrainQuery(
     }
 
     // 配置 litellm 环境变量
+    // 注意：必须直接设置 process.env，因为 SDK 子进程会继承父进程的环境变量
     const litellmApiKey = process.env.LITELLM_API_KEY || 'sk-litellm-41e2a2d4d101255ea6e76fd59f96548a'
     const litellmBaseUrl = process.env.LITELLM_BASE_URL || 'http://localhost:4000'
+
+    // 保存原始环境变量（以便在 finally 中恢复）
+    const originalApiKey = process.env.ANTHROPIC_API_KEY
+    const originalBaseUrl = process.env.ANTHROPIC_BASE_URL
+
+    // 设置环境变量（SDK 子进程会继承这些）
+    process.env.ANTHROPIC_API_KEY = litellmApiKey
+    process.env.ANTHROPIC_BASE_URL = litellmBaseUrl
 
     const query: SDKQuery = sdkQuery({
         prompt,
@@ -110,11 +119,6 @@ export async function executeBrainQuery(
             abortController,
             // 指定 SDK 内置的 Claude Code 可执行文件路径
             pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable,
-            // 传递 litellm 环境变量（SDK 需要 ANTHROPIC_API_KEY 而不是 ANTHROPIC_AUTH_TOKEN）
-            env: {
-                ANTHROPIC_API_KEY: litellmApiKey,
-                ANTHROPIC_BASE_URL: litellmBaseUrl,
-            }
         }
     })
 
@@ -203,6 +207,17 @@ export async function executeBrainQuery(
         throw error
     } finally {
         query.close()
+        // 恢复原始环境变量
+        if (originalApiKey !== undefined) {
+            process.env.ANTHROPIC_API_KEY = originalApiKey
+        } else {
+            delete process.env.ANTHROPIC_API_KEY
+        }
+        if (originalBaseUrl !== undefined) {
+            process.env.ANTHROPIC_BASE_URL = originalBaseUrl
+        } else {
+            delete process.env.ANTHROPIC_BASE_URL
+        }
     }
 }
 
