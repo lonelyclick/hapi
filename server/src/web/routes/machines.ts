@@ -181,15 +181,22 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                             if (brainSpawnResult.type === 'success') {
                                 const brainOnline = await waitForSessionOnline(engine, brainSpawnResult.sessionId, 60_000)
                                 if (brainOnline) {
-                                    // 构建上下文
+                                    // 构建上下文（复用 brain 模块的消息解析逻辑）
                                     const page = await engine.getMessagesPage(result.sessionId, { limit: 20, beforeSeq: null })
-                                    const contextMessages = page.messages.map(m => {
-                                        const content = m.content as Record<string, unknown>
-                                        if (content?.role === 'user' && typeof content.content === 'string') {
-                                            return content.content
+                                    const contextMessages: string[] = []
+                                    for (const m of page.messages) {
+                                        const content = m.content as Record<string, unknown> | null
+                                        if (!content || content.role !== 'user') continue
+                                        const body = content.content as Record<string, unknown> | string | undefined
+                                        if (!body) continue
+                                        if (typeof body === 'string') {
+                                            const trimmed = body.trim()
+                                            if (trimmed) contextMessages.push(trimmed)
+                                        } else if (typeof body === 'object' && body.type === 'text' && typeof body.text === 'string') {
+                                            const trimmed = (body.text as string).trim()
+                                            if (trimmed) contextMessages.push(trimmed)
                                         }
-                                        return null
-                                    }).filter(Boolean)
+                                    }
                                     const contextSummary = contextMessages.join('\n') || 'New session'
 
                                     await brainStore.createBrainSession({
