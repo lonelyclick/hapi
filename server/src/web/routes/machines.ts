@@ -10,7 +10,7 @@ import { requireMachine } from './guards'
 
 const spawnBodySchema = z.object({
     directory: z.string().min(1),
-    agent: z.enum(['claude', 'opencode']).optional(),
+    agent: z.enum(['claude', 'codex', 'opencode']).optional(),
     yolo: z.boolean().optional(),
     sessionType: z.enum(['simple', 'worktree']).optional(),
     worktreeName: z.string().optional(),
@@ -18,6 +18,7 @@ const spawnBodySchema = z.object({
     claudeAgent: z.string().min(1).optional(),
     opencodeModel: z.string().min(1).optional(),
     opencodeVariant: z.string().min(1).optional(),
+    codexModel: z.string().min(1).optional(),
     enableBrain: z.boolean().optional(),
     source: z.string().min(1).max(100).optional()
 })
@@ -125,6 +126,12 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
         const rawSource = parsed.data.source?.trim()
         const source = rawSource ? rawSource : 'external-api'
 
+        // 将 codexModel 转换为 modelMode（如 'openai/gpt-5.3-codex' -> 'gpt-5.3-codex'）
+        let modelMode: string | undefined
+        if (parsed.data.codexModel) {
+            modelMode = parsed.data.codexModel.replace('openai/', '') as any
+        }
+
         const result = await engine.spawnSession(
             machineId,
             parsed.data.directory,
@@ -132,7 +139,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             parsed.data.yolo,
             parsed.data.sessionType,
             parsed.data.worktreeName,
-            { claudeSettingsType: parsed.data.claudeSettingsType, claudeAgent: parsed.data.claudeAgent, opencodeModel: parsed.data.opencodeModel, opencodeVariant: parsed.data.opencodeVariant, source }
+            { claudeSettingsType: parsed.data.claudeSettingsType, claudeAgent: parsed.data.claudeAgent, opencodeModel: parsed.data.opencodeModel, opencodeVariant: parsed.data.opencodeVariant, codexModel: parsed.data.codexModel, modelMode, source }
         )
 
         // 如果 spawn 成功，等 session online 后设置 createdBy 并发送初始化 prompt
