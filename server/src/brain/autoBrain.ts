@@ -856,7 +856,8 @@ export class AutoBrainService {
                     prompt: reviewPrompt
                 })
 
-                // 尝试解析结果
+                // 将审查结果转换成消息发送到主 session
+                // 这样前端就能看到审查结果，无需修改前端代码
                 try {
                     const jsonMatch = result.output.match(/```json\s*([\s\S]*?)\s*```/)
                     if (jsonMatch) {
@@ -864,25 +865,108 @@ export class AutoBrainService {
                         if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
                             console.log('[BrainSync] Parsed', parsed.suggestions.length, 'suggestions from SDK')
 
-                            // 广播完成状态
-                            this.broadcastSyncStatus(brainSession, {
-                                status: 'complete',
-                                totalRounds: summaries.length,
-                                summarizedRounds: summaries.length,
-                                pendingRounds: 0,
-                                suggestions: parsed.suggestions,
-                                summary: parsed.summary
+                            // 构建友好的审查结果消息
+                            const messageText = this.buildReviewResultMessage(parsed.suggestions, parsed.summary)
+
+                            // 发送到主 session（前端会显示这条消息）
+                            await this.engine.sendMessage(mainSessionId, {
+                                text: messageText,
+                                sentFrom: 'brain-review'
                             })
+
+                            console.log('[BrainSync] Sent review result to main session:', mainSessionId)
                         }
                     }
                 } catch (parseErr) {
                     console.error('[BrainSync] Failed to parse SDK output:', parseErr)
+                    // 解析失败时，仍然发送原始输出
+                    await this.engine.sendMessage(mainSessionId, {
+                        text: `## Brain 审查结果\n\n${result.output}`,
+                        sentFrom: 'brain-review'
+                    })
                 }
+
+                // 广播完成状态（用于前端状态更新）
+                this.broadcastSyncStatus(brainSession, {
+                    status: 'complete',
+                    totalRounds: summaries.length,
+                    summarizedRounds: summaries.length,
+                    pendingRounds: 0
+                })
             } else if (result.status === 'error') {
                 console.error('[BrainSync] SDK review failed:', result.error)
+
+                // 发送错误消息到主 session
+                await this.engine.sendMessage(mainSessionId, {
+                    text: `⚠️ Brain 审查失败: ${result.error || '未知错误'}`,
+                    sentFrom: 'brain-review'
+                })
             }
         } catch (err) {
             console.error('[BrainSync] SDK review error:', err)
         }
+    }
+
+    /**
+     * 构建友好的审查结果消息
+     */
+    private buildReviewResultMessage(
+        suggestions: Array<{ type: string; severity: string; title: string; detail: string }>,
+        summary?: string
+    ): string {
+        const lines: string[] = [
+            '## 🔍 Brain 代码审查结果\n'
+        ]
+
+        // 添加总体评价
+        if (summary) {
+            lines.push(`**总体评价:** ${summary}\n`)
+        }
+
+        // 按严重程度分组
+        const bySeverity: Record<string, Array<typeof suggestions[0]>> = {
+            high: [],
+            medium: [],
+            low: []
+        }
+
+        for (const s of suggestions) {
+            if (bySeverity[s.severity]) {
+                bySeverity[s.severity].push(s)
+            }
+        }
+
+        // 高优先级问题
+        if (bySeverity.high.length > 0) {
+            lines.push('### 🔴 高优先级问题')
+            for (const s of bySeverity.high) {
+                lines.push(`**${s.type.toUpperCase()}** - ${s.title}`)
+                lines.push(`> ${s.detail}\n`)
+            }
+        }
+
+        // 中优先级问题
+        if (bySeverity.medium.length > 0) {
+            lines.push('### 🟡 中优先级问题')
+            for (const s of bySeverity.medium) {
+                lines.push(`**${s.type.toUpperCase()}** - ${s.title}`)
+                lines.push(`> ${s.detail}\n`)
+            }
+        }
+
+        // 低优先级问题
+        if (bySeverity.low.length > 0) {
+            lines.push('### 🟢 低优先级建议')
+            for (const s of bySeverity.low) {
+                lines.push(`**${s.type.toUpperCase()}** - ${s.title}`)
+                lines.push(`> ${s.detail}\n`)
+            }
+        }
+
+        // 统计信息
+        lines.push(`---`)
+        lines.push(`📊 **统计:** ${suggestions.length} 条建议 (${bySeverity.high.length} 高 / ${bySeverity.medium.length} 中 / ${bySeverity.low.length} 低)`)
+
+        return lines.join('\n')
     }
 }
