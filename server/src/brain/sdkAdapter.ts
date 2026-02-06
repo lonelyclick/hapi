@@ -73,7 +73,8 @@ export async function executeBrainQuery(
 ): Promise<void> {
     const {
         cwd,
-        model = 'claude-sonnet-4-5-20250929',
+        // 使用 glm-4.7 模型（litellm 支持，而 claude-sonnet-4-5 映射的 kimi API 返回 401）
+        model = 'glm-4.7',
         systemPrompt,
         appendSystemPrompt,
         maxTurns = 20,
@@ -92,6 +93,10 @@ export async function executeBrainQuery(
         finalSystemPrompt = appendSystemPrompt
     }
 
+    // 配置 litellm 环境变量
+    const litellmApiKey = process.env.LITELLM_API_KEY || 'sk-litellm-41e2a2d4d101255ea6e76fd59f96548a'
+    const litellmBaseUrl = process.env.LITELLM_BASE_URL || 'http://localhost:4000'
+
     const query: SDKQuery = sdkQuery({
         prompt,
         options: {
@@ -104,7 +109,12 @@ export async function executeBrainQuery(
             permissionMode,
             abortController,
             // 指定 SDK 内置的 Claude Code 可执行文件路径
-            pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable
+            pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable,
+            // 传递 litellm 环境变量（SDK 需要 ANTHROPIC_API_KEY 而不是 ANTHROPIC_AUTH_TOKEN）
+            env: {
+                ANTHROPIC_API_KEY: litellmApiKey,
+                ANTHROPIC_BASE_URL: litellmBaseUrl,
+            }
         }
     })
 
