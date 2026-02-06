@@ -181,6 +181,27 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                             if (brainSpawnResult.type === 'success') {
                                 const brainOnline = await waitForSessionOnline(engine, brainSpawnResult.sessionId, 60_000)
                                 if (brainOnline) {
+                                    // 发送 Brain 初始化 Prompt
+                                    await engine.sendMessage(brainSpawnResult.sessionId, {
+                                        text: [
+                                            '你是一个「大脑」角色，负责审查和分析另一个编程 Session 的对话内容。',
+                                            '',
+                                            '## 你的职责',
+                                            '- 你会持续收到来自主 Session 的对话汇总（用户提问 + AI 回复摘要）',
+                                            '- 请从全局视角审查代码变更，发现潜在的 bug、安全问题、性能问题和改进建议',
+                                            '- 每次收到汇总后，给出简洁的分析和建议',
+                                            '',
+                                            '## 回复格式',
+                                            '- 如果发现问题，列出具体的建议（类型、严重程度、描述）',
+                                            '- 如果没有问题，简短回复即可',
+                                            '- 使用中文回复',
+                                            '',
+                                            '等待接收对话汇总...'
+                                        ].join('\n'),
+                                        sentFrom: 'webapp'
+                                    })
+                                    console.log(`[machines/spawn] Sent brain init prompt to ${brainSpawnResult.sessionId}`)
+
                                     // 构建上下文（复用 brain 模块的消息解析逻辑）
                                     const page = await engine.getMessagesPage(result.sessionId, { limit: 20, beforeSeq: null })
                                     const contextMessages: string[] = []

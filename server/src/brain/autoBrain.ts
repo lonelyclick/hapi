@@ -471,6 +471,33 @@ export class AutoBrainService {
                     }
                 }
 
+                // 将汇总内容作为用户消息发送到 Brain session
+                if (savedSummaries.length > 0) {
+                    try {
+                        const brainSessionObj = this.engine.getSession(brainSession.brainSessionId)
+                        if (brainSessionObj?.active) {
+                            const messageLines: string[] = ['## 对话汇总同步\n']
+                            for (const s of savedSummaries) {
+                                messageLines.push(`### 第 ${s.round} 轮`)
+                                messageLines.push(s.summary)
+                                messageLines.push('')
+                            }
+                            messageLines.push('---')
+                            messageLines.push('请分析以上对话内容，如果发现潜在问题或有改进建议，请指出。')
+
+                            await this.engine.sendMessage(brainSession.brainSessionId, {
+                                text: messageLines.join('\n'),
+                                sentFrom: 'webapp'
+                            })
+                            console.log('[BrainSync] Sent', savedSummaries.length, 'round summaries to brain session', brainSession.brainSessionId)
+                        } else {
+                            console.warn('[BrainSync] Brain session not active, skipping message send')
+                        }
+                    } catch (sendErr) {
+                        console.error('[BrainSync] Failed to send summaries to brain session:', sendErr)
+                    }
+                }
+
                 const newSummarizedCount = existingRounds.length + savedRounds.length
                 const newPendingCount = allRounds.length - newSummarizedCount
 
