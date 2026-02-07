@@ -4,6 +4,7 @@ type InitPromptOptions = {
     projectRoot?: string | null
     userName?: string | null
     isBrain?: boolean
+    hasBrain?: boolean
 }
 
 export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptions): Promise<string> {
@@ -31,8 +32,8 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
     lines.push('  - `[发送者: 用户 via Brain]` → 用户的消息经过 Brain 系统转发，内容是用户的原始意图，正常响应即可')
     lines.push('')
 
-    // 3) 项目上下文（Brain session 不需要）
-    if (!options?.isBrain) {
+    // 3) 项目上下文（Brain session 和开启大脑模式的主 session 不需要）
+    if (!options?.isBrain && !options?.hasBrain) {
         lines.push('3) 项目上下文')
         lines.push('- 开始工作前，先从当前工作目录往下级目录递归查找 .yoho-project.yaml 文件')
         lines.push('- 找到后读取其内容，基于其中的项目信息（名称、技术栈、目录结构、模块说明等）理解项目全貌')

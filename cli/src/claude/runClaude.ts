@@ -482,6 +482,40 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
 
     const resumeSessionId = (options.resumeSessionId ?? response.metadata?.claudeSessionId ?? null) || null;
 
+    // When refreshing accounts, the session .jsonl file lives under the old account's config dir.
+    // Claude Code's claudeCheckSession will fail if it can't find the file under the new CLAUDE_CONFIG_DIR.
+    // We symlink the old session file into the new account's project dir so --resume works across accounts.
+    if (resumeSessionId && activeAccount) {
+        const { getProjectPath } = await import('./utils/path');
+        const { existsSync, symlinkSync, mkdirSync, readdirSync } = await import('node:fs');
+        const { join, dirname } = await import('node:path');
+        const newProjectDir = getProjectPath(workingDirectory);
+        const targetFile = join(newProjectDir, `${resumeSessionId}.jsonl`);
+        if (!existsSync(targetFile)) {
+            // Search all account dirs for the session file
+            const accountsDir = dirname(activeAccount.configDir);
+            try {
+                const accounts = readdirSync(accountsDir, { withFileTypes: true });
+                for (const entry of accounts) {
+                    if (!entry.isDirectory()) continue;
+                    const candidateDir = join(accountsDir, entry.name);
+                    if (candidateDir === activeAccount.configDir) continue;
+                    // Build the same project path but under the old account's config dir
+                    const projectId = resolve(workingDirectory).replace(/[^a-zA-Z0-9]/g, '-');
+                    const sourceFile = join(candidateDir, 'projects', projectId, `${resumeSessionId}.jsonl`);
+                    if (existsSync(sourceFile)) {
+                        mkdirSync(newProjectDir, { recursive: true });
+                        symlinkSync(sourceFile, targetFile);
+                        logger.debug(`[refresh] Symlinked session file: ${sourceFile} -> ${targetFile}`);
+                        break;
+                    }
+                }
+            } catch (err) {
+                logger.debug(`[refresh] Failed to search for session file across accounts:`, err);
+            }
+        }
+    }
+
     // Create claude loop
     await loop({
         path: workingDirectory,

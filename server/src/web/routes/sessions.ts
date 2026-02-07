@@ -246,14 +246,14 @@ async function waitForSessionInactive(engine: SyncEngine, sessionId: string, tim
     })
 }
 
-async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null): Promise<void> {
+async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null, hasBrain?: boolean): Promise<void> {
     try {
         const session = engine.getSession(sessionId)
         const projectRoot = session?.metadata?.path?.trim()
             || session?.metadata?.worktree?.basePath?.trim()
             || null
-        console.log(`[sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}, userName=${userName}`)
-        const prompt = await buildInitPrompt(role, { projectRoot, userName })
+        console.log(`[sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}, userName=${userName}, hasBrain=${hasBrain}`)
+        const prompt = await buildInitPrompt(role, { projectRoot, userName, hasBrain })
         if (!prompt.trim()) {
             console.warn(`[sendInitPrompt] Empty prompt for session ${sessionId}, skipping`)
             return
@@ -269,12 +269,12 @@ async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserR
     }
 }
 
-async function sendInitPromptAfterOnline(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null): Promise<void> {
+async function sendInitPromptAfterOnline(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null, hasBrain?: boolean): Promise<void> {
     const isOnline = await waitForSessionOnline(engine, sessionId, 60_000)
     if (!isOnline) {
         return
     }
-    await sendInitPrompt(engine, sessionId, role, userName)
+    await sendInitPrompt(engine, sessionId, role, userName, hasBrain)
 }
 
 async function resolveSpawnTarget(
@@ -523,7 +523,7 @@ export function createSessionsRoutes(
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
-                await sendInitPrompt(engine, result.sessionId, role, userName)
+                await sendInitPrompt(engine, result.sessionId, role, userName, parsed.data.enableBrain)
             })()
         }
 
@@ -902,7 +902,8 @@ export function createSessionsRoutes(
 
         const role = c.get('role')  // Role from Keycloak token
         const userName = c.get('name')
-        await sendInitPrompt(engine, newSessionId, role, userName)
+        const hasBrainSession = brainStore ? !!(await brainStore.getActiveBrainSession(sessionId).catch(() => null)) : false
+        await sendInitPrompt(engine, newSessionId, role, userName, hasBrainSession)
 
         if (!resumeSessionId) {
             const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
@@ -987,6 +988,7 @@ export function createSessionsRoutes(
             const value = session.metadata?.claudeSessionId
             return typeof value === 'string' && value.trim() ? value : undefined
         })()
+        console.log(`[refresh-account] sessionId=${sessionId}, resumeSessionId=${resumeSessionId ?? 'NONE'}, claudeAccountName=${session.metadata?.claudeAccountName ?? 'unknown'}`)
 
         // Spawn new Claude process with the SAME hapi session ID + Claude --resume
         const spawnResult = await engine.spawnSession(
@@ -1022,7 +1024,8 @@ export function createSessionsRoutes(
         if (!resumeSessionId) {
             const role = c.get('role')
             const userName = c.get('name')
-            await sendInitPrompt(engine, sessionId, role, userName)
+            const hasBrainSession = brainStore ? !!(await brainStore.getActiveBrainSession(sessionId).catch(() => null)) : false
+            await sendInitPrompt(engine, sessionId, role, userName, hasBrainSession)
 
             const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
             const contextMessage = buildResumeContextMessage(session, page.messages)

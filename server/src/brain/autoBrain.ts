@@ -858,7 +858,7 @@ export class AutoBrainService {
         const roundsSummary = summaries.map(s => `### 第 ${s.round} 轮\n${s.summary}`).join('\n\n')
         const contextSummary = brainSession.contextSummary || '(无上下文)'
         const reviewPrompt = buildReviewPrompt(contextSummary, roundsSummary)
-        const systemPrompt = buildBrainSystemPrompt()
+        const systemPrompt = await buildBrainSystemPrompt()
 
         // 使用 glm-4.7（LiteLLM 代理支持，claude-sonnet-4-5 映射的 API 返回 401）
         const model = 'glm-4.7'

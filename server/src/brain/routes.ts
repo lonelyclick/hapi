@@ -321,7 +321,7 @@ export function createBrainRoutes(
 
         // 发送 Brain 专用 init prompt（不含项目上下文）
         try {
-            const brainInitPrompt = await buildInitPrompt('user', { isBrain: true })
+            const brainInitPrompt = await buildInitPrompt('developer', { isBrain: true })
             if (brainInitPrompt.trim()) {
                 await engine.sendMessage(brainSessionId, {
                     text: brainInitPrompt,
@@ -1203,7 +1203,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             timeRange
         )
 
-        const systemPrompt = buildBrainSystemPrompt(body.customInstructions)
+        const systemPrompt = await buildBrainSystemPrompt(body.customInstructions)
 
         // 创建执行记录（status=running）
         const execution = await brainStore.createBrainExecution({

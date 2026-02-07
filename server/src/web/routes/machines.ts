@@ -33,14 +33,14 @@ const pathsExistsSchema = z.object({
     paths: z.array(z.string().min(1)).max(1000)
 })
 
-async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null): Promise<void> {
+async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null, hasBrain?: boolean): Promise<void> {
     try {
         const session = engine.getSession(sessionId)
         const projectRoot = session?.metadata?.path?.trim()
             || session?.metadata?.worktree?.basePath?.trim()
             || null
-        console.log(`[machines/sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}, userName=${userName}`)
-        const prompt = await buildInitPrompt(role, { projectRoot, userName })
+        console.log(`[machines/sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}, userName=${userName}, hasBrain=${hasBrain}`)
+        const prompt = await buildInitPrompt(role, { projectRoot, userName, hasBrain })
         if (!prompt.trim()) {
             console.warn(`[machines/sendInitPrompt] Empty prompt for session ${sessionId}, skipping`)
             return
@@ -176,7 +176,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
-                await sendInitPrompt(engine, result.sessionId, role, userName)
+                await sendInitPrompt(engine, result.sessionId, role, userName, parsed.data.enableBrain)
 
                 // 如果启用 Brain，创建 Brain session（使用 SDK 方式，不依赖 CLI daemon）
                 if (parsed.data.enableBrain && brainStore) {
@@ -205,6 +205,20 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                             const brainDisplaySession = await engine.getOrCreateSession(brainTag, brainMetadata, null, namespace)
                             if (email) {
                                 await store.setSessionCreatedBy(brainDisplaySession.id, email, namespace)
+                            }
+
+                            // 给 brain display session 发送 init prompt
+                            try {
+                                const brainInitPrompt = await buildInitPrompt(role, { isBrain: true, userName })
+                                if (brainInitPrompt.trim()) {
+                                    await engine.sendMessage(brainDisplaySession.id, {
+                                        text: brainInitPrompt,
+                                        sentFrom: 'webapp'
+                                    })
+                                    console.log(`[machines/spawn] Sent init prompt to brain display session ${brainDisplaySession.id}`)
+                                }
+                            } catch (err) {
+                                console.error('[machines/spawn] Failed to send init prompt to brain session:', err)
                             }
 
                             // 构建上下文（复用 brain 模块的消息解析逻辑）

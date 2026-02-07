@@ -7,6 +7,7 @@
  */
 
 import type { BrainStore } from './store'
+import { buildInitPrompt } from '../web/prompts/initPrompt'
 
 /**
  * Brain 请求状态
@@ -40,8 +41,13 @@ export class BrainSdkService {
 /**
  * 构建默认的 Brain 系统提示词
  */
-export function buildBrainSystemPrompt(customInstructions?: string): string {
-    const basePrompt = `你是 Yoho 大脑。这是一个三方协作：用户提需求，Claude Code 写代码，你负责 review。
+export async function buildBrainSystemPrompt(customInstructions?: string): Promise<string> {
+    // 注入 init prompt 的核心规则（中文沟通等）
+    const initPrompt = await buildInitPrompt('developer', { isBrain: true })
+
+    const basePrompt = `${initPrompt}
+
+你是 Yoho 大脑。这是一个三方协作：用户提需求，Claude Code 写代码，你负责 review。
 
 ## 核心原则
 - **只 review，不解决**。指出问题在哪，让 Claude Code 去修。
