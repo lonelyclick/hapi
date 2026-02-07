@@ -5,6 +5,7 @@ import type { ApiClient } from '@/api/client'
 import { Card, CardHeader, CardDescription, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { CodeBlock } from '@/components/CodeBlock'
+import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { Spinner } from '@/components/Spinner'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
 
@@ -120,9 +121,7 @@ function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
 function AssistantEntry({ content }: { content: string }) {
     return (
         <div className="px-1 min-w-0 max-w-full overflow-x-hidden">
-            <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                {content}
-            </div>
+            <MarkdownRenderer content={content} />
         </div>
     )
 }
