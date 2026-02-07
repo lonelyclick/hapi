@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/Spinner'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
+import { useAppContext } from '@/lib/app-context'
 
 type AgentType = 'claude' | 'codex' | 'opencode'
 type ClaudeSettingsType = 'litellm' | 'claude'
@@ -22,20 +23,23 @@ interface SpawnPrefs {
     enableBrain?: boolean
 }
 
-const SPAWN_PREFS_KEY = 'hapi:lastSpawnPrefs'
+function getSpawnPrefsKey(userEmail: string | null): string {
+    const suffix = userEmail ? `:${userEmail}` : ''
+    return `hapi:lastSpawnPrefs${suffix}`
+}
 
-function loadSpawnPrefs(): SpawnPrefs {
+function loadSpawnPrefs(userEmail: string | null): SpawnPrefs {
     try {
-        const stored = localStorage.getItem(SPAWN_PREFS_KEY)
+        const stored = localStorage.getItem(getSpawnPrefsKey(userEmail))
         return stored ? JSON.parse(stored) : {}
     } catch {
         return {}
     }
 }
 
-function saveSpawnPrefs(prefs: SpawnPrefs): void {
+function saveSpawnPrefs(userEmail: string | null, prefs: SpawnPrefs): void {
     try {
-        localStorage.setItem(SPAWN_PREFS_KEY, JSON.stringify(prefs))
+        localStorage.setItem(getSpawnPrefsKey(userEmail), JSON.stringify(prefs))
     } catch {
         // Ignore storage errors
     }
@@ -161,11 +165,12 @@ export function NewSession(props: {
     onSuccess: (sessionId: string) => void
     onCancel: () => void
 }) {
+    const { userEmail } = useAppContext()
     const { haptic } = usePlatform()
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
     const isFormDisabled = isPending || props.isLoading
 
-    const [savedPrefs] = useState(loadSpawnPrefs)
+    const [savedPrefs] = useState(() => loadSpawnPrefs(userEmail))
     const [machineId, setMachineId] = useState<string | null>(savedPrefs.machineId ?? null)
     const [projectPath, setProjectPath] = useState(savedPrefs.projectPath ?? '')
     const [agent, setAgent] = useState<AgentType>(savedPrefs.agent ?? 'claude')
@@ -297,7 +302,7 @@ export function NewSession(props: {
 
             if (result.type === 'success') {
                 // 保存本次偏好设置，下次新建时自动恢复
-                saveSpawnPrefs({
+                saveSpawnPrefs(userEmail, {
                     machineId: machineId ?? undefined,
                     projectPath: directory,
                     agent,
