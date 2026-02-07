@@ -194,19 +194,13 @@ export function SessionChat(props: {
 
     const handleRefreshAccount = useCallback(async () => {
         try {
-            const result = await refreshAccount()
+            await refreshAccount()
             haptic.notification('success')
-            await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
-            // Navigate to the new session
-            navigate({
-                to: '/sessions/$sessionId',
-                params: { sessionId: result.newSessionId }
-            })
         } catch (error) {
             haptic.notification('error')
             console.error('Failed to refresh account:', error)
         }
-    }, [refreshAccount, haptic, queryClient, navigate])
+    }, [refreshAccount, haptic])
 
     const sendPendingMessage = useCallback(async (sessionId: string, text: string) => {
         const trimmed = text.trim()

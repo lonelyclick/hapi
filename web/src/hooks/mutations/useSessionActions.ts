@@ -30,7 +30,7 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
     setPermissionMode: (mode: PermissionMode) => Promise<void>
     setModelMode: (config: ModelConfig) => Promise<void>
     deleteSession: () => Promise<void>
-    refreshAccount: () => Promise<{ newSessionId: string }>
+    refreshAccount: () => Promise<void>
     isPending: boolean
 } {
     const queryClient = useQueryClient()
@@ -105,11 +105,9 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
             if (!api || !sessionId) {
                 throw new Error('Session unavailable')
             }
-            return await api.refreshAccount(sessionId)
+            await api.refreshAccount(sessionId)
         },
-        onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
-        },
+        onSuccess: () => void invalidateSession(),
     })
 
     return {
@@ -118,10 +116,7 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         setPermissionMode: permissionMutation.mutateAsync,
         setModelMode: modelMutation.mutateAsync,
         deleteSession: deleteMutation.mutateAsync,
-        refreshAccount: async () => {
-            const result = await refreshAccountMutation.mutateAsync()
-            return { newSessionId: result.newSessionId }
-        },
+        refreshAccount: refreshAccountMutation.mutateAsync,
         isPending: abortMutation.isPending
             || switchMutation.isPending
             || permissionMutation.isPending

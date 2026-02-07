@@ -205,6 +205,47 @@ async function waitForSessionOnline(engine: SyncEngine, sessionId: string, timeo
     })
 }
 
+async function waitForSessionInactive(engine: SyncEngine, sessionId: string, timeoutMs: number): Promise<boolean> {
+    const existing = engine.getSession(sessionId)
+    if (!existing?.active) {
+        return true
+    }
+
+    return await new Promise((resolve) => {
+        let resolved = false
+        let unsubscribe = () => {}
+
+        const finalize = (result: boolean) => {
+            if (resolved) return
+            resolved = true
+            clearTimeout(timer)
+            unsubscribe()
+            resolve(result)
+        }
+
+        const timer = setTimeout(() => finalize(false), timeoutMs)
+
+        unsubscribe = engine.subscribe((event) => {
+            if (event.sessionId !== sessionId) {
+                return
+            }
+            if (event.type !== 'session-updated') {
+                return
+            }
+            const session = engine.getSession(sessionId)
+            if (session && !session.active) {
+                finalize(true)
+            }
+        })
+
+        // Re-check after subscribing to avoid race condition
+        const current = engine.getSession(sessionId)
+        if (!current?.active) {
+            finalize(true)
+        }
+    })
+}
+
 async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserRole, userName?: string | null): Promise<void> {
     try {
         const session = engine.getSession(sessionId)
@@ -879,7 +920,7 @@ export function createSessionsRoutes(
         })
     })
 
-    // 刷新账号：将旧 session 迁移到当前活跃账号，保留对话上下文
+    // 刷新账号：原地重启 Claude 进程，使用新账号，保留同一 session 和所有消息
     app.post('/sessions/:id/refresh-account', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) {
@@ -922,7 +963,26 @@ export function createSessionsRoutes(
             claudeAgent: session.metadata?.runtimeAgent ?? undefined
         }
 
-        // Spawn new session with current active account
+        // Kill the old Claude process (fire-and-forget, tolerate failure)
+        if (session.active) {
+            try {
+                await engine.killSession(sessionId)
+            } catch (error) {
+                console.warn(`[refresh-account] killSession failed for ${sessionId}:`, error)
+            }
+            // Wait for the old process to go inactive (max 10s)
+            await waitForSessionInactive(engine, sessionId, 10_000)
+        }
+
+        // Pre-activate session in DB (same pattern as resume) so heartbeats are accepted
+        const namespace = c.get('namespace')
+        const now = Date.now()
+        await store.setSessionActive(sessionId, true, now, namespace)
+        session.active = true
+        session.activeAt = now
+        session.thinking = false
+
+        // Spawn new Claude process with the SAME session ID (CLI will auto-select best account)
         const spawnResult = await engine.spawnSession(
             machineId,
             spawnTarget.directory,
@@ -930,43 +990,42 @@ export function createSessionsRoutes(
             undefined,
             spawnTarget.sessionType,
             spawnTarget.worktreeName,
-            modeSettings
+            { sessionId, ...modeSettings }
         )
 
         if (spawnResult.type !== 'success') {
+            // Revert pre-activation on failure
+            await store.setSessionActive(sessionId, false, Date.now(), namespace)
+            session.active = false
             return c.json({ error: spawnResult.message }, 409)
         }
 
-        const newSessionId = spawnResult.sessionId
-
-        const online = await waitForSessionOnline(engine, newSessionId, RESUME_TIMEOUT_MS)
+        const online = await waitForSessionOnline(engine, sessionId, RESUME_TIMEOUT_MS)
         if (!online) {
-            return c.json({ error: 'New session failed to come online' }, 409)
+            return c.json({ error: 'Session failed to come online after refresh' }, 409)
         }
 
-        // Set createdBy after session is confirmed online (exists in DB)
+        // Set createdBy after session is confirmed online
         const email = c.get('email')
         if (email) {
-            const namespace = c.get('namespace')
-            void store.setSessionCreatedBy(newSessionId, email, namespace)
+            void store.setSessionCreatedBy(sessionId, email, namespace)
         }
 
         // Send init prompt
-        const role = c.get('role')  // Role from Keycloak token
+        const role = c.get('role')
         const userName = c.get('name')
-        await sendInitPrompt(engine, newSessionId, role, userName)
+        await sendInitPrompt(engine, sessionId, role, userName)
 
-        // Transfer context from old session
+        // Send context from this session's own messages so the new Claude process has awareness
         const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
         const contextMessage = buildResumeContextMessage(session, page.messages)
         if (contextMessage) {
-            await engine.sendMessage(newSessionId, { text: contextMessage, sentFrom: 'webapp' })
+            await engine.sendMessage(sessionId, { text: contextMessage, sentFrom: 'webapp' })
         }
 
         return c.json({
             type: 'success',
-            newSessionId,
-            oldSessionId: sessionId
+            sessionId
         })
     })
 
