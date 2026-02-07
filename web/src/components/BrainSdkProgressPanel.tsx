@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 import type { ApiClient } from '@/api/client'
-import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/components/ui/card'
+import { Card, CardHeader, CardDescription, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/Spinner'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
 
@@ -26,50 +26,22 @@ function useForceUpdate(): [number, () => void] {
 }
 
 function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
-    // 新格式：有 toolName + toolInput
-    if (entry.toolName) {
-        const presentation = getToolPresentation({
-            toolName: entry.toolName,
-            input: entry.toolInput ?? {},
-            result: null,
-            childrenCount: 0,
-            description: null,
-            metadata: null
-        })
-        return (
-            <Card className="overflow-hidden shadow-sm">
-                <CardHeader className="p-3 space-y-0">
-                    <div className="flex items-center gap-2">
-                        <div className="shrink-0 flex h-3.5 w-3.5 items-center justify-center text-[var(--app-hint)] leading-none">
-                            {presentation.icon}
-                        </div>
-                        <CardTitle className="min-w-0 text-sm font-medium leading-tight break-words">
-                            {presentation.title}
-                        </CardTitle>
-                    </div>
-                    {presentation.subtitle && (
-                        <CardDescription className="font-mono text-xs break-all opacity-80 mt-1">
-                            {presentation.subtitle.length > 160
-                                ? presentation.subtitle.slice(0, 157) + '...'
-                                : presentation.subtitle}
-                        </CardDescription>
-                    )}
-                </CardHeader>
-            </Card>
-        )
-    }
-
-    // 旧格式 fallback：content = "ToolName args..."
-    const spaceIdx = entry.content.indexOf(' ')
-    const toolName = spaceIdx === -1 ? entry.content : entry.content.slice(0, spaceIdx)
-    const args = spaceIdx === -1 ? '' : entry.content.slice(spaceIdx + 1)
+    const toolName = entry.toolName || (() => {
+        const idx = entry.content.indexOf(' ')
+        return idx === -1 ? entry.content : entry.content.slice(0, idx)
+    })()
+    const input = entry.toolInput ?? {}
+    const fallbackDesc = !entry.toolName ? (() => {
+        const idx = entry.content.indexOf(' ')
+        return idx === -1 ? null : entry.content.slice(idx + 1)
+    })() : null
 
     const presentation = getToolPresentation({
         toolName,
-        input: {},
+        input,
         result: null,
         childrenCount: 0,
-        description: args || null,
+        description: fallbackDesc,
         metadata: null
     })
 
@@ -84,9 +56,11 @@ function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
                         {presentation.title}
                     </CardTitle>
                 </div>
-                {args && (
+                {presentation.subtitle && (
                     <CardDescription className="font-mono text-xs break-all opacity-80 mt-1">
-                        {args.length > 160 ? args.slice(0, 157) + '...' : args}
+                        {presentation.subtitle.length > 160
+                            ? presentation.subtitle.slice(0, 157) + '...'
+                            : presentation.subtitle}
                     </CardDescription>
                 )}
             </CardHeader>
@@ -96,8 +70,10 @@ function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
 
 function AssistantEntry({ content }: { content: string }) {
     return (
-        <div className="py-1 text-sm leading-relaxed whitespace-pre-wrap break-words">
-            {content}
+        <div className="px-1 min-w-0 max-w-full overflow-x-hidden">
+            <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                {content}
+            </div>
         </div>
     )
 }
@@ -175,35 +151,20 @@ export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: s
     }
 
     return (
-        <div className="mx-auto w-full max-w-content px-3 pb-2">
-            <Card>
-                <CardHeader className="px-3 py-2 space-y-0">
-                    <div className="flex items-center gap-2">
-                        {data?.isActive && (
-                            <Spinner size="sm" label="Brain analyzing" />
-                        )}
-                        <span className="text-xs font-medium">
-                            Brain SDK Review
-                        </span>
-                        {data?.isActive && (
-                            <span className="text-xs text-[var(--app-hint)]">
-                                analyzing...
-                            </span>
-                        )}
-                    </div>
-                </CardHeader>
-                <CardContent className="px-3 pb-3 pt-0">
-                    <div ref={scrollRef} className="max-h-96 overflow-y-auto space-y-1.5">
-                        {data?.entries?.map(entry => (
-                            entry.type === 'tool-use' ? (
-                                <ToolUseEntry key={entry.id} entry={entry} />
-                            ) : (
-                                <AssistantEntry key={entry.id} content={entry.content} />
-                            )
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
+        <div ref={scrollRef} className="mx-auto w-full max-w-content px-3 flex flex-col gap-2 pb-4">
+            {data?.isActive && (
+                <div className="flex items-center gap-2 py-1">
+                    <Spinner size="sm" label="Brain analyzing" />
+                    <span className="text-xs text-[var(--app-hint)]">Brain analyzing...</span>
+                </div>
+            )}
+            {data?.entries?.map(entry => (
+                entry.type === 'tool-use' ? (
+                    <ToolUseEntry key={entry.id} entry={entry} />
+                ) : (
+                    <AssistantEntry key={entry.id} content={entry.content} />
+                )
+            ))}
         </div>
     )
 }
