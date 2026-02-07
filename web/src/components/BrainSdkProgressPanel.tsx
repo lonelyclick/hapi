@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 import type { ApiClient } from '@/api/client'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/Spinner'
-import { EyeIcon, SearchIcon } from '@/components/ToolCard/icons'
+import { getToolPresentation } from '@/components/ToolCard/knownTools'
 
 type ProgressEntry = {
     id: string
     type: string
     content: string
+    toolName?: string
+    toolInput?: Record<string, unknown>
     timestamp: number
 }
 
@@ -23,34 +25,72 @@ function useForceUpdate(): [number, () => void] {
     return [tick, () => setTick(t => t + 1)]
 }
 
-const ICON_CLASS = 'h-3.5 w-3.5'
+function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
+    // 新格式：有 toolName + toolInput
+    if (entry.toolName) {
+        const presentation = getToolPresentation({
+            toolName: entry.toolName,
+            input: entry.toolInput ?? {},
+            result: null,
+            childrenCount: 0,
+            description: null,
+            metadata: null
+        })
+        return (
+            <Card className="overflow-hidden shadow-sm">
+                <CardHeader className="p-3 space-y-0">
+                    <div className="flex items-center gap-2">
+                        <div className="shrink-0 flex h-3.5 w-3.5 items-center justify-center text-[var(--app-hint)] leading-none">
+                            {presentation.icon}
+                        </div>
+                        <CardTitle className="min-w-0 text-sm font-medium leading-tight break-words">
+                            {presentation.title}
+                        </CardTitle>
+                    </div>
+                    {presentation.subtitle && (
+                        <CardDescription className="font-mono text-xs break-all opacity-80 mt-1">
+                            {presentation.subtitle.length > 160
+                                ? presentation.subtitle.slice(0, 157) + '...'
+                                : presentation.subtitle}
+                        </CardDescription>
+                    )}
+                </CardHeader>
+            </Card>
+        )
+    }
 
-/** 根据 tool-use content 解析出 tool name 和参数 */
-function parseToolUse(content: string): { toolName: string; args: string } {
-    const spaceIdx = content.indexOf(' ')
-    if (spaceIdx === -1) return { toolName: content, args: '' }
-    return { toolName: content.slice(0, spaceIdx), args: content.slice(spaceIdx + 1) }
-}
+    // 旧格式 fallback：content = "ToolName args..."
+    const spaceIdx = entry.content.indexOf(' ')
+    const toolName = spaceIdx === -1 ? entry.content : entry.content.slice(0, spaceIdx)
+    const args = spaceIdx === -1 ? '' : entry.content.slice(spaceIdx + 1)
 
-function ToolIcon({ toolName }: { toolName: string }) {
-    if (toolName === 'Read') return <EyeIcon className={ICON_CLASS} />
-    if (toolName === 'Grep') return <EyeIcon className={ICON_CLASS} />
-    if (toolName === 'Glob') return <SearchIcon className={ICON_CLASS} />
-    return <SearchIcon className={ICON_CLASS} />
-}
+    const presentation = getToolPresentation({
+        toolName,
+        input: {},
+        result: null,
+        childrenCount: 0,
+        description: args || null,
+        metadata: null
+    })
 
-function ToolUseEntry({ content }: { content: string }) {
-    const { toolName, args } = parseToolUse(content)
     return (
-        <div className="flex items-start gap-2 py-0.5">
-            <span className="shrink-0 mt-0.5 text-[var(--app-hint)]">
-                <ToolIcon toolName={toolName} />
-            </span>
-            <span className="min-w-0 font-mono text-xs text-[var(--app-hint)] break-all">
-                <span className="font-medium text-[var(--app-fg)]">{toolName}</span>
-                {args && <span className="ml-1.5 opacity-70">{args}</span>}
-            </span>
-        </div>
+        <Card className="overflow-hidden shadow-sm">
+            <CardHeader className="p-3 space-y-0">
+                <div className="flex items-center gap-2">
+                    <div className="shrink-0 flex h-3.5 w-3.5 items-center justify-center text-[var(--app-hint)] leading-none">
+                        {presentation.icon}
+                    </div>
+                    <CardTitle className="min-w-0 text-sm font-medium leading-tight break-words">
+                        {presentation.title}
+                    </CardTitle>
+                </div>
+                {args && (
+                    <CardDescription className="font-mono text-xs break-all opacity-80 mt-1">
+                        {args.length > 160 ? args.slice(0, 157) + '...' : args}
+                    </CardDescription>
+                )}
+            </CardHeader>
+        </Card>
     )
 }
 
@@ -139,12 +179,8 @@ export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: s
             <Card>
                 <CardHeader className="px-3 py-2 space-y-0">
                     <div className="flex items-center gap-2">
-                        {data?.isActive ? (
+                        {data?.isActive && (
                             <Spinner size="sm" label="Brain analyzing" />
-                        ) : (
-                            <span className="text-[var(--app-hint)]">
-                                <SearchIcon className={ICON_CLASS} />
-                            </span>
                         )}
                         <span className="text-xs font-medium">
                             Brain SDK Review
@@ -157,10 +193,10 @@ export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: s
                     </div>
                 </CardHeader>
                 <CardContent className="px-3 pb-3 pt-0">
-                    <div ref={scrollRef} className="max-h-64 overflow-y-auto space-y-0.5">
+                    <div ref={scrollRef} className="max-h-96 overflow-y-auto space-y-1.5">
                         {data?.entries?.map(entry => (
                             entry.type === 'tool-use' ? (
-                                <ToolUseEntry key={entry.id} content={entry.content} />
+                                <ToolUseEntry key={entry.id} entry={entry} />
                             ) : (
                                 <AssistantEntry key={entry.id} content={entry.content} />
                             )

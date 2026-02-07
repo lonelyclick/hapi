@@ -133,17 +133,12 @@ async function run(): Promise<void> {
                     })
                 },
                 onToolUse: (toolName, input) => {
-                    const inputSummary = toolName === 'Read'
-                        ? (input as { file_path?: string }).file_path || ''
-                        : toolName === 'Grep'
-                            ? `pattern="${(input as { pattern?: string }).pattern}" path="${(input as { path?: string }).path || '.'}"`
-                            : toolName === 'Glob'
-                                ? `pattern="${(input as { pattern?: string }).pattern}"`
-                                : JSON.stringify(input).slice(0, 200)
                     const entry = {
                         id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
                         type: 'tool-use',
-                        content: `${toolName} ${inputSummary}`,
+                        content: toolName,
+                        toolName,
+                        toolInput: input,
                         timestamp: Date.now()
                     }
                     brainStore.appendProgressLog(config.executionId, entry).catch(err => {
