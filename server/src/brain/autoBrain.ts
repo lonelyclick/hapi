@@ -195,6 +195,17 @@ export class AutoBrainService {
     }
 
     /**
+     * 给 brain-sdk display session 发心跳，防止被判定为 inactive
+     */
+    private keepBrainDisplaySessionAlive(brainSession: StoredBrainSession): void {
+        if (!brainSession.brainSessionId || brainSession.brainSessionId === 'sdk-mode') return
+        this.engine.handleSessionAlive({
+            sid: brainSession.brainSessionId,
+            time: Date.now()
+        }).catch(() => {})
+    }
+
+    /**
      * 检查 Brain session 是否使用 SDK 模式
      */
     private isSdkMode(brainSession: StoredBrainSession): boolean {
@@ -395,6 +406,7 @@ export class AutoBrainService {
 
             let continueSync = true
             while (continueSync) {
+                this.keepBrainDisplaySessionAlive(brainSession)
                 console.log('[BrainSync] Getting all messages for main session...')
 
                 const allMessages = await this.engine.getAllMessages(mainSessionId)
@@ -833,6 +845,8 @@ export class AutoBrainService {
                 },
                 {
                     onProgress: (type, data) => {
+                        // 维持 display session 心跳
+                        this.keepBrainDisplaySessionAlive(brainSession)
                         // 广播进度
                         if (this.sseManager) {
                             const mainSession = this.engine.getSession(mainSessionId)

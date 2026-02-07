@@ -72,42 +72,44 @@ export function YohoCredentialPicker({ api, onSelect, onClose }: YohoCredentialP
     }
 
     return (
-        <div className="relative w-full min-w-[280px] max-w-[400px]">
+        <div className="relative w-full">
             {/* Header */}
-            <div className="flex items-center justify-between px-3 pb-2">
-                <h3 className="text-sm font-semibold text-[var(--app-fg)]">
-                    Yoho Credentials
-                </h3>
-                <button
-                    type="button"
-                    onClick={onClose}
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                    aria-label="Close"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                </button>
-            </div>
+            <div className="sticky top-0 z-10 bg-[var(--app-bg)]">
+                <div className="flex items-center justify-between px-3 pt-2.5 pb-2">
+                    <h3 className="text-sm font-semibold text-[var(--app-fg)]">
+                        Yoho Credentials
+                    </h3>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                        aria-label="Close"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
 
-            {/* Search */}
-            <div className="px-3 pb-2">
-                <div className="relative">
-                    <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--app-hint)] pointer-events-none" />
-                    <input
-                        type="text"
-                        value={nameQuery}
-                        onChange={(e) => setNameQuery(e.target.value)}
-                        placeholder="Search (e.g., antom.prod, cloudflare)..."
-                        autoFocus
-                        className="w-full pl-8 pr-3 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
-                    />
+                {/* Search */}
+                <div className="px-3 pb-2">
+                    <div className="relative">
+                        <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--app-hint)] pointer-events-none" />
+                        <input
+                            type="text"
+                            value={nameQuery}
+                            onChange={(e) => setNameQuery(e.target.value)}
+                            placeholder="Search (e.g., antom.prod, cloudflare)..."
+                            autoFocus
+                            className="w-full pl-8 pr-3 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                        />
+                    </div>
                 </div>
             </div>
 
             {/* Results */}
-            <div className="min-h-[120px] max-h-[280px] overflow-y-auto">
+            <div>
                 {isLoading ? (
                     <div className="flex items-center justify-center py-8 text-[var(--app-hint)]">
                         <div className="animate-spin rounded-full h-6 w-6 border-2 border-[var(--app-hint)] border-t-[var(--app-button)]" />
@@ -127,7 +129,7 @@ export function YohoCredentialPicker({ api, onSelect, onClose }: YohoCredentialP
                                 key={file.relativePath}
                                 type="button"
                                 onClick={() => handleSelect(file)}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--app-secondary-bg)] transition-colors"
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--app-secondary-bg)] transition-colors"
                             >
                                 <FileIcon className="shrink-0 text-[var(--app-hint)]" />
                                 <span className="flex-1 text-sm text-[var(--app-fg)] truncate font-mono">
@@ -141,7 +143,7 @@ export function YohoCredentialPicker({ api, onSelect, onClose }: YohoCredentialP
 
             {/* Count */}
             {files.length > 0 && (
-                <div className="px-3 py-2 text-xs text-[var(--app-hint)] border-t border-[var(--app-divider)]">
+                <div className="sticky bottom-0 bg-[var(--app-bg)] px-3 py-1.5 text-xs text-[var(--app-hint)] border-t border-[var(--app-divider)]">
                     {files.length} credential{files.length !== 1 ? 's' : ''} found
                 </div>
             )}

@@ -65,13 +65,14 @@ function filterSessions(
         if (!archiveFilter && !session.active) return false
 
         // Owner filter
+        const isBrainSession = session.metadata?.source === 'brain' || session.metadata?.source === 'brain-sdk'
         if (ownerFilter === 'mine') {
             // Show only my sessions (no ownerEmail means it's mine, exclude brain sessions)
             if (session.ownerEmail) return false
-            if (session.metadata?.source === 'brain') return false
+            if (isBrainSession) return false
         } else if (ownerFilter === 'brain') {
             // Show only brain sessions
-            if (session.metadata?.source !== 'brain') return false
+            if (!isBrainSession) return false
         } else if (ownerFilter === 'others') {
             // Show only others' sessions (has ownerEmail)
             if (!session.ownerEmail) return false

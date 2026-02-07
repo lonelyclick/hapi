@@ -1566,7 +1566,7 @@ export function HappyComposer(props: {
         if (showYohoCredentialPicker) {
             return (
                 <div className="absolute bottom-[100%] mb-2 w-full">
-                    <FloatingOverlay>
+                    <FloatingOverlay maxHeight={420}>
                         <YohoCredentialPicker
                             api={apiClient}
                             onSelect={handleYohoCredentialSelect}
