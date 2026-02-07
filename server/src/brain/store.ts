@@ -204,6 +204,39 @@ export class BrainStore implements IBrainStore {
         return this.rowToBrainSession(result.rows[0])
     }
 
+    async getActiveBrainSessions(): Promise<StoredBrainSession[]> {
+        const result = await this.pool.query(
+            `SELECT DISTINCT ON (main_session_id) *
+             FROM brain_sessions
+             WHERE status IN ('pending', 'active')
+             ORDER BY main_session_id, created_at DESC`
+        )
+        return result.rows.map(row => this.rowToBrainSession(row))
+    }
+
+    async getRecentCompletedBrainSessions(sinceMs: number = 24 * 60 * 60 * 1000): Promise<StoredBrainSession[]> {
+        const cutoff = Date.now() - sinceMs
+        const result = await this.pool.query(
+            `SELECT DISTINCT ON (main_session_id) *
+             FROM brain_sessions
+             WHERE status = 'completed' AND completed_at > $1
+             ORDER BY main_session_id, completed_at DESC`,
+            [cutoff]
+        )
+        return result.rows.map(row => this.rowToBrainSession(row))
+    }
+
+    async getLatestBrainSession(mainSessionId: string): Promise<StoredBrainSession | null> {
+        const result = await this.pool.query(
+            `SELECT * FROM brain_sessions
+             WHERE main_session_id = $1
+             ORDER BY created_at DESC LIMIT 1`,
+            [mainSessionId]
+        )
+        if (result.rows.length === 0) return null
+        return this.rowToBrainSession(result.rows[0])
+    }
+
     async updateBrainSessionStatus(id: string, status: BrainSessionStatus): Promise<boolean> {
         const now = Date.now()
         const result = await this.pool.query(

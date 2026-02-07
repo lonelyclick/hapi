@@ -298,6 +298,17 @@ function SessionItem(props: {
                             {openCodeStatus.icon} {openCodeStatus.label}
                         </span>
                     )}
+                    {s.hasBrain && (
+                        <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                            s.brainStatus === 'active' ? 'bg-indigo-500/15 text-indigo-600' :
+                            s.brainStatus === 'pending' ? 'bg-amber-500/15 text-amber-600' :
+                            'bg-emerald-500/15 text-emerald-600'
+                        }`}>
+                            {s.brainStatus === 'active' ? 'Brain' :
+                             s.brainStatus === 'pending' ? 'Brain' :
+                             'Brain ✓'}
+                        </span>
+                    )}
                     {hasPending && (
                         <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600">
                             {s.pendingRequestsCount} pending

@@ -522,10 +522,21 @@ export function SessionHeader(props: {
                             <button
                                 type="button"
                                 onClick={() => props.onOpenBrain?.(brainSession.brainSessionId)}
-                                className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-indigo-500/10 hover:text-indigo-600"
+                                className={`flex items-center gap-1.5 h-7 px-2 rounded-md text-xs font-medium transition-colors ${
+                                    brainSession.status === 'active'
+                                        ? 'bg-indigo-500/15 text-indigo-600 animate-pulse'
+                                        : brainSession.status === 'pending'
+                                            ? 'bg-amber-500/15 text-amber-600'
+                                            : 'bg-emerald-500/15 text-emerald-600'
+                                }`}
                                 title="Open Brain session"
                             >
                                 <BrainIcon />
+                                <span>{
+                                    brainSession.status === 'active' ? 'Reviewing'
+                                    : brainSession.status === 'pending' ? 'Pending'
+                                    : 'Done'
+                                }</span>
                             </button>
                         ) : null}
                         {/* Delete button - 只有创建者可见 */}
@@ -627,7 +638,11 @@ export function SessionHeader(props: {
                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
                                     >
                                         <BrainIcon className="shrink-0" />
-                                        <span className="whitespace-nowrap">Open Brain</span>
+                                        <span className="whitespace-nowrap">Brain: {
+                                            brainSession.status === 'active' ? 'Reviewing'
+                                            : brainSession.status === 'pending' ? 'Pending'
+                                            : 'Done'
+                                        }</span>
                                     </button>
                                 ) : null}
                                 {/* 删除会话 - 只有创建者可见 */}

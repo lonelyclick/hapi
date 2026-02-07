@@ -379,11 +379,13 @@ export function SessionChat(props: {
                         rawMessagesCount={props.messages.length}
                         normalizedMessagesCount={normalizedMessages.length}
                         renderedMessagesCount={reconciled.blocks.length}
-                        trailing={props.session.metadata?.source === 'brain-sdk' && props.session.metadata?.mainSessionId ? (
-                            <BrainSdkProgressPanel mainSessionId={props.session.metadata.mainSessionId as string} api={props.api} />
-                        ) : (
-                            <BrainRefineIndicator sessionId={props.session.id} />
-                        )}
+                        trailing={
+                            props.session.metadata?.source === 'brain-sdk' && props.session.metadata?.mainSessionId
+                                ? <BrainSdkProgressPanel mainSessionId={props.session.metadata.mainSessionId as string} api={props.api} />
+                                : props.session.metadata?.source === 'brain'
+                                    ? undefined
+                                    : <BrainRefineIndicator sessionId={props.session.id} api={props.api} />
+                        }
                     />
 
                     <HappyComposer

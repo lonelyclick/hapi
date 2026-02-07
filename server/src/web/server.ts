@@ -109,7 +109,7 @@ function createWebApp(options: {
     // Auth middleware - verifies Keycloak JWT tokens
     app.use('/api/*', createAuthMiddleware())
     app.route('/api', createEventsRoutes(options.getSseManager, options.getSyncEngine))
-    app.route('/api', createSessionsRoutes(options.getSyncEngine, options.getSseManager, options.store))
+    app.route('/api', createSessionsRoutes(options.getSyncEngine, options.getSseManager, options.store, options.brainStore))
     app.route('/api', createMessagesRoutes(options.getSyncEngine, options.store, options.brainStore, options.getSseManager))
     app.route('/api', createPermissionsRoutes(options.getSyncEngine))
     app.route('/api', createMachinesRoutes(options.getSyncEngine, options.store, options.brainStore, options.autoBrainService))

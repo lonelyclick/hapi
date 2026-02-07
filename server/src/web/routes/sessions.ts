@@ -60,6 +60,8 @@ type SessionSummary = {
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     viewers?: SessionViewer[]
+    hasBrain?: boolean
+    brainStatus?: string
 }
 
 function toSessionSummary(session: Session): SessionSummary {
@@ -402,7 +404,8 @@ function buildResumeContextMessage(session: Session, messages: DecryptedMessage[
 export function createSessionsRoutes(
     getSyncEngine: () => SyncEngine | null,
     getSseManager: () => SSEManager | null,
-    store: IStore
+    store: IStore,
+    brainStore?: import('../../brain/store').BrainStore
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -627,6 +630,32 @@ export function createSessionsRoutes(
 
             return summary
         })
+
+        // 批量附加 brain 信息
+        if (brainStore) {
+            try {
+                const [activeBrains, completedBrains] = await Promise.all([
+                    brainStore.getActiveBrainSessions(),
+                    brainStore.getRecentCompletedBrainSessions(2 * 60 * 60 * 1000) // 2小时内
+                ])
+                const brainMap = new Map<string, { status: string }>()
+                for (const b of completedBrains) {
+                    brainMap.set(b.mainSessionId, { status: 'completed' })
+                }
+                for (const b of activeBrains) {
+                    brainMap.set(b.mainSessionId, { status: b.status })
+                }
+                for (const s of sessionSummaries) {
+                    const brain = brainMap.get(s.id)
+                    if (brain) {
+                        s.hasBrain = true
+                        s.brainStatus = brain.status
+                    }
+                }
+            } catch (err) {
+                console.warn('[Sessions] Failed to fetch brain sessions:', err)
+            }
+        }
 
         // Sort: active first, then by pending requests, then by updatedAt
         const allSessions = sessionSummaries.sort((a, b) => {

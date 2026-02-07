@@ -181,6 +181,8 @@ export type SessionSummary = {
     modelMode?: ModelMode
     modelReasoningEffort?: ModelReasoningEffort
     viewers?: SessionViewer[]
+    hasBrain?: boolean
+    brainStatus?: string
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'failed'

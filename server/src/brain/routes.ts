@@ -365,11 +365,17 @@ export function createBrainRoutes(
         const mainSessionId = c.req.param('mainSessionId')
         const brainSession = await brainStore.getActiveBrainSession(mainSessionId)
 
-        if (!brainSession) {
+        if (brainSession) {
+            return c.json(brainSession)
+        }
+
+        // Fallback: 返回最近完成的 brain session（用于恢复 noMessage 等持久化状态）
+        const latest = await brainStore.getLatestBrainSession(mainSessionId)
+        if (!latest) {
             return c.json({ error: 'No active brain session' }, 404)
         }
 
-        return c.json(brainSession)
+        return c.json(latest)
     })
 
     // 获取单个 Brain Session
@@ -1363,7 +1369,9 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         if (body.status === 'completed' && body.output) {
             if (body.output.includes('[NO_MESSAGE]')) {
                 // NO_MESSAGE: 不发真实消息给主 session，只通过 SSE 广播通知前端
+                // 持久化到 brain_sessions 表，前端刷新后可恢复状态
                 console.log(`[BrainWorkerCallback] ${callbackPhase} result contains [NO_MESSAGE], broadcasting via SSE only`)
+                await brainStore.completeBrainSession(body.brainSessionId, '[NO_MESSAGE]')
             } else if (callbackPhase === 'refine') {
                 // refine 完成：发给主 session，sentFrom 由调用方决定
                 const sentFrom = (body.refineSentFrom as 'webapp' | 'brain-review') || 'brain-review'
