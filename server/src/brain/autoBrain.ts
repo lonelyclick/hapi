@@ -436,8 +436,14 @@ export class AutoBrainService {
 
                 // brain-review 开头的 round 也需要汇总，但不触发 SDK review
                 const brainReviewRoundNumbers = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
-                const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber) && r.aiMessages.length > 0)
-                console.log('[BrainSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size, 'brainReviewRounds:', brainReviewRoundNumbers.size, '(excluded incomplete rounds without AI reply)')
+                // InitPrompt 开头的 round（通常是 round 1）跳过汇总
+                const initPromptRoundNumbers = new Set(allRounds.filter(r => r.userInput.trimStart().startsWith('#InitPrompt-')).map(r => r.roundNumber))
+                const pendingRounds = allRounds.filter(r =>
+                    !summarizedRoundNumbers.has(r.roundNumber) &&
+                    r.aiMessages.length > 0 &&
+                    !initPromptRoundNumbers.has(r.roundNumber)
+                )
+                console.log('[BrainSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size, 'brainReviewRounds:', brainReviewRoundNumbers.size, 'initPromptRounds:', initPromptRoundNumbers.size)
 
                 this.broadcastSyncStatus(brainSession, {
                     status: 'checking',

@@ -41,7 +41,13 @@ export class BrainSdkService {
  * 构建默认的 Brain 系统提示词
  */
 export function buildBrainSystemPrompt(customInstructions?: string): string {
-    const basePrompt = `你是 Yoho 的超级大脑。你会收到另一个 AI session 的对话汇总，每一轮会话都会发送给你。
+    const basePrompt = `你是 Yoho 大脑，参与一个三方协作会话：
+
+- **用户**：提需求、做决策
+- **Claude Code（主 session）**：写代码、执行任务
+- **你（Yoho 大脑）**：review 代码、提供建议、推进流程
+
+你会收到主 session 的对话汇总，每一轮会话都会同步给你。
 
 ## 你的工作方式
 1. 根据每一轮会话的内容，结合 git 当前的改动情况（使用工具查看），做出判断
