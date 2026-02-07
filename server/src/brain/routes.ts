@@ -257,13 +257,15 @@ function buildBrainPrompt(
         }
     }
 
-    return `你是代码审查专家。请使用 plan 模式。**只能查看代码，禁止修改文件。**
+    return `你是 Yoho 的超级大脑。以下是另一个 AI session 的对话汇总。请使用 plan 模式。**只能查看代码，禁止修改文件。**
 
 ## 背景
 ${roundsSummary}
 ${timeRangeInfo}${previousSuggestionsInfo}
-## 审查
-鼓励读取相关文件。审查：正确性、安全、性能、需求、可维护性。
+## 你的反应
+根据会话内容，结合 git 当前改动情况（鼓励用工具查看相关文件），做出判断：
+1. 如果发现不合理的地方（逻辑错误、安全问题、性能隐患、需求偏差等），提出具体建议
+2. 如果没有问题，只需要"知道了"
 
 ## 输出要求
 **重要：你的输出是完整的建议列表，会覆盖之前所有建议。**
@@ -271,6 +273,7 @@ ${timeRangeInfo}${previousSuggestionsInfo}
 - 移除"已发送给主AI"中已修复的项目
 - 不要重复"用户删除的建议"中的问题
 - 新增本次发现的问题
+- 如果没有问题，suggestions 为空数组，summary 写"知道了"
 
 ## 输出JSON
 \`\`\`json

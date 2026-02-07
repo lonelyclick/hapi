@@ -519,8 +519,12 @@ export class AutoBrainService {
                             messageLines.push('')
                         }
                         messageLines.push('---')
-                        messageLines.push('请先读取 `.yoho-brain/MEMORY.md` 了解之前的上下文，然后分析以上对话内容。')
-                        messageLines.push('分析完成后，将重要发现更新到 `.yoho-brain/` 记忆文件中。')
+                        messageLines.push('你是 Yoho 的超级大脑，以上是另一个 session 的对话汇总。')
+                        messageLines.push('请根据这一轮会话的情况，结合 git 当前改动（用工具查看），做出反应：')
+                        messageLines.push('1. 如果发现不合理的地方，提出具体建议')
+                        messageLines.push('2. 如果没有问题，只需回复"知道了"')
+                        messageLines.push('')
+                        messageLines.push('同时读取 `.yoho-brain/MEMORY.md` 了解之前的上下文，将重要发现更新到 `.yoho-brain/` 记忆文件中。')
 
                         if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
                             await this.engine.sendMessage(brainSession.brainSessionId, {
