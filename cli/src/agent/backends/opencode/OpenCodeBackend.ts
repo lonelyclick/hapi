@@ -264,7 +264,7 @@ export class OpenCodeBackend implements AgentBackend {
         this.messageHandler.handleUpdate(update);
     }
 
-    private async handlePermissionRequest(params: unknown, requestId: string): Promise<unknown> {
+    private async handlePermissionRequest(params: unknown, requestId: string | number | null): Promise<unknown> {
         if (!isObject(params)) {
             return { outcome: { outcome: 'cancelled' } };
         }
@@ -279,7 +279,13 @@ export class OpenCodeBackend implements AgentBackend {
             return { outcome: { outcome: 'cancelled' } };
         }
 
-        const id = asString(permission.id) ?? requestId;
+        const requestIdString = typeof requestId === 'string'
+            ? requestId
+            : typeof requestId === 'number'
+                ? String(requestId)
+                : '';
+        const fallbackId = requestIdString || asString(permission.callId) || `${sessionId}-${Date.now()}`;
+        const id = asString(permission.id) ?? fallbackId;
         const title = asString(permission.title) ?? 'Permission Request';
         const kind = asString(permission.type) ?? 'unknown';
 

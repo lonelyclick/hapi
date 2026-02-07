@@ -293,7 +293,7 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         return parsed;
     }
 
-    const TURN_TIMEOUT_MS = parseTimeoutEnv('HAPI_CODEX_TURN_TIMEOUT_MS', 30 * 60 * 1000);
+    const TURN_TIMEOUT_MS = parseTimeoutEnv('HAPI_CODEX_TURN_TIMEOUT_MS', 3 * 60 * 60 * 1000);
     const TURN_COMPLETE_GRACE_MS = parseTimeoutEnv('HAPI_CODEX_TURN_COMPLETE_GRACE_MS', 15000);
     const mcpLogEnabled = parseBooleanEnv('HAPI_MCP_EVENT_LOG', true);
     const mcpLogSampleRate = parseSampleRateEnv('HAPI_MCP_EVENT_LOG_SAMPLE')

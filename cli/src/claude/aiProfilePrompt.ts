@@ -1,4 +1,18 @@
-import type { AIProfile } from '@/api/types'
+export type AIProfileRole = 'developer' | 'architect' | 'reviewer' | 'pm' | 'tester' | 'devops'
+
+export type AIProfile = {
+    name: string
+    role: AIProfileRole
+    specialties: string[]
+    personality: string | null
+    greetingTemplate: string | null
+    workStyle: string | null
+    avatarEmoji: string
+    stats: {
+        tasksCompleted: number
+        activeMinutes: number
+    }
+}
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
     developer: 'Software Developer - You write clean, efficient code and solve technical problems.',

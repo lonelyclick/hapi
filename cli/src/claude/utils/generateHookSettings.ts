@@ -41,7 +41,7 @@ export function setupClaudeSettings(claudeSettingsType?: 'litellm' | 'claude'): 
         // No claudeSettingsType specified, keep existing settings.json as-is
         return true;
     } catch (error) {
-        logger.error(`[setupClaudeSettings] Error: ${error}`);
+        logger.warn(`[setupClaudeSettings] Error: ${error}`);
         return false;
     }
 }

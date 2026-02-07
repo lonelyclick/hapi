@@ -182,9 +182,31 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 if (parsed.data.enableBrain && brainStore) {
                     try {
                         console.log(`[machines/spawn] Creating Brain session for ${result.sessionId} (SDK mode)...`)
+
+                        const existing = await brainStore.getActiveBrainSession(result.sessionId)
+                        if (existing) {
+                            console.log(`[machines/spawn] Brain session already exists: ${existing.id}`)
+                            return
+                        }
+
                         const mainSession = engine.getSession(result.sessionId)
                         const directory = mainSession?.metadata?.path
                         if (directory) {
+                            const brainTag = `brain-sdk:${result.sessionId}`
+                            const brainMetadata = {
+                                ...(mainSession?.metadata ?? { path: directory, host: 'unknown' }),
+                                path: directory,
+                                host: mainSession?.metadata?.host ?? 'unknown',
+                                source: 'brain-sdk',
+                                name: `Brain: ${(mainSession?.metadata?.name ?? '').trim() || directory.split('/').filter(Boolean).slice(-1)[0] || result.sessionId.slice(0, 8)}`,
+                                mainSessionId: result.sessionId
+                            }
+
+                            const brainDisplaySession = await engine.getOrCreateSession(brainTag, brainMetadata, null, namespace)
+                            if (email) {
+                                await store.setSessionCreatedBy(brainDisplaySession.id, email, namespace)
+                            }
+
                             // 构建上下文（复用 brain 模块的消息解析逻辑）
                             const page = await engine.getMessagesPage(result.sessionId, { limit: 20, beforeSeq: null })
                             const contextMessages: string[] = []
@@ -207,7 +229,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                             const brainSession = await brainStore.createBrainSession({
                                 namespace,
                                 mainSessionId: result.sessionId,
-                                brainSessionId: 'sdk-mode',  // SDK 模式：使用特殊值而非 CLI session ID
+                                brainSessionId: brainDisplaySession.id,
                                 brainModel: 'claude',
                                 contextSummary,
                             })

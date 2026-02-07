@@ -90,11 +90,15 @@ function normalizeError(error: unknown): Record<string, unknown> | null {
         if (nodeError.syscall) {
             detail.syscall = nodeError.syscall;
         }
-        if (nodeError.address) {
-            detail.address = nodeError.address;
+        const nodeErrorWithDetails = nodeError as NodeJS.ErrnoException & {
+            address?: string
+            port?: number
+        };
+        if (nodeErrorWithDetails.address) {
+            detail.address = nodeErrorWithDetails.address;
         }
-        if (nodeError.port !== undefined) {
-            detail.port = nodeError.port;
+        if (nodeErrorWithDetails.port !== undefined) {
+            detail.port = nodeErrorWithDetails.port;
         }
         if (error.cause) {
             detail.cause = normalizeError(error.cause) ?? String(error.cause);
