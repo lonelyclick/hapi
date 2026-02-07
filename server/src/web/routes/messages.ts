@@ -2,8 +2,10 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { IStore } from '../../store'
+import type { BrainStore } from '../../brain/store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParamWithShareCheck, requireSyncEngine } from './guards'
+import { buildRefineSystemPrompt } from '../../brain/brainSdkService'
 
 const querySchema = z.object({
     limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -20,7 +22,65 @@ const clearMessagesBodySchema = z.object({
     compact: z.boolean().optional()
 })
 
-export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore): Hono<WebAppEnv> {
+/**
+ * Spawn 一个 refine worker 来预处理用户消息
+ * 返回 true 表示成功拦截，false 表示 fallback 到直接发送
+ */
+async function spawnRefineWorker(
+    engine: SyncEngine,
+    mainSessionId: string,
+    brainSessionId: string,
+    userMessage: string
+): Promise<boolean> {
+    try {
+        const { spawn } = await import('child_process')
+        const { existsSync } = await import('fs')
+        const pathMod = await import('path')
+
+        let workerPath: string | null = null
+        const serverDir = pathMod.dirname(process.execPath)
+        const candidate1 = pathMod.join(serverDir, 'hapi-brain-worker')
+        const candidate2 = '/home/guang/softwares/hapi/cli/dist-exe/bun-linux-x64/hapi-brain-worker'
+        if (existsSync(candidate1)) workerPath = candidate1
+        else if (existsSync(candidate2)) workerPath = candidate2
+
+        if (!workerPath) {
+            console.warn('[Messages] Brain worker not found, skipping intercept')
+            return false
+        }
+
+        const mainSession = engine.getSession(mainSessionId)
+        const projectPath = mainSession?.metadata?.path || '/tmp'
+
+        const config = JSON.stringify({
+            executionId: `refine-${Date.now()}`,
+            brainSessionId,
+            mainSessionId,
+            prompt: userMessage,
+            projectPath,
+            model: 'claude-haiku-4-5-20250929',
+            systemPrompt: buildRefineSystemPrompt(),
+            serverCallbackUrl: `http://127.0.0.1:${process.env.WEBAPP_PORT || '3006'}`,
+            serverToken: process.env.CLI_API_TOKEN || '',
+            phase: 'refine',
+            refineSentFrom: 'webapp'
+        })
+
+        const child = spawn(workerPath, [config], {
+            detached: true,
+            stdio: 'ignore',
+            env: process.env as NodeJS.ProcessEnv
+        })
+        child.unref()
+        console.log('[Messages] Spawned refine worker PID:', child.pid, 'for message intercept')
+        return true
+    } catch (err) {
+        console.error('[Messages] Failed to spawn refine worker:', err)
+        return false
+    }
+}
+
+export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore, brainStore?: BrainStore): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/sessions/:id/messages', async (c) => {
@@ -57,6 +117,15 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
         const parsed = sendMessageBodySchema.safeParse(body)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
+        }
+
+        // 大脑模式：拦截用户消息，让 Brain Worker 先处理再发给主 session
+        const activeBrain = brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
+        if (activeBrain) {
+            const intercepted = await spawnRefineWorker(engine, sessionId, activeBrain.id, parsed.data.text)
+            if (intercepted) {
+                return c.json({ ok: true, intercepted: true })
+            }
         }
 
         await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: 'webapp' })

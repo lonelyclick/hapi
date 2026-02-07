@@ -22,6 +22,8 @@ interface WorkerConfig {
     systemPrompt: string
     serverCallbackUrl: string
     serverToken: string
+    phase?: 'review' | 'refine'
+    refineSentFrom?: 'webapp' | 'brain-review'
 }
 
 // 解析配置
@@ -39,7 +41,8 @@ try {
     process.exit(1)
 }
 
-console.log(`[BrainWorker] Starting worker PID=${process.pid} for execution=${config.executionId}`)
+const phase = config.phase || 'review'
+console.log(`[BrainWorker] Starting worker PID=${process.pid} phase=${phase} for execution=${config.executionId}`)
 
 // 连接 PostgreSQL（从环境变量读取，spawn 时继承自 server）
 const pool = new Pool({
@@ -94,13 +97,15 @@ async function notifyServer(body: Record<string, unknown>): Promise<void> {
 }
 
 async function run(): Promise<void> {
-    // 注册 PID 和初始心跳
-    await brainStore.updateExecutionWorkerPid(config.executionId, process.pid)
+    const isRefine = phase === 'refine'
 
-    // 心跳定时器：每 30 秒更新
-    heartbeatTimer = setInterval(() => {
-        brainStore.updateExecutionHeartbeat(config.executionId).catch(() => {})
-    }, 30_000)
+    // refine 阶段不需要 execution 记录
+    if (!isRefine) {
+        await brainStore.updateExecutionWorkerPid(config.executionId, process.pid)
+        heartbeatTimer = setInterval(() => {
+            brainStore.updateExecutionHeartbeat(config.executionId).catch(() => {})
+        }, 30_000)
+    }
 
     // 收集输出
     const outputChunks: string[] = []
@@ -113,7 +118,7 @@ async function run(): Promise<void> {
                 cwd: config.projectPath,
                 model: config.model,
                 systemPrompt: config.systemPrompt,
-                maxTurns: 30,
+                maxTurns: isRefine ? 3 : 30,
                 tools: ['Read', 'Grep', 'Glob'],
                 allowedTools: ['Read', 'Grep', 'Glob'],
                 disallowedTools: ['Bash', 'Edit', 'Write', 'Task'],
@@ -123,64 +128,70 @@ async function run(): Promise<void> {
             {
                 onAssistantMessage: (message) => {
                     outputChunks.push(message.content)
-                    const entry = {
-                        id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                        type: 'assistant-message',
-                        content: message.content,
-                        timestamp: Date.now()
+                    if (!isRefine) {
+                        const entry = {
+                            id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            type: 'assistant-message',
+                            content: message.content,
+                            timestamp: Date.now()
+                        }
+                        brainStore.appendProgressLog(config.executionId, entry).catch(err => {
+                            console.error('[BrainWorker] Failed to append progress log:', err.message)
+                        })
                     }
-                    brainStore.appendProgressLog(config.executionId, entry).catch(err => {
-                        console.error('[BrainWorker] Failed to append progress log:', err.message)
-                    })
                 },
                 onToolUse: (toolName, input) => {
                     lastToolEntryId = `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-                    const entry = {
-                        id: lastToolEntryId,
-                        type: 'tool-use',
-                        content: toolName,
-                        toolName,
-                        toolInput: input,
-                        timestamp: Date.now()
+                    if (!isRefine) {
+                        const entry = {
+                            id: lastToolEntryId,
+                            type: 'tool-use',
+                            content: toolName,
+                            toolName,
+                            toolInput: input,
+                            timestamp: Date.now()
+                        }
+                        brainStore.appendProgressLog(config.executionId, entry).catch(err => {
+                            console.error('[BrainWorker] Failed to append progress log:', err.message)
+                        })
                     }
-                    brainStore.appendProgressLog(config.executionId, entry).catch(err => {
-                        console.error('[BrainWorker] Failed to append progress log:', err.message)
-                    })
                 },
                 onToolResult: (_toolName, result) => {
                     if (result === undefined || !lastToolEntryId) return
-                    const entry = {
-                        id: `${lastToolEntryId}-result`,
-                        type: 'tool-result',
-                        content: typeof result === 'string' ? result : JSON.stringify(result),
-                        toolEntryId: lastToolEntryId,
-                        timestamp: Date.now()
+                    if (!isRefine) {
+                        const entry = {
+                            id: `${lastToolEntryId}-result`,
+                            type: 'tool-result',
+                            content: typeof result === 'string' ? result : JSON.stringify(result),
+                            toolEntryId: lastToolEntryId,
+                            timestamp: Date.now()
+                        }
+                        brainStore.appendProgressLog(config.executionId, entry).catch(err => {
+                            console.error('[BrainWorker] Failed to append progress log:', err.message)
+                        })
                     }
-                    brainStore.appendProgressLog(config.executionId, entry).catch(err => {
-                        console.error('[BrainWorker] Failed to append progress log:', err.message)
-                    })
                 },
                 onProgress: () => {
-                    // 更新心跳
-                    brainStore.updateExecutionHeartbeat(config.executionId).catch(() => {})
+                    if (!isRefine) {
+                        brainStore.updateExecutionHeartbeat(config.executionId).catch(() => {})
+                    }
                 }
             }
         )
 
         // 完成
         const output = outputChunks.join('\n\n')
-        console.log('[BrainWorker] Review completed, output length:', output.length)
+        console.log(`[BrainWorker] ${phase} completed, output length:`, output.length)
 
-        // 写 done 日志
-        await brainStore.appendProgressLog(config.executionId, {
-            id: `sdk-${Date.now()}-done`,
-            type: 'done',
-            content: '',
-            timestamp: Date.now()
-        }).catch(() => {})
-
-        // 标记完成
-        await brainStore.completeBrainExecution(config.executionId, output)
+        if (!isRefine) {
+            await brainStore.appendProgressLog(config.executionId, {
+                id: `sdk-${Date.now()}-done`,
+                type: 'done',
+                content: '',
+                timestamp: Date.now()
+            }).catch(() => {})
+            await brainStore.completeBrainExecution(config.executionId, output)
+        }
 
         // 通知 server
         await notifyServer({
@@ -188,25 +199,31 @@ async function run(): Promise<void> {
             brainSessionId: config.brainSessionId,
             mainSessionId: config.mainSessionId,
             status: 'completed',
-            output
+            output,
+            phase,
+            ...(config.refineSentFrom ? { refineSentFrom: config.refineSentFrom } : {})
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         const isAbort = (error as Error).name === 'AbortError' || message === 'Aborted by user'
 
-        console.error('[BrainWorker] Review failed:', message)
+        console.error(`[BrainWorker] ${phase} failed:`, message)
 
-        await brainStore.failBrainExecution(
-            config.executionId,
-            isAbort ? 'Aborted' : message
-        )
+        if (!isRefine) {
+            await brainStore.failBrainExecution(
+                config.executionId,
+                isAbort ? 'Aborted' : message
+            )
+        }
 
         await notifyServer({
             executionId: config.executionId,
             brainSessionId: config.brainSessionId,
             mainSessionId: config.mainSessionId,
             status: 'failed',
-            error: isAbort ? 'Aborted' : message
+            error: isAbort ? 'Aborted' : message,
+            phase,
+            ...(config.refineSentFrom ? { refineSentFrom: config.refineSentFrom } : {})
         })
     }
 }

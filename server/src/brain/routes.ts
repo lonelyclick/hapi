@@ -11,7 +11,7 @@ import type { SSEManager } from '../sse/sseManager'
 import type { WebAppEnv } from '../web/middleware/auth'
 import type { BrainStore } from './store'
 import type { AutoBrainService } from './autoBrain'
-import { buildBrainSystemPrompt, buildReviewPrompt } from './brainSdkService'
+import { buildBrainSystemPrompt, buildReviewPrompt, buildRefineSystemPrompt } from './brainSdkService'
 
 // Brain 上下文最大消息数
 const BRAIN_CONTEXT_MAX_MESSAGES = 10
@@ -199,127 +199,26 @@ function formatTimestamp(ts: number): string {
 }
 
 /**
- * 之前的建议项
- */
-interface PreviousSuggestion {
-    id: string
-    type: string
-    severity: string
-    title: string
-    detail: string
-    applied: boolean   // 是否已发送给主 AI
-    deleted?: boolean  // 是否被用户删除（不采纳）
-}
-
-/**
- * 构建 Brain Prompt - 要求返回 JSON 格式的建议列表
+ * 构建 Brain Prompt
  */
 function buildBrainPrompt(
     roundsSummary: string,
-    timeRange?: { start: number; end: number },
-    previousSuggestions?: PreviousSuggestion[]
+    timeRange?: { start: number; end: number }
 ): string {
-    // 只显示开发开始时间，让 Brain AI 自行决定如何查看代码
     const timeRangeInfo = timeRange
         ? `\n## 时间范围\n\n开发开始时间：${formatTimestamp(timeRange.start)}\n`
         : ''
-
-    // 构建之前建议的上下文
-    let previousSuggestionsInfo = ''
-    if (previousSuggestions && previousSuggestions.length > 0) {
-        // 已发送给主 AI 的建议（需要检查是否修复）
-        const appliedSuggestions = previousSuggestions.filter(s => s.applied)
-        // 用户删除的建议（不要再提类似问题）
-        const deletedSuggestions = previousSuggestions.filter(s => s.deleted && !s.applied)
-        // 待处理的建议（保留到新列表中）
-        const pendingSuggestions = previousSuggestions.filter(s => !s.applied && !s.deleted)
-
-        if (pendingSuggestions.length > 0) {
-            previousSuggestionsInfo += '\n## 待处理的建议（需保留到新列表，去重合并）\n'
-            for (const s of pendingSuggestions) {
-                previousSuggestionsInfo += `- [${s.type}/${s.severity}] ${s.title}: ${s.detail}\n`
-            }
-        }
-
-        if (appliedSuggestions.length > 0) {
-            previousSuggestionsInfo += '\n## 已发送给主AI的建议（检查是否已修复，已修复则不要再提）\n'
-            for (const s of appliedSuggestions) {
-                previousSuggestionsInfo += `- [${s.type}/${s.severity}] ${s.title}: ${s.detail}\n`
-            }
-        }
-
-        if (deletedSuggestions.length > 0) {
-            previousSuggestionsInfo += '\n## 用户删除的建议（不要再提类似问题）\n'
-            for (const s of deletedSuggestions) {
-                previousSuggestionsInfo += `- [${s.type}/${s.severity}] ${s.title}\n`
-            }
-        }
-    }
 
     return `你是 Yoho 的超级大脑。以下是另一个 AI session 的对话汇总。请使用 plan 模式。**只能查看代码，禁止修改文件。**
 
 ## 背景
 ${roundsSummary}
-${timeRangeInfo}${previousSuggestionsInfo}
-## 你的反应
+${timeRangeInfo}
+## 你的任务
 根据会话内容，结合 git 当前改动情况（鼓励用工具查看相关文件），做出判断：
-1. 如果发现不合理的地方（逻辑错误、安全问题、性能隐患、需求偏差等），提出具体建议
-2. 如果没有问题，只需要"知道了"
-
-## 输出要求
-**重要：你的输出是完整的建议列表，会覆盖之前所有建议。**
-- 保留"待处理的建议"中仍有效的项目（去重、合并类似问题）
-- 移除"已发送给主AI"中已修复的项目
-- 不要重复"用户删除的建议"中的问题
-- 新增本次发现的问题
-- 如果没有问题，suggestions 为空数组，summary 写"知道了"
-
-## 输出JSON
-\`\`\`json
-{"suggestions":[{"id":"1","type":"bug|security|performance|improvement","severity":"high|medium|low","title":"简短标题","detail":"详细描述和解决方案，发给主AI执行"}],"summary":"总体评价"}
-\`\`\`
+- 如果发现问题（逻辑错误、安全问题、性能隐患、需求偏差等），直接写出你要告知主 session 的内容（自然语言，会原样发送给主 session 中正在工作的 AI）
+- 如果没有问题，只需输出 \`[NO_MESSAGE]\`
 `
-}
-
-/**
- * 构建友好的审查结果消息（供 worker-callback 使用）
- */
-function buildWorkerReviewResultMessage(
-    suggestions: Array<{ type: string; severity: string; title: string; detail: string }>,
-    summary?: string
-): string {
-    const lines: string[] = ['## Brain 代码审查结果\n']
-    if (summary) {
-        lines.push(`**总体评价:** ${summary}\n`)
-    }
-    const bySeverity: Record<string, Array<typeof suggestions[0]>> = { high: [], medium: [], low: [] }
-    for (const s of suggestions) {
-        if (bySeverity[s.severity]) bySeverity[s.severity].push(s)
-    }
-    if (bySeverity.high.length > 0) {
-        lines.push('### 高优先级问题')
-        for (const s of bySeverity.high) {
-            lines.push(`**${s.type.toUpperCase()}** - ${s.title}`)
-            lines.push(`> ${s.detail}\n`)
-        }
-    }
-    if (bySeverity.medium.length > 0) {
-        lines.push('### 中优先级问题')
-        for (const s of bySeverity.medium) {
-            lines.push(`**${s.type.toUpperCase()}** - ${s.title}`)
-            lines.push(`> ${s.detail}\n`)
-        }
-    }
-    if (bySeverity.low.length > 0) {
-        lines.push('### 低优先级建议')
-        for (const s of bySeverity.low) {
-            lines.push(`**${s.type.toUpperCase()}** - ${s.title}`)
-            lines.push(`> ${s.detail}\n`)
-        }
-    }
-    lines.push(`---`)
-    lines.push(`**统计:** ${suggestions.length} 条建议 (${bySeverity.high.length} 高 / ${bySeverity.medium.length} 中 / ${bySeverity.low.length} 低)`)
-    return lines.join('\n')
 }
 
 export function createBrainRoutes(
@@ -828,12 +727,6 @@ ${batchRounds.map(r => `  {
             return c.json({ error: 'Sync engine not available' }, 503)
         }
 
-        // 解析请求体，获取之前的建议
-        const body = await c.req.json().catch(() => null) as {
-            previousSuggestions?: PreviousSuggestion[]
-        } | null
-        const previousSuggestions = body?.previousSuggestions
-
         const brainSession = await brainStore.getBrainSession(id)
         if (!brainSession) {
             return c.json({ error: 'Brain session not found' }, 404)
@@ -884,8 +777,7 @@ ${batchRounds.map(r => `  {
             }
         }
 
-        // 发送 Brain Prompt（包含之前的建议上下文）
-        const brainPrompt = buildBrainPrompt(roundsSummary, timeRange, previousSuggestions)
+        const brainPrompt = buildBrainPrompt(roundsSummary, timeRange)
 
         // 创建执行记录（记录本次 brain 的轮次号）
         const execution = await brainStore.createBrainExecution({
@@ -1228,17 +1120,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             return c.json({ error: 'Brain review already in progress', executionId: latestExec.id }, 409)
         }
 
-        // 获取请求体
         const body = await c.req.json().catch(() => ({})) as {
-            previousSuggestions?: Array<{
-                id: string
-                type: string
-                severity: string
-                title: string
-                detail: string
-                applied: boolean
-                deleted?: boolean
-            }>
             customInstructions?: string
         }
 
@@ -1295,7 +1177,6 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         const reviewPrompt = buildReviewPrompt(
             contextSummary,
             roundsSummary,
-            body.previousSuggestions,
             timeRange
         )
 
@@ -1468,6 +1349,8 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             status: 'completed' | 'failed'
             output?: string
             error?: string
+            phase?: 'review' | 'refine'
+            refineSentFrom?: 'webapp' | 'brain-review'
         } | null
 
         if (!body?.executionId) {
@@ -1475,43 +1358,72 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         }
 
         const engine = getSyncEngine()
+        const callbackPhase = body.phase || 'review'
 
         if (body.status === 'completed' && body.output) {
-            // 解析 suggestions 并发送到主 session
-            try {
-                const jsonBlocks = [...body.output.matchAll(/```json\s*([\s\S]*?)\s*```/g)]
-                if (jsonBlocks.length > 0) {
-                    const lastBlock = jsonBlocks[jsonBlocks.length - 1]
-                    let jsonStr = lastBlock[1]
+            if (body.output.includes('[NO_MESSAGE]')) {
+                // Brain 认为没有问题，不发消息
+            } else if (callbackPhase === 'refine') {
+                // refine 完成：发给主 session，sentFrom 由调用方决定
+                await engine?.sendMessage(body.mainSessionId, {
+                    text: body.output,
+                    sentFrom: (body.refineSentFrom as 'webapp' | 'brain-review') || 'brain-review'
+                })
+            } else {
+                // 第一阶段完成：spawn 第二个 worker 做 refine
+                try {
+                    const { spawn } = await import('child_process')
+                    const { existsSync } = await import('fs')
+                    const pathMod = await import('path')
 
-                    let parsed = null
-                    try {
-                        parsed = JSON.parse(jsonStr)
-                    } catch {
-                        // 尝试修复截断的 JSON
-                        const openBraces = (jsonStr.match(/\{/g) || []).length
-                        const closeBraces = (jsonStr.match(/\}/g) || []).length
-                        const openBrackets = (jsonStr.match(/\[/g) || []).length
-                        const closeBrackets = (jsonStr.match(/\]/g) || []).length
-                        while (closeBrackets < openBrackets) jsonStr += ']'
-                        while (closeBraces < openBraces) jsonStr += '}'
-                        try { parsed = JSON.parse(jsonStr) } catch { /* ignore */ }
-                    }
+                    let workerPath: string | null = null
+                    const serverDir = pathMod.dirname(process.execPath)
+                    const candidate1 = pathMod.join(serverDir, 'hapi-brain-worker')
+                    const candidate2 = '/home/guang/softwares/hapi/cli/dist-exe/bun-linux-x64/hapi-brain-worker'
+                    if (existsSync(candidate1)) workerPath = candidate1
+                    else if (existsSync(candidate2)) workerPath = candidate2
 
-                    if (parsed?.suggestions && Array.isArray(parsed.suggestions)) {
-                        const messageText = buildWorkerReviewResultMessage(parsed.suggestions, parsed.summary)
+                    if (workerPath) {
+                        const mainSession = engine?.getSession(body.mainSessionId)
+                        const projectPath = mainSession?.metadata?.path || '/tmp'
+
+                        const refineConfig = JSON.stringify({
+                            executionId: body.executionId,
+                            brainSessionId: body.brainSessionId,
+                            mainSessionId: body.mainSessionId,
+                            prompt: body.output,
+                            projectPath,
+                            model: 'claude-haiku-4-5-20250929',
+                            systemPrompt: buildRefineSystemPrompt(),
+                            serverCallbackUrl: `http://127.0.0.1:${process.env.WEBAPP_PORT || '3006'}`,
+                            serverToken: process.env.CLI_API_TOKEN || '',
+                            phase: 'refine',
+                            refineSentFrom: 'brain-review'
+                        })
+
+                        const child = spawn(workerPath, [refineConfig], {
+                            detached: true,
+                            stdio: 'ignore',
+                            env: process.env as NodeJS.ProcessEnv
+                        })
+                        child.unref()
+                        console.log('[BrainWorkerCallback] Spawned refine worker PID:', child.pid)
+                    } else {
+                        // worker 找不到，直接发原始 output
+                        console.warn('[BrainWorkerCallback] Worker not found, sending raw output')
                         await engine?.sendMessage(body.mainSessionId, {
-                            text: messageText,
+                            text: body.output,
                             sentFrom: 'brain-review'
                         })
                     }
+                } catch (spawnErr) {
+                    console.error('[BrainWorkerCallback] Failed to spawn refine worker:', spawnErr)
+                    // fallback: 直接发原始 output
+                    await engine?.sendMessage(body.mainSessionId, {
+                        text: body.output,
+                        sentFrom: 'brain-review'
+                    })
                 }
-            } catch (parseErr) {
-                console.error('[BrainWorkerCallback] Failed to parse output:', parseErr)
-                await engine?.sendMessage(body.mainSessionId, {
-                    text: `## Brain 审查结果\n\n${body.output}`,
-                    sentFrom: 'brain-review'
-                })
             }
         } else if (body.status === 'failed') {
             await engine?.sendMessage(body.mainSessionId, {
@@ -1520,20 +1432,26 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             })
         }
 
-        // SSE 广播 done 事件
-        const sseManager = getSseManager()
-        if (sseManager) {
-            const mainSession = engine?.getSession(body.mainSessionId)
-            sseManager.broadcast({
-                type: 'brain-sdk-progress',
-                namespace: mainSession?.namespace,
-                sessionId: body.mainSessionId,
-                data: {
-                    brainSessionId: body.brainSessionId,
-                    progressType: 'done',
-                    data: { status: body.status }
-                }
-            } as unknown as import('../sync/syncEngine.js').SyncEvent)
+        // SSE 广播 done 事件：只在 refine 阶段或失败/NO_MESSAGE 时广播
+        const shouldBroadcastDone = callbackPhase === 'refine'
+            || body.status === 'failed'
+            || (body.output?.includes('[NO_MESSAGE]'))
+
+        if (shouldBroadcastDone) {
+            const sseManager = getSseManager()
+            if (sseManager) {
+                const mainSession = engine?.getSession(body.mainSessionId)
+                sseManager.broadcast({
+                    type: 'brain-sdk-progress',
+                    namespace: mainSession?.namespace,
+                    sessionId: body.mainSessionId,
+                    data: {
+                        brainSessionId: body.brainSessionId,
+                        progressType: 'done',
+                        data: { status: body.status }
+                    }
+                } as unknown as import('../sync/syncEngine.js').SyncEvent)
+            }
         }
 
         return c.json({ success: true })

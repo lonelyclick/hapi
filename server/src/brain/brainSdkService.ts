@@ -45,37 +45,16 @@ export function buildBrainSystemPrompt(customInstructions?: string): string {
 
 ## 你的工作方式
 1. 根据每一轮会话的内容，结合 git 当前的改动情况（使用工具查看），做出判断
-2. 如果发现不合理的地方（逻辑错误、安全问题、性能隐患、需求偏差等），**提出具体建议**
-3. 如果没有问题，只需回复"知道了"，不要强行找问题
+2. 如果发现不合理的地方（逻辑错误、安全问题、性能隐患、需求偏差等），写出要告知主 session 的内容
+3. 如果没有问题，不需要强行找问题
 
 ## 工具使用
 - 使用 \`Read\`、\`Grep\`、\`Glob\` 工具查看代码和 git 改动
 - **禁止修改任何文件** - 只能查看，不能 Edit/Write/Bash
 
-## 输出格式
-当有问题需要指出时，使用 JSON 格式：
-\`\`\`json
-{
-  "suggestions": [
-    {
-      "id": "唯一ID",
-      "type": "bug|security|performance|improvement",
-      "severity": "high|medium|low",
-      "title": "简短标题",
-      "detail": "详细描述和解决方案"
-    }
-  ],
-  "summary": "总体评价"
-}
-\`\`\`
-
-当没有问题时，直接输出：
-\`\`\`json
-{
-  "suggestions": [],
-  "summary": "知道了"
-}
-\`\`\`
+## 输出规则
+- 如果有问题需要告知主 session，直接用自然语言写出你要传达的内容（这段文字会原样发送给主 session 中正在工作的 AI）
+- 如果没有问题，只需输出 \`[NO_MESSAGE]\`，不要输出其他内容
 `
 
     return customInstructions
@@ -89,15 +68,6 @@ export function buildBrainSystemPrompt(customInstructions?: string): string {
 export function buildReviewPrompt(
     contextSummary: string,
     roundsSummary?: string,
-    previousSuggestions?: Array<{
-        id: string
-        type: string
-        severity: string
-        title: string
-        detail: string
-        applied: boolean
-        deleted?: boolean
-    }>,
     timeRange?: { start: number; end: number }
 ): string {
     const lines: string[] = [
@@ -105,75 +75,37 @@ export function buildReviewPrompt(
         contextSummary
     ]
 
-    // 时间范围
     if (timeRange) {
         const startDate = new Date(timeRange.start).toLocaleString('zh-CN')
         lines.push(`\n**开发时间范围：** ${startDate} 开始`)
     }
 
-    // 之前的建议
-    if (previousSuggestions && previousSuggestions.length > 0) {
-        const pending = previousSuggestions.filter(s => !s.applied && !s.deleted)
-        const applied = previousSuggestions.filter(s => s.applied)
-        const deleted = previousSuggestions.filter(s => s.deleted && !s.applied)
-
-        if (pending.length > 0) {
-            lines.push('\n## 待处理的建议（需保留到新列表）')
-            pending.forEach(s => {
-                lines.push(`- [${s.type}/${s.severity}] ${s.title}: ${s.detail}`)
-            })
-        }
-
-        if (applied.length > 0) {
-            lines.push('\n## 已发送给主AI的建议（检查是否已修复）')
-            applied.forEach(s => {
-                lines.push(`- [${s.type}/${s.severity}] ${s.title}: ${s.detail}`)
-            })
-        }
-
-        if (deleted.length > 0) {
-            lines.push('\n## 用户删除的建议（不要再提类似问题）')
-            deleted.forEach(s => {
-                lines.push(`- [${s.type}/${s.severity}] ${s.title}`)
-            })
-        }
-    }
-
-    // 对话汇总
     if (roundsSummary) {
         lines.push('\n## 对话汇总\n')
         lines.push(roundsSummary)
     }
 
     lines.push(`
-## 你的反应
+## 你的任务
 根据会话内容，结合 git 当前改动情况（用 Read/Grep/Glob 工具查看相关代码），做出判断：
-1. 如果发现不合理的地方，提出具体建议
-2. 如果没有问题，只需要"知道了"
-
-## 输出要求
-- **输出完整的建议列表**，会覆盖之前的所有建议
-- 保留仍有效的待处理建议（去重合并）
-- 移除已修复的建议
-- 不要重复用户删除的问题
-- 如果没有问题，suggestions 为空数组，summary 写"知道了"
-
-## 输出格式
-\`\`\`json
-{
-  "suggestions": [
-    {
-      "id": "1",
-      "type": "bug|security|performance|improvement",
-      "severity": "high|medium|low",
-      "title": "简短标题",
-      "detail": "详细描述，包含问题位置和解决方案"
-    }
-  ],
-  "summary": "总体评价，不超过200字"
-}
-\`\`\`
+- 如果发现问题（逻辑错误、安全问题、性能隐患等），直接写出你要告知主 session 的内容（自然语言，会原样发送给主 session 中正在工作的 AI）
+- 如果没有问题，只需输出 \`[NO_MESSAGE]\`
 `)
 
     return lines.join('\n')
+}
+
+/**
+ * 构建 refine 阶段的系统提示词
+ * 第二个 worker 用来对审查结果做二次处理
+ */
+export function buildRefineSystemPrompt(): string {
+    return `你是一个消息处理助手。你会收到一段代码审查结果，你的任务是对它做简单处理后输出。
+
+## 规则
+1. 阅读收到的审查结果内容
+2. 在末尾加上后缀："\n\n— brain 处理过"
+3. 直接输出处理后的完整文本，不要添加额外解释
+4. 不要使用任何工具，直接输出文本即可
+`
 }
