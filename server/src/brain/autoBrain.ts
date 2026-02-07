@@ -495,6 +495,31 @@ export class AutoBrainService {
                         const mainSessionObj = this.engine.getSession(mainSessionId)
                         const projectPath = mainSessionObj?.metadata?.path || '(未知)'
 
+                        const messageLines: string[] = [
+                            '## 对话汇总同步\n',
+                            `**项目路径：** \`${projectPath}\``,
+                            `**记忆目录：** \`${projectPath}/.yoho-brain/\``,
+                            ''
+                        ]
+                        for (const s of savedSummaries) {
+                            messageLines.push(`### 第 ${s.round} 轮`)
+                            messageLines.push(s.summary)
+                            messageLines.push('')
+                        }
+                        messageLines.push('---')
+                        messageLines.push('请先读取 `.yoho-brain/MEMORY.md` 了解之前的上下文，然后分析以上对话内容。')
+                        messageLines.push('分析完成后，将重要发现更新到 `.yoho-brain/` 记忆文件中。')
+
+                        if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
+                            await this.engine.sendMessage(brainSession.brainSessionId, {
+                                text: messageLines.join('\n'),
+                                sentFrom: 'webapp'
+                            })
+                            console.log('[BrainSync] Sent', savedSummaries.length, 'round summaries to brain session', brainSession.brainSessionId)
+                        } else {
+                            console.warn('[BrainSync] Brain session id missing, skipping summary send')
+                        }
+
                         if (this.isSdkMode(brainSession)) {
                             // SDK 模式：直接使用 SDK 进行代码审查
                             if (this.brainSdkService) {
@@ -504,32 +529,7 @@ export class AutoBrainService {
                                 console.warn('[BrainSync] SDK mode requested but brainSdkService not available')
                             }
                         } else {
-                            // CLI 模式：发送到 Brain CLI session
-                            const brainSessionObj = this.engine.getSession(brainSession.brainSessionId!)
-                            if (brainSessionObj?.active) {
-                                const messageLines: string[] = [
-                                    '## 对话汇总同步\n',
-                                    `**项目路径：** \`${projectPath}\``,
-                                    `**记忆目录：** \`${projectPath}/.yoho-brain/\``,
-                                    ''
-                                ]
-                                for (const s of savedSummaries) {
-                                    messageLines.push(`### 第 ${s.round} 轮`)
-                                    messageLines.push(s.summary)
-                                    messageLines.push('')
-                                }
-                                messageLines.push('---')
-                                messageLines.push('请先读取 `.yoho-brain/MEMORY.md` 了解之前的上下文，然后分析以上对话内容。')
-                                messageLines.push('分析完成后，将重要发现更新到 `.yoho-brain/` 记忆文件中。')
-
-                                await this.engine.sendMessage(brainSession.brainSessionId!, {
-                                    text: messageLines.join('\n'),
-                                    sentFrom: 'webapp'
-                                })
-                                console.log('[BrainSync] Sent', savedSummaries.length, 'round summaries to brain session', brainSession.brainSessionId)
-                            } else {
-                                console.warn('[BrainSync] Brain session not active, skipping message send')
-                            }
+                            // CLI 模式：此处不额外处理，Brain session 会自行根据消息做分析
                         }
                     } catch (sendErr) {
                         console.error('[BrainSync] Failed to send summaries to brain session:', sendErr)

@@ -7,6 +7,7 @@ import { ViewersBadge } from './ViewersBadge'
 import { ShareDialog } from './ShareDialog'
 import { useAppContext } from '@/lib/app-context'
 import { queryKeys } from '@/lib/query-keys'
+import { useActiveBrainSession } from '@/hooks/queries/useActiveBrainSession'
 
 function getSessionPath(session: Session): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -154,6 +155,29 @@ function RefreshAccountIcon(props: { className?: string }) {
     )
 }
 
+function BrainIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <path d="M12 8a3 3 0 1 0-3-3" />
+            <path d="M12 8a3 3 0 1 1 3-3" />
+            <path d="M12 8v13" />
+            <path d="M8 13a4 4 0 0 0 8 0" />
+            <path d="M9 21h6" />
+        </svg>
+    )
+}
+
 function ShareIcon(props: { className?: string }) {
     return (
         <svg
@@ -245,6 +269,7 @@ export function SessionHeader(props: {
     onBack: () => void
     onDelete?: () => void
     onRefreshAccount?: () => void
+    onOpenBrain?: (brainSessionId: string) => void
     deleteDisabled?: boolean
     refreshAccountDisabled?: boolean
     modelMode?: ModelMode
@@ -260,6 +285,14 @@ export function SessionHeader(props: {
         () => formatRuntimeModel(props.session, props.modelMode, props.modelReasoningEffort),
         [props.session, props.modelMode, props.modelReasoningEffort]
     )
+
+    const mainSessionIdForBrain = props.session.metadata?.mainSessionId
+        ? props.session.metadata.mainSessionId
+        : props.session.metadata?.source === 'brain-sdk'
+            ? props.session.id
+            : null
+
+    const { brainSession } = useActiveBrainSession(api, mainSessionIdForBrain)
 
     // Check if current user is the creator of this session (must be defined before queries that use it)
     const isCreator = useMemo(() => {
@@ -470,6 +503,17 @@ export function SessionHeader(props: {
                                 <RefreshAccountIcon />
                             </button>
                         ) : null}
+
+                        {props.onOpenBrain && brainSession ? (
+                            <button
+                                type="button"
+                                onClick={() => props.onOpenBrain?.(brainSession.brainSessionId)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-indigo-500/10 hover:text-indigo-600"
+                                title="Open Brain session"
+                            >
+                                <BrainIcon />
+                            </button>
+                        ) : null}
                         {/* Delete button - 只有创建者可见 */}
                         {isCreator && props.onDelete ? (
                             <button
@@ -556,6 +600,20 @@ export function SessionHeader(props: {
                                     >
                                         <RefreshAccountIcon className="shrink-0" />
                                         <span className="whitespace-nowrap">Refresh Session</span>
+                                    </button>
+                                ) : null}
+
+                                {props.onOpenBrain && brainSession ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false)
+                                            props.onOpenBrain?.(brainSession.brainSessionId)
+                                        }}
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
+                                    >
+                                        <BrainIcon className="shrink-0" />
+                                        <span className="whitespace-nowrap">Open Brain</span>
                                     </button>
                                 ) : null}
                                 {/* 删除会话 - 只有创建者可见 */}

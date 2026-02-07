@@ -45,6 +45,7 @@ import type {
     RemoveSessionShareResponse,
     SessionResponse,
     SessionsResponse,
+    BrainSession,
     UpdateGroupResponse,
     UpdateInputPresetResponse,
     UpdateProjectResponse,
@@ -243,6 +244,19 @@ export class ApiClient {
 
     async getSession(sessionId: string): Promise<SessionResponse> {
         return await this.request<SessionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}`)
+    }
+
+    async getActiveBrainSession(mainSessionId: string): Promise<BrainSession | null> {
+        try {
+            return await this.request<BrainSession>(
+                `/api/brain/sessions/active/${encodeURIComponent(mainSessionId)}`
+            )
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 404) {
+                return null
+            }
+            throw error
+        }
     }
 
     async deleteSession(sessionId: string): Promise<DeleteSessionResponse> {

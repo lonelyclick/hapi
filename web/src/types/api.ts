@@ -21,6 +21,7 @@ export type SessionMetadataSummary = {
     os?: string
     summary?: { text: string; updatedAt: number }
     machineId?: string
+    mainSessionId?: string
     tools?: string[]
     flavor?: string | null
     runtimeAgent?: string
@@ -101,6 +102,7 @@ export type SessionSummaryMetadata = {
     name?: string
     path: string
     machineId?: string
+    mainSessionId?: string
     summary?: { text: string }
     flavor?: string | null
     runtimeAgent?: string
@@ -215,6 +217,23 @@ export type AuthResponse = {
 export type SessionsResponse = { sessions: SessionSummary[] }
 export type SessionResponse = { session: Session }
 export type DeleteSessionResponse = { ok: true }
+
+export type BrainSessionStatus = 'pending' | 'active' | 'completed' | 'cancelled'
+
+export type BrainSession = {
+    id: string
+    namespace: string
+    mainSessionId: string
+    brainSessionId: string
+    brainModel: string
+    brainModelVariant?: string
+    status: BrainSessionStatus
+    contextSummary: string
+    brainResult?: string
+    createdAt: number
+    updatedAt: number
+    completedAt?: number
+}
 
 // 用户设置类型
 export type UserPreferences = {

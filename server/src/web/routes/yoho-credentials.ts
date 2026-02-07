@@ -57,16 +57,16 @@ function listCredentials(filters: { name?: string; limit?: number }): Credential
         try {
             const files = readdirSync(typeDir)
             for (const file of files) {
-                if (!file.endsWith('.json')) continue
-                const name = file.replace(/\.json$/, '')
+                const filePath = join(typeDir, file)
+                try { if (!statSync(filePath).isFile()) continue } catch { continue }
+                const name = file.replace(/\.[^.]+$/, '')
                 // Search by type/name or just name
                 const displayName = `${type}.${name}`
                 if (filters.name && !displayName.toLowerCase().includes(filters.name.toLowerCase())) {
                     continue
                 }
-                const fullPath = join(typeDir, file)
                 const relativePath = join(type, file)
-                results.push({ type, name, fullPath, relativePath, displayName })
+                results.push({ type, name, fullPath: filePath, relativePath, displayName })
                 if (results.length >= limit) {
                     return results
                 }
