@@ -10,6 +10,37 @@ import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 type AgentType = 'claude' | 'codex' | 'opencode'
 type ClaudeSettingsType = 'litellm' | 'claude'
 
+/** 上次创建 session 时的偏好设置，存储在 localStorage */
+interface SpawnPrefs {
+    machineId?: string
+    projectPath?: string
+    agent?: AgentType
+    claudeSettingsType?: ClaudeSettingsType
+    claudeAgent?: string
+    opencodeModel?: string
+    codexReasoningEffort?: 'medium' | 'high' | 'xhigh'
+    enableBrain?: boolean
+}
+
+const SPAWN_PREFS_KEY = 'hapi:lastSpawnPrefs'
+
+function loadSpawnPrefs(): SpawnPrefs {
+    try {
+        const stored = localStorage.getItem(SPAWN_PREFS_KEY)
+        return stored ? JSON.parse(stored) : {}
+    } catch {
+        return {}
+    }
+}
+
+function saveSpawnPrefs(prefs: SpawnPrefs): void {
+    try {
+        localStorage.setItem(SPAWN_PREFS_KEY, JSON.stringify(prefs))
+    } catch {
+        // Ignore storage errors
+    }
+}
+
 // Codex 固定使用 gpt-5.3-codex
 const CODEX_MODEL = 'openai/gpt-5.3-codex'
 
@@ -134,14 +165,15 @@ export function NewSession(props: {
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
     const isFormDisabled = isPending || props.isLoading
 
-    const [machineId, setMachineId] = useState<string | null>(null)
-    const [projectPath, setProjectPath] = useState('')
-    const [agent, setAgent] = useState<AgentType>('claude')
-    const [claudeSettingsType, setClaudeSettingsType] = useState<ClaudeSettingsType>('litellm')
-    const [claudeAgent, setClaudeAgent] = useState('')
-    const [opencodeModel, setOpencodeModel] = useState(OPENCODE_MODELS[0].value)
-    const [codexReasoningEffort, setCodexReasoningEffort] = useState<'medium' | 'high' | 'xhigh'>('medium')
-    const [enableBrain, setEnableBrain] = useState(false)
+    const [savedPrefs] = useState(loadSpawnPrefs)
+    const [machineId, setMachineId] = useState<string | null>(savedPrefs.machineId ?? null)
+    const [projectPath, setProjectPath] = useState(savedPrefs.projectPath ?? '')
+    const [agent, setAgent] = useState<AgentType>(savedPrefs.agent ?? 'claude')
+    const [claudeSettingsType, setClaudeSettingsType] = useState<ClaudeSettingsType>(savedPrefs.claudeSettingsType ?? 'litellm')
+    const [claudeAgent, setClaudeAgent] = useState(savedPrefs.claudeAgent ?? '')
+    const [opencodeModel, setOpencodeModel] = useState(savedPrefs.opencodeModel ?? OPENCODE_MODELS[0].value)
+    const [codexReasoningEffort, setCodexReasoningEffort] = useState<'medium' | 'high' | 'xhigh'>(savedPrefs.codexReasoningEffort ?? 'medium')
+    const [enableBrain, setEnableBrain] = useState(savedPrefs.enableBrain ?? false)
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
     const [spawnLogs, setSpawnLogs] = useState<SpawnLogEntry[]>([])
@@ -196,28 +228,37 @@ export function NewSession(props: {
         }))
     }, [projects])
 
-    // Initialize with first available machine
+    // Initialize with saved machine or first available
     useEffect(() => {
         if (props.machines.length === 0) return
         if (machineId && props.machines.find((m) => m.id === machineId)) return
 
+        // savedPrefs.machineId 已通过 useState 初始值设置，如果它不在列表中才 fallback
         if (props.machines[0]) {
             setMachineId(props.machines[0].id)
         }
     }, [props.machines, machineId])
 
     // Reset project path when machine changes (different machine may have different projects)
+    const [initialProjectRestored, setInitialProjectRestored] = useState(false)
     useEffect(() => {
-        // When machine changes, reset to first available project for that machine
-        if (projects.length > 0) {
-            setProjectPath(projects[0].path)
-        } else {
+        if (projects.length === 0) {
             setProjectPath('')
+            return
         }
+        // On first load, try to restore saved project path if it exists in the list
+        if (!initialProjectRestored && savedPrefs.projectPath && projects.some(p => p.path === savedPrefs.projectPath)) {
+            setProjectPath(savedPrefs.projectPath)
+            setInitialProjectRestored(true)
+            return
+        }
+        setInitialProjectRestored(true)
+        setProjectPath(projects[0].path)
     }, [machineId, projects])
 
     const handleMachineChange = useCallback((newMachineId: string) => {
         setMachineId(newMachineId)
+        setInitialProjectRestored(true) // 手动切换机器时不再尝试恢复旧项目
     }, [])
 
     async function handleCreate() {
@@ -255,6 +296,17 @@ export function NewSession(props: {
             }
 
             if (result.type === 'success') {
+                // 保存本次偏好设置，下次新建时自动恢复
+                saveSpawnPrefs({
+                    machineId: machineId ?? undefined,
+                    projectPath: directory,
+                    agent,
+                    claudeSettingsType,
+                    claudeAgent: claudeAgent.trim() || undefined,
+                    opencodeModel,
+                    codexReasoningEffort,
+                    enableBrain,
+                })
                 haptic.notification('success')
                 props.onSuccess(result.sessionId)
                 return
