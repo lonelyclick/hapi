@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
-import { readFile, readdir, stat } from 'node:fs/promises'
+import { readFile, readdir, stat, writeFile, rename } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
 
@@ -65,8 +65,15 @@ interface UsageResponse {
     timestamp: number
 }
 
+/** Claude Code OAuth client ID (from claude-code source) */
+const CLAUDE_OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
+const CLAUDE_OAUTH_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token'
+/** Refresh token 提前 30 分钟（token 有效期 8 小时） */
+const TOKEN_REFRESH_MARGIN_MS = 30 * 60_000
+
 /**
  * Get Claude Code access token from credentials file
+ * 自动检查 token 是否过期，过期则用 refreshToken 刷新并写回文件
  */
 async function getClaudeAccessToken(configDir?: string): Promise<string | null> {
     try {
@@ -74,9 +81,84 @@ async function getClaudeAccessToken(configDir?: string): Promise<string | null> 
         const credPath = join(baseDir, '.credentials.json')
         const content = await readFile(credPath, 'utf-8')
         const creds = JSON.parse(content)
-        // Try claudeAiOauth.accessToken first (newer format), then accessToken (older format)
-        return creds.claudeAiOauth?.accessToken ?? creds.accessToken ?? null
+        const oauth = creds.claudeAiOauth
+        if (!oauth?.accessToken) {
+            return creds.accessToken ?? null
+        }
+
+        // 检查 token 是否快过期
+        const expiresAt = oauth.expiresAt ?? 0
+        if (expiresAt > Date.now() + TOKEN_REFRESH_MARGIN_MS) {
+            return oauth.accessToken
+        }
+
+        // Token 已过期或即将过期，尝试刷新
+        if (!oauth.refreshToken) {
+            return oauth.accessToken // 没有 refreshToken，只能用现有的
+        }
+
+        console.log(`[Usage] Token expired for ${baseDir}, refreshing...`)
+        const refreshed = await refreshOAuthToken(oauth.refreshToken)
+        if (!refreshed) {
+            return oauth.accessToken // 刷新失败，返回旧 token
+        }
+
+        // 更新 credentials 文件
+        creds.claudeAiOauth = {
+            ...oauth,
+            accessToken: refreshed.accessToken,
+            refreshToken: refreshed.refreshToken,
+            expiresAt: Date.now() + refreshed.expiresIn * 1000,
+        }
+        const tmpFile = credPath + '.tmp'
+        await writeFile(tmpFile, JSON.stringify(creds, null, 2))
+        await rename(tmpFile, credPath)
+        console.log(`[Usage] Token refreshed for ${baseDir}`)
+
+        return refreshed.accessToken
     } catch {
+        return null
+    }
+}
+
+/**
+ * 使用 refreshToken 获取新的 accessToken
+ */
+async function refreshOAuthToken(refreshToken: string): Promise<{
+    accessToken: string
+    refreshToken: string
+    expiresIn: number
+} | null> {
+    try {
+        const resp = await fetch(CLAUDE_OAUTH_TOKEN_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'claude-code/2.1.33',
+            },
+            body: JSON.stringify({
+                grant_type: 'refresh_token',
+                refresh_token: refreshToken,
+                client_id: CLAUDE_OAUTH_CLIENT_ID,
+            }),
+        })
+        if (!resp.ok) {
+            console.error(`[Usage] Token refresh failed: ${resp.status} ${resp.statusText}`)
+            return null
+        }
+        const data = await resp.json() as {
+            access_token?: string
+            refresh_token?: string
+            expires_in?: number
+        }
+        if (!data.access_token) return null
+        return {
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token ?? refreshToken,
+            expiresIn: data.expires_in ?? 28800,
+        }
+    } catch (error) {
+        console.error('[Usage] Token refresh error:', error)
         return null
     }
 }
