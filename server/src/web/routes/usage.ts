@@ -75,7 +75,7 @@ const TOKEN_REFRESH_MARGIN_MS = 30 * 60_000
  * Get Claude Code access token from credentials file
  * 自动检查 token 是否过期，过期则用 refreshToken 刷新并写回文件
  */
-async function getClaudeAccessToken(configDir?: string): Promise<string | null> {
+export async function getClaudeAccessToken(configDir?: string): Promise<string | null> {
     try {
         const baseDir = configDir || join(homedir(), '.claude')
         const credPath = join(baseDir, '.credentials.json')

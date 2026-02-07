@@ -18,6 +18,7 @@ import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
 import { BrainStore, AutoBrainService } from './brain'
+import { startTokenRefreshTimer, stopTokenRefreshTimer } from './claude-accounts/accountsService'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -154,6 +155,9 @@ async function main() {
         socketEngine: socketServer.engine
     })
 
+    // Start background token refresh timer for Claude accounts
+    startTokenRefreshTimer()
+
     // Start the bot if configured
     if (happyBot) {
         await happyBot.start()
@@ -164,6 +168,7 @@ async function main() {
     // Handle shutdown
     const shutdown = async () => {
         console.log('\nShutting down...')
+        stopTokenRefreshTimer()
         await happyBot?.stop()
         syncEngine?.stop()
         sseManager?.stop()

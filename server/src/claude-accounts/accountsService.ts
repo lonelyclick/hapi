@@ -23,7 +23,7 @@ import {
     type AccountSelectionResult,
     DEFAULT_ACCOUNTS_CONFIG,
 } from './types'
-import { getClaudeUsage } from '../web/routes/usage'
+import { getClaudeUsage, getClaudeAccessToken } from '../web/routes/usage'
 
 const ACCOUNTS_CONFIG_FILE = 'claude-accounts.json'
 const CLAUDE_ACCOUNTS_BASE_DIR = join(homedir(), '.hapi', 'claude-accounts')
@@ -480,6 +480,76 @@ export async function setDefaultThreshold(threshold: number): Promise<void> {
  */
 export async function getAccountsConfig(): Promise<ClaudeAccountsConfig> {
     return readAccountsConfig()
+}
+
+// ==================== 后台定时 Token 续期 ====================
+
+/** 定时器句柄 */
+let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null
+/** 每 4 小时执行一次（token 有效期 8 小时，4 小时足够安全） */
+const TOKEN_REFRESH_INTERVAL_MS = 4 * 60 * 60_000
+
+/**
+ * 后台遍历所有账号，调用 getClaudeAccessToken 触发自动续期
+ * getClaudeAccessToken 内部会检查 expiresAt，过期前 30 分钟自动刷新
+ */
+async function refreshAllTokens(): Promise<void> {
+    try {
+        const config = await readAccountsConfig()
+        if (config.accounts.length === 0) return
+
+        console.log(`[ClaudeAccounts] Background token refresh: checking ${config.accounts.length} accounts...`)
+        let refreshed = 0
+        let failed = 0
+
+        for (const account of config.accounts) {
+            try {
+                const token = await getClaudeAccessToken(account.configDir)
+                if (token) {
+                    refreshed++
+                } else {
+                    failed++
+                    console.warn(`[ClaudeAccounts] No token for account: ${account.name}`)
+                }
+            } catch (err) {
+                failed++
+                console.error(`[ClaudeAccounts] Token refresh error for ${account.name}:`, err)
+            }
+            // 每个账号之间加短暂延迟，避免并发请求
+            if (config.accounts.length > 1) {
+                await randomDelay()
+            }
+        }
+
+        console.log(`[ClaudeAccounts] Background token refresh done: ${refreshed} ok, ${failed} failed`)
+    } catch (err) {
+        console.error('[ClaudeAccounts] Background token refresh error:', err)
+    }
+}
+
+/**
+ * 启动后台 token 定时续期
+ * 服务器启动时调用，每 4 小时自动刷新所有账号的 OAuth token
+ */
+export function startTokenRefreshTimer(): void {
+    if (tokenRefreshTimer) return
+
+    // 启动后立即执行一次
+    refreshAllTokens()
+
+    tokenRefreshTimer = setInterval(refreshAllTokens, TOKEN_REFRESH_INTERVAL_MS)
+    console.log('[ClaudeAccounts] Background token refresh timer started (interval: 4h)')
+}
+
+/**
+ * 停止后台 token 定时续期
+ */
+export function stopTokenRefreshTimer(): void {
+    if (tokenRefreshTimer) {
+        clearInterval(tokenRefreshTimer)
+        tokenRefreshTimer = null
+        console.log('[ClaudeAccounts] Background token refresh timer stopped')
+    }
 }
 
 /**
