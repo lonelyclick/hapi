@@ -124,7 +124,7 @@ function AssistantEntry({ content }: { content: string }) {
         <div className="px-1 min-w-0 max-w-full overflow-x-hidden">
             <Markdown
                 remarkPlugins={[remarkGfm]}
-                className="aui-md min-w-0 max-w-full break-words text-sm [&>*+*]:mt-2"
+                className="min-w-0 max-w-full break-words text-xs [&>*+*]:mt-1.5"
                 components={{
                     pre: (props) => (
                         <div className="min-w-0 w-full max-w-full overflow-x-auto">
