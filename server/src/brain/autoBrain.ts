@@ -29,6 +29,11 @@ function extractUserText(content: unknown): string | null {
     if (record.role !== 'user') {
         return null
     }
+    // 跳过 brain-review 系统消息，避免审查结果被当作用户输入触发无限循环
+    const meta = record.meta as Record<string, unknown> | undefined
+    if (meta?.sentFrom === 'brain-review') {
+        return null
+    }
     const body = record.content as Record<string, unknown> | string | undefined
     if (!body) {
         return null
@@ -242,6 +247,32 @@ export class AutoBrainService {
             console.log('[BrainSync] Brain AI response, triggering save')
             await this.handleBrainAIResponse(sessionId)
             return
+        }
+
+        if (session?.metadata?.source === 'brain-sdk') {
+            // review session 本身的 AI response，不触发主 session sync
+            return
+        }
+
+        // 检查最近一条用户消息是否来自 brain-review，如果是则跳过 sync
+        // 避免 brain-review 结果 → CLI agent 回复 → 触发 sync 的无限循环
+        try {
+            const result = await this.engine.getMessagesPage(sessionId, { limit: 10, beforeSeq: null })
+            // getMessagesPage 返回最新的消息（DESC排序），取第一个 user 消息即最新的
+            const lastUserMsg = result.messages?.find(m => {
+                const c = m.content as Record<string, unknown>
+                return c?.role === 'user'
+            })
+            if (lastUserMsg) {
+                const content = lastUserMsg.content as Record<string, unknown>
+                const meta = content?.meta as Record<string, unknown> | undefined
+                if (meta?.sentFrom === 'brain-review') {
+                    console.log('[BrainSync] Skipping sync for brain-review response in session:', sessionId)
+                    return
+                }
+            }
+        } catch {
+            // 读取消息失败不影响正常流程
         }
 
         await this.handleMainSessionComplete(sessionId)
