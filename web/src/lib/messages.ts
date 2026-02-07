@@ -99,7 +99,7 @@ export function upsertMessagesInCache(
                 {
                     messages: mergedIncoming,
                     page: {
-                        limit: 50,
+                        limit: 200,
                         beforeSeq: null,
                         nextBeforeSeq: null,
                         hasMore: false,

@@ -21,7 +21,7 @@ export function useMessages(api: ApiClient | null, sessionId: string | null): {
                 throw new Error('Messages unavailable')
             }
             const beforeSeq = typeof pageParam === 'number' ? pageParam : null
-            return await api.getMessages(sessionId, { limit: 50, beforeSeq })
+            return await api.getMessages(sessionId, { limit: 200, beforeSeq })
         },
         initialPageParam: null,
         getNextPageParam: (lastPage) =>
