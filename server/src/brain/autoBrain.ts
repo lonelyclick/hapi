@@ -860,10 +860,8 @@ export class AutoBrainService {
         const reviewPrompt = buildReviewPrompt(contextSummary, roundsSummary)
         const systemPrompt = buildBrainSystemPrompt()
 
-        // Claude Code SDK 需要 claude 模型名
-        const model = brainSession.brainModelVariant === 'opus'
-            ? 'claude-opus-4-5-20250929'
-            : 'claude-sonnet-4-5-20250929'
+        // 使用 glm-4.7（LiteLLM 代理支持，claude-sonnet-4-5 映射的 API 返回 401）
+        const model = 'glm-4.7'
 
         // 创建执行记录（status=running）
         const execution = await this.brainStore.createBrainExecution({

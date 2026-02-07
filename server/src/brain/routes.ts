@@ -1234,9 +1234,8 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             return c.json({ error: 'Brain worker executable not found' }, 500)
         }
 
-        const model = brainSession.brainModelVariant === 'opus'
-            ? 'claude-opus-4-5-20250929'
-            : 'claude-sonnet-4-5-20250929'
+        // 使用 glm-4.7（LiteLLM 代理支持，claude-sonnet-4-5 映射的 API 返回 401）
+        const model = 'glm-4.7'
 
         const config = JSON.stringify({
             executionId: execution.id,
