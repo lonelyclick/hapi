@@ -162,6 +162,15 @@ if [[ "$BUILD_DAEMON" == "true" ]]; then
     echo "=== macmini daemon updated and restarted"
 fi
 
+# 确保 systemd service 包含 EnvironmentFile（加载 .env 中的 LITELLM 等变量）
+HAPI_ENV_FILE="/home/guang/softwares/hapi/.env"
+SERVICE_FILE="/etc/systemd/system/hapi-server.service"
+if ! grep -q "EnvironmentFile=" "$SERVICE_FILE" 2>/dev/null; then
+    echo "=== Adding EnvironmentFile to systemd service..."
+    echo "guang" | sudo -S sed -i "/^ExecStart=/i EnvironmentFile=$HAPI_ENV_FILE" "$SERVICE_FILE"
+    echo "guang" | sudo -S systemctl daemon-reload
+fi
+
 echo "=== Killing old processes..."
 fuser -k 3006/tcp 2>/dev/null || true
 fuser -k 3000/tcp 2>/dev/null || true
