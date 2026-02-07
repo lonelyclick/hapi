@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { queryKeys } from '@/lib/query-keys'
 import type { ApiClient } from '@/api/client'
 import { Card, CardHeader, CardDescription, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { CodeBlock } from '@/components/CodeBlock'
-import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { Spinner } from '@/components/Spinner'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
 
@@ -121,7 +122,32 @@ function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
 function AssistantEntry({ content }: { content: string }) {
     return (
         <div className="px-1 min-w-0 max-w-full overflow-x-hidden">
-            <MarkdownRenderer content={content} />
+            <Markdown
+                remarkPlugins={[remarkGfm]}
+                className="aui-md min-w-0 max-w-full break-words text-sm [&>*+*]:mt-2"
+                components={{
+                    pre: (props) => (
+                        <div className="min-w-0 w-full max-w-full overflow-x-auto">
+                            <pre {...props} className="m-0 w-max min-w-full rounded-md bg-[var(--app-code-bg)] p-2 text-xs" />
+                        </div>
+                    ),
+                    code: (props) => {
+                        const { className, children, ...rest } = props
+                        const isBlock = className?.startsWith('language-')
+                        if (isBlock) {
+                            return <code {...rest} className={`font-mono ${className ?? ''}`}>{children}</code>
+                        }
+                        return <code {...rest} className="break-words rounded bg-[var(--app-inline-code-bg)] px-[0.3em] py-[0.1em] font-mono text-[0.9em]">{children}</code>
+                    },
+                    p: (props) => <p {...props} className="leading-relaxed" />,
+                    ul: (props) => <ul {...props} className="list-disc pl-6" />,
+                    ol: (props) => <ol {...props} className="list-decimal pl-6" />,
+                    a: (props) => <a {...props} target="_blank" rel="noreferrer" className="text-[var(--app-link)] underline" />,
+                    strong: (props) => <strong {...props} className="font-semibold" />,
+                }}
+            >
+                {content}
+            </Markdown>
         </div>
     )
 }
