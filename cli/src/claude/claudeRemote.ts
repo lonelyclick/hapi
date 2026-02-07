@@ -11,6 +11,16 @@ import { systemPrompt } from "./utils/systemPrompt";
 import { PermissionResult } from "./sdk/types";
 import { buildMessageContent } from "./utils/imageMessage";
 
+// Timeout for waiting on Claude API response (3 minutes)
+const THINKING_TIMEOUT_MS = 3 * 60 * 1000;
+
+export class ThinkingTimeoutError extends Error {
+    constructor() {
+        super('Claude API response timed out after 3 minutes of no activity');
+        this.name = 'ThinkingTimeoutError';
+    }
+}
+
 export async function claudeRemote(opts: {
 
     // Fixed parameters
@@ -155,11 +165,48 @@ export async function claudeRemote(opts: {
         options: sdkOptions,
     });
 
+    // Thinking timeout: if no messages arrive for THINKING_TIMEOUT_MS, throw
+    let thinkingTimer: ReturnType<typeof setTimeout> | null = null;
+    let thinkingTimeoutReject: ((err: Error) => void) | null = null;
+    const resetThinkingTimeout = () => {
+        if (thinkingTimer) clearTimeout(thinkingTimer);
+        thinkingTimer = setTimeout(() => {
+            logger.debug('[claudeRemote] Thinking timeout reached - no messages for 3 minutes');
+            if (thinkingTimeoutReject) {
+                thinkingTimeoutReject(new ThinkingTimeoutError());
+            }
+        }, THINKING_TIMEOUT_MS);
+    };
+    const clearThinkingTimeout = () => {
+        if (thinkingTimer) {
+            clearTimeout(thinkingTimer);
+            thinkingTimer = null;
+        }
+        thinkingTimeoutReject = null;
+    };
+
     updateThinking(true);
     try {
         logger.debug(`[claudeRemote] Starting to iterate over response`);
 
-        for await (const message of response) {
+        // Use manual iteration with Promise.race for timeout support
+        const iterator = response[Symbol.asyncIterator]();
+        resetThinkingTimeout();
+
+        while (true) {
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                thinkingTimeoutReject = reject;
+            });
+            const result = await Promise.race([
+                iterator.next(),
+                timeoutPromise,
+            ]);
+            if (result.done) break;
+            const message = result.value;
+
+            // Reset timeout on each message
+            resetThinkingTimeout();
+
             logger.debugLargeJson(`[claudeRemote] Message ${message.type}`, message);
 
             // Handle messages
@@ -186,6 +233,7 @@ export async function claudeRemote(opts: {
             // Handle result messages
             if (message.type === 'result') {
                 updateThinking(false);
+                clearThinkingTimeout(); // No need for timeout while waiting for user
                 const resultMsg = message as SDKResultMessage;
                 logger.debug('[claudeRemote] Result received, exiting claudeRemote');
 
@@ -218,6 +266,7 @@ export async function claudeRemote(opts: {
                 mode = next.mode;
                 const nextContent = await buildMessageContent(next.message, opts.path);
                 messages.push({ type: 'user', message: { role: 'user', content: nextContent } });
+                resetThinkingTimeout(); // Restart timeout after sending new message
             }
 
             // Handle tool result
@@ -227,12 +276,14 @@ export async function claudeRemote(opts: {
                     for (let c of msg.message.content) {
                         if (c.type === 'tool_result' && c.tool_use_id && opts.isAborted(c.tool_use_id)) {
                             logger.debug('[claudeRemote] Tool aborted, exiting claudeRemote');
+                            clearThinkingTimeout();
                             return;
                         }
                     }
                 }
             }
         }
+        clearThinkingTimeout();
     } catch (e) {
         if (e instanceof AbortError) {
             logger.debug(`[claudeRemote] Aborted`);
@@ -241,6 +292,7 @@ export async function claudeRemote(opts: {
             throw e;
         }
     } finally {
+        clearThinkingTimeout();
         updateThinking(false);
     }
 }

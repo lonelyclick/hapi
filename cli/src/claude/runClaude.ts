@@ -271,8 +271,9 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         ? modeEnv.permissionMode
         : undefined;
     let currentPermissionMode: PermissionMode = envPermissionMode ?? options.permissionMode ?? 'default';
-    let currentModel = options.model; // Track current model state
-    let currentModelMode: SessionModelMode = modeEnv.modelMode ?? (currentModel === 'sonnet' || currentModel === 'opus' ? currentModel : 'default');
+    let currentModelMode: SessionModelMode = modeEnv.modelMode ?? (options.model === 'sonnet' || options.model === 'opus' ? options.model : 'default');
+    // Sync currentModel with modelMode: 'opus'/'sonnet' → pass as --model, 'default' → 'opus' (Claude Code defaults to Sonnet without --model)
+    let currentModel = currentModelMode !== 'default' ? currentModelMode : (options.model ?? 'opus');
     let currentFallbackModel: string | undefined = undefined; // Track current fallback model
     if (envPermissionMode || modeEnv.modelMode) {
         logger.debug(`[loop] Using mode settings from environment: permissionMode=${envPermissionMode}, modelMode=${modeEnv.modelMode}, reasoningEffort=${modeEnv.modelReasoningEffort}`);
@@ -473,7 +474,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
                 throw new Error('Invalid model mode');
             }
             currentModelMode = config.modelMode;
-            currentModel = config.modelMode === 'default' ? undefined : config.modelMode;
+            currentModel = config.modelMode === 'default' ? 'opus' : config.modelMode;
         }
 
         syncSessionModes();

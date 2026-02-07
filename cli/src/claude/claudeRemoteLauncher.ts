@@ -3,7 +3,7 @@ import { Session } from "./session";
 import { MessageBuffer } from "@/ui/ink/messageBuffer";
 import { RemoteModeDisplay } from "@/ui/ink/RemoteModeDisplay";
 import React from "react";
-import { claudeRemote } from "./claudeRemote";
+import { claudeRemote, ThinkingTimeoutError } from "./claudeRemote";
 import { PermissionHandler } from "./utils/permissionHandler";
 import { Future } from "@/utils/future";
 import { SDKAssistantMessage, SDKMessage, SDKSystemMessage, SDKUserMessage } from "./sdk";
@@ -447,6 +447,16 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     logger.debug('[remote]: stack trace:', errorStack);
                 }
                 console.error('[HAPI] Process error:', errorMessage);
+
+                // Handle thinking timeout - restart the process
+                if (!exitReason && e instanceof ThinkingTimeoutError) {
+                    logger.debug('[remote]: Thinking timeout - restarting Claude process');
+                    session.client.sendSessionEvent({
+                        type: 'message',
+                        message: 'Response timed out. Retrying...'
+                    });
+                    continue;
+                }
 
                 // Handle failed --resume (session file not found / conversation not found)
                 if (!exitReason && /no conversation found/i.test(errorMessage)) {
