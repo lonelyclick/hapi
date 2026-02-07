@@ -24,7 +24,7 @@ const MIN_ROUNDS_PER_BATCH = 1   // 每批最小轮数
 /**
  * 从消息内容中提取用户文本
  */
-function extractUserText(content: unknown): string | null {
+function extractUserText(content: unknown): { text: string; fromBrainReview: boolean } | null {
     if (!content || typeof content !== 'object') {
         return null
     }
@@ -32,22 +32,20 @@ function extractUserText(content: unknown): string | null {
     if (record.role !== 'user') {
         return null
     }
-    // 跳过 brain-review 系统消息，避免审查结果被当作用户输入触发无限循环
     const meta = record.meta as Record<string, unknown> | undefined
-    if (meta?.sentFrom === 'brain-review') {
-        return null
-    }
+    const fromBrainReview = meta?.sentFrom === 'brain-review'
     const body = record.content as Record<string, unknown> | string | undefined
     if (!body) {
         return null
     }
+    let text: string | null = null
     if (typeof body === 'string') {
-        return body.trim() || null
+        text = body.trim() || null
+    } else if (typeof body === 'object' && body.type === 'text' && typeof body.text === 'string') {
+        text = (body.text as string).trim() || null
     }
-    if (typeof body === 'object' && body.type === 'text' && typeof body.text === 'string') {
-        return body.text.trim() || null
-    }
-    return null
+    if (!text) return null
+    return { text, fromBrainReview }
 }
 
 /**
@@ -60,6 +58,8 @@ interface DialogueRound {
     messageIds: string[]
     startedAt: number
     endedAt: number
+    /** 该 round 的用户输入是否来自 brain-review（不需要再触发 SDK review） */
+    fromBrainReview?: boolean
 }
 
 function extractAIText(content: unknown): string | null {
@@ -148,21 +148,22 @@ function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown;
             }
         }
 
-        const userText = extractUserText(message.content)
+        const userResult = extractUserText(message.content)
         const aiText = extractAIText(message.content)
 
-        if (userText) {
+        if (userResult) {
             if (currentRound) {
                 rounds.push(currentRound)
             }
             roundNumber++
             currentRound = {
                 roundNumber,
-                userInput: userText,
+                userInput: userResult.text,
                 aiMessages: [],
                 messageIds: [message.id],
                 startedAt: message.createdAt,
-                endedAt: message.createdAt
+                endedAt: message.createdAt,
+                fromBrainReview: userResult.fromBrainReview
             }
         } else if (aiText && currentRound) {
             currentRound.aiMessages.push(aiText)
@@ -250,27 +251,8 @@ export class AutoBrainService {
             return
         }
 
-        // 检查最近一条用户消息是否来自 brain-review，如果是则跳过 sync
-        // 避免 brain-review 结果 → CLI agent 回复 → 触发 sync 的无限循环
-        try {
-            const result = await this.engine.getMessagesPage(sessionId, { limit: 10, beforeSeq: null })
-            // getMessagesPage 返回最新的消息（DESC排序），取第一个 user 消息即最新的
-            const lastUserMsg = result.messages?.find(m => {
-                const c = m.content as Record<string, unknown>
-                return c?.role === 'user'
-            })
-            if (lastUserMsg) {
-                const content = lastUserMsg.content as Record<string, unknown>
-                const meta = content?.meta as Record<string, unknown> | undefined
-                if (meta?.sentFrom === 'brain-review') {
-                    console.log('[BrainSync] Skipping sync for brain-review response in session:', sessionId)
-                    return
-                }
-            }
-        } catch {
-            // 读取消息失败不影响正常流程
-        }
-
+        // brain-review 消息也会被汇总到 round 中（标记 fromBrainReview），
+        // 但不会触发新的 SDK review（防止无限循环）
         await this.handleMainSessionComplete(sessionId)
     }
 
@@ -452,8 +434,10 @@ export class AutoBrainService {
                 const existingRounds = await this.brainStore.getBrainRounds(brainId)
                 const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
 
+                // brain-review 开头的 round 也需要汇总，但不触发 SDK review
+                const brainReviewRoundNumbers = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
                 const pendingRounds = allRounds.filter(r => !summarizedRoundNumbers.has(r.roundNumber) && r.aiMessages.length > 0)
-                console.log('[BrainSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size, '(excluded incomplete rounds without AI reply)')
+                console.log('[BrainSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size, 'brainReviewRounds:', brainReviewRoundNumbers.size, '(excluded incomplete rounds without AI reply)')
 
                 this.broadcastSyncStatus(brainSession, {
                     status: 'checking',
@@ -464,14 +448,17 @@ export class AutoBrainService {
 
                 if (pendingRounds.length === 0) {
                     const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId)
-                    const unbrainedRounds = existingRounds.filter(r => !brainedRoundNumbers.has(r.roundNumber))
+                    // 排除 brain-review 开头的 round（这些只需汇总，不需要 review，否则会形成无限循环）
+                    const unbrainedRounds = existingRounds.filter(r =>
+                        !brainedRoundNumbers.has(r.roundNumber) && !brainReviewRoundNumbers.has(r.roundNumber)
+                    )
 
                     // 如果有已同步但未 brain 的 rounds，补触发 SDK review
                     if (unbrainedRounds.length > 0 && this.isSdkMode(brainSession)) {
                         const mainSessionObj = this.engine.getSession(mainSessionId)
                         const projectPath = mainSessionObj?.metadata?.path
                         if (projectPath) {
-                            console.log('[BrainSync] Found', unbrainedRounds.length, 'unbrained rounds, triggering SDK review')
+                            console.log('[BrainSync] Found', unbrainedRounds.length, 'unbrained rounds (excluding brain-review rounds), triggering SDK review')
                             const summaries = unbrainedRounds.map(r => ({ round: r.roundNumber, summary: r.aiSummary }))
                             await this.triggerSdkReview(brainSession, summaries, projectPath)
                         }
@@ -584,8 +571,14 @@ export class AutoBrainService {
 
                         if (this.isSdkMode(brainSession)) {
                             // SDK 模式：spawn detached worker 进行代码审查
-                            console.log('[BrainSync] Using SDK mode for brain analysis (detached worker)')
-                            await this.triggerSdkReview(brainSession, savedSummaries, projectPath)
+                            // 排除 brain-review 开头的 round（防止 review 自己的审查结果）
+                            const reviewableSummaries = savedSummaries.filter(s => !brainReviewRoundNumbers.has(s.round))
+                            if (reviewableSummaries.length > 0) {
+                                console.log('[BrainSync] Using SDK mode for brain analysis (detached worker), reviewable:', reviewableSummaries.length, 'of', savedSummaries.length)
+                                await this.triggerSdkReview(brainSession, reviewableSummaries, projectPath)
+                            } else {
+                                console.log('[BrainSync] All saved rounds are brain-review rounds, skipping SDK review')
+                            }
                         } else {
                             // CLI 模式：此处不额外处理，Brain session 会自行根据消息做分析
                         }
@@ -597,9 +590,11 @@ export class AutoBrainService {
                 const newSummarizedCount = existingRounds.length + savedRounds.length
                 const newPendingCount = allRounds.length - newSummarizedCount
 
-                const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId)
+                const brainedRoundNumbersForStatus = await this.brainStore.getBrainedRoundNumbers(brainId)
                 const newExistingRounds = await this.brainStore.getBrainRounds(brainId)
-                const unbrainedCount = newExistingRounds.filter(r => !brainedRoundNumbers.has(r.roundNumber)).length
+                const unbrainedCount = newExistingRounds.filter(r =>
+                    !brainedRoundNumbersForStatus.has(r.roundNumber) && !brainReviewRoundNumbers.has(r.roundNumber)
+                ).length
 
                 this.broadcastSyncStatus(brainSession, {
                     status: newPendingCount > 0 ? 'syncing' : 'complete',
@@ -627,9 +622,12 @@ export class AutoBrainService {
             console.error('[BrainSync] syncRounds error:', err)
             const allMessages = await this.engine.getAllMessages(mainSessionId).catch(() => [])
             const allRounds = groupMessagesIntoRounds(allMessages)
+            const brainReviewRoundNums = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
             const existingRounds = await this.brainStore.getBrainRounds(brainId).catch(() => [])
             const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId).catch(() => new Set<number>())
-            const unbrainedCount = existingRounds.filter(r => !brainedRoundNumbers.has(r.roundNumber)).length
+            const unbrainedCount = existingRounds.filter(r =>
+                !brainedRoundNumbers.has(r.roundNumber) && !brainReviewRoundNums.has(r.roundNumber)
+            ).length
 
             this.broadcastSyncStatus(brainSession, {
                 status: 'complete',
@@ -774,7 +772,10 @@ export class AutoBrainService {
             const pendingCount = allRounds.length - newExistingRounds.length
 
             const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId)
-            const unbrainedCount = newExistingRounds.filter(r => !brainedRoundNumbers.has(r.roundNumber)).length
+            const brainReviewRoundNums = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
+            const unbrainedCount = newExistingRounds.filter(r =>
+                !brainedRoundNumbers.has(r.roundNumber) && !brainReviewRoundNums.has(r.roundNumber)
+            ).length
 
             this.broadcastSyncStatus(brainSession, {
                 status: pendingCount > 0 ? 'syncing' : 'complete',
