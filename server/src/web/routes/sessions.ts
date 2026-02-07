@@ -1017,13 +1017,13 @@ export function createSessionsRoutes(
             void store.setSessionCreatedBy(sessionId, email, namespace)
         }
 
-        // Send init prompt
-        const role = c.get('role')
-        const userName = c.get('name')
-        await sendInitPrompt(engine, sessionId, role, userName)
-
-        // Only send context message if we couldn't use Claude --resume
+        // Only send init prompt and context if we couldn't use Claude --resume
+        // When --resume is used, Claude Code already has the full conversation history
         if (!resumeSessionId) {
+            const role = c.get('role')
+            const userName = c.get('name')
+            await sendInitPrompt(engine, sessionId, role, userName)
+
             const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
             const contextMessage = buildResumeContextMessage(session, page.messages)
             if (contextMessage) {

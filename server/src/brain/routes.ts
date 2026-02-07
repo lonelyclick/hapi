@@ -1375,13 +1375,13 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                 await brainStore.completeBrainSession(body.brainSessionId, '[NO_MESSAGE]')
             } else if (callbackPhase === 'refine') {
                 // refine 完成：发给主 session，sentFrom 由调用方决定
+                // 注意：refine 是消息拦截优化，不结束 brain session
                 const sentFrom = (body.refineSentFrom as 'webapp' | 'brain-review') || 'brain-review'
                 console.log(`[BrainWorkerCallback] refine completed, sending to main session, sentFrom=${sentFrom}, outputLen=${body.output.length}`)
                 await engine?.sendMessage(body.mainSessionId, {
                     text: body.output,
                     sentFrom
                 })
-                await brainStore.completeBrainSession(body.brainSessionId, body.output)
             } else {
                 // review 阶段完成：直接发给主 session，不再 spawn refine
                 console.log(`[BrainWorkerCallback] review completed, sending directly to main session, outputLen=${body.output.length}`)
@@ -1389,7 +1389,8 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                     text: body.output,
                     sentFrom: 'brain-review'
                 })
-                await brainStore.completeBrainSession(body.brainSessionId, body.output)
+                // 保存 review 结果但保持 brain session 为 active（后续新对话还会继续被 review）
+                await brainStore.updateBrainResult(body.brainSessionId, body.output)
             }
         } else if (body.status === 'failed') {
             console.error(`[BrainWorkerCallback] ${callbackPhase} FAILED: ${body.error || '未知错误'}`)

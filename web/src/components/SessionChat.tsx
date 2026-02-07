@@ -306,7 +306,7 @@ export function SessionChat(props: {
                     onBack={props.onBack}
                     onDelete={handleDeleteClick}
                     onRefreshAccount={props.session.metadata?.flavor === 'claude' ? handleRefreshAccount : undefined}
-                    onOpenBrain={(brainSessionId) => navigate({ to: '/sessions/$sessionId', params: { sessionId: brainSessionId } })}
+                    onOpenBrain={(brainSessionId) => window.open(`/sessions/${brainSessionId}`, '_blank')}
                     deleteDisabled={isPending}
                     refreshAccountDisabled={isPending}
                     modelMode={resolvedModelMode}
