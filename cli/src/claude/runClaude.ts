@@ -486,12 +486,19 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     // Claude Code's claudeCheckSession will fail if it can't find the file under the new CLAUDE_CONFIG_DIR.
     // We symlink the old session file into the new account's project dir so --resume works across accounts.
     if (resumeSessionId && activeAccount) {
-        const { getProjectPath } = await import('./utils/path');
-        const { existsSync, symlinkSync, mkdirSync, readdirSync } = await import('node:fs');
+        const { existsSync, symlinkSync, mkdirSync, readdirSync, lstatSync, unlinkSync } = await import('node:fs');
         const { join, dirname } = await import('node:path');
-        const newProjectDir = getProjectPath(workingDirectory);
+        // Build project path under the NEW account's config dir (don't use getProjectPath which reads process.env)
+        const projectId = resolve(workingDirectory).replace(/[^a-zA-Z0-9]/g, '-');
+        const newProjectDir = join(activeAccount.configDir, 'projects', projectId);
         const targetFile = join(newProjectDir, `${resumeSessionId}.jsonl`);
-        if (!existsSync(targetFile)) {
+        // Check if target exists as a valid file (existsSync follows symlinks)
+        // Also handle broken symlinks: lstatSync succeeds but existsSync returns false
+        let needsSymlink = !existsSync(targetFile);
+        if (needsSymlink) {
+            try { lstatSync(targetFile); unlinkSync(targetFile); } catch {}  // Remove broken symlink if present
+        }
+        if (needsSymlink) {
             // Search all account dirs for the session file
             const accountsDir = dirname(activeAccount.configDir);
             try {
@@ -500,8 +507,6 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
                     if (!entry.isDirectory()) continue;
                     const candidateDir = join(accountsDir, entry.name);
                     if (candidateDir === activeAccount.configDir) continue;
-                    // Build the same project path but under the old account's config dir
-                    const projectId = resolve(workingDirectory).replace(/[^a-zA-Z0-9]/g, '-');
                     const sourceFile = join(candidateDir, 'projects', projectId, `${resumeSessionId}.jsonl`);
                     if (existsSync(sourceFile)) {
                         mkdirSync(newProjectDir, { recursive: true });

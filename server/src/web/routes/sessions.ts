@@ -1010,6 +1010,8 @@ export function createSessionsRoutes(
 
         const online = await waitForSessionOnline(engine, sessionId, RESUME_TIMEOUT_MS)
         if (!online) {
+            // Revert pre-activation since process didn't come online
+            await store.setSessionActive(sessionId, false, Date.now(), namespace)
             return c.json({ error: 'Session failed to come online after refresh' }, 409)
         }
 

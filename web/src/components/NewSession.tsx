@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import type { Machine, SpawnLogEntry } from '@/types/api'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/Spinner'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
+import { queryKeys } from '@/lib/query-keys'
 import { useAppContext } from '@/lib/app-context'
 
 type AgentType = 'claude' | 'codex' | 'opencode'
@@ -167,6 +168,7 @@ export function NewSession(props: {
 }) {
     const { userEmail } = useAppContext()
     const { haptic } = usePlatform()
+    const queryClient = useQueryClient()
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
     const isFormDisabled = isPending || props.isLoading
 
@@ -301,6 +303,14 @@ export function NewSession(props: {
             }
 
             if (result.type === 'success') {
+                // 如果启用了 Brain，标记 brain 正在初始化，禁止用户发送消息直到 brain-ready
+                if (enableBrain) {
+                    queryClient.setQueryData(queryKeys.brainRefine(result.sessionId), {
+                        isRefining: false,
+                        noMessage: false,
+                        brainInitializing: true
+                    })
+                }
                 // 保存本次偏好设置，下次新建时自动恢复
                 saveSpawnPrefs(userEmail, {
                     machineId: machineId ?? undefined,

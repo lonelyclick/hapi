@@ -75,6 +75,7 @@ export function SessionChat(props: {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [isResuming, setIsResuming] = useState(false)
     const [resumeError, setResumeError] = useState<string | null>(null)
+    const [brainBusy, setBrainBusy] = useState(false)
     const pendingMessageRef = useRef<string | null>(null)
     const composerSetTextRef = useRef<((text: string) => void) | null>(null)
 
@@ -83,6 +84,7 @@ export function SessionChat(props: {
         blocksByIdRef.current.clear()
         setIsResuming(false)
         setResumeError(null)
+        setBrainBusy(false)
         pendingMessageRef.current = null
     }, [props.session.id])
 
@@ -378,14 +380,14 @@ export function SessionChat(props: {
                                 ? <BrainSdkProgressPanel mainSessionId={props.session.metadata.mainSessionId as string} api={props.api} />
                                 : props.session.metadata?.source === 'brain'
                                     ? undefined
-                                    : <BrainRefineIndicator sessionId={props.session.id} api={props.api} />
+                                    : <BrainRefineIndicator sessionId={props.session.id} api={props.api} onBrainBusy={setBrainBusy} />
                         }
                     />
 
                     <HappyComposer
                         apiClient={props.api}
                         sessionId={props.session.id}
-                        disabled={props.isSending || isResuming || controlsDisabled}
+                        disabled={props.isSending || isResuming || controlsDisabled || brainBusy}
                         permissionMode={props.session.permissionMode}
                         modelMode={resolvedModelMode}
                         modelReasoningEffort={resolvedReasoningEffort}

@@ -264,6 +264,12 @@ export function useSSE(options: {
                         })
                     }
 
+                    // Brain 初始化完成，刷新 brain session 查询并清除 brainInitializing 状态
+                    if (progressData.progressType === 'brain-ready') {
+                        void queryClient.invalidateQueries({ queryKey: ['brain-active-session', event.sessionId] })
+                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: false, noMessage: false, brainInitializing: false })
+                    }
+
                     // Brain refine loading 状态（主 session 侧）
                     if (progressData.progressType === 'refine-started') {
                         queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: true, noMessage: false })

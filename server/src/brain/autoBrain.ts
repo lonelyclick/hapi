@@ -465,7 +465,7 @@ export class AutoBrainService {
                         const projectPath = mainSessionObj?.metadata?.path
                         if (projectPath) {
                             console.log('[BrainSync] Found', unbrainedRounds.length, 'unbrained rounds (excluding brain-review rounds), triggering SDK review')
-                            const summaries = unbrainedRounds.map(r => ({ round: r.roundNumber, summary: r.aiSummary }))
+                            const summaries = unbrainedRounds.map(r => ({ round: r.roundNumber, summary: r.aiSummary, userInput: r.userInput }))
                             await this.triggerSdkReview(brainSession, summaries, projectPath)
                         }
                     }
@@ -510,7 +510,7 @@ export class AutoBrainService {
                 console.log('[BrainSync] GLM returned', summaries.length, 'summaries')
 
                 const savedRounds: number[] = []
-                const savedSummaries: Array<{ round: number; summary: string }> = []
+                const savedSummaries: Array<{ round: number; summary: string; userInput: string }> = []
                 for (const summary of summaries) {
                     if (summarizedRoundNumbers.has(summary.round)) {
                         console.log('[BrainSync] Round', summary.round, 'already exists, skipping')
@@ -532,7 +532,7 @@ export class AutoBrainService {
                             endedAt: targetRound.endedAt
                         })
                         savedRounds.push(summary.round)
-                        savedSummaries.push({ round: summary.round, summary: summary.summary })
+                        savedSummaries.push({ round: summary.round, summary: summary.summary, userInput: targetRound.userInput })
                         summarizedRoundNumbers.add(summary.round)
                         console.log('[BrainSync] Saved round', summary.round)
                     } catch (e) {
@@ -554,7 +554,9 @@ export class AutoBrainService {
                         ]
                         for (const s of savedSummaries) {
                             messageLines.push(`### 第 ${s.round} 轮`)
-                            messageLines.push(s.summary)
+                            messageLines.push(`**用户：**\n${s.userInput}`)
+                            messageLines.push('')
+                            messageLines.push(`**AI 回应汇总：**\n${s.summary}`)
                             messageLines.push('')
                         }
                         messageLines.push('---')
@@ -807,7 +809,7 @@ export class AutoBrainService {
         pendingRounds: number
         syncingRounds?: number[]
         savedRounds?: number[]
-        savedSummaries?: Array<{ round: number; summary: string }>
+        savedSummaries?: Array<{ round: number; summary: string; userInput?: string }>
         unbrainedRounds?: number
         suggestions?: unknown[]
         summary?: string
@@ -846,7 +848,7 @@ export class AutoBrainService {
      */
     private async triggerSdkReview(
         brainSession: StoredBrainSession,
-        summaries: Array<{ round: number; summary: string }>,
+        summaries: Array<{ round: number; summary: string; userInput: string }>,
         projectPath: string
     ): Promise<void> {
         const brainId = brainSession.id
@@ -854,8 +856,8 @@ export class AutoBrainService {
 
         console.log('[BrainSync] Triggering SDK review for', summaries.length, 'rounds (detached worker)')
 
-        // 构建审查提示词
-        const roundsSummary = summaries.map(s => `### 第 ${s.round} 轮\n${s.summary}`).join('\n\n')
+        // 构建审查提示词：用户消息原文 + AI 回应汇总
+        const roundsSummary = summaries.map(s => `### 第 ${s.round} 轮\n**用户：**\n${s.userInput}\n\n**AI 回应汇总：**\n${s.summary}`).join('\n\n')
         const contextSummary = brainSession.contextSummary || '(无上下文)'
         const reviewPrompt = buildReviewPrompt(contextSummary, roundsSummary)
         const systemPrompt = await buildBrainSystemPrompt()

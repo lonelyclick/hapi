@@ -4,6 +4,7 @@ import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { IStore, UserRole } from '../../store'
 import type { BrainStore } from '../../brain/store'
 import type { AutoBrainService } from '../../brain/autoBrain'
+import type { SSEManager } from '../../sse/sseManager'
 import type { WebAppEnv } from '../middleware/auth'
 import { buildInitPrompt } from '../prompts/initPrompt'
 import { requireMachine } from './guards'
@@ -97,7 +98,7 @@ async function waitForSessionOnline(engine: SyncEngine, sessionId: string, timeo
 }
 
 
-export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore, brainStore?: BrainStore, autoBrainService?: AutoBrainService): Hono<WebAppEnv> {
+export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore, brainStore?: BrainStore, autoBrainService?: AutoBrainService, getSseManager?: () => SSEManager | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/machines', (c) => {
@@ -248,6 +249,21 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                                 contextSummary,
                             })
                             console.log(`[machines/spawn] Brain session created (SDK mode): ${brainSession.id}`)
+
+                            // SSE 广播 brain-ready，前端刷新 brain 状态并解除输入禁用
+                            const sseManager = getSseManager?.()
+                            if (sseManager) {
+                                sseManager.broadcast({
+                                    type: 'brain-sdk-progress',
+                                    namespace,
+                                    sessionId: result.sessionId,
+                                    data: {
+                                        brainSessionId: brainDisplaySession.id,
+                                        progressType: 'brain-ready',
+                                        data: {}
+                                    }
+                                } as unknown as import('../../sync/syncEngine.js').SyncEvent)
+                            }
 
                             // 触发初始 Brain 分析
                             if (autoBrainService) {

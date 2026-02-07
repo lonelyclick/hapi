@@ -8,18 +8,20 @@ import type { BrainSession } from '@/types/api'
 interface BrainRefineState {
     isRefining: boolean
     noMessage: boolean
+    brainInitializing?: boolean
 }
 
 /**
  * 主 session 侧的 Brain 状态指示器。
+ * - brainInitializing：Brain 正在初始化，显示 loading
  * - refine 进行中：显示 loading + 进度步骤
  * - review 完成且 noMessage：持久显示 "Brain: 没有问题"（从 DB 恢复）
  */
-export function BrainRefineIndicator({ sessionId, api }: { sessionId: string; api?: ApiClient | null }) {
+export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionId: string; api?: ApiClient | null; onBrainBusy?: (busy: boolean) => void }) {
     const queryClient = useQueryClient()
     const [state, setState] = useState<BrainRefineState>({ isRefining: false, noMessage: false })
 
-    // 从 brainSession 数据恢复持久化状态（noMessage + isRefining）
+    // 从 brainSession 数据恢复持久化状态（noMessage + isRefining + brainInitializing）
     useEffect(() => {
         const brainData = queryClient.getQueryData<BrainSession | null>(['brain-active-session', sessionId])
         if (brainData?.status === 'completed' && brainData.brainResult?.includes('[NO_MESSAGE]')) {
@@ -27,6 +29,10 @@ export function BrainRefineIndicator({ sessionId, api }: { sessionId: string; ap
         }
         if (brainData?.isRefining) {
             setState(prev => prev.isRefining ? prev : { ...prev, isRefining: true })
+        }
+        // 刷新后恢复：brain session 存在但 status 为 pending，说明还在初始化
+        if (brainData?.status === 'pending') {
+            setState(prev => prev.brainInitializing ? prev : { ...prev, brainInitializing: true })
         }
     }, [queryClient, sessionId])
 
@@ -48,10 +54,30 @@ export function BrainRefineIndicator({ sessionId, api }: { sessionId: string; ap
                 if (brainData?.isRefining) {
                     setState(prev => prev.isRefining ? prev : { ...prev, isRefining: true })
                 }
+                // brain session 存在但 status 为 pending → 还在初始化；否则清除初始化状态
+                if (brainData?.status === 'pending') {
+                    setState(prev => prev.brainInitializing ? prev : { ...prev, brainInitializing: true })
+                } else if (brainData) {
+                    setState(prev => prev.brainInitializing ? { ...prev, brainInitializing: false } : prev)
+                }
             }
         })
         return unsubscribe
     }, [queryClient, sessionId])
+
+    // 通知父组件 brain 是否忙碌（initializing 或 refining），用于禁用输入
+    useEffect(() => {
+        onBrainBusy?.(state.brainInitializing === true || state.isRefining)
+    }, [state.brainInitializing, state.isRefining, onBrainBusy])
+
+    if (state.brainInitializing) {
+        return (
+            <div className="flex items-center gap-2 py-2 px-1">
+                <Spinner size="sm" label="Brain initializing" />
+                <span className="text-xs text-[var(--app-fg)]">Brain 初始化中...</span>
+            </div>
+        )
+    }
 
     if (state.isRefining) {
         return (
