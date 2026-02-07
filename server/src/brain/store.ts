@@ -88,8 +88,21 @@ export class BrainStore implements IBrainStore {
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_sessions' AND column_name = 'applied_suggestion_ids') THEN
                     ALTER TABLE brain_sessions ADD COLUMN applied_suggestion_ids TEXT[] DEFAULT '{}';
                 END IF;
+                -- 添加 progress_log 字段到 brain_executions（存储进度日志）
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_executions' AND column_name = 'progress_log') THEN
+                    ALTER TABLE brain_executions ADD COLUMN progress_log JSONB DEFAULT '[]';
+                END IF;
             END $$;
         `)
+
+        // 启动时清理：将因 server 重启而中断的 running execution 标记为 failed
+        const cleaned = await this.pool.query(
+            `UPDATE brain_executions SET status = 'failed', result = 'Interrupted by server restart', completed_at = $1 WHERE status = 'running'`,
+            [Date.now()]
+        )
+        if ((cleaned.rowCount ?? 0) > 0) {
+            console.log(`[BrainStore] Cleaned ${cleaned.rowCount} interrupted executions from previous run`)
+        }
     }
 
     async createBrainSession(data: {
@@ -269,15 +282,16 @@ export class BrainStore implements IBrainStore {
         timeRangeStart: number
         timeRangeEnd: number
         prompt: string
+        status?: string
     }): Promise<{ id: string }> {
         const id = randomUUID()
         const now = Date.now()
 
         await this.pool.query(
             `INSERT INTO brain_executions
-             (id, review_session_id, rounds_reviewed, reviewed_round_numbers, time_range_start, time_range_end, prompt, status, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)`,
-            [id, data.brainSessionId, data.roundsReviewed, data.reviewedRoundNumbers, data.timeRangeStart, data.timeRangeEnd, data.prompt, now]
+             (id, review_session_id, rounds_reviewed, reviewed_round_numbers, time_range_start, time_range_end, prompt, status, progress_log, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '[]'::jsonb, $9)`,
+            [id, data.brainSessionId, data.roundsReviewed, data.reviewedRoundNumbers, data.timeRangeStart, data.timeRangeEnd, data.prompt, data.status || 'pending', now]
         )
 
         return { id }
@@ -316,19 +330,53 @@ export class BrainStore implements IBrainStore {
 
     /**
      * 获取已 brain 过的轮次号集合
-     * 只要有执行记录就算已 brain（因为 prompt 已发给 Brain AI）
+     * 只统计 completed 的执行记录（running/failed 不算）
      */
     async getBrainedRoundNumbers(brainSessionId: string): Promise<Set<number>> {
-        const executions = await this.getBrainExecutions(brainSessionId)
+        const result = await this.pool.query(
+            `SELECT reviewed_round_numbers FROM brain_executions WHERE review_session_id = $1 AND status = 'completed'`,
+            [brainSessionId]
+        )
         const brainedRoundNumbers = new Set<number>()
-        for (const exec of executions) {
-            if (exec.reviewedRoundNumbers) {
-                for (const roundNum of exec.reviewedRoundNumbers) {
-                    brainedRoundNumbers.add(roundNum)
+        for (const row of result.rows) {
+            const nums = row.reviewed_round_numbers as number[]
+            if (nums) {
+                for (const num of nums) {
+                    brainedRoundNumbers.add(num)
                 }
             }
         }
         return brainedRoundNumbers
+    }
+
+    async appendProgressLog(executionId: string, entry: {
+        id: string
+        type: string
+        content: string
+        timestamp: number
+    }): Promise<void> {
+        await this.pool.query(
+            `UPDATE brain_executions SET progress_log = progress_log || $1::jsonb WHERE id = $2`,
+            [JSON.stringify([entry]), executionId]
+        )
+    }
+
+    async getLatestExecutionWithProgress(brainSessionId: string): Promise<{
+        id: string
+        status: string
+        progressLog: Array<{ id: string; type: string; content: string; timestamp: number }>
+    } | null> {
+        const result = await this.pool.query(
+            `SELECT id, status, progress_log FROM brain_executions WHERE review_session_id = $1 ORDER BY created_at DESC LIMIT 1`,
+            [brainSessionId]
+        )
+        if (result.rows.length === 0) return null
+        const row = result.rows[0]
+        return {
+            id: row.id as string,
+            status: row.status as string,
+            progressLog: (row.progress_log ?? []) as Array<{ id: string; type: string; content: string; timestamp: number }>
+        }
     }
 
     async completeBrainExecution(id: string, result: string): Promise<boolean> {

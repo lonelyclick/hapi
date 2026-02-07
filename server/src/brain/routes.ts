@@ -1260,6 +1260,18 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
 
         const systemPrompt = buildBrainSystemPrompt(body.customInstructions)
 
+        // 提前创建执行记录（status=running），这样回调中可以追加进度日志
+        const execution = await brainStore.createBrainExecution({
+            brainSessionId: id,
+            roundsReviewed: unbrainedRounds.length,
+            reviewedRoundNumbers: unbrainedRounds.map(r => r.roundNumber),
+            timeRangeStart: timeRange?.start ?? Date.now(),
+            timeRangeEnd: timeRange?.end ?? Date.now(),
+            prompt: reviewPrompt,
+            status: 'running'
+        })
+        const executionId = execution.id
+
         // 执行 Brain 审查
         let result: BrainRequestResult
         try {
@@ -1282,6 +1294,14 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                 },
                 {
                     onProgress: (type, data) => {
+                        // 持久化进度日志
+                        const entry = {
+                            id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            type: type,
+                            content: typeof data === 'object' ? JSON.stringify(data) : String(data),
+                            timestamp: Date.now()
+                        }
+                        brainStore.appendProgressLog(executionId, entry).catch(() => {})
                         // 广播进度更新
                         const sseManager = getSseManager()
                         if (sseManager) {
@@ -1300,6 +1320,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                 }
             )
         } catch (error) {
+            await brainStore.failBrainExecution(executionId, (error as Error).message)
             return c.json({
                 error: 'Brain review failed',
                 message: (error as Error).message
@@ -1311,16 +1332,9 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             await brainStore.updateBrainSessionStatus(id, 'completed')
         }
 
-        // 创建执行记录
+        // 更新执行记录
         if (result.status === 'completed' && result.output) {
-            await brainStore.createBrainExecution({
-                brainSessionId: id,
-                roundsReviewed: unbrainedRounds.length,
-                reviewedRoundNumbers: unbrainedRounds.map(r => r.roundNumber),
-                timeRangeStart: timeRange?.start ?? Date.now(),
-                timeRangeEnd: timeRange?.end ?? Date.now(),
-                prompt: reviewPrompt
-            })
+            await brainStore.completeBrainExecution(executionId, result.output)
 
             // 尝试解析结果并验证
             try {
@@ -1328,13 +1342,16 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                 if (jsonMatch) {
                     const parsed = JSON.parse(jsonMatch[1])
                     if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-                        // 轮次已在创建 execution 时标记为已 brain
                         console.log('[Brain SDK] Parsed suggestions:', parsed.suggestions.length)
                     }
                 }
             } catch {
                 // 忽略解析错误
             }
+        } else if (result.status === 'error') {
+            await brainStore.failBrainExecution(executionId, result.error || 'Unknown error')
+        } else if (result.status === 'aborted') {
+            await brainStore.failBrainExecution(executionId, 'Aborted')
         }
 
         return c.json({
@@ -1363,6 +1380,26 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             hasResult: !!result,
             isRunning,
             result
+        })
+    })
+
+    // 获取 Brain Session 的最新执行进度日志（用于前端加载历史）
+    app.get('/brain/sessions/:id/progress-log', async (c) => {
+        const id = c.req.param('id')
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
+        }
+
+        const execution = await brainStore.getLatestExecutionWithProgress(id)
+        if (!execution) {
+            return c.json({ entries: [], isActive: false })
+        }
+
+        return c.json({
+            entries: execution.progressLog,
+            isActive: execution.status === 'running',
+            executionId: execution.id
         })
     })
 

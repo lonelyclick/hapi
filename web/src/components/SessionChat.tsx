@@ -381,7 +381,7 @@ export function SessionChat(props: {
                     />
 
                     {props.session.metadata?.source === 'brain-sdk' && props.session.metadata?.mainSessionId && (
-                        <BrainSdkProgressPanel mainSessionId={props.session.metadata.mainSessionId as string} />
+                        <BrainSdkProgressPanel mainSessionId={props.session.metadata.mainSessionId as string} api={props.api} />
                     )}
 
                     <HappyComposer

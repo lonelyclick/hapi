@@ -893,6 +893,18 @@ export class AutoBrainService {
         process.on('uncaughtException', crashGuard)
 
         try {
+            // 提前创建执行记录（status=running），这样回调中可以追加进度日志
+            const execution = await this.brainStore.createBrainExecution({
+                brainSessionId: brainId,
+                roundsReviewed: summaries.length,
+                reviewedRoundNumbers: summaries.map(s => s.round),
+                timeRangeStart: Date.now(),
+                timeRangeEnd: Date.now(),
+                prompt: reviewPrompt,
+                status: 'running'
+            })
+            const executionId = execution.id
+
             // 执行 SDK 审查
             const result = await this.brainSdkService.executeBrainReview(
                 brainId,
@@ -909,6 +921,16 @@ export class AutoBrainService {
                 },
                 {
                     onAssistantMessage: (message) => {
+                        // 持久化进度日志
+                        const entry = {
+                            id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            type: 'assistant-message',
+                            content: message.content,
+                            timestamp: Date.now()
+                        }
+                        this.brainStore.appendProgressLog(executionId, entry).catch(err => {
+                            console.error('[BrainSync] Failed to append progress log:', err)
+                        })
                         // 通过 SSE 广播 SDK review 的 assistant 消息（不能用 sendMessage，会触发 CLI daemon 处理）
                         if (this.sseManager) {
                             const mainSession = this.engine.getSession(mainSessionId)
@@ -926,14 +948,24 @@ export class AutoBrainService {
                     },
                     onToolUse: (toolName, input) => {
                         // 通过 SSE 广播工具调用信息
+                        const inputSummary = toolName === 'Read'
+                            ? (input as { file_path?: string }).file_path || ''
+                            : toolName === 'Grep'
+                                ? `pattern="${(input as { pattern?: string }).pattern}" path="${(input as { path?: string }).path || '.'}"`
+                                : toolName === 'Glob'
+                                    ? `pattern="${(input as { pattern?: string }).pattern}"`
+                                    : JSON.stringify(input).slice(0, 200)
+                        // 持久化进度日志
+                        const entry = {
+                            id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            type: 'tool-use',
+                            content: `${toolName} ${inputSummary}`,
+                            timestamp: Date.now()
+                        }
+                        this.brainStore.appendProgressLog(executionId, entry).catch(err => {
+                            console.error('[BrainSync] Failed to append progress log:', err)
+                        })
                         if (this.sseManager) {
-                            const inputSummary = toolName === 'Read'
-                                ? (input as { file_path?: string }).file_path || ''
-                                : toolName === 'Grep'
-                                    ? `pattern="${(input as { pattern?: string }).pattern}" path="${(input as { path?: string }).path || '.'}"`
-                                    : toolName === 'Glob'
-                                        ? `pattern="${(input as { pattern?: string }).pattern}"`
-                                        : JSON.stringify(input).slice(0, 200)
                             const mainSession = this.engine.getSession(mainSessionId)
                             this.sseManager.broadcast({
                                 type: 'brain-sdk-progress',
@@ -967,16 +999,6 @@ export class AutoBrainService {
                     }
                 }
             )
-
-            // 创建执行记录（在结果判断前，确保所有分支都能更新状态）
-            const execution = await this.brainStore.createBrainExecution({
-                brainSessionId: brainId,
-                roundsReviewed: summaries.length,
-                reviewedRoundNumbers: summaries.map(s => s.round),
-                timeRangeStart: Date.now(),
-                timeRangeEnd: Date.now(),
-                prompt: reviewPrompt
-            })
 
             if (result.status === 'completed' && result.output) {
                 console.log('[BrainSync] SDK review completed, output length:', result.output.length)
@@ -1034,8 +1056,14 @@ export class AutoBrainService {
                     })
                 }
 
-                // 标记执行记录为完成
-                await this.brainStore.completeBrainExecution(execution.id, result.output)
+                // 标记执行记录为完成，追加 done 日志
+                await this.brainStore.appendProgressLog(executionId, {
+                    id: `sdk-${Date.now()}-done`,
+                    type: 'done',
+                    content: '',
+                    timestamp: Date.now()
+                }).catch(() => {})
+                await this.brainStore.completeBrainExecution(executionId, result.output)
 
                 // 广播 SDK review 完成事件
                 if (this.sseManager) {
@@ -1063,7 +1091,7 @@ export class AutoBrainService {
                 console.error('[BrainSync] SDK review failed:', result.error)
 
                 // 标记执行记录为失败
-                await this.brainStore.failBrainExecution(execution.id, result.error || 'Unknown error')
+                await this.brainStore.failBrainExecution(executionId, result.error || 'Unknown error')
 
                 // 发送错误消息到主 session
                 await this.engine.sendMessage(mainSessionId, {
@@ -1071,7 +1099,7 @@ export class AutoBrainService {
                     sentFrom: 'brain-review'
                 })
             } else if (result.status === 'aborted') {
-                await this.brainStore.failBrainExecution(execution.id, 'Aborted by user')
+                await this.brainStore.failBrainExecution(executionId, 'Aborted by user')
             }
         } catch (err) {
             console.error('[BrainSync] SDK review error:', err)

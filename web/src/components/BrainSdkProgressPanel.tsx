@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
+import type { ApiClient } from '@/api/client'
 
 type ProgressEntry = {
     id: string
@@ -19,10 +20,34 @@ function useForceUpdate(): [number, () => void] {
     return [tick, () => setTick(t => t + 1)]
 }
 
-export function BrainSdkProgressPanel({ mainSessionId }: { mainSessionId: string }) {
+export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: string; api: ApiClient }) {
     const queryClient = useQueryClient()
     const data = queryClient.getQueryData<ProgressData>(queryKeys.brainSdkProgress(mainSessionId))
     const scrollRef = useRef<HTMLDivElement>(null)
+    const loadedRef = useRef(false)
+
+    // 挂载时加载历史进度日志
+    useEffect(() => {
+        if (loadedRef.current) return
+        loadedRef.current = true
+
+        const cached = queryClient.getQueryData<ProgressData>(queryKeys.brainSdkProgress(mainSessionId))
+        if (cached?.entries?.length) return
+
+        api.getActiveBrainSession(mainSessionId).then(brainSession => {
+            if (!brainSession) return
+            return api.getBrainProgressLog(brainSession.id)
+        }).then(result => {
+            if (!result?.entries?.length) return
+            // 过滤掉 done 类型的条目（它只是标记，不需要显示）
+            const displayEntries = result.entries.filter(e => e.type !== 'done')
+            if (!displayEntries.length) return
+            queryClient.setQueryData(queryKeys.brainSdkProgress(mainSessionId), {
+                entries: displayEntries,
+                isActive: result.isActive
+            })
+        }).catch(() => {})
+    }, [mainSessionId, api, queryClient])
 
     // 监听 cache 变化来触发重渲染
     const [, forceUpdate] = useForceUpdate()

@@ -259,6 +259,14 @@ export class ApiClient {
         }
     }
 
+    async getBrainProgressLog(brainSessionId: string): Promise<{
+        entries: Array<{ id: string; type: string; content: string; timestamp: number }>
+        isActive: boolean
+        executionId?: string
+    }> {
+        return await this.request(`/api/brain/sessions/${encodeURIComponent(brainSessionId)}/progress-log`)
+    }
+
     async deleteSession(sessionId: string): Promise<DeleteSessionResponse> {
         return await this.request<DeleteSessionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}`, {
             method: 'DELETE'
