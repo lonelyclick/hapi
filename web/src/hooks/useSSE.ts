@@ -263,6 +263,13 @@ export function useSSE(options: {
                             isActive: false
                         })
                     }
+
+                    // Brain refine loading 状态（主 session 侧）
+                    if (progressData.progressType === 'refine-started') {
+                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: true })
+                    } else if (progressData.progressType === 'done') {
+                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: false })
+                    }
                 }
             }
 

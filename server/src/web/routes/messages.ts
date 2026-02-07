@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { IStore } from '../../store'
 import type { BrainStore } from '../../brain/store'
+import type { SSEManager } from '../../sse/sseManager'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParamWithShareCheck, requireSyncEngine } from './guards'
 import { buildRefineSystemPrompt } from '../../brain/brainSdkService'
@@ -80,7 +81,7 @@ async function spawnRefineWorker(
     }
 }
 
-export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore, brainStore?: BrainStore): Hono<WebAppEnv> {
+export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore, brainStore?: BrainStore, getSseManager?: () => SSEManager | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/sessions/:id/messages', async (c) => {
@@ -126,11 +127,21 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
             const intercepted = await spawnRefineWorker(engine, sessionId, activeBrain.id, parsed.data.text)
             if (intercepted) {
                 console.log(`[Messages] Brain intercept: message intercepted, waiting for refine worker callback`)
-                // 先发一条提示，让用户知道 Brain 正在处理
-                await engine.sendMessage(sessionId, {
-                    text: '🧠 Brain 正在处理你的消息...',
-                    sentFrom: 'brain-review'
-                })
+                // SSE 广播 refine-started，前端显示 loading
+                const sseManager = getSseManager?.()
+                if (sseManager) {
+                    const session = engine.getSession(sessionId)
+                    sseManager.broadcast({
+                        type: 'brain-sdk-progress',
+                        namespace: session?.namespace,
+                        sessionId,
+                        data: {
+                            brainSessionId: activeBrain.id,
+                            progressType: 'refine-started',
+                            data: {}
+                        }
+                    } as unknown as import('../../sync/syncEngine.js').SyncEvent)
+                }
                 return c.json({ ok: true, intercepted: true })
             }
             console.warn(`[Messages] Brain intercept: failed to spawn refine worker, falling back to direct send`)

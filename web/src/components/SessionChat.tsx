@@ -14,6 +14,7 @@ import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { SessionHeader } from '@/components/SessionHeader'
 import { BrainSdkProgressPanel } from '@/components/BrainSdkProgressPanel'
+import { BrainRefineIndicator } from '@/components/BrainRefineIndicator'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
@@ -380,7 +381,9 @@ export function SessionChat(props: {
                         renderedMessagesCount={reconciled.blocks.length}
                         trailing={props.session.metadata?.source === 'brain-sdk' && props.session.metadata?.mainSessionId ? (
                             <BrainSdkProgressPanel mainSessionId={props.session.metadata.mainSessionId as string} api={props.api} />
-                        ) : undefined}
+                        ) : (
+                            <BrainRefineIndicator sessionId={props.session.id} />
+                        )}
                     />
 
                     <HappyComposer
