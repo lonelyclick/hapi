@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import type { SyncEngine } from '../../sync/syncEngine'
+import type { Session, SyncEngine } from '../../sync/syncEngine'
 import type { IStore, UserRole } from '../../store'
 import type { BrainStore } from '../../brain/store'
 import type { AutoBrainService } from '../../brain/autoBrain'
@@ -19,9 +19,15 @@ const spawnBodySchema = z.object({
     opencodeModel: z.string().min(1).optional(),
     opencodeVariant: z.string().min(1).optional(),
     codexModel: z.string().min(1).optional(),
+    modelReasoningEffort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
     enableBrain: z.boolean().optional(),
     source: z.string().min(1).max(100).optional()
 })
+
+const modelModeValues = ['default', 'sonnet', 'opus', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'] as const
+const isModelMode = (value: string): value is NonNullable<Session['modelMode']> => {
+    return (modelModeValues as readonly string[]).includes(value)
+}
 
 const pathsExistsSchema = z.object({
     paths: z.array(z.string().min(1)).max(1000)
@@ -127,9 +133,12 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
         const source = rawSource ? rawSource : 'external-api'
 
         // 将 codexModel 转换为 modelMode（如 'openai/gpt-5.3-codex' -> 'gpt-5.3-codex'）
-        let modelMode: string | undefined
+        let modelMode: Session['modelMode'] | undefined
         if (parsed.data.codexModel) {
-            modelMode = parsed.data.codexModel.replace('openai/', '') as any
+            const maybeModelMode = parsed.data.codexModel.replace('openai/', '')
+            if (isModelMode(maybeModelMode)) {
+                modelMode = maybeModelMode
+            }
         }
 
         const result = await engine.spawnSession(
@@ -139,7 +148,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             parsed.data.yolo,
             parsed.data.sessionType,
             parsed.data.worktreeName,
-            { claudeSettingsType: parsed.data.claudeSettingsType, claudeAgent: parsed.data.claudeAgent, opencodeModel: parsed.data.opencodeModel, opencodeVariant: parsed.data.opencodeVariant, codexModel: parsed.data.codexModel, modelMode, source }
+            { claudeSettingsType: parsed.data.claudeSettingsType, claudeAgent: parsed.data.claudeAgent, opencodeModel: parsed.data.opencodeModel, opencodeVariant: parsed.data.opencodeVariant, codexModel: parsed.data.codexModel, modelMode, modelReasoningEffort: parsed.data.modelReasoningEffort, source }
         )
 
         // 如果 spawn 成功，等 session online 后设置 createdBy 并发送初始化 prompt
@@ -201,7 +210,6 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                                 brainSessionId: 'sdk-mode',  // SDK 模式：使用特殊值而非 CLI session ID
                                 brainModel: 'claude',
                                 contextSummary,
-                                status: 'active'
                             })
                             console.log(`[machines/spawn] Brain session created (SDK mode): ${brainSession.id}`)
 

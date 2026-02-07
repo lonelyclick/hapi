@@ -14,6 +14,7 @@ type SpawnInput = {
     claudeAgent?: string
     opencodeModel?: string
     codexModel?: string
+    modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     enableBrain?: boolean
 }
 
@@ -40,6 +41,7 @@ export function useSpawnSession(api: ApiClient | null): {
                 input.claudeAgent,
                 input.opencodeModel,
                 input.codexModel,
+                input.modelReasoningEffort,
                 input.enableBrain
             )
         },

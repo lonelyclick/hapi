@@ -138,6 +138,18 @@ export function useSSE(options: {
                             sid?: string  // 仅包含 sid 表示是 metadata/todos/agentState 更新
                         } | null
 
+                        if (import.meta.env.DEV) {
+                            console.log('[sse] session-updated event', {
+                                sessionId: event.sessionId,
+                                hasData: !!data,
+                                modelMode: data?.modelMode,
+                                modelReasoningEffort: data?.modelReasoningEffort,
+                                permissionMode: data?.permissionMode,
+                                active: data?.active,
+                                thinking: data?.thinking
+                            })
+                        }
+
                         // Check if this is a heartbeat-style event with status fields we can update directly
                         // If it only has 'sid' or other non-status fields, we should invalidate instead
                         const hasStatusFields = data && (

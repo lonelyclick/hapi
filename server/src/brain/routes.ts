@@ -1272,9 +1272,10 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                             : 'claude-sonnet-4-5-20250929',
                     systemPrompt,
                     maxTurns: 30,
+                    tools: ['Read', 'Grep', 'Glob'],
                     allowedTools: ['Read', 'Grep', 'Glob'],
                     disallowedTools: ['Bash', 'Edit', 'Write', 'Task'],
-                    permissionMode: 'plan'
+                    permissionMode: 'dontAsk'
                 },
                 {
                     onProgress: (type, data) => {

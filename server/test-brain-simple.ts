@@ -31,6 +31,7 @@ try {
       maxTurns: 1,
       permissionMode: 'acceptEdits',
       env: {
+        ...process.env,
         ANTHROPIC_API_KEY: litellmApiKey,
         ANTHROPIC_BASE_URL: litellmBaseUrl,
       }

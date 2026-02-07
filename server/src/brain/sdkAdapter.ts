@@ -5,7 +5,13 @@
  * 提供流式查询和消息转换功能
  */
 
-import { query as sdkQuery, type Query as SDKQuery, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import {
+    query as sdkQuery,
+    type PermissionMode,
+    type PermissionResult,
+    type Query as SDKQuery,
+    type SDKMessage
+} from '@anthropic-ai/claude-agent-sdk'
 
 /**
  * Brain 模式配置
@@ -23,14 +29,18 @@ export interface BrainQueryOptions {
     appendSystemPrompt?: string
     // 最大轮次
     maxTurns?: number
+    // 指定可用工具集合（用于严格限制 toolset）
+    tools?: string[]
     // 允许的工具
     allowedTools?: string[]
     // 禁用的工具
     disallowedTools?: string[]
     // 权限模式
-    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+    permissionMode?: PermissionMode
     // 中止控制器
     abortController?: AbortController
+    // 传递给 Claude Code 子进程的环境变量
+    env?: Record<string, string | undefined>
 }
 
 /**
@@ -78,10 +88,12 @@ export async function executeBrainQuery(
         systemPrompt,
         appendSystemPrompt,
         maxTurns = 20,
-        allowedTools = ['Read', 'Grep', 'Glob'],  // Brain 默认只允许读取工具
-        disallowedTools = ['Bash', 'Edit', 'Write'],  // 禁止修改工具
-        permissionMode = 'plan',  // 默认使用 plan 模式
-        abortController
+        tools = ['Read', 'Grep', 'Glob'],
+        allowedTools = ['Read', 'Grep', 'Glob'],
+        disallowedTools = ['Bash', 'Edit', 'Write', 'Task'],
+        permissionMode = 'dontAsk',
+        abortController,
+        env
     } = options
 
     // 创建 SDK 查询
@@ -93,18 +105,37 @@ export async function executeBrainQuery(
         finalSystemPrompt = appendSystemPrompt
     }
 
-    // 配置 litellm 环境变量
-    // 注意：必须直接设置 process.env，因为 SDK 子进程会继承父进程的环境变量
-    const litellmApiKey = process.env.LITELLM_API_KEY || 'sk-litellm-41e2a2d4d101255ea6e76fd59f96548a'
-    const litellmBaseUrl = process.env.LITELLM_BASE_URL || 'http://localhost:4000'
+    // SDK 会将 env 透传给 Claude Code 子进程。
+    // 注意：SDK 在传入 env 时不会自动合并 process.env，因此这里必须做 merge。
+    // 同时如果未配置 ANTHROPIC_*，但配置了 LITELLM_*，则自动映射为 Anthropic 环境变量。
+    const finalEnv: Record<string, string | undefined> = { ...process.env, ...(env ?? {}) }
 
-    // 保存原始环境变量（以便在 finally 中恢复）
-    const originalApiKey = process.env.ANTHROPIC_API_KEY
-    const originalBaseUrl = process.env.ANTHROPIC_BASE_URL
+    const litellmApiKey = finalEnv.LITELLM_API_KEY
+    const litellmBaseUrl = finalEnv.LITELLM_BASE_URL
 
-    // 设置环境变量（SDK 子进程会继承这些）
-    process.env.ANTHROPIC_API_KEY = litellmApiKey
-    process.env.ANTHROPIC_BASE_URL = litellmBaseUrl
+    if (!finalEnv.ANTHROPIC_API_KEY && litellmApiKey) {
+        finalEnv.ANTHROPIC_API_KEY = litellmApiKey
+    }
+
+    if (!finalEnv.ANTHROPIC_BASE_URL) {
+        if (litellmBaseUrl) {
+            finalEnv.ANTHROPIC_BASE_URL = litellmBaseUrl
+        } else if (litellmApiKey) {
+            finalEnv.ANTHROPIC_BASE_URL = 'http://localhost:4000'
+        }
+    }
+
+    const canUseTool = async (toolName: string, _input: Record<string, unknown>, context: { toolUseID: string }): Promise<PermissionResult> => {
+        if (disallowedTools.includes(toolName)) {
+            return { behavior: 'deny', message: `Tool disallowed in Brain mode: ${toolName}`, toolUseID: context.toolUseID }
+        }
+
+        if (allowedTools.includes(toolName)) {
+            return { behavior: 'allow', toolUseID: context.toolUseID }
+        }
+
+        return { behavior: 'deny', message: `Tool not allowed in Brain mode: ${toolName}`, toolUseID: context.toolUseID }
+    }
 
     const query: SDKQuery = sdkQuery({
         prompt,
@@ -113,10 +144,13 @@ export async function executeBrainQuery(
             model,
             systemPrompt: finalSystemPrompt,
             maxTurns,
+            tools,
             allowedTools,
             disallowedTools,
             permissionMode,
             abortController,
+            canUseTool,
+            env: finalEnv,
             // 指定 SDK 内置的 Claude Code 可执行文件路径
             pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable,
         }
@@ -166,12 +200,23 @@ export async function executeBrainQuery(
                     break
 
                 case 'result':
-                    const resMsg = message as { subtype: string; result?: string; num_turns: number; total_cost_usd: number; duration_ms: number }
+                    const resMsg = message as {
+                        subtype: string
+                        result?: string
+                        errors?: string[]
+                        num_turns: number
+                        total_cost_usd: number
+                        duration_ms: number
+                    }
                     const isSuccess = resMsg.subtype === 'success'
                     callbacks.onResult?.({
                         success: isSuccess,
                         result: resMsg.result,
-                        error: isSuccess ? undefined : 'Query failed',
+                        error: isSuccess
+                            ? undefined
+                            : Array.isArray(resMsg.errors) && resMsg.errors.length > 0
+                                ? resMsg.errors.join('\n')
+                                : 'Query failed',
                         numTurns: resMsg.num_turns,
                         totalCostUsd: resMsg.total_cost_usd,
                         durationMs: resMsg.duration_ms
@@ -194,30 +239,22 @@ export async function executeBrainQuery(
                 totalCostUsd: 0,
                 durationMs: 0
             })
-        } else {
-            // 其他错误
-            callbacks.onResult?.({
-                success: false,
-                error: (error as Error).message,
-                numTurns: 0,
-                totalCostUsd: 0,
-                durationMs: 0
-            })
+            callbacks.onProgress?.('done')
+            return
         }
+
+        // 其他错误
+        callbacks.onResult?.({
+            success: false,
+            error: (error as Error).message,
+            numTurns: 0,
+            totalCostUsd: 0,
+            durationMs: 0
+        })
+        callbacks.onProgress?.('done')
         throw error
     } finally {
         query.close()
-        // 恢复原始环境变量
-        if (originalApiKey !== undefined) {
-            process.env.ANTHROPIC_API_KEY = originalApiKey
-        } else {
-            delete process.env.ANTHROPIC_API_KEY
-        }
-        if (originalBaseUrl !== undefined) {
-            process.env.ANTHROPIC_BASE_URL = originalBaseUrl
-        } else {
-            delete process.env.ANTHROPIC_BASE_URL
-        }
     }
 }
 
@@ -266,13 +303,20 @@ export class BrainQueryController {
         this.abortController = new AbortController()
 
         // 执行查询
-        this.currentPromise = executeBrainQuery(
+        const promise = executeBrainQuery(
             prompt,
             { ...options, abortController: this.abortController },
             callbacks
         )
+        this.currentPromise = promise
+        void promise.finally(() => {
+            if (this.currentPromise === promise) {
+                this.currentPromise = null
+                this.abortController = null
+            }
+        })
 
-        return this.currentPromise
+        return promise
     }
 
     /**

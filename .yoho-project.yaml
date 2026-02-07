@@ -13,13 +13,13 @@ stack:
   queue: []
 
 paths:
-  src: src
   cli: cli/src
   server: server/src
-  webapp: webapp/src
+  web: web/src
   skills: skills
-  config: src/config
-  tests: tests
+  docs: docs
+  scripts: scripts
+  data: data
 
 # CLI 模块
 cli:
@@ -112,8 +112,8 @@ server:
     - 自动审查服务
     - MiniMax 同步集成
 
-# Webapp 模块
-webapp:
+# Web 模块
+web:
   chat: # 聊天系统
     - types.ts - 消息类型
     - modelConfig.ts - AI 模型配置
@@ -297,7 +297,8 @@ deployment:
     LANGFUSE_BASE_URL: https://langfuse.yohomobile.dev
 
 development:
-  setup: pnpm install
-  start: pnpm dev
-  test: pnpm test
-  build: pnpm build
+  setup: bun install
+  start: bun run dev
+  test: bun run test
+  build: bun run build
+  typecheck: bun run typecheck

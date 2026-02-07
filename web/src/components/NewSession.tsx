@@ -10,12 +10,14 @@ import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 type AgentType = 'claude' | 'codex' | 'opencode'
 type ClaudeSettingsType = 'litellm' | 'claude'
 
-// Codex models
-const CODEX_MODELS = [
-    { value: 'openai/gpt-5.3-codex', label: 'GPT-5.3 Codex' },
-    { value: 'openai/gpt-5.2-codex', label: 'GPT-5.2 Codex' },
-    { value: 'openai/gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
-    { value: 'openai/gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini' },
+// Codex 固定使用 gpt-5.3-codex
+const CODEX_MODEL = 'openai/gpt-5.3-codex'
+
+// Codex reasoning effort levels
+const CODEX_REASONING_EFFORTS = [
+    { value: 'medium' as const, label: 'Medium (默认)' },
+    { value: 'high' as const, label: 'High (更强推理)' },
+    { value: 'xhigh' as const, label: 'X-High (最强推理)' },
 ]
 
 // OpenCode supported models - using OpenCode's native model ID format
@@ -138,7 +140,7 @@ export function NewSession(props: {
     const [claudeSettingsType, setClaudeSettingsType] = useState<ClaudeSettingsType>('litellm')
     const [claudeAgent, setClaudeAgent] = useState('')
     const [opencodeModel, setOpencodeModel] = useState(OPENCODE_MODELS[0].value)
-    const [codexModel, setCodexModel] = useState(CODEX_MODELS[0].value)
+    const [codexReasoningEffort, setCodexReasoningEffort] = useState<'medium' | 'high' | 'xhigh'>('medium')
     const [enableBrain, setEnableBrain] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [isCustomPath, setIsCustomPath] = useState(false)
@@ -242,7 +244,8 @@ export function NewSession(props: {
                 claudeSettingsType: agent === 'claude' ? claudeSettingsType : undefined,
                 claudeAgent: agent === 'claude' ? (claudeAgent.trim() || undefined) : undefined,
                 opencodeModel: agent === 'opencode' ? opencodeModel : undefined,
-                codexModel: agent === 'codex' ? codexModel : undefined,
+                codexModel: agent === 'codex' ? CODEX_MODEL : undefined,
+                modelReasoningEffort: agent === 'codex' ? codexReasoningEffort : undefined,
                 enableBrain: enableBrain || undefined
             })
 
@@ -425,26 +428,26 @@ export function NewSession(props: {
                 </div>
             ) : null}
 
-            {/* Codex Model Selector */}
+            {/* Codex Reasoning Effort Selector */}
             {agent === 'codex' ? (
                 <div className="flex flex-col gap-1.5 px-3 pb-3">
                     <label className="text-xs font-medium text-[var(--app-hint)]">
-                        Model (Codex)
+                        Reasoning Effort (Codex)
                     </label>
                     <select
-                        value={codexModel}
-                        onChange={(e) => setCodexModel(e.target.value)}
+                        value={codexReasoningEffort}
+                        onChange={(e) => setCodexReasoningEffort(e.target.value as 'medium' | 'high' | 'xhigh')}
                         disabled={isFormDisabled}
                         className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
                     >
-                        {CODEX_MODELS.map((model) => (
-                            <option key={model.value} value={model.value}>
-                                {model.label}
+                        {CODEX_REASONING_EFFORTS.map((effort) => (
+                            <option key={effort.value} value={effort.value}>
+                                {effort.label}
                             </option>
                         ))}
                     </select>
                     <div className="text-[11px] text-[var(--app-hint)]">
-                        Codex models optimized for coding tasks via OpenAI.
+                        Codex 固定使用 GPT-5.3，可选择推理强度。
                     </div>
                 </div>
             ) : null}

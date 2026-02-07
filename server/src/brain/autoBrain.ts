@@ -12,7 +12,6 @@ import type { BrainStore } from './store'
 import type { StoredBrainSession } from './types'
 import { generateSummariesWithGlm, parseBrainResultWithGlm, type BrainResult } from './glmSync'
 import { BrainSdkService, buildBrainSystemPrompt, buildReviewPrompt } from './brainSdkService'
-import type { BrainQueryOptions, MessageCallbacks } from './sdkAdapter'
 
 // 同步配置
 const MAX_BATCH_CHARS = 50000  // 每批最大字符数
@@ -803,6 +802,12 @@ export class AutoBrainService {
 
         const systemPrompt = buildBrainSystemPrompt()
 
+        const model = brainSession.brainModelVariant === 'opus'
+            || brainSession.brainModelVariant === 'sonnet'
+            || brainSession.brainModelVariant === 'haiku'
+            ? brainSession.brainModelVariant
+            : undefined
+
         // 广播开始状态
         this.broadcastSyncStatus(brainSession, {
             status: 'analyzing',
@@ -818,10 +823,13 @@ export class AutoBrainService {
                 reviewPrompt,
                 {
                     cwd: projectPath,
+                    model,
                     systemPrompt,
                     maxTurns: 30,
-                    // 指定 SDK 内置的 Claude Code 可执行文件路径
-                    pathToClaudeCodeExecutable: '/home/guang/softwares/hapi/server/node_modules/@anthropic-ai/claude-agent-sdk/cli.js'
+                    tools: ['Read', 'Grep', 'Glob'],
+                    allowedTools: ['Read', 'Grep', 'Glob'],
+                    disallowedTools: ['Bash', 'Edit', 'Write', 'Task'],
+                    permissionMode: 'dontAsk'
                 },
                 {
                     onProgress: (type, data) => {

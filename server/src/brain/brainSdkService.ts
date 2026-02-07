@@ -81,7 +81,13 @@ export class BrainSdkService {
                     callbacks.onAssistantMessage?.(message)
                 },
                 onResult: (sdkResult) => {
-                    result.status = sdkResult.success ? 'completed' : 'error'
+                    if (sdkResult.success) {
+                        result.status = 'completed'
+                    } else if (sdkResult.error === 'Aborted by user') {
+                        result.status = 'aborted'
+                    } else if (result.status !== 'aborted') {
+                        result.status = 'error'
+                    }
                     result.output = outputChunks.join('\n\n')
                     result.error = sdkResult.error
                     result.numTurns = sdkResult.numTurns
@@ -94,8 +100,10 @@ export class BrainSdkService {
 
             return result
         } catch (error) {
-            result.status = 'error'
-            result.error = (error as Error).message
+            const message = error instanceof Error ? error.message : String(error)
+            const isAbort = (error as Error).name === 'AbortError' || message === 'Aborted by user'
+            result.status = isAbort ? 'aborted' : 'error'
+            result.error = message
             result.completedAt = Date.now()
             return result
         } finally {

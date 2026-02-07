@@ -23,6 +23,7 @@ const q = query({
       process.stderr.write('[STDERR] ' + data);
     },
     env: {
+      ...process.env,
       // 同时设置两个
       ANTHROPIC_API_KEY: 'sk-litellm-41e2a2d4d101255ea6e76fd59f96548a',
       ANTHROPIC_AUTH_TOKEN: 'sk-litellm-41e2a2d4d101255ea6e76fd59f96548a',

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Project, Session, SessionViewer } from '@/types/api'
+import type { Project, Session, SessionViewer, ModelMode, ModelReasoningEffort } from '@/types/api'
 import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
 import { getClientId } from '@/lib/client-identity'
 import { ViewersBadge } from './ViewersBadge'
@@ -226,16 +226,17 @@ function getAgentLabel(session: Session): string {
     return 'Agent'
 }
 
-function formatRuntimeModel(session: Session): string | null {
-    const model = session.metadata?.runtimeModel?.trim()
-    if (!model) {
+function formatRuntimeModel(session: Session, modelMode?: ModelMode, modelReasoningEffort?: ModelReasoningEffort): string | null {
+    // 优先使用用户设置的 modelMode 和 modelReasoningEffort
+    const displayModel = modelMode && modelMode !== 'default' ? modelMode : session.metadata?.runtimeModel?.trim()
+    if (!displayModel) {
         return null
     }
-    const effort = session.metadata?.runtimeModelReasoningEffort
-    if (effort) {
-        return `${model} (${effort})`
+    const displayEffort = modelReasoningEffort ?? session.metadata?.runtimeModelReasoningEffort
+    if (displayEffort) {
+        return `${displayModel} (${displayEffort})`
     }
-    return model
+    return displayModel
 }
 
 export function SessionHeader(props: {
@@ -246,6 +247,8 @@ export function SessionHeader(props: {
     onRefreshAccount?: () => void
     deleteDisabled?: boolean
     refreshAccountDisabled?: boolean
+    modelMode?: ModelMode
+    modelReasoningEffort?: ModelReasoningEffort
 }) {
     const { api, userEmail } = useAppContext()
     const queryClient = useQueryClient()
@@ -253,7 +256,10 @@ export function SessionHeader(props: {
     const worktreeBranch = props.session.metadata?.worktree?.branch
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
     const runtimeAgent = props.session.metadata?.runtimeAgent?.trim() || null
-    const runtimeModel = useMemo(() => formatRuntimeModel(props.session), [props.session])
+    const runtimeModel = useMemo(
+        () => formatRuntimeModel(props.session, props.modelMode, props.modelReasoningEffort),
+        [props.session, props.modelMode, props.modelReasoningEffort]
+    )
 
     // Check if current user is the creator of this session (must be defined before queries that use it)
     const isCreator = useMemo(() => {

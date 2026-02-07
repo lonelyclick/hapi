@@ -10,6 +10,7 @@ async function test() {
       model: 'claude-sonnet-4-5-20250929',
       maxTurns: 1,
       env: {
+        ...process.env,
         ANTHROPIC_AUTH_TOKEN: 'sk-litellm-41e2a2d4d101255ea6e76fd59f96548a',
         ANTHROPIC_BASE_URL: 'http://localhost:4000'
       }

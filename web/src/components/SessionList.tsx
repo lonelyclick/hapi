@@ -5,7 +5,7 @@ import { LoadingState } from './LoadingState'
 
 // Filter types
 type ArchiveFilter = boolean  // true = show archived (offline) sessions only
-type OwnerFilter = 'mine' | 'others'
+type OwnerFilter = 'mine' | 'brain' | 'others'
 
 function getSessionPath(session: SessionSummary): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -66,8 +66,12 @@ function filterSessions(
 
         // Owner filter
         if (ownerFilter === 'mine') {
-            // Show only my sessions (no ownerEmail means it's mine)
+            // Show only my sessions (no ownerEmail means it's mine, exclude brain sessions)
             if (session.ownerEmail) return false
+            if (session.metadata?.source === 'brain') return false
+        } else if (ownerFilter === 'brain') {
+            // Show only brain sessions
+            if (session.metadata?.source !== 'brain') return false
         } else if (ownerFilter === 'others') {
             // Show only others' sessions (has ownerEmail)
             if (!session.ownerEmail) return false
@@ -441,6 +445,19 @@ export function SessionList(props: {
                                 `}
                             >
                                 Mine
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setOwnerFilter('brain')}
+                                className={`
+                                    px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                                    ${ownerFilter === 'brain'
+                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                    }
+                                `}
+                            >
+                                Brain
                             </button>
                             <button
                                 type="button"

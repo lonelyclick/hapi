@@ -81,7 +81,8 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
                 reasoningEffort: config.reasoningEffort ?? undefined
             })
         },
-        onSuccess: () => void invalidateSession(),
+        // Note: No onSuccess callback here - we rely on SSE session-updated events to update the cache
+        // This avoids race conditions between invalidation and SSE cache updates
     })
 
     const deleteMutation = useMutation({

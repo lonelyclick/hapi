@@ -12,6 +12,7 @@ const q = query({
     model: 'glm-4.7',
     maxTurns: 1,
     env: {
+      ...process.env,
       ANTHROPIC_API_KEY: 'sk-litellm-41e2a2d4d101255ea6e76fd59f96548a',
       ANTHROPIC_BASE_URL: 'http://localhost:4000',
     }

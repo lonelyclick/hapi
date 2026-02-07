@@ -312,6 +312,8 @@ export function SessionChat(props: {
                     onRefreshAccount={props.session.metadata?.flavor === 'claude' ? handleRefreshAccount : undefined}
                     deleteDisabled={isPending}
                     refreshAccountDisabled={isPending}
+                    modelMode={resolvedModelMode}
+                    modelReasoningEffort={resolvedReasoningEffort}
                 />
 
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
