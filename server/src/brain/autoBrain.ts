@@ -558,11 +558,9 @@ export class AutoBrainService {
                             messageLines.push('')
                         }
                         messageLines.push('---')
-                        messageLines.push('以上是主 session 的对话汇总。请 review 代码改动：')
-                        messageLines.push('- 如果发现问题，简要指出，让主 session 去修（不要给解决方案）')
-                        messageLines.push('- 如果没有问题，只需回复"知道了"')
+                        messageLines.push('review 代码改动，有问题就指出，没问题回复"知道了"。不要给修复方案。')
                         messageLines.push('')
-                        messageLines.push('同时读取 `.yoho-brain/MEMORY.md` 了解之前的上下文，将重要发现更新到 `.yoho-brain/` 记忆文件中。')
+                        messageLines.push('读取 `.yoho-brain/MEMORY.md` 了解上下文，重要发现更新到 `.yoho-brain/`。')
 
                         if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
                             await this.engine.sendMessage(brainSession.brainSessionId, {

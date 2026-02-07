@@ -209,15 +209,15 @@ function buildBrainPrompt(
         ? `\n## 时间范围\n\n开发开始时间：${formatTimestamp(timeRange.start)}\n`
         : ''
 
-    return `你是 Yoho 的超级大脑。以下是另一个 AI session 的对话汇总。请使用 plan 模式。**只能查看代码，禁止修改文件。**
+    return `以下是主 session 的对话汇总。只能查看代码，禁止修改文件。
 
 ## 背景
 ${roundsSummary}
 ${timeRangeInfo}
-## 你的任务
-根据会话内容，结合 git 当前改动情况（鼓励用工具查看相关文件），做出判断：
-- 如果发现问题（逻辑错误、安全问题、性能隐患、需求偏差等），直接写出你要告知主 session 的内容（自然语言，会原样发送给主 session 中正在工作的 AI）
-- 如果没有问题，只需输出 \`[NO_MESSAGE]\`
+## 任务
+用工具查看 git 改动和相关代码，review 后：
+- 有问题 → 指出哪个文件什么问题（不给修复方案）
+- 没问题 → 输出 \`[NO_MESSAGE]\`
 `
 }
 
