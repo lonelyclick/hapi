@@ -1367,6 +1367,29 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
     })
 
     // 中止 Brain SDK 查询
+    // 触发 autoBrain 的 syncRounds（SDK 模式的完整链路：GLM 摘要 + SDK review）
+    app.post('/brain/sessions/:id/auto-sync', async (c) => {
+        if (!autoBrainService) {
+            return c.json({ error: 'AutoBrain service not available' }, 503)
+        }
+
+        const id = c.req.param('id')
+        const brainSession = await brainStore.getBrainSession(id)
+        if (!brainSession) {
+            return c.json({ error: 'Brain session not found' }, 404)
+        }
+
+        // 异步触发
+        autoBrainService.triggerSync(brainSession.mainSessionId).catch(err => {
+            console.error('[Brain] auto-sync trigger failed:', err)
+        })
+
+        return c.json({
+            success: true,
+            message: 'Auto sync triggered (async)'
+        })
+    })
+
     app.post('/brain/sessions/:id/sdk-abort', async (c) => {
         if (!brainSdkService) {
             return c.json({ error: 'Brain SDK service not available' }, 503)
