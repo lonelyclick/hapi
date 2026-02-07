@@ -266,9 +266,10 @@ export function useSSE(options: {
 
                     // Brain refine loading 状态（主 session 侧）
                     if (progressData.progressType === 'refine-started') {
-                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: true })
+                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: true, noMessage: false })
                     } else if (progressData.progressType === 'done') {
-                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: false })
+                        const noMessage = !!(progressData.data as Record<string, unknown> | undefined)?.noMessage
+                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: false, noMessage })
                     }
                 }
             }

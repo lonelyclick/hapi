@@ -1362,11 +1362,8 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
 
         if (body.status === 'completed' && body.output) {
             if (body.output.includes('[NO_MESSAGE]')) {
-                console.log(`[BrainWorkerCallback] ${callbackPhase} result contains [NO_MESSAGE], sending ack`)
-                await engine?.sendMessage(body.mainSessionId, {
-                    text: '🧠 Brain: 已了解，没有问题。',
-                    sentFrom: 'brain-review'
-                })
+                // NO_MESSAGE: 不发真实消息给主 session，只通过 SSE 广播通知前端
+                console.log(`[BrainWorkerCallback] ${callbackPhase} result contains [NO_MESSAGE], broadcasting via SSE only`)
             } else if (callbackPhase === 'refine') {
                 // refine 完成：发给主 session，sentFrom 由调用方决定
                 const sentFrom = (body.refineSentFrom as 'webapp' | 'brain-review') || 'brain-review'
@@ -1399,6 +1396,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             const sseManager = getSseManager()
             if (sseManager) {
                 const mainSession = engine?.getSession(body.mainSessionId)
+                const noMessage = body.status === 'completed' && body.output?.includes('[NO_MESSAGE]')
                 sseManager.broadcast({
                     type: 'brain-sdk-progress',
                     namespace: mainSession?.namespace,
@@ -1406,7 +1404,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                     data: {
                         brainSessionId: body.brainSessionId,
                         progressType: 'done',
-                        data: { status: body.status }
+                        data: { status: body.status, noMessage }
                     }
                 } as unknown as import('../sync/syncEngine.js').SyncEvent)
             }
