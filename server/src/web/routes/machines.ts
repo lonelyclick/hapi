@@ -250,6 +250,9 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                             })
                             console.log(`[machines/spawn] Brain session created (SDK mode): ${brainSession.id}`)
 
+                            // 立即设为 active，避免 status 卡在 pending（syncRounds 不一定有 pending rounds 来触发）
+                            await brainStore.updateBrainSessionStatus(brainSession.id, 'active')
+
                             // SSE 广播 brain-ready，前端刷新 brain 状态并解除输入禁用
                             const sseManager = getSseManager?.()
                             if (sseManager) {
