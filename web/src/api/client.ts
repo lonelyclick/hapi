@@ -737,6 +737,42 @@ export class ApiClient {
         return await this.request('/api/usage')
     }
 
+    // 24h hourly usage analysis
+    async getHourlyUsage(): Promise<{
+        hourly: Array<{
+            hour: string
+            cacheRead: number
+            cacheCreate: number
+            input: number
+            output: number
+            messages: number
+        }>
+        projects: Array<{
+            project: string
+            cacheRead: number
+            cacheCreate: number
+            input: number
+            output: number
+            messages: number
+            sessions: number
+        }>
+        sessions: Array<{
+            sessionId: string
+            project: string
+            model: string
+            firstSeen: string
+            lastSeen: string
+            cacheRead: number
+            cacheCreate: number
+            messages: number
+            toolCalls: number
+        }>
+        timestamp: number
+        error?: string
+    }> {
+        return await this.request('/api/usage/hourly')
+    }
+
     // ==================== Session Notification Subscriptions ====================
 
     async getSessionSubscribers(sessionId: string): Promise<{

@@ -515,6 +515,201 @@ async function getCodexUsage(): Promise<CodexUsageData> {
     }
 }
 
+// --- 24h Hourly Usage Analysis ---
+
+interface HourlyBucket {
+    hour: string
+    cacheRead: number
+    cacheCreate: number
+    input: number
+    output: number
+    messages: number
+}
+
+interface ProjectBucket {
+    project: string
+    cacheRead: number
+    cacheCreate: number
+    input: number
+    output: number
+    messages: number
+    sessions: number
+}
+
+interface SessionBucket {
+    sessionId: string
+    project: string
+    model: string
+    firstSeen: string
+    lastSeen: string
+    cacheRead: number
+    cacheCreate: number
+    messages: number
+    toolCalls: number
+}
+
+interface HourlyUsageResponse {
+    hourly: HourlyBucket[]
+    projects: ProjectBucket[]
+    sessions: SessionBucket[]
+    timestamp: number
+    error?: string
+}
+
+let hourlyUsageCache: { data: HourlyUsageResponse; fetchedAt: number } | null = null
+const HOURLY_CACHE_TTL_MS = 2 * 60_000
+
+async function getHourlyUsage(): Promise<HourlyUsageResponse> {
+    if (hourlyUsageCache && (Date.now() - hourlyUsageCache.fetchedAt) < HOURLY_CACHE_TTL_MS) {
+        return hourlyUsageCache.data
+    }
+    const data = await computeHourlyUsage()
+    hourlyUsageCache = { data, fetchedAt: Date.now() }
+    return data
+}
+
+async function computeHourlyUsage(): Promise<HourlyUsageResponse> {
+    try {
+        const projectsDir = join(homedir(), '.claude', 'projects')
+        const cutoff = Date.now() - 24 * 60 * 60_000
+
+        const hourlyMap = new Map<string, HourlyBucket>()
+        const projectMap = new Map<string, ProjectBucket>()
+        const sessionMap = new Map<string, SessionBucket>()
+
+        let projectDirs: string[]
+        try {
+            projectDirs = await readdir(projectsDir)
+        } catch {
+            return { hourly: [], projects: [], sessions: [], timestamp: Date.now(), error: 'No projects found' }
+        }
+
+        for (const projectDir of projectDirs) {
+            const projectPath = join(projectsDir, projectDir)
+            try {
+                const pStat = await stat(projectPath)
+                if (!pStat.isDirectory()) continue
+
+                const files = await readdir(projectPath)
+                for (const file of files) {
+                    if (!file.endsWith('.jsonl')) continue
+                    const filePath = join(projectPath, file)
+                    const fStat = await stat(filePath)
+                    if (!fStat.isFile() || fStat.size === 0) continue
+                    // Skip files not modified in last 24h
+                    if (fStat.mtimeMs < cutoff) continue
+
+                    const sessionId = file.replace('.jsonl', '').slice(0, 8)
+                    let sessionData = sessionMap.get(`${projectDir}/${sessionId}`)
+
+                    const fileStream = createReadStream(filePath)
+                    const rl = createInterface({ input: fileStream, crlfDelay: Infinity })
+
+                    for await (const line of rl) {
+                        if (!line.trim()) continue
+                        try {
+                            const entry = JSON.parse(line) as {
+                                type?: string
+                                timestamp?: string
+                                message?: {
+                                    model?: string
+                                    usage?: {
+                                        input_tokens?: number
+                                        output_tokens?: number
+                                        cache_creation_input_tokens?: number
+                                        cache_read_input_tokens?: number
+                                    }
+                                    content?: Array<{ type?: string }>
+                                }
+                            }
+
+                            if (entry.type !== 'assistant' || !entry.message?.usage || !entry.timestamp) continue
+
+                            const entryTime = new Date(entry.timestamp).getTime()
+                            if (entryTime < cutoff) continue
+
+                            const usage = entry.message.usage
+                            const cr = usage.cache_read_input_tokens ?? 0
+                            const cc = usage.cache_creation_input_tokens ?? 0
+                            const inp = usage.input_tokens ?? 0
+                            const out = usage.output_tokens ?? 0
+                            const model = entry.message.model ?? 'unknown'
+
+                            // Hourly bucket
+                            const dt = new Date(entryTime)
+                            const hourKey = `${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:00`
+                            let hBucket = hourlyMap.get(hourKey)
+                            if (!hBucket) {
+                                hBucket = { hour: hourKey, cacheRead: 0, cacheCreate: 0, input: 0, output: 0, messages: 0 }
+                                hourlyMap.set(hourKey, hBucket)
+                            }
+                            hBucket.cacheRead += cr
+                            hBucket.cacheCreate += cc
+                            hBucket.input += inp
+                            hBucket.output += out
+                            hBucket.messages += 1
+
+                            // Project bucket
+                            let pBucket = projectMap.get(projectDir)
+                            if (!pBucket) {
+                                pBucket = { project: projectDir, cacheRead: 0, cacheCreate: 0, input: 0, output: 0, messages: 0, sessions: 0 }
+                                projectMap.set(projectDir, pBucket)
+                            }
+                            pBucket.cacheRead += cr
+                            pBucket.cacheCreate += cc
+                            pBucket.input += inp
+                            pBucket.output += out
+                            pBucket.messages += 1
+
+                            // Session bucket
+                            const timeStr = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
+                            if (!sessionData) {
+                                sessionData = {
+                                    sessionId, project: projectDir, model,
+                                    firstSeen: timeStr, lastSeen: timeStr,
+                                    cacheRead: 0, cacheCreate: 0, messages: 0, toolCalls: 0
+                                }
+                                sessionMap.set(`${projectDir}/${sessionId}`, sessionData)
+                            }
+                            sessionData.cacheRead += cr
+                            sessionData.cacheCreate += cc
+                            sessionData.messages += 1
+                            sessionData.lastSeen = timeStr
+                            if (model !== 'unknown') sessionData.model = model
+
+                            // Count tool calls
+                            const content = entry.message.content
+                            if (Array.isArray(content)) {
+                                for (const block of content) {
+                                    if (block.type === 'tool_use') sessionData.toolCalls += 1
+                                }
+                            }
+                        } catch {
+                            // skip bad lines
+                        }
+                    }
+                }
+            } catch {
+                // skip inaccessible dirs
+            }
+        }
+
+        // Count unique sessions per project
+        for (const sd of sessionMap.values()) {
+            const pBucket = projectMap.get(sd.project)
+            if (pBucket) pBucket.sessions += 1
+        }
+
+        const hourly = Array.from(hourlyMap.values()).sort((a, b) => a.hour.localeCompare(b.hour))
+        const projects = Array.from(projectMap.values()).sort((a, b) => b.cacheRead - a.cacheRead)
+        const sessions = Array.from(sessionMap.values()).sort((a, b) => b.cacheRead - a.cacheRead).slice(0, 10)
+
+        return { hourly, projects, sessions, timestamp: Date.now() }
+    } catch (error) {
+        return { hourly: [], projects: [], sessions: [], timestamp: Date.now(), error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+}
+
 /**
  * Get usage data directly (server-side, no RPC)
  */
@@ -544,6 +739,18 @@ export function createUsageRoutes(getSyncEngine: () => SyncEngine | null): Hono<
         } catch (error) {
             return c.json({
                 error: error instanceof Error ? error.message : 'Failed to get usage'
+            }, 500)
+        }
+    })
+
+    // 24h hourly usage analysis
+    app.get('/usage/hourly', async (c) => {
+        try {
+            const data = await getHourlyUsage()
+            return c.json(data)
+        } catch (error) {
+            return c.json({
+                error: error instanceof Error ? error.message : 'Failed to get hourly usage'
             }, 500)
         }
     })
