@@ -179,6 +179,9 @@ export async function executeBrainQuery(
         return { behavior: 'deny', message: `Tool not allowed in Brain mode: ${toolName}`, toolUseID: context.toolUseID }
     }
 
+    const claudePath = options.pathToClaudeCodeExecutable || getClaudeExecutablePath()
+    console.log(`[BrainSDK] executeBrainQuery: model=${model} cwd=${cwd} maxTurns=${maxTurns} claudePath=${claudePath} hasAnthropicKey=${!!finalEnv.ANTHROPIC_API_KEY} hasBaseUrl=${!!finalEnv.ANTHROPIC_BASE_URL}`)
+
     const query: SDKQuery = sdkQuery({
         prompt,
         options: {
@@ -193,8 +196,7 @@ export async function executeBrainQuery(
             abortController,
             canUseTool,
             env: finalEnv,
-            // 优先使用 options 指定的路径，否则自动检测系统上的 claude
-            pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable || getClaudeExecutablePath(),
+            pathToClaudeCodeExecutable: claudePath,
         }
     })
 

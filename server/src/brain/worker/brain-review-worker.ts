@@ -98,6 +98,7 @@ async function notifyServer(body: Record<string, unknown>): Promise<void> {
 
 async function run(): Promise<void> {
     const isRefine = phase === 'refine'
+    console.log(`[BrainWorker] run() phase=${phase} model=${config.model} cwd=${config.projectPath} promptLen=${config.prompt.length} executionId=${config.executionId}`)
 
     // refine 阶段不需要 execution 记录
     if (!isRefine) {
@@ -205,9 +206,11 @@ async function run(): Promise<void> {
         })
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
+        const stack = error instanceof Error ? error.stack : ''
         const isAbort = (error as Error).name === 'AbortError' || message === 'Aborted by user'
 
-        console.error(`[BrainWorker] ${phase} failed:`, message)
+        console.error(`[BrainWorker] ${phase} FAILED: ${message}`)
+        if (stack) console.error(`[BrainWorker] Stack: ${stack}`)
 
         if (!isRefine) {
             await brainStore.failBrainExecution(

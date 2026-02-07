@@ -856,9 +856,7 @@ export class AutoBrainService {
         // Claude Code SDK 需要 claude 模型名
         const model = brainSession.brainModelVariant === 'opus'
             ? 'claude-opus-4-5-20250929'
-            : brainSession.brainModelVariant === 'haiku'
-                ? 'claude-haiku-4-5-20250929'
-                : 'claude-sonnet-4-5-20250929'
+            : 'claude-sonnet-4-5-20250929'
 
         // 创建执行记录（status=running）
         const execution = await this.brainStore.createBrainExecution({

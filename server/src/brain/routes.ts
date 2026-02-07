@@ -1213,9 +1213,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
 
         const model = brainSession.brainModelVariant === 'opus'
             ? 'claude-opus-4-5-20250929'
-            : brainSession.brainModelVariant === 'haiku'
-                ? 'claude-haiku-4-5-20250929'
-                : 'claude-sonnet-4-5-20250929'
+            : 'claude-sonnet-4-5-20250929'
 
         const config = JSON.stringify({
             executionId: execution.id,
@@ -1360,82 +1358,38 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         const engine = getSyncEngine()
         const callbackPhase = body.phase || 'review'
 
+        console.log(`[BrainWorkerCallback] phase=${callbackPhase} status=${body.status} executionId=${body.executionId} mainSessionId=${body.mainSessionId} outputLen=${body.output?.length ?? 0} error=${body.error ?? 'none'}`)
+
         if (body.status === 'completed' && body.output) {
             if (body.output.includes('[NO_MESSAGE]')) {
-                // Brain 认为没有问题，不发消息
+                console.log(`[BrainWorkerCallback] ${callbackPhase} result contains [NO_MESSAGE], skipping message`)
             } else if (callbackPhase === 'refine') {
                 // refine 完成：发给主 session，sentFrom 由调用方决定
+                const sentFrom = (body.refineSentFrom as 'webapp' | 'brain-review') || 'brain-review'
+                console.log(`[BrainWorkerCallback] refine completed, sending to main session, sentFrom=${sentFrom}, outputLen=${body.output.length}`)
                 await engine?.sendMessage(body.mainSessionId, {
                     text: body.output,
-                    sentFrom: (body.refineSentFrom as 'webapp' | 'brain-review') || 'brain-review'
+                    sentFrom
                 })
             } else {
-                // 第一阶段完成：spawn 第二个 worker 做 refine
-                try {
-                    const { spawn } = await import('child_process')
-                    const { existsSync } = await import('fs')
-                    const pathMod = await import('path')
-
-                    let workerPath: string | null = null
-                    const serverDir = pathMod.dirname(process.execPath)
-                    const candidate1 = pathMod.join(serverDir, 'hapi-brain-worker')
-                    const candidate2 = '/home/guang/softwares/hapi/cli/dist-exe/bun-linux-x64/hapi-brain-worker'
-                    if (existsSync(candidate1)) workerPath = candidate1
-                    else if (existsSync(candidate2)) workerPath = candidate2
-
-                    if (workerPath) {
-                        const mainSession = engine?.getSession(body.mainSessionId)
-                        const projectPath = mainSession?.metadata?.path || '/tmp'
-
-                        const refineConfig = JSON.stringify({
-                            executionId: body.executionId,
-                            brainSessionId: body.brainSessionId,
-                            mainSessionId: body.mainSessionId,
-                            prompt: body.output,
-                            projectPath,
-                            model: 'claude-haiku-4-5-20250929',
-                            systemPrompt: buildRefineSystemPrompt(),
-                            serverCallbackUrl: `http://127.0.0.1:${process.env.WEBAPP_PORT || '3006'}`,
-                            serverToken: process.env.CLI_API_TOKEN || '',
-                            phase: 'refine',
-                            refineSentFrom: 'brain-review'
-                        })
-
-                        const child = spawn(workerPath, [refineConfig], {
-                            detached: true,
-                            stdio: 'ignore',
-                            env: process.env as NodeJS.ProcessEnv
-                        })
-                        child.unref()
-                        console.log('[BrainWorkerCallback] Spawned refine worker PID:', child.pid)
-                    } else {
-                        // worker 找不到，直接发原始 output
-                        console.warn('[BrainWorkerCallback] Worker not found, sending raw output')
-                        await engine?.sendMessage(body.mainSessionId, {
-                            text: body.output,
-                            sentFrom: 'brain-review'
-                        })
-                    }
-                } catch (spawnErr) {
-                    console.error('[BrainWorkerCallback] Failed to spawn refine worker:', spawnErr)
-                    // fallback: 直接发原始 output
-                    await engine?.sendMessage(body.mainSessionId, {
-                        text: body.output,
-                        sentFrom: 'brain-review'
-                    })
-                }
+                // review 阶段完成：直接发给主 session，不再 spawn refine
+                console.log(`[BrainWorkerCallback] review completed, sending directly to main session, outputLen=${body.output.length}`)
+                await engine?.sendMessage(body.mainSessionId, {
+                    text: body.output,
+                    sentFrom: 'brain-review'
+                })
             }
         } else if (body.status === 'failed') {
+            console.error(`[BrainWorkerCallback] ${callbackPhase} FAILED: ${body.error || '未知错误'}`)
             await engine?.sendMessage(body.mainSessionId, {
                 text: `Brain 审查失败: ${body.error || '未知错误'}`,
                 sentFrom: 'brain-review'
             })
         }
 
-        // SSE 广播 done 事件：只在 refine 阶段或失败/NO_MESSAGE 时广播
-        const shouldBroadcastDone = callbackPhase === 'refine'
+        // SSE 广播 done 事件：review/refine 完成、失败、NO_MESSAGE 均广播
+        const shouldBroadcastDone = body.status === 'completed'
             || body.status === 'failed'
-            || (body.output?.includes('[NO_MESSAGE]'))
 
         if (shouldBroadcastDone) {
             const sseManager = getSseManager()

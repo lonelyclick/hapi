@@ -58,7 +58,7 @@ async function spawnRefineWorker(
             mainSessionId,
             prompt: userMessage,
             projectPath,
-            model: 'claude-haiku-4-5-20250929',
+            model: 'claude-sonnet-4-5-20250929',
             systemPrompt: buildRefineSystemPrompt(),
             serverCallbackUrl: `http://127.0.0.1:${process.env.WEBAPP_PORT || '3006'}`,
             serverToken: process.env.CLI_API_TOKEN || '',
@@ -122,10 +122,13 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
         // 大脑模式：拦截用户消息，让 Brain Worker 先处理再发给主 session
         const activeBrain = brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
         if (activeBrain) {
+            console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} model=claude-sonnet-4-5-20250929 msgLen=${parsed.data.text.length}`)
             const intercepted = await spawnRefineWorker(engine, sessionId, activeBrain.id, parsed.data.text)
             if (intercepted) {
+                console.log(`[Messages] Brain intercept: message intercepted, waiting for refine worker callback`)
                 return c.json({ ok: true, intercepted: true })
             }
+            console.warn(`[Messages] Brain intercept: failed to spawn refine worker, falling back to direct send`)
         }
 
         await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: 'webapp' })
