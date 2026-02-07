@@ -452,6 +452,9 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
 
                 logger.debug('[remote]: launch finally');
 
+                // Reset thinking state to prevent it from being stuck
+                session.onThinkingChange(false);
+
                 // Terminate all ongoing tool calls
                 for (let [toolCallId, { parentToolCallId }] of ongoingToolCalls) {
                     const converted = sdkToLogConverter.generateInterruptedToolResult(toolCallId, parentToolCallId);

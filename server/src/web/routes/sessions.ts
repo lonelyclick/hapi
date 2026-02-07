@@ -767,6 +767,8 @@ export function createSessionsRoutes(
         await store.setSessionActive(sessionId, true, now, namespace)
         session.active = true
         session.activeAt = now
+        // Reset thinking state so resumed session starts clean
+        session.thinking = false
 
         const resumeAttempt = await engine.spawnSession(
             machineId,

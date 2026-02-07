@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AgentState, ModelMode, PermissionMode, TypingUser } from '@/types/api'
 import { getContextBudgetTokens } from '@/chat/modelConfig'
 
@@ -57,9 +57,8 @@ function getConnectionStatus(
     }
 
     if (thinking) {
-        const vibingMessage = VIBING_MESSAGES[Math.floor(Math.random() * VIBING_MESSAGES.length)].toLowerCase() + '…'
         return {
-            text: vibingMessage,
+            text: '', // filled by useVibingMessage hook
             color: 'text-[#007AFF]',
             dotColor: 'bg-[#007AFF]',
             isPulsing: true
@@ -95,6 +94,20 @@ function getDisplayName(email: string): string {
     return name.length > 0 ? name : email
 }
 
+function useVibingMessage(thinking: boolean): string {
+    const [index, setIndex] = useState(() => Math.floor(Math.random() * VIBING_MESSAGES.length))
+
+    useEffect(() => {
+        if (!thinking) return
+        const interval = setInterval(() => {
+            setIndex(Math.floor(Math.random() * VIBING_MESSAGES.length))
+        }, 3000)
+        return () => clearInterval(interval)
+    }, [thinking])
+
+    return VIBING_MESSAGES[index].toLowerCase() + '…'
+}
+
 export function StatusBar(props: {
     active: boolean
     thinking: boolean
@@ -109,6 +122,9 @@ export function StatusBar(props: {
         () => getConnectionStatus(props.active, props.thinking, props.agentState),
         [props.active, props.thinking, props.agentState]
     )
+
+    const vibingMessage = useVibingMessage(props.thinking)
+    const statusText = props.thinking && props.active ? vibingMessage : connectionStatus.text
 
     const contextWarning = useMemo(
         () => {
@@ -134,7 +150,7 @@ export function StatusBar(props: {
                         className={`h-2 w-2 rounded-full ${connectionStatus.dotColor} ${connectionStatus.isPulsing ? 'animate-pulse' : ''}`}
                     />
                     <span className={`text-xs ${connectionStatus.color}`}>
-                        {connectionStatus.text}
+                        {statusText}
                     </span>
                 </div>
                 {contextWarning ? (
