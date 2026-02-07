@@ -12,6 +12,7 @@ import type { WebAppEnv } from '../web/middleware/auth'
 import type { BrainStore } from './store'
 import type { AutoBrainService } from './autoBrain'
 import { buildBrainSystemPrompt, buildReviewPrompt, buildRefineSystemPrompt } from './brainSdkService'
+import { refiningSessions } from '../web/routes/messages'
 
 // Brain 上下文最大消息数
 const BRAIN_CONTEXT_MAX_MESSAGES = 10
@@ -365,8 +366,10 @@ export function createBrainRoutes(
         const mainSessionId = c.req.param('mainSessionId')
         const brainSession = await brainStore.getActiveBrainSession(mainSessionId)
 
+        const isRefining = refiningSessions.has(mainSessionId)
+
         if (brainSession) {
-            return c.json(brainSession)
+            return c.json({ ...brainSession, isRefining })
         }
 
         // Fallback: 返回最近完成的 brain session（用于恢复 noMessage 等持久化状态）
@@ -375,7 +378,7 @@ export function createBrainRoutes(
             return c.json({ error: 'No active brain session' }, 404)
         }
 
-        return c.json(latest)
+        return c.json({ ...latest, isRefining })
     })
 
     // 获取单个 Brain Session
@@ -1409,6 +1412,9 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                 })
             }
         }
+
+        // 清除 refine 状态
+        refiningSessions.delete(body.mainSessionId)
 
         // SSE 广播 done 事件：review/refine 完成、失败、NO_MESSAGE 均广播
         const shouldBroadcastDone = body.status === 'completed'

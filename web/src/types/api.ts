@@ -234,6 +234,7 @@ export type BrainSession = {
     status: BrainSessionStatus
     contextSummary: string
     brainResult?: string
+    isRefining?: boolean
     createdAt: number
     updatedAt: number
     completedAt?: number

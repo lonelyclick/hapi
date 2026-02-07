@@ -19,11 +19,14 @@ export function BrainRefineIndicator({ sessionId, api }: { sessionId: string; ap
     const queryClient = useQueryClient()
     const [state, setState] = useState<BrainRefineState>({ isRefining: false, noMessage: false })
 
-    // 从 brainSession 数据恢复 noMessage 持久化状态
+    // 从 brainSession 数据恢复持久化状态（noMessage + isRefining）
     useEffect(() => {
         const brainData = queryClient.getQueryData<BrainSession | null>(['brain-active-session', sessionId])
         if (brainData?.status === 'completed' && brainData.brainResult?.includes('[NO_MESSAGE]')) {
             setState(prev => prev.noMessage ? prev : { ...prev, noMessage: true })
+        }
+        if (brainData?.isRefining) {
+            setState(prev => prev.isRefining ? prev : { ...prev, isRefining: true })
         }
     }, [queryClient, sessionId])
 
@@ -41,6 +44,9 @@ export function BrainRefineIndicator({ sessionId, api }: { sessionId: string; ap
                 const brainData = queryClient.getQueryData<BrainSession | null>(['brain-active-session', sessionId])
                 if (brainData?.status === 'completed' && brainData.brainResult?.includes('[NO_MESSAGE]')) {
                     setState(prev => prev.noMessage ? prev : { ...prev, noMessage: true })
+                }
+                if (brainData?.isRefining) {
+                    setState(prev => prev.isRefining ? prev : { ...prev, isRefining: true })
                 }
             }
         })

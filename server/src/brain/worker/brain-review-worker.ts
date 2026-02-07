@@ -108,6 +108,16 @@ async function run(): Promise<void> {
         }, 30_000)
     }
 
+    // refine 阶段设置 60 秒超时，防止 SDK 启动慢导致卡死
+    if (isRefine) {
+        setTimeout(() => {
+            if (!abortController.signal.aborted) {
+                console.error('[BrainWorker] Refine timeout (60s), aborting...')
+                abortController.abort()
+            }
+        }, 60_000)
+    }
+
     // 收集输出
     const outputChunks: string[] = []
     let lastToolEntryId: string | null = null

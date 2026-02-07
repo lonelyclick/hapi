@@ -23,6 +23,9 @@ const clearMessagesBodySchema = z.object({
     compact: z.boolean().optional()
 })
 
+// 跟踪正在 refine 的主 session（用于页面刷新后恢复状态）
+export const refiningSessions = new Set<string>()
+
 /**
  * Spawn 一个 refine worker 来预处理用户消息
  * 返回 true 表示成功拦截，false 表示 fallback 到直接发送
@@ -59,7 +62,7 @@ async function spawnRefineWorker(
             mainSessionId,
             prompt: userMessage,
             projectPath,
-            model: 'claude-sonnet-4-5-20250929',
+            model: 'glm-4.7',
             systemPrompt: buildRefineSystemPrompt(),
             serverCallbackUrl: `http://127.0.0.1:${process.env.WEBAPP_PORT || '3006'}`,
             serverToken: process.env.CLI_API_TOKEN || '',
@@ -123,9 +126,10 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
         // 大脑模式：拦截用户消息，让 Brain Worker 先处理再发给主 session
         const activeBrain = brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
         if (activeBrain) {
-            console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} model=claude-sonnet-4-5-20250929 msgLen=${parsed.data.text.length}`)
+            console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} model=glm-4.7 msgLen=${parsed.data.text.length}`)
             const intercepted = await spawnRefineWorker(engine, sessionId, activeBrain.id, parsed.data.text)
             if (intercepted) {
+                refiningSessions.add(sessionId)
                 console.log(`[Messages] Brain intercept: message intercepted, waiting for refine worker callback`)
                 // SSE 广播 refine-started，前端显示 loading
                 const sseManager = getSseManager?.()
