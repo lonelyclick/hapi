@@ -558,10 +558,9 @@ export class AutoBrainService {
                             messageLines.push('')
                         }
                         messageLines.push('---')
-                        messageLines.push('你是 Yoho 大脑，这是一个三方协作会话（用户、Claude Code、你）。以上是主 session 的对话汇总。')
-                        messageLines.push('请根据这一轮会话的情况，结合 git 当前改动（用工具查看），做出反应：')
-                        messageLines.push('1. 如果发现不合理的地方，提出具体建议')
-                        messageLines.push('2. 如果没有问题，只需回复"知道了"')
+                        messageLines.push('以上是主 session 的对话汇总。请 review 代码改动：')
+                        messageLines.push('- 如果发现问题，简要指出，让主 session 去修（不要给解决方案）')
+                        messageLines.push('- 如果没有问题，只需回复"知道了"')
                         messageLines.push('')
                         messageLines.push('同时读取 `.yoho-brain/MEMORY.md` 了解之前的上下文，将重要发现更新到 `.yoho-brain/` 记忆文件中。')
 
