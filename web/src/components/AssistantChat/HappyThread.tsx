@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ThreadPrimitive } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
 import type { SessionMetadataSummary } from '@/types/api'
@@ -66,6 +66,7 @@ export function HappyThread(props: {
     rawMessagesCount: number
     normalizedMessagesCount: number
     renderedMessagesCount: number
+    trailing?: ReactNode
 }) {
     const viewportRef = useRef<HTMLDivElement | null>(null)
     const topSentinelRef = useRef<HTMLDivElement | null>(null)
@@ -310,6 +311,7 @@ export function HappyThread(props: {
                             <div className="flex flex-col gap-3">
                                 <ThreadPrimitive.Messages components={THREAD_MESSAGE_COMPONENTS} />
                             </div>
+                            {props.trailing}
                         </div>
                     </div>
                 </ThreadPrimitive.Viewport>

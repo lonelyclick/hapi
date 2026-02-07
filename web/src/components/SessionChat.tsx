@@ -378,11 +378,10 @@ export function SessionChat(props: {
                         rawMessagesCount={props.messages.length}
                         normalizedMessagesCount={normalizedMessages.length}
                         renderedMessagesCount={reconciled.blocks.length}
+                        trailing={props.session.metadata?.source === 'brain-sdk' && props.session.metadata?.mainSessionId ? (
+                            <BrainSdkProgressPanel mainSessionId={props.session.metadata.mainSessionId as string} api={props.api} />
+                        ) : undefined}
                     />
-
-                    {props.session.metadata?.source === 'brain-sdk' && props.session.metadata?.mainSessionId && (
-                        <BrainSdkProgressPanel mainSessionId={props.session.metadata.mainSessionId as string} api={props.api} />
-                    )}
 
                     <HappyComposer
                         apiClient={props.api}

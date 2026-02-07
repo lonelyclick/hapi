@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 import type { ApiClient } from '@/api/client'
 import { Card, CardHeader, CardDescription, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { CodeBlock } from '@/components/CodeBlock'
 import { Spinner } from '@/components/Spinner'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
 
@@ -25,6 +27,14 @@ function useForceUpdate(): [number, () => void] {
     return [tick, () => setTick(t => t + 1)]
 }
 
+function safeStringify(value: unknown): string {
+    try {
+        return JSON.stringify(value, null, 2)
+    } catch {
+        return String(value)
+    }
+}
+
 function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
     const toolName = entry.toolName || (() => {
         const idx = entry.content.indexOf(' ')
@@ -45,24 +55,63 @@ function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
         metadata: null
     })
 
+    const subtitle = presentation.subtitle ?? fallbackDesc
+
     return (
         <Card className="overflow-hidden shadow-sm">
             <CardHeader className="p-3 space-y-0">
-                <div className="flex items-center gap-2">
-                    <div className="shrink-0 flex h-3.5 w-3.5 items-center justify-center text-[var(--app-hint)] leading-none">
-                        {presentation.icon}
-                    </div>
-                    <CardTitle className="min-w-0 text-sm font-medium leading-tight break-words">
-                        {presentation.title}
-                    </CardTitle>
-                </div>
-                {presentation.subtitle && (
-                    <CardDescription className="font-mono text-xs break-all opacity-80 mt-1">
-                        {presentation.subtitle.length > 160
-                            ? presentation.subtitle.slice(0, 157) + '...'
-                            : presentation.subtitle}
-                    </CardDescription>
-                )}
+                <Dialog>
+                    <DialogTrigger asChild>
+                        <button
+                            type="button"
+                            className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
+                        >
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0 flex items-center gap-2">
+                                        <div className="shrink-0 flex h-3.5 w-3.5 items-center justify-center text-[var(--app-hint)] leading-none">
+                                            {presentation.icon}
+                                        </div>
+                                        <CardTitle className="min-w-0 text-sm font-medium leading-tight break-words">
+                                            {presentation.title}
+                                        </CardTitle>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <span className="text-emerald-600">
+                                            <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none">
+                                                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+                                                <path d="M5.2 8.3l1.8 1.8 3.8-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </span>
+                                        <span className="text-[var(--app-hint)]">
+                                            <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+                                                <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </span>
+                                    </div>
+                                </div>
+                                {subtitle && (
+                                    <CardDescription className="font-mono text-xs break-all opacity-80">
+                                        {subtitle.length > 160
+                                            ? subtitle.slice(0, 157) + '...'
+                                            : subtitle}
+                                    </CardDescription>
+                                )}
+                            </div>
+                        </button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>{presentation.title}</DialogTitle>
+                        </DialogHeader>
+                        <div className="mt-3 flex max-h-[75vh] flex-col gap-4 overflow-auto">
+                            <div>
+                                <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">Input</div>
+                                <CodeBlock code={safeStringify(input)} language="json" />
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </CardHeader>
         </Card>
     )
@@ -81,7 +130,6 @@ function AssistantEntry({ content }: { content: string }) {
 export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: string; api: ApiClient }) {
     const queryClient = useQueryClient()
     const data = queryClient.getQueryData<ProgressData>(queryKeys.brainSdkProgress(mainSessionId))
-    const scrollRef = useRef<HTMLDivElement>(null)
     const loadedRef = useRef(false)
 
     // 挂载时加载历史进度日志
@@ -139,25 +187,12 @@ export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: s
         return () => clearInterval(interval)
     }, [data?.isActive, mainSessionId, api, queryClient])
 
-    // 自动滚动到底部
-    useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-        }
-    }, [data?.entries?.length])
-
     if (!data?.entries?.length && !data?.isActive) {
         return null
     }
 
     return (
-        <div ref={scrollRef} className="mx-auto w-full max-w-content px-3 flex flex-col gap-2 pb-4">
-            {data?.isActive && (
-                <div className="flex items-center gap-2 py-1">
-                    <Spinner size="sm" label="Brain analyzing" />
-                    <span className="text-xs text-[var(--app-hint)]">Brain analyzing...</span>
-                </div>
-            )}
+        <div className="flex flex-col gap-3 mt-3">
             {data?.entries?.map(entry => (
                 entry.type === 'tool-use' ? (
                     <ToolUseEntry key={entry.id} entry={entry} />
@@ -165,6 +200,12 @@ export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: s
                     <AssistantEntry key={entry.id} content={entry.content} />
                 )
             ))}
+            {data?.isActive && (
+                <div className="flex items-center gap-2 py-1">
+                    <Spinner size="sm" label="Brain analyzing" />
+                    <span className="text-xs text-[var(--app-hint)]">Brain analyzing...</span>
+                </div>
+            )}
         </div>
     )
 }
