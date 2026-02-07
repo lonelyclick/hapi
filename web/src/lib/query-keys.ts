@@ -20,4 +20,5 @@ export const queryKeys = {
         ['yoho-credentials', name, limit] as const,
     yohoCredentialTypes: () => ['yoho-credential-types'] as const,
     userPreferences: ['user-preferences'] as const,
+    brainSdkProgress: (sessionId: string) => ['brain-sdk-progress', sessionId] as const,
 }

@@ -1037,6 +1037,21 @@ export class AutoBrainService {
                 // 标记执行记录为完成
                 await this.brainStore.completeBrainExecution(execution.id, result.output)
 
+                // 广播 SDK review 完成事件
+                if (this.sseManager) {
+                    const mainSession = this.engine.getSession(mainSessionId)
+                    this.sseManager.broadcast({
+                        type: 'brain-sdk-progress',
+                        namespace: mainSession?.namespace,
+                        sessionId: mainSessionId,
+                        data: {
+                            brainSessionId: brainId,
+                            progressType: 'done',
+                            data: {}
+                        }
+                    } as unknown as SyncEvent)
+                }
+
                 // 广播完成状态（用于前端状态更新）
                 this.broadcastSyncStatus(brainSession, {
                     status: 'complete',

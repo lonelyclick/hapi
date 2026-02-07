@@ -368,11 +368,17 @@ export type TypingUser = {
 }
 
 // Brain SDK 进度事件
-export type BrainSdkProgressType = 'thinking' | 'tool' | 'done'
-export type BrainSdkProgressData =
-    | { progressType: 'thinking'; sessionId?: string }
-    | { progressType: 'tool'; toolName?: string; input?: unknown }
-    | { progressType: 'done' }
+export type BrainSdkProgressType = 'thinking' | 'tool' | 'done' | 'assistant-message' | 'tool-use'
+export type BrainSdkProgressData = {
+    brainSessionId: string
+    progressType: BrainSdkProgressType
+    data: {
+        content?: string
+        tool?: string
+        input?: string
+        toolName?: string
+    }
+}
 
 export type SyncEvent =
     | { type: 'session-added'; sessionId: string; data?: unknown; namespace?: string }
@@ -384,7 +390,7 @@ export type SyncEvent =
     | { type: 'connection-changed'; data?: { status: string }; namespace?: string }
     | { type: 'online-users-changed'; users: OnlineUser[]; namespace?: string }
     | { type: 'typing-changed'; sessionId: string; typing: TypingUser; namespace?: string }
-    | { type: 'brain-sdk-progress'; sessionId: string; brainSessionId: string; progressType: BrainSdkProgressType; data: BrainSdkProgressData; namespace?: string }
+    | { type: 'brain-sdk-progress'; sessionId: string; data: BrainSdkProgressData; namespace?: string }
 
 export type OnlineUsersResponse = { users: OnlineUser[] }
 

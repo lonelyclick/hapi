@@ -243,6 +243,42 @@ export function useSSE(options: {
                 )
             }
 
+            // 处理 brain-sdk-progress 事件，累积进度日志
+            if (event.type === 'brain-sdk-progress' && 'sessionId' in event && event.sessionId) {
+                const progressData = 'data' in event ? event.data as { brainSessionId?: string; progressType?: string; data?: Record<string, unknown> } : null
+                if (progressData?.progressType) {
+                    type ProgressEntry = { id: string; type: string; content: string; timestamp: number }
+                    const key = queryKeys.brainSdkProgress(event.sessionId)
+                    const prev = queryClient.getQueryData<{ entries: ProgressEntry[]; isActive: boolean }>(key)
+                    const entries = prev?.entries ?? []
+                    const id = `sdk-${Date.now()}-${entries.length}`
+
+                    if (progressData.progressType === 'assistant-message') {
+                        const content = (progressData.data?.content as string) || ''
+                        if (content) {
+                            queryClient.setQueryData(key, {
+                                entries: [...entries, { id, type: 'assistant-message', content, timestamp: Date.now() }],
+                                isActive: true
+                            })
+                        }
+                    } else if (progressData.progressType === 'tool-use') {
+                        const tool = (progressData.data?.tool as string) || ''
+                        const input = (progressData.data?.input as string) || ''
+                        if (tool) {
+                            queryClient.setQueryData(key, {
+                                entries: [...entries, { id, type: 'tool-use', content: `${tool} ${input}`, timestamp: Date.now() }],
+                                isActive: true
+                            })
+                        }
+                    } else if (progressData.progressType === 'done') {
+                        queryClient.setQueryData(key, {
+                            entries,
+                            isActive: false
+                        })
+                    }
+                }
+            }
+
             onEventRef.current(event)
         }
 
