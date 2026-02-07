@@ -12,6 +12,48 @@ import {
     type Query as SDKQuery,
     type SDKMessage
 } from '@anthropic-ai/claude-agent-sdk'
+import { execSync } from 'child_process'
+
+/**
+ * 查找系统上的 claude 可执行文件路径
+ * 编译后的 Bun 二进制中 SDK 内置的 cli.js 路径不可用（/$bunfs/root/cli.js）
+ */
+function findClaudeExecutable(): string | undefined {
+    try {
+        const result = execSync('which claude', { encoding: 'utf-8', timeout: 5000 }).trim()
+        if (result) return result
+    } catch {
+        // which 命令失败
+    }
+    // 常见路径
+    const candidates = [
+        '/home/guang/.nvm/versions/node/v22.18.0/bin/claude',
+        '/usr/local/bin/claude',
+        '/usr/bin/claude'
+    ]
+    for (const p of candidates) {
+        try {
+            const { existsSync } = require('fs')
+            if (existsSync(p)) return p
+        } catch {
+            // ignore
+        }
+    }
+    return undefined
+}
+
+let _cachedClaudePath: string | undefined | null = null
+function getClaudeExecutablePath(): string | undefined {
+    if (_cachedClaudePath === null) {
+        _cachedClaudePath = findClaudeExecutable()
+        if (_cachedClaudePath) {
+            console.log('[BrainSDK] Found claude executable at:', _cachedClaudePath)
+        } else {
+            console.warn('[BrainSDK] Claude executable not found on system')
+        }
+    }
+    return _cachedClaudePath
+}
 
 /**
  * Brain 模式配置
@@ -151,8 +193,8 @@ export async function executeBrainQuery(
             abortController,
             canUseTool,
             env: finalEnv,
-            // 指定 SDK 内置的 Claude Code 可执行文件路径
-            pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable,
+            // 优先使用 options 指定的路径，否则自动检测系统上的 claude
+            pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable || getClaudeExecutablePath(),
         }
     })
 

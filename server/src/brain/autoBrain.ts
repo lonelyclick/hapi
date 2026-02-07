@@ -431,14 +431,25 @@ export class AutoBrainService {
 
                 if (pendingRounds.length === 0) {
                     const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId)
-                    const unbrainedCount = existingRounds.filter(r => !brainedRoundNumbers.has(r.roundNumber)).length
+                    const unbrainedRounds = existingRounds.filter(r => !brainedRoundNumbers.has(r.roundNumber))
+
+                    // 如果有已同步但未 brain 的 rounds，补触发 SDK review
+                    if (unbrainedRounds.length > 0 && this.isSdkMode(brainSession) && this.brainSdkService) {
+                        const mainSessionObj = this.engine.getSession(mainSessionId)
+                        const projectPath = mainSessionObj?.metadata?.path
+                        if (projectPath) {
+                            console.log('[BrainSync] Found', unbrainedRounds.length, 'unbrained rounds, triggering SDK review')
+                            const summaries = unbrainedRounds.map(r => ({ round: r.roundNumber, summary: r.aiSummary }))
+                            await this.triggerSdkReview(brainSession, summaries, projectPath)
+                        }
+                    }
 
                     this.broadcastSyncStatus(brainSession, {
                         status: 'complete',
                         totalRounds: allRounds.length,
                         summarizedRounds: existingRounds.length,
                         pendingRounds: 0,
-                        unbrainedRounds: unbrainedCount
+                        unbrainedRounds: unbrainedRounds.length
                     })
                     continueSync = false
                     break
