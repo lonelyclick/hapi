@@ -126,6 +126,11 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
             const intercepted = await spawnRefineWorker(engine, sessionId, activeBrain.id, parsed.data.text)
             if (intercepted) {
                 console.log(`[Messages] Brain intercept: message intercepted, waiting for refine worker callback`)
+                // 先发一条提示，让用户知道 Brain 正在处理
+                await engine.sendMessage(sessionId, {
+                    text: '🧠 Brain 正在处理你的消息...',
+                    sentFrom: 'brain-review'
+                })
                 return c.json({ ok: true, intercepted: true })
             }
             console.warn(`[Messages] Brain intercept: failed to spawn refine worker, falling back to direct send`)

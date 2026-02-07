@@ -1362,7 +1362,11 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
 
         if (body.status === 'completed' && body.output) {
             if (body.output.includes('[NO_MESSAGE]')) {
-                console.log(`[BrainWorkerCallback] ${callbackPhase} result contains [NO_MESSAGE], skipping message`)
+                console.log(`[BrainWorkerCallback] ${callbackPhase} result contains [NO_MESSAGE], sending ack`)
+                await engine?.sendMessage(body.mainSessionId, {
+                    text: '🧠 Brain: 已了解，没有问题。',
+                    sentFrom: 'brain-review'
+                })
             } else if (callbackPhase === 'refine') {
                 // refine 完成：发给主 session，sentFrom 由调用方决定
                 const sentFrom = (body.refineSentFrom as 'webapp' | 'brain-review') || 'brain-review'
