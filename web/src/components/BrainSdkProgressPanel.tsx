@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 import type { ApiClient } from '@/api/client'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { Spinner } from '@/components/Spinner'
 import { EyeIcon, SearchIcon } from '@/components/ToolCard/icons'
 
@@ -57,8 +56,8 @@ function ToolUseEntry({ content }: { content: string }) {
 
 function AssistantEntry({ content }: { content: string }) {
     return (
-        <div className="py-1">
-            <MarkdownRenderer content={content} />
+        <div className="py-1 text-sm leading-relaxed whitespace-pre-wrap break-words">
+            {content}
         </div>
     )
 }
