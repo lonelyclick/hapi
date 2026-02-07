@@ -19,25 +19,25 @@ import { execSync } from 'child_process'
  * 编译后的 Bun 二进制中 SDK 内置的 cli.js 路径不可用（/$bunfs/root/cli.js）
  */
 function findClaudeExecutable(): string | undefined {
+    const { existsSync } = require('fs')
+    // 优先使用 nvm 安装的新版 claude（SDK 需要 2.1.30+）
+    const candidates = [
+        '/home/guang/.nvm/versions/node/v22.18.0/bin/claude',
+        '/usr/local/bin/claude',
+    ]
+    for (const p of candidates) {
+        try {
+            if (existsSync(p)) return p
+        } catch {
+            // ignore
+        }
+    }
+    // 最后 fallback 到 which
     try {
         const result = execSync('which claude', { encoding: 'utf-8', timeout: 5000 }).trim()
         if (result) return result
     } catch {
         // which 命令失败
-    }
-    // 常见路径
-    const candidates = [
-        '/home/guang/.nvm/versions/node/v22.18.0/bin/claude',
-        '/usr/local/bin/claude',
-        '/usr/bin/claude'
-    ]
-    for (const p of candidates) {
-        try {
-            const { existsSync } = require('fs')
-            if (existsSync(p)) return p
-        } catch {
-            // ignore
-        }
     }
     return undefined
 }
