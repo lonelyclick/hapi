@@ -558,7 +558,7 @@ export class AutoBrainService {
                             messageLines.push('')
                         }
                         messageLines.push('---')
-                        messageLines.push('你是 Yoho 的超级大脑，以上是另一个 session 的对话汇总。')
+                        messageLines.push('你是 Yoho 大脑，这是一个三方协作会话（用户、Claude Code、你）。以上是主 session 的对话汇总。')
                         messageLines.push('请根据这一轮会话的情况，结合 git 当前改动（用工具查看），做出反应：')
                         messageLines.push('1. 如果发现不合理的地方，提出具体建议')
                         messageLines.push('2. 如果没有问题，只需回复"知道了"')
@@ -594,7 +594,7 @@ export class AutoBrainService {
                 }
 
                 const newSummarizedCount = existingRounds.length + savedRounds.length
-                const newPendingCount = allRounds.length - newSummarizedCount
+                const newPendingCount = allRounds.length - newSummarizedCount - initPromptRoundNumbers.size
 
                 const brainedRoundNumbersForStatus = await this.brainStore.getBrainedRoundNumbers(brainId)
                 const newExistingRounds = await this.brainStore.getBrainRounds(brainId)
@@ -629,6 +629,8 @@ export class AutoBrainService {
             const allMessages = await this.engine.getAllMessages(mainSessionId).catch(() => [])
             const allRounds = groupMessagesIntoRounds(allMessages)
             const brainReviewRoundNums = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
+            const initPromptRoundNums = new Set(allRounds.filter(r => r.userInput.trimStart().startsWith('#InitPrompt-')).map(r => r.roundNumber))
+            const skippedCount = initPromptRoundNums.size
             const existingRounds = await this.brainStore.getBrainRounds(brainId).catch(() => [])
             const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId).catch(() => new Set<number>())
             const unbrainedCount = existingRounds.filter(r =>
@@ -639,7 +641,7 @@ export class AutoBrainService {
                 status: 'complete',
                 totalRounds: allRounds.length,
                 summarizedRounds: existingRounds.length,
-                pendingRounds: allRounds.length - existingRounds.length,
+                pendingRounds: allRounds.length - existingRounds.length - skippedCount,
                 unbrainedRounds: unbrainedCount
             })
         } finally {
@@ -775,7 +777,8 @@ export class AutoBrainService {
             }
 
             const newExistingRounds = await this.brainStore.getBrainRounds(brainId)
-            const pendingCount = allRounds.length - newExistingRounds.length
+            const initPromptSkipped = allRounds.filter(r => r.userInput.trimStart().startsWith('#InitPrompt-')).length
+            const pendingCount = allRounds.length - newExistingRounds.length - initPromptSkipped
 
             const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId)
             const brainReviewRoundNums = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
