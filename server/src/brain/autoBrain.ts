@@ -877,6 +877,33 @@ export class AutoBrainService {
                     permissionMode: 'dontAsk'
                 },
                 {
+                    onAssistantMessage: (message) => {
+                        // 将 SDK review 过程中的 assistant 消息发送到 brain display session
+                        if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
+                            this.engine.sendMessage(brainSession.brainSessionId, {
+                                text: message.content,
+                                sentFrom: 'brain-sdk-review'
+                            }).catch(err => {
+                                console.error('[BrainSync] Failed to send SDK assistant message to display session:', err)
+                            })
+                        }
+                    },
+                    onToolUse: (toolName, input) => {
+                        // 将工具调用信息发送到 brain display session
+                        if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
+                            const inputSummary = toolName === 'Read'
+                                ? (input as { file_path?: string }).file_path || ''
+                                : toolName === 'Grep'
+                                    ? `pattern="${(input as { pattern?: string }).pattern}" path="${(input as { path?: string }).path || '.'}"`
+                                    : toolName === 'Glob'
+                                        ? `pattern="${(input as { pattern?: string }).pattern}"`
+                                        : JSON.stringify(input).slice(0, 200)
+                            this.engine.sendMessage(brainSession.brainSessionId, {
+                                text: `🔧 \`${toolName}\` ${inputSummary}`,
+                                sentFrom: 'brain-sdk-review'
+                            }).catch(() => {})
+                        }
+                    },
                     onProgress: (type, data) => {
                         // 维持 display session 心跳
                         this.keepBrainDisplaySessionAlive(brainSession)
