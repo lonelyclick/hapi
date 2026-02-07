@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -16,6 +16,7 @@ type ProgressEntry = {
     content: string
     toolName?: string
     toolInput?: Record<string, unknown>
+    toolEntryId?: string
     timestamp: number
 }
 
@@ -37,7 +38,12 @@ function safeStringify(value: unknown): string {
     }
 }
 
-function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
+function truncateResult(text: string, maxLen: number = 5000): string {
+    if (text.length <= maxLen) return text
+    return text.slice(0, maxLen) + `\n\n... (truncated, ${text.length} chars total)`
+}
+
+function ToolUseEntry({ entry, resultContent }: { entry: ProgressEntry; resultContent?: string }) {
     const toolName = entry.toolName || (() => {
         const idx = entry.content.indexOf(' ')
         return idx === -1 ? entry.content : entry.content.slice(0, idx)
@@ -110,6 +116,14 @@ function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
                             <div>
                                 <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">Input</div>
                                 <CodeBlock code={safeStringify(input)} language="json" />
+                            </div>
+                            <div>
+                                <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">Result</div>
+                                {resultContent ? (
+                                    <CodeBlock code={truncateResult(resultContent)} language="text" />
+                                ) : (
+                                    <div className="text-sm text-[var(--app-hint)]">(no output)</div>
+                                )}
                             </div>
                         </div>
                     </DialogContent>
@@ -211,19 +225,33 @@ export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: s
         return () => clearInterval(interval)
     }, [data?.isActive, mainSessionId, api, queryClient])
 
+    // 构建 tool result 映射：toolEntryId -> result content
+    const resultMap = useMemo(() => {
+        const map = new Map<string, string>()
+        if (!data?.entries) return map
+        for (const entry of data.entries) {
+            if (entry.type === 'tool-result' && entry.toolEntryId) {
+                map.set(entry.toolEntryId, entry.content)
+            }
+        }
+        return map
+    }, [data?.entries])
+
     if (!data?.entries?.length && !data?.isActive) {
         return null
     }
 
     return (
         <div className="flex flex-col gap-3 mt-3">
-            {data?.entries?.map(entry => (
-                entry.type === 'tool-use' ? (
-                    <ToolUseEntry key={entry.id} entry={entry} />
-                ) : (
-                    <AssistantEntry key={entry.id} content={entry.content} />
-                )
-            ))}
+            {data?.entries?.map(entry => {
+                if (entry.type === 'tool-use') {
+                    return <ToolUseEntry key={entry.id} entry={entry} resultContent={resultMap.get(entry.id)} />
+                }
+                if (entry.type === 'tool-result') {
+                    return null // tool-result 已通过 resultMap 关联到 tool-use
+                }
+                return <AssistantEntry key={entry.id} content={entry.content} />
+            })}
             {data?.isActive && (
                 <div className="flex items-center gap-2 py-1">
                     <Spinner size="sm" label="Brain analyzing" />

@@ -398,6 +398,16 @@ export const ActiveAccountResponseSchema = z.object({
     account: ClaudeAccountSchema.nullable()
 })
 
+export const SelectBestAccountResponseSchema = z.object({
+    account: ClaudeAccountSchema.nullable(),
+    usage: z.object({
+        fiveHour: z.object({ utilization: z.number(), resetsAt: z.string() }).nullable(),
+        sevenDay: z.object({ utilization: z.number(), resetsAt: z.string() }).nullable(),
+    }).nullable().optional(),
+    reason: z.string().optional(),
+    timestamp: z.number().optional()
+})
+
 export interface ServerToClientEvents {
     update: (data: Update) => void
     'rpc-request': (data: { method: string; params: string }, callback: (response: string) => void) => void

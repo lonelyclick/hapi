@@ -104,6 +104,7 @@ async function run(): Promise<void> {
 
     // 收集输出
     const outputChunks: string[] = []
+    let lastToolEntryId: string | null = null
 
     try {
         await executeBrainQuery(
@@ -133,12 +134,26 @@ async function run(): Promise<void> {
                     })
                 },
                 onToolUse: (toolName, input) => {
+                    lastToolEntryId = `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
                     const entry = {
-                        id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        id: lastToolEntryId,
                         type: 'tool-use',
                         content: toolName,
                         toolName,
                         toolInput: input,
+                        timestamp: Date.now()
+                    }
+                    brainStore.appendProgressLog(config.executionId, entry).catch(err => {
+                        console.error('[BrainWorker] Failed to append progress log:', err.message)
+                    })
+                },
+                onToolResult: (_toolName, result) => {
+                    if (result === undefined || !lastToolEntryId) return
+                    const entry = {
+                        id: `${lastToolEntryId}-result`,
+                        type: 'tool-result',
+                        content: typeof result === 'string' ? result : JSON.stringify(result),
+                        toolEntryId: lastToolEntryId,
                         timestamp: Date.now()
                     }
                     brainStore.appendProgressLog(config.executionId, entry).catch(err => {

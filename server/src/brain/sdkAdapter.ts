@@ -236,6 +236,20 @@ export async function executeBrainQuery(
                     }
                     break
 
+                case 'user':
+                    // 捕获 tool result（工具执行结果在 user 消息中返回）
+                    const userMsg = message as { tool_use_result?: unknown; parent_tool_use_id?: string | null; message?: { content?: Array<{ type: string; tool_use_id?: string; content?: unknown }> } }
+                    if (userMsg.tool_use_result !== undefined) {
+                        callbacks.onToolResult?.('', userMsg.tool_use_result)
+                    } else if (userMsg.message?.content) {
+                        for (const block of userMsg.message.content) {
+                            if (block.type === 'tool_result' && block.content !== undefined) {
+                                callbacks.onToolResult?.('', block.content)
+                            }
+                        }
+                    }
+                    break
+
                 case 'tool_progress':
                     const toolMsg = message as { tool_name: string }
                     callbacks.onToolResult?.(toolMsg.tool_name, undefined)

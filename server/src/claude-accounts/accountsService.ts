@@ -19,14 +19,24 @@ import {
     type AddAccountInput,
     type UpdateAccountInput,
     type AccountSwitchEvent,
+    type AnthropicUsageData,
+    type AccountSelectionResult,
     DEFAULT_ACCOUNTS_CONFIG,
 } from './types'
+import { getClaudeUsage } from '../web/routes/usage'
 
 const ACCOUNTS_CONFIG_FILE = 'claude-accounts.json'
 const CLAUDE_ACCOUNTS_BASE_DIR = join(homedir(), '.hapi', 'claude-accounts')
 
 let cachedConfig: ClaudeAccountsConfig | null = null
 let dataDir: string = join(homedir(), '.hapi')
+
+/** Per-account usage 缓存 (key: accountId) */
+const usageCache = new Map<string, AnthropicUsageData>()
+/** 缓存 TTL: 60 秒 */
+const USAGE_CACHE_TTL_MS = 60_000
+/** 5 小时利用率"相近"的阈值: 5% */
+const FIVE_HOUR_SIMILARITY_THRESHOLD = 0.05
 
 /**
  * 初始化账号服务
@@ -271,7 +281,137 @@ export async function updateAccountUsage(id: string, usage: ClaudeAccountUsage):
 }
 
 /**
- * 检查是否需要自动轮换
+ * 获取单个账号的 usage 数据（带缓存）
+ * 缓存未过期直接返回，否则从 Anthropic API 拉取
+ */
+export async function getAccountUsageCached(
+    accountId: string,
+    configDir: string
+): Promise<AnthropicUsageData> {
+    const cached = usageCache.get(accountId)
+    if (cached && (Date.now() - cached.fetchedAt) < USAGE_CACHE_TTL_MS) {
+        return cached
+    }
+
+    const usage = await getClaudeUsage(configDir)
+    const data: AnthropicUsageData = {
+        fiveHour: usage.fiveHour,
+        sevenDay: usage.sevenDay,
+        error: usage.error,
+        fetchedAt: Date.now()
+    }
+    usageCache.set(accountId, data)
+    return data
+}
+
+/**
+ * 并行刷新所有账号的 usage 数据
+ */
+export async function refreshAllAccountsUsage(): Promise<Map<string, AnthropicUsageData>> {
+    const config = await readAccountsConfig()
+    const results = await Promise.all(
+        config.accounts.map(async (account) => {
+            const usage = await getAccountUsageCached(account.id, account.configDir)
+            return { accountId: account.id, usage }
+        })
+    )
+
+    const map = new Map<string, AnthropicUsageData>()
+    for (const r of results) {
+        map.set(r.accountId, r.usage)
+    }
+    return map
+}
+
+/**
+ * 清除 usage 缓存（单个账号或全部）
+ */
+export function invalidateUsageCache(accountId?: string): void {
+    if (accountId) {
+        usageCache.delete(accountId)
+    } else {
+        usageCache.clear()
+    }
+}
+
+/**
+ * 智能选择最优账号（负载平衡）
+ *
+ * 排序逻辑：
+ * 1. 只从 autoRotate: true 的账号中选择
+ * 2. 优先按 fiveHour.utilization 升序
+ * 3. 如果两个账号 fiveHour 差值 < 5%，按 sevenDay.utilization 排序
+ * 4. 排除已超过阈值的账号（如果所有都超限，选最低的）
+ * 5. 无 usage 数据的账号 utilization 视为 0.5
+ */
+export async function selectBestAccount(): Promise<AccountSelectionResult | null> {
+    const config = await readAccountsConfig()
+
+    const candidates = config.accounts.filter(a => a.autoRotate)
+    if (candidates.length === 0) {
+        const active = config.accounts.find(a => a.id === config.activeAccountId)
+        if (active) {
+            return { account: active, usage: null, reason: 'fallback_lowest' }
+        }
+        return null
+    }
+
+    if (candidates.length === 1) {
+        const usage = await getAccountUsageCached(candidates[0].id, candidates[0].configDir)
+        return { account: candidates[0], usage, reason: 'only_candidate' }
+    }
+
+    // 并行获取所有候选账号的 usage
+    const usageEntries = await Promise.all(
+        candidates.map(async (account) => ({
+            account,
+            usage: await getAccountUsageCached(account.id, account.configDir)
+        }))
+    )
+
+    const getFiveHour = (u: AnthropicUsageData | null): number =>
+        u?.fiveHour?.utilization ?? 0.5
+
+    const getSevenDay = (u: AnthropicUsageData | null): number =>
+        u?.sevenDay?.utilization ?? 0.5
+
+    // 先尝试排除超过阈值的账号
+    const thresholdFiltered = usageEntries.filter(e => {
+        const fiveHourUtil = getFiveHour(e.usage)
+        return fiveHourUtil < (e.account.usageThreshold / 100)
+    })
+
+    // 如果所有账号都超限，使用全部候选
+    const pool = thresholdFiltered.length > 0 ? thresholdFiltered : usageEntries
+
+    // 综合排序：fiveHour 优先，相近时看 sevenDay
+    pool.sort((a, b) => {
+        const aFive = getFiveHour(a.usage)
+        const bFive = getFiveHour(b.usage)
+        const fiveDiff = Math.abs(aFive - bFive)
+
+        if (fiveDiff < FIVE_HOUR_SIMILARITY_THRESHOLD) {
+            return getSevenDay(a.usage) - getSevenDay(b.usage)
+        }
+        return aFive - bFive
+    })
+
+    const best = pool[0]
+    const bestFive = getFiveHour(best.usage)
+    const secondFive = pool.length > 1 ? getFiveHour(pool[1].usage) : -1
+    const reason = (Math.abs(bestFive - secondFive) < FIVE_HOUR_SIMILARITY_THRESHOLD)
+        ? 'lowest_seven_day_tiebreak'
+        : 'lowest_five_hour'
+
+    console.log(
+        `[ClaudeAccounts] Selected account: ${best.account.name} (5h: ${(bestFive * 100).toFixed(1)}%, 7d: ${(getSevenDay(best.usage) * 100).toFixed(1)}%), reason: ${reason}`
+    )
+
+    return { account: best.account, usage: best.usage, reason }
+}
+
+/**
+ * 检查是否需要自动轮换（使用 Anthropic API 实时 usage 数据）
  */
 export async function checkAndRotate(): Promise<AccountSwitchEvent | null> {
     const config = await readAccountsConfig()
@@ -285,32 +425,28 @@ export async function checkAndRotate(): Promise<AccountSwitchEvent | null> {
         return null
     }
 
-    // 检查使用量
-    if (!activeAccount.lastUsage) {
+    // 获取当前活跃账号的实时 usage
+    const activeUsage = await getAccountUsageCached(activeAccount.id, activeAccount.configDir)
+    const fiveHourUtil = activeUsage.fiveHour?.utilization ?? 0
+    const threshold = activeAccount.usageThreshold / 100
+
+    if (fiveHourUtil < threshold) {
         return null
     }
 
-    const { percentage } = activeAccount.lastUsage
-    if (percentage < activeAccount.usageThreshold) {
+    // 需要轮换，选择最优账号
+    const selection = await selectBestAccount()
+    if (!selection || selection.account.id === activeAccount.id) {
+        console.warn('[ClaudeAccounts] Current account over threshold but no better alternative found')
         return null
     }
 
-    // 找到使用量最低的可轮换账号
-    const candidates = config.accounts
-        .filter(a => a.autoRotate && !a.isActive)
-        .sort((a, b) => (a.lastUsage?.percentage || 0) - (b.lastUsage?.percentage || 0))
-
-    if (candidates.length === 0) {
-        console.warn('[ClaudeAccounts] No available accounts for rotation')
-        return null
-    }
-
-    const nextAccount = candidates[0]
     console.log(
-        `[ClaudeAccounts] Auto-rotating from ${activeAccount.name} (${percentage}%) to ${nextAccount.name} (${nextAccount.lastUsage?.percentage || 0}%)`
+        `[ClaudeAccounts] Auto-rotating from ${activeAccount.name} (5h: ${(fiveHourUtil * 100).toFixed(1)}%) ` +
+        `to ${selection.account.name} (reason: ${selection.reason})`
     )
 
-    return setActiveAccount(nextAccount.id, 'auto_rotate')
+    return setActiveAccount(selection.account.id, 'auto_rotate')
 }
 
 /**

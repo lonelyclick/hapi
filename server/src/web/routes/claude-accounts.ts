@@ -19,8 +19,10 @@ import {
     getAccountsConfig,
     migrateDefaultAccount,
     getAccountConfigDir,
+    selectBestAccount,
+    getAccountUsageCached,
+    invalidateUsageCache,
 } from '../../claude-accounts/accountsService'
-import { getClaudeUsage } from './usage'
 import type { ClaudeAccountUsage } from '../../claude-accounts/types'
 
 const addAccountSchema = z.object({
@@ -77,6 +79,34 @@ export function createClaudeAccountsRoutes(): Hono<WebAppEnv> {
         } catch (error) {
             console.error('[ClaudeAccounts API] Failed to get active account:', error)
             return c.json({ error: 'Failed to get active account' }, 500)
+        }
+    })
+
+    // 智能选择最优账号（负载平衡，供 CLI session 启动时调用）
+    app.get('/claude-accounts/select-best', async (c) => {
+        try {
+            const selection = await selectBestAccount()
+            if (!selection) {
+                // fallback: 尝试迁移默认账号
+                const migrated = await migrateDefaultAccount()
+                if (migrated) {
+                    return c.json({ account: migrated, usage: null, reason: 'fallback_lowest', timestamp: Date.now() })
+                }
+                return c.json({ account: null, reason: 'no_accounts', timestamp: Date.now() })
+            }
+
+            return c.json({
+                account: selection.account,
+                usage: selection.usage ? {
+                    fiveHour: selection.usage.fiveHour,
+                    sevenDay: selection.usage.sevenDay,
+                } : null,
+                reason: selection.reason,
+                timestamp: Date.now()
+            })
+        } catch (error: any) {
+            console.error('[ClaudeAccounts API] Failed to select best account:', error)
+            return c.json({ error: error.message || 'Failed to select best account' }, 500)
         }
     })
 
@@ -257,13 +287,18 @@ export function createClaudeAccountsRoutes(): Hono<WebAppEnv> {
         }
     })
 
-    // 获取所有账号的 usage 数据
+    // 获取所有账号的 usage 数据（带缓存，支持 ?refresh=true 强制刷新）
     app.get('/claude-accounts/usage', async (c) => {
         try {
+            const forceRefresh = c.req.query('refresh') === 'true'
+            if (forceRefresh) {
+                invalidateUsageCache()
+            }
+
             const accounts = await getAccounts()
             const usageResults = await Promise.all(
                 accounts.map(async (account) => {
-                    const usage = await getClaudeUsage(account.configDir)
+                    const usage = await getAccountUsageCached(account.id, account.configDir)
                     return {
                         accountId: account.id,
                         accountName: account.name,
@@ -272,6 +307,7 @@ export function createClaudeAccountsRoutes(): Hono<WebAppEnv> {
                         fiveHour: usage.fiveHour,
                         sevenDay: usage.sevenDay,
                         error: usage.error,
+                        cachedAt: usage.fetchedAt,
                     }
                 })
             )

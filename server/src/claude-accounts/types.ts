@@ -58,7 +58,7 @@ export interface UpdateAccountInput {
 export interface AccountSwitchEvent {
   previousAccountId: string;
   newAccountId: string;
-  reason: 'manual' | 'auto_rotate' | 'usage_limit';
+  reason: 'manual' | 'auto_rotate' | 'usage_limit' | 'load_balance';
   timestamp: number;
 }
 
@@ -72,3 +72,19 @@ export const DEFAULT_ACCOUNTS_CONFIG: ClaudeAccountsConfig = {
 
 /** 账号配置目录基础路径 */
 export const CLAUDE_ACCOUNTS_BASE_DIR = '~/.hapi/claude-accounts';
+
+/** Anthropic API 返回的实时 usage 数据（缓存在内存中） */
+export interface AnthropicUsageData {
+  fiveHour: { utilization: number; resetsAt: string } | null;
+  sevenDay: { utilization: number; resetsAt: string } | null;
+  error?: string;
+  /** 缓存时间戳 */
+  fetchedAt: number;
+}
+
+/** selectBestAccount 的返回结果 */
+export interface AccountSelectionResult {
+  account: ClaudeAccount;
+  usage: AnthropicUsageData | null;
+  reason: 'lowest_five_hour' | 'lowest_seven_day_tiebreak' | 'fallback_lowest' | 'only_candidate';
+}
