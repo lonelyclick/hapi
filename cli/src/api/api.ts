@@ -224,7 +224,7 @@ export class ApiClient {
     async getActiveClaudeAccount(): Promise<ClaudeAccount | null> {
         try {
             const response = await axios.get(
-                `${configuration.serverUrl}/api/claude-accounts/active`,
+                `${configuration.serverUrl}/cli/claude-accounts/active`,
                 {
                     headers: {
                         Authorization: `Bearer ${this.token}`,
@@ -254,7 +254,7 @@ export class ApiClient {
     async selectBestClaudeAccount(): Promise<ClaudeAccount | null> {
         try {
             const response = await axios.get(
-                `${configuration.serverUrl}/api/claude-accounts/select-best`,
+                `${configuration.serverUrl}/cli/claude-accounts/select-best`,
                 {
                     headers: {
                         Authorization: `Bearer ${this.token}`,

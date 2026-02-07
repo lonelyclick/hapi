@@ -6,6 +6,11 @@ import { configuration, getConfiguration } from '../../configuration'
 import { safeCompareStrings } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
 import type { Machine, Session, SyncEngine } from '../../sync/syncEngine'
+import {
+    getActiveAccount,
+    selectBestAccount,
+    migrateDefaultAccount,
+} from '../../claude-accounts/accountsService'
 
 const bearerSchema = z.string().regex(/^Bearer\s+(.+)$/i)
 
@@ -214,6 +219,49 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
         } catch (error) {
             console.error('[cli/server-uploads] read error:', error)
             return c.json({ error: 'Failed to read file' }, 500)
+        }
+    })
+
+    // Claude 多账号：获取当前活跃账号
+    app.get('/claude-accounts/active', async (c) => {
+        try {
+            const account = await getActiveAccount()
+            if (!account) {
+                const migrated = await migrateDefaultAccount()
+                if (migrated) {
+                    return c.json({ account: migrated })
+                }
+                return c.json({ account: null })
+            }
+            return c.json({ account })
+        } catch (error: any) {
+            return c.json({ error: error.message || 'Failed to get active account' }, 500)
+        }
+    })
+
+    // Claude 多账号：智能选择最优账号（负载平衡）
+    app.get('/claude-accounts/select-best', async (c) => {
+        try {
+            const selection = await selectBestAccount()
+            if (!selection) {
+                const migrated = await migrateDefaultAccount()
+                if (migrated) {
+                    return c.json({ account: migrated, usage: null, reason: 'fallback_lowest', timestamp: Date.now() })
+                }
+                return c.json({ account: null, reason: 'no_accounts', timestamp: Date.now() })
+            }
+
+            return c.json({
+                account: selection.account,
+                usage: selection.usage ? {
+                    fiveHour: selection.usage.fiveHour,
+                    sevenDay: selection.usage.sevenDay,
+                } : null,
+                reason: selection.reason,
+                timestamp: Date.now()
+            })
+        } catch (error: any) {
+            return c.json({ error: error.message || 'Failed to select best account' }, 500)
         }
     })
 
