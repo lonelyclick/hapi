@@ -837,11 +837,12 @@ export class AutoBrainService {
 
         const systemPrompt = buildBrainSystemPrompt()
 
+        // Claude Code SDK 需要 claude 模型名，不支持 glm-4.7 等非 Anthropic 模型
         const model = brainSession.brainModelVariant === 'opus'
-            || brainSession.brainModelVariant === 'sonnet'
-            || brainSession.brainModelVariant === 'haiku'
-            ? brainSession.brainModelVariant
-            : undefined
+            ? 'claude-opus-4-5-20250929'
+            : brainSession.brainModelVariant === 'haiku'
+                ? 'claude-haiku-4-5-20250929'
+                : 'claude-sonnet-4-5-20250929'
 
         // 广播开始状态
         this.broadcastSyncStatus(brainSession, {
@@ -852,15 +853,11 @@ export class AutoBrainService {
         })
 
         // 临时捕获 uncaughtException，防止 SDK 子进程错误导致 server 崩溃
+        // 注意：在 uncaughtException handler 中不能 throw，否则直接杀进程
         let sdkCrashError: Error | null = null
         const crashGuard = (err: Error) => {
-            if (err.message?.includes('Claude Code process exited') || err.message?.includes('process exited with code')) {
-                console.error('[BrainSync] Caught SDK crash error (prevented server crash):', err.message)
-                sdkCrashError = err
-            } else {
-                // 非 SDK 错误，重新抛出
-                throw err
-            }
+            console.error('[BrainSync] Caught uncaughtException during SDK review (prevented server crash):', err.message)
+            sdkCrashError = err
         }
         process.on('uncaughtException', crashGuard)
 
