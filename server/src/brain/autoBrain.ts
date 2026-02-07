@@ -851,6 +851,19 @@ export class AutoBrainService {
             pendingRounds: 0
         })
 
+        // 临时捕获 uncaughtException，防止 SDK 子进程错误导致 server 崩溃
+        let sdkCrashError: Error | null = null
+        const crashGuard = (err: Error) => {
+            if (err.message?.includes('Claude Code process exited') || err.message?.includes('process exited with code')) {
+                console.error('[BrainSync] Caught SDK crash error (prevented server crash):', err.message)
+                sdkCrashError = err
+            } else {
+                // 非 SDK 错误，重新抛出
+                throw err
+            }
+        }
+        process.on('uncaughtException', crashGuard)
+
         try {
             // 执行 SDK 审查
             const result = await this.brainSdkService.executeBrainReview(
@@ -972,6 +985,12 @@ export class AutoBrainService {
             }
         } catch (err) {
             console.error('[BrainSync] SDK review error:', err)
+        } finally {
+            process.removeListener('uncaughtException', crashGuard)
+        }
+
+        if (sdkCrashError) {
+            console.error('[BrainSync] SDK crashed but server survived:', sdkCrashError.message)
         }
     }
 
