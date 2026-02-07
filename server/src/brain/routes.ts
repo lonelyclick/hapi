@@ -1381,6 +1381,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                     text: body.output,
                     sentFrom
                 })
+                await brainStore.completeBrainSession(body.brainSessionId, body.output)
             } else {
                 // review 阶段完成：直接发给主 session，不再 spawn refine
                 console.log(`[BrainWorkerCallback] review completed, sending directly to main session, outputLen=${body.output.length}`)
@@ -1388,6 +1389,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                     text: body.output,
                     sentFrom: 'brain-review'
                 })
+                await brainStore.completeBrainSession(body.brainSessionId, body.output)
             }
         } else if (body.status === 'failed') {
             console.error(`[BrainWorkerCallback] ${callbackPhase} FAILED: ${body.error || '未知错误'}`)

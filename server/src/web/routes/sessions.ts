@@ -982,7 +982,13 @@ export function createSessionsRoutes(
         session.activeAt = now
         session.thinking = false
 
-        // Spawn new Claude process with the SAME session ID (CLI will auto-select best account)
+        // Extract Claude Code's internal session ID for --resume (full conversation history)
+        const resumeSessionId = (() => {
+            const value = session.metadata?.claudeSessionId
+            return typeof value === 'string' && value.trim() ? value : undefined
+        })()
+
+        // Spawn new Claude process with the SAME hapi session ID + Claude --resume
         const spawnResult = await engine.spawnSession(
             machineId,
             spawnTarget.directory,
@@ -990,7 +996,7 @@ export function createSessionsRoutes(
             undefined,
             spawnTarget.sessionType,
             spawnTarget.worktreeName,
-            { sessionId, ...modeSettings }
+            { sessionId, resumeSessionId, ...modeSettings }
         )
 
         if (spawnResult.type !== 'success') {
@@ -1016,16 +1022,19 @@ export function createSessionsRoutes(
         const userName = c.get('name')
         await sendInitPrompt(engine, sessionId, role, userName)
 
-        // Send context from this session's own messages so the new Claude process has awareness
-        const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
-        const contextMessage = buildResumeContextMessage(session, page.messages)
-        if (contextMessage) {
-            await engine.sendMessage(sessionId, { text: contextMessage, sentFrom: 'webapp' })
+        // Only send context message if we couldn't use Claude --resume
+        if (!resumeSessionId) {
+            const page = await engine.getMessagesPage(sessionId, { limit: RESUME_CONTEXT_MAX_LINES * 2, beforeSeq: null })
+            const contextMessage = buildResumeContextMessage(session, page.messages)
+            if (contextMessage) {
+                await engine.sendMessage(sessionId, { text: contextMessage, sentFrom: 'webapp' })
+            }
         }
 
         return c.json({
             type: 'success',
-            sessionId
+            sessionId,
+            usedResume: Boolean(resumeSessionId)
         })
     })
 
