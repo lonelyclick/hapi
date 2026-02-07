@@ -33,8 +33,8 @@ let dataDir: string = join(homedir(), '.hapi')
 
 /** Per-account usage 缓存 (key: accountId) */
 const usageCache = new Map<string, AnthropicUsageData>()
-/** 缓存 TTL: 60 秒 */
-const USAGE_CACHE_TTL_MS = 60_000
+/** 缓存 TTL: 5 分钟 */
+const USAGE_CACHE_TTL_MS = 5 * 60_000
 /** 5 小时利用率"相近"的阈值: 5% */
 const FIVE_HOUR_SIMILARITY_THRESHOLD = 0.05
 
@@ -280,6 +280,12 @@ export async function updateAccountUsage(id: string, usage: ClaudeAccountUsage):
     await writeAccountsConfig(config)
 }
 
+/** 随机延迟 200-800ms，避免短时间内大量请求被风控 */
+function randomDelay(): Promise<void> {
+    const ms = 200 + Math.random() * 600
+    return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 /**
  * 获取单个账号的 usage 数据（带缓存）
  * 缓存未过期直接返回，否则从 Anthropic API 拉取
@@ -305,21 +311,21 @@ export async function getAccountUsageCached(
 }
 
 /**
- * 并行刷新所有账号的 usage 数据
+ * 串行刷新所有账号的 usage 数据（带随机延迟，避免并发请求触发风控）
  */
 export async function refreshAllAccountsUsage(): Promise<Map<string, AnthropicUsageData>> {
     const config = await readAccountsConfig()
-    const results = await Promise.all(
-        config.accounts.map(async (account) => {
-            const usage = await getAccountUsageCached(account.id, account.configDir)
-            return { accountId: account.id, usage }
-        })
-    )
-
     const map = new Map<string, AnthropicUsageData>()
-    for (const r of results) {
-        map.set(r.accountId, r.usage)
+
+    for (const account of config.accounts) {
+        const usage = await getAccountUsageCached(account.id, account.configDir)
+        map.set(account.id, usage)
+        // 如果是实际发起了 API 请求（非缓存），加延迟
+        if (config.accounts.length > 1) {
+            await randomDelay()
+        }
     }
+
     return map
 }
 
@@ -361,13 +367,12 @@ export async function selectBestAccount(): Promise<AccountSelectionResult | null
         return { account: candidates[0], usage, reason: 'only_candidate' }
     }
 
-    // 并行获取所有候选账号的 usage
-    const usageEntries = await Promise.all(
-        candidates.map(async (account) => ({
-            account,
-            usage: await getAccountUsageCached(account.id, account.configDir)
-        }))
-    )
+    // 串行获取所有候选账号的 usage（带随机延迟，避免并发请求触发风控）
+    const usageEntries: { account: ClaudeAccount; usage: AnthropicUsageData }[] = []
+    for (const account of candidates) {
+        const usage = await getAccountUsageCached(account.id, account.configDir)
+        usageEntries.push({ account, usage })
+    }
 
     const getFiveHour = (u: AnthropicUsageData | null): number =>
         u?.fiveHour?.utilization ?? 0.5

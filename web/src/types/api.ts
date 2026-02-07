@@ -42,6 +42,7 @@ export type SessionMetadataSummary = {
         lastActivity?: number
         errorCount?: number
     }
+    claudeAccountName?: string
 }
 
 export type AgentStateRequest = {
@@ -111,6 +112,7 @@ export type SessionSummaryMetadata = {
     worktree?: WorktreeMetadata
     source?: string
     privacyMode?: boolean  // true = 私密模式，不分享给其他人
+    claudeAccountName?: string
 }
 
 export type SessionViewer = {

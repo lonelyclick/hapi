@@ -296,21 +296,21 @@ export function createClaudeAccountsRoutes(): Hono<WebAppEnv> {
             }
 
             const accounts = await getAccounts()
-            const usageResults = await Promise.all(
-                accounts.map(async (account) => {
-                    const usage = await getAccountUsageCached(account.id, account.configDir)
-                    return {
-                        accountId: account.id,
-                        accountName: account.name,
-                        configDir: account.configDir,
-                        isActive: account.isActive,
-                        fiveHour: usage.fiveHour,
-                        sevenDay: usage.sevenDay,
-                        error: usage.error,
-                        cachedAt: usage.fetchedAt,
-                    }
+            // 串行获取，避免并发请求触发风控
+            const usageResults = []
+            for (const account of accounts) {
+                const usage = await getAccountUsageCached(account.id, account.configDir)
+                usageResults.push({
+                    accountId: account.id,
+                    accountName: account.name,
+                    configDir: account.configDir,
+                    isActive: account.isActive,
+                    fiveHour: usage.fiveHour,
+                    sevenDay: usage.sevenDay,
+                    error: usage.error,
+                    cachedAt: usage.fetchedAt,
                 })
-            )
+            }
 
             return c.json({
                 accounts: usageResults,

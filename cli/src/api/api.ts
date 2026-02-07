@@ -245,4 +245,34 @@ export class ApiClient {
             return null
         }
     }
+
+    /**
+     * 智能选择最优 Claude 账号（负载平衡）
+     * 基于所有账号的实时 usage 数据选择最空闲的账号
+     * 如果 select-best 端点不存在（旧版 server），fallback 到 getActiveClaudeAccount
+     */
+    async selectBestClaudeAccount(): Promise<ClaudeAccount | null> {
+        try {
+            const response = await axios.get(
+                `${configuration.serverUrl}/api/claude-accounts/select-best`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 15_000
+                }
+            )
+
+            const parsed = SelectBestAccountResponseSchema.safeParse(response.data)
+            if (!parsed.success) {
+                return this.getActiveClaudeAccount()
+            }
+
+            return parsed.data.account
+        } catch (error) {
+            // fallback: 如果 select-best 端点不存在，使用旧的 active 端点
+            return this.getActiveClaudeAccount()
+        }
+    }
 }

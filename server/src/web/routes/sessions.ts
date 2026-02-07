@@ -38,6 +38,7 @@ type SessionSummaryMetadata = {
         errorCount?: number
     }
     privacyMode?: boolean  // 私密模式，true表示不分享给其他人
+    claudeAccountName?: string
 }
 
 type SessionViewer = {
@@ -78,7 +79,8 @@ function toSessionSummary(session: Session): SessionSummary {
         // OpenCode 特有字段
         opencodeCapabilities: session.metadata.opencodeCapabilities,
         opencodeStatus: session.metadata.opencodeStatus,
-        privacyMode: session.metadata.privacyMode
+        privacyMode: session.metadata.privacyMode,
+        claudeAccountName: session.metadata.claudeAccountName
     } : null
 
     const todoProgress = session.todos?.length ? {

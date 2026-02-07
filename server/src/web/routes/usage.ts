@@ -82,9 +82,28 @@ async function getClaudeAccessToken(configDir?: string): Promise<string | null> 
 }
 
 /**
- * Fetch Claude Code usage from Anthropic API
+ * Simple cache for getClaudeUsage to avoid redundant API calls
+ * Key: configDir (or 'default'), Value: { data, fetchedAt }
+ */
+const claudeUsageCache = new Map<string, { data: ClaudeUsageData; fetchedAt: number }>()
+const CLAUDE_USAGE_CACHE_TTL_MS = 5 * 60_000 // 5 分钟缓存
+
+/**
+ * Fetch Claude Code usage from Anthropic API (with 60s cache)
  */
 export async function getClaudeUsage(configDir?: string): Promise<ClaudeUsageData> {
+    const cacheKey = configDir || 'default'
+    const cached = claudeUsageCache.get(cacheKey)
+    if (cached && (Date.now() - cached.fetchedAt) < CLAUDE_USAGE_CACHE_TTL_MS) {
+        return cached.data
+    }
+
+    const data = await fetchClaudeUsageFromApi(configDir)
+    claudeUsageCache.set(cacheKey, { data, fetchedAt: Date.now() })
+    return data
+}
+
+async function fetchClaudeUsageFromApi(configDir?: string): Promise<ClaudeUsageData> {
     try {
         const accessToken = await getClaudeAccessToken(configDir)
 
@@ -101,7 +120,7 @@ export async function getClaudeUsage(configDir?: string): Promise<ClaudeUsageDat
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'anthropic-beta': 'oauth-2025-04-20',
-                'User-Agent': 'claude-code/2.0.32',
+                'User-Agent': 'claude-code/2.1.33',
                 'Accept': 'application/json, text/plain, */*'
             }
         })

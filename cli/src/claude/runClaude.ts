@@ -86,10 +86,10 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     // Create session service
     const api = await ApiClient.create();
 
-    // Fetch active Claude account and set CLAUDE_CONFIG_DIR if available
-    const activeAccount = await api.getActiveClaudeAccount();
+    // Select best Claude account via load balancing and set CLAUDE_CONFIG_DIR
+    const activeAccount = await api.selectBestClaudeAccount();
     if (activeAccount) {
-        logger.debug(`[START] Using Claude account: ${activeAccount.name} (${activeAccount.id}), configDir: ${activeAccount.configDir}`);
+        logger.debug(`[START] Load-balanced to Claude account: ${activeAccount.name} (${activeAccount.id}), configDir: ${activeAccount.configDir}`);
         options.claudeEnvVars = {
             ...options.claudeEnvVars,
             CLAUDE_CONFIG_DIR: activeAccount.configDir

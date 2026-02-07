@@ -107,7 +107,7 @@ export async function getClaudeUsage(): Promise<ClaudeUsageData> {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'anthropic-beta': 'oauth-2025-04-20',
-                'User-Agent': 'claude-code/2.0.32',
+                'User-Agent': 'claude-code/2.1.33',
                 'Accept': 'application/json, text/plain, */*'
             }
         });

@@ -153,7 +153,7 @@ export default function UsagePage() {
             return await api.getUsage()
         },
         enabled: Boolean(api),
-        refetchInterval: 60000 // Refresh every minute
+        refetchInterval: 5 * 60_000 // 5 分钟自动刷新
     })
 
     // 多账号 usage 数据
@@ -164,7 +164,7 @@ export default function UsagePage() {
             return await api.getClaudeAccountsUsage()
         },
         enabled: Boolean(api),
-        refetchInterval: 60000
+        refetchInterval: 5 * 60_000 // 5 分钟自动刷新
     })
 
     const hasMultipleAccounts = (accountsUsage?.accounts?.length ?? 0) > 1
