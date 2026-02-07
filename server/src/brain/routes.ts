@@ -11,8 +11,7 @@ import type { SSEManager } from '../sse/sseManager'
 import type { WebAppEnv } from '../web/middleware/auth'
 import type { BrainStore } from './store'
 import type { AutoBrainService } from './autoBrain'
-import { BrainSdkService, buildBrainSystemPrompt, buildReviewPrompt } from './brainSdkService'
-import type { BrainRequestResult } from './brainSdkService'
+import { buildBrainSystemPrompt, buildReviewPrompt } from './brainSdkService'
 
 // Brain 上下文最大消息数
 const BRAIN_CONTEXT_MAX_MESSAGES = 10
@@ -282,12 +281,52 @@ ${timeRangeInfo}${previousSuggestionsInfo}
 `
 }
 
+/**
+ * 构建友好的审查结果消息（供 worker-callback 使用）
+ */
+function buildWorkerReviewResultMessage(
+    suggestions: Array<{ type: string; severity: string; title: string; detail: string }>,
+    summary?: string
+): string {
+    const lines: string[] = ['## Brain 代码审查结果\n']
+    if (summary) {
+        lines.push(`**总体评价:** ${summary}\n`)
+    }
+    const bySeverity: Record<string, Array<typeof suggestions[0]>> = { high: [], medium: [], low: [] }
+    for (const s of suggestions) {
+        if (bySeverity[s.severity]) bySeverity[s.severity].push(s)
+    }
+    if (bySeverity.high.length > 0) {
+        lines.push('### 高优先级问题')
+        for (const s of bySeverity.high) {
+            lines.push(`**${s.type.toUpperCase()}** - ${s.title}`)
+            lines.push(`> ${s.detail}\n`)
+        }
+    }
+    if (bySeverity.medium.length > 0) {
+        lines.push('### 中优先级问题')
+        for (const s of bySeverity.medium) {
+            lines.push(`**${s.type.toUpperCase()}** - ${s.title}`)
+            lines.push(`> ${s.detail}\n`)
+        }
+    }
+    if (bySeverity.low.length > 0) {
+        lines.push('### 低优先级建议')
+        for (const s of bySeverity.low) {
+            lines.push(`**${s.type.toUpperCase()}** - ${s.title}`)
+            lines.push(`> ${s.detail}\n`)
+        }
+    }
+    lines.push(`---`)
+    lines.push(`**统计:** ${suggestions.length} 条建议 (${bySeverity.high.length} 高 / ${bySeverity.medium.length} 中 / ${bySeverity.low.length} 低)`)
+    return lines.join('\n')
+}
+
 export function createBrainRoutes(
     brainStore: BrainStore,
     getSyncEngine: () => SyncEngine | null,
     getSseManager: () => SSEManager | null,
-    autoBrainService?: AutoBrainService,
-    brainSdkService?: BrainSdkService
+    autoBrainService?: AutoBrainService
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -1170,12 +1209,8 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
     // Brain SDK Routes - 使用 Claude Agent SDK 直接处理
     // ============================================================
 
-    // 使用 SDK 执行 Brain 代码审查
+    // 使用 SDK 执行 Brain 代码审查（spawn detached worker）
     app.post('/brain/sessions/:id/execute-sdk', async (c) => {
-        if (!brainSdkService) {
-            return c.json({ error: 'Brain SDK service not available' }, 503)
-        }
-
         const id = c.req.param('id')
         const engine = getSyncEngine()
         if (!engine) {
@@ -1185,6 +1220,12 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         const brainSession = await brainStore.getBrainSession(id)
         if (!brainSession) {
             return c.json({ error: 'Brain session not found' }, 404)
+        }
+
+        // 检查是否已有正在运行的 execution
+        const latestExec = await brainStore.getLatestExecutionWithProgress(id)
+        if (latestExec?.status === 'running') {
+            return c.json({ error: 'Brain review already in progress', executionId: latestExec.id }, 409)
         }
 
         // 获取请求体
@@ -1260,7 +1301,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
 
         const systemPrompt = buildBrainSystemPrompt(body.customInstructions)
 
-        // 提前创建执行记录（status=running），这样回调中可以追加进度日志
+        // 创建执行记录（status=running）
         const execution = await brainStore.createBrainExecution({
             brainSessionId: id,
             roundsReviewed: unbrainedRounds.length,
@@ -1270,116 +1311,99 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             prompt: reviewPrompt,
             status: 'running'
         })
-        const executionId = execution.id
 
-        // 执行 Brain 审查
-        let result: BrainRequestResult
+        // spawn detached worker
+        const { spawn } = await import('child_process')
+        const { existsSync } = await import('fs')
+        const pathMod = await import('path')
+
+        // 查找 worker 路径
+        let workerPath: string | null = null
+        const serverDir = pathMod.dirname(process.execPath)
+        const candidate1 = pathMod.join(serverDir, 'hapi-brain-worker')
+        const candidate2 = '/home/guang/softwares/hapi/cli/dist-exe/bun-linux-x64/hapi-brain-worker'
+        if (existsSync(candidate1)) workerPath = candidate1
+        else if (existsSync(candidate2)) workerPath = candidate2
+
+        if (!workerPath) {
+            await brainStore.failBrainExecution(execution.id, 'hapi-brain-worker executable not found')
+            return c.json({ error: 'Brain worker executable not found' }, 500)
+        }
+
+        const model = brainSession.brainModelVariant === 'opus'
+            ? 'claude-opus-4-5-20250929'
+            : brainSession.brainModelVariant === 'haiku'
+                ? 'claude-haiku-4-5-20250929'
+                : 'claude-sonnet-4-5-20250929'
+
+        const config = JSON.stringify({
+            executionId: execution.id,
+            brainSessionId: id,
+            mainSessionId: brainSession.mainSessionId,
+            prompt: reviewPrompt,
+            projectPath,
+            model,
+            systemPrompt,
+            serverCallbackUrl: `http://127.0.0.1:${process.env.WEBAPP_PORT || '3006'}`,
+            serverToken: process.env.CLI_API_TOKEN || '',
+        })
+
         try {
-            result = await brainSdkService.executeBrainReview(
-                id,
-                reviewPrompt,
-                {
-                    cwd: projectPath,
-                    model: brainSession.brainModelVariant === 'opus'
-                        ? 'claude-opus-4-5-20250929'
-                        : brainSession.brainModelVariant === 'haiku'
-                            ? 'claude-haiku-4-5-20250929'
-                            : 'claude-sonnet-4-5-20250929',
-                    systemPrompt,
-                    maxTurns: 30,
-                    tools: ['Read', 'Grep', 'Glob'],
-                    allowedTools: ['Read', 'Grep', 'Glob'],
-                    disallowedTools: ['Bash', 'Edit', 'Write', 'Task'],
-                    permissionMode: 'dontAsk'
-                },
-                {
-                    onProgress: (type, data) => {
-                        // 持久化进度日志
-                        const entry = {
-                            id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                            type: type,
-                            content: typeof data === 'object' ? JSON.stringify(data) : String(data),
-                            timestamp: Date.now()
-                        }
-                        brainStore.appendProgressLog(executionId, entry).catch(() => {})
-                        // 广播进度更新
-                        const sseManager = getSseManager()
-                        if (sseManager) {
-                            sseManager.broadcast({
-                                type: 'brain-sdk-progress',
-                                namespace: mainSession.namespace,
-                                sessionId: brainSession.mainSessionId,
-                                data: {
-                                    brainSessionId: id,
-                                    progressType: type,
-                                    data
-                                }
-                            } as unknown as import('../sync/syncEngine.js').SyncEvent)
-                        }
-                    }
-                }
-            )
-        } catch (error) {
-            await brainStore.failBrainExecution(executionId, (error as Error).message)
-            return c.json({
-                error: 'Brain review failed',
-                message: (error as Error).message
-            }, 500)
+            const child = spawn(workerPath, [config], {
+                detached: true,
+                stdio: 'ignore',
+                env: process.env as NodeJS.ProcessEnv
+            })
+            child.unref()
+            console.log('[Brain SDK] Spawned detached worker PID:', child.pid, 'for execution:', execution.id)
+        } catch (err) {
+            await brainStore.failBrainExecution(execution.id, `Failed to spawn worker: ${(err as Error).message}`)
+            return c.json({ error: 'Failed to spawn brain worker', message: (err as Error).message }, 500)
         }
 
-        // 更新 Brain Session 状态
-        if (result.status === 'completed') {
-            await brainStore.updateBrainSessionStatus(id, 'completed')
-        }
-
-        // 更新执行记录
-        if (result.status === 'completed' && result.output) {
-            await brainStore.completeBrainExecution(executionId, result.output)
-
-            // 尝试解析结果并验证
-            try {
-                const jsonMatch = result.output.match(/```json\s*([\s\S]*?)\s*```/)
-                if (jsonMatch) {
-                    const parsed = JSON.parse(jsonMatch[1])
-                    if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-                        console.log('[Brain SDK] Parsed suggestions:', parsed.suggestions.length)
-                    }
+        // SSE 广播 started 事件
+        const sseManager = getSseManager()
+        if (sseManager) {
+            sseManager.broadcast({
+                type: 'brain-sdk-progress',
+                namespace: mainSession.namespace,
+                sessionId: brainSession.mainSessionId,
+                data: {
+                    brainSessionId: id,
+                    progressType: 'started',
+                    data: {}
                 }
-            } catch {
-                // 忽略解析错误
-            }
-        } else if (result.status === 'error') {
-            await brainStore.failBrainExecution(executionId, result.error || 'Unknown error')
-        } else if (result.status === 'aborted') {
-            await brainStore.failBrainExecution(executionId, 'Aborted')
+            } as unknown as import('../sync/syncEngine.js').SyncEvent)
         }
 
         return c.json({
-            success: result.status === 'completed',
-            status: result.status,
-            output: result.output,
-            error: result.error,
-            numTurns: result.numTurns,
-            costUsd: result.costUsd,
-            durationMs: result.durationMs,
+            success: true,
+            status: 'spawned',
+            executionId: execution.id,
             roundsBrained: unbrainedRounds.length
-        })
+        }, 202)
     })
 
-    // 获取 Brain SDK 查询状态
+    // 获取 Brain SDK 查询状态（从 DB 查询）
     app.get('/brain/sessions/:id/sdk-status', async (c) => {
-        if (!brainSdkService) {
-            return c.json({ error: 'Brain SDK service not available' }, 503)
+        const id = c.req.param('id')
+        const execution = await brainStore.getLatestExecutionWithProgress(id)
+
+        if (!execution) {
+            return c.json({
+                hasResult: false,
+                isRunning: false,
+                result: null
+            })
         }
 
-        const id = c.req.param('id')
-        const result = brainSdkService.getQueryResult(id)
-        const isRunning = brainSdkService.isQueryRunning(id)
-
         return c.json({
-            hasResult: !!result,
-            isRunning,
-            result
+            hasResult: execution.status === 'completed' || execution.status === 'failed',
+            isRunning: execution.status === 'running',
+            result: {
+                status: execution.status,
+                executionId: execution.id
+            }
         })
     })
 
@@ -1427,18 +1451,115 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
         })
     })
 
-    app.post('/brain/sessions/:id/sdk-abort', async (c) => {
-        if (!brainSdkService) {
-            return c.json({ error: 'Brain SDK service not available' }, 503)
+    // Worker 完成后的回调通知（detached worker 通过 HTTP 通知 server）
+    // 此路由在 publicPaths 中跳过 Keycloak 认证，使用 workerSecret 验证
+    app.post('/brain/worker-callback', async (c) => {
+        // 验证 worker secret（防止非 worker 调用）
+        const workerSecret = c.req.header('x-worker-secret')
+        const expectedSecret = process.env.CLI_API_TOKEN
+        if (!workerSecret || !expectedSecret || workerSecret !== expectedSecret) {
+            return c.json({ error: 'Unauthorized' }, 401)
         }
 
-        const id = c.req.param('id')
-        const aborted = brainSdkService.abortBrainReview(id)
+        const body = await c.req.json().catch(() => null) as {
+            executionId: string
+            brainSessionId: string
+            mainSessionId: string
+            status: 'completed' | 'failed'
+            output?: string
+            error?: string
+        } | null
 
-        return c.json({
-            success: aborted,
-            message: aborted ? 'Query aborted' : 'No query to abort'
-        })
+        if (!body?.executionId) {
+            return c.json({ error: 'Invalid callback body' }, 400)
+        }
+
+        const engine = getSyncEngine()
+
+        if (body.status === 'completed' && body.output) {
+            // 解析 suggestions 并发送到主 session
+            try {
+                const jsonBlocks = [...body.output.matchAll(/```json\s*([\s\S]*?)\s*```/g)]
+                if (jsonBlocks.length > 0) {
+                    const lastBlock = jsonBlocks[jsonBlocks.length - 1]
+                    let jsonStr = lastBlock[1]
+
+                    let parsed = null
+                    try {
+                        parsed = JSON.parse(jsonStr)
+                    } catch {
+                        // 尝试修复截断的 JSON
+                        const openBraces = (jsonStr.match(/\{/g) || []).length
+                        const closeBraces = (jsonStr.match(/\}/g) || []).length
+                        const openBrackets = (jsonStr.match(/\[/g) || []).length
+                        const closeBrackets = (jsonStr.match(/\]/g) || []).length
+                        while (closeBrackets < openBrackets) jsonStr += ']'
+                        while (closeBraces < openBraces) jsonStr += '}'
+                        try { parsed = JSON.parse(jsonStr) } catch { /* ignore */ }
+                    }
+
+                    if (parsed?.suggestions && Array.isArray(parsed.suggestions)) {
+                        const messageText = buildWorkerReviewResultMessage(parsed.suggestions, parsed.summary)
+                        await engine?.sendMessage(body.mainSessionId, {
+                            text: messageText,
+                            sentFrom: 'brain-review'
+                        })
+                    }
+                }
+            } catch (parseErr) {
+                console.error('[BrainWorkerCallback] Failed to parse output:', parseErr)
+                await engine?.sendMessage(body.mainSessionId, {
+                    text: `## Brain 审查结果\n\n${body.output}`,
+                    sentFrom: 'brain-review'
+                })
+            }
+        } else if (body.status === 'failed') {
+            await engine?.sendMessage(body.mainSessionId, {
+                text: `Brain 审查失败: ${body.error || '未知错误'}`,
+                sentFrom: 'brain-review'
+            })
+        }
+
+        // SSE 广播 done 事件
+        const sseManager = getSseManager()
+        if (sseManager) {
+            const mainSession = engine?.getSession(body.mainSessionId)
+            sseManager.broadcast({
+                type: 'brain-sdk-progress',
+                namespace: mainSession?.namespace,
+                sessionId: body.mainSessionId,
+                data: {
+                    brainSessionId: body.brainSessionId,
+                    progressType: 'done',
+                    data: { status: body.status }
+                }
+            } as unknown as import('../sync/syncEngine.js').SyncEvent)
+        }
+
+        return c.json({ success: true })
+    })
+
+    app.post('/brain/sessions/:id/sdk-abort', async (c) => {
+        const id = c.req.param('id')
+
+        // 从 DB 获取最新的 running execution
+        const execution = await brainStore.getLatestExecutionWithProgress(id)
+        if (!execution || execution.status !== 'running') {
+            return c.json({ success: false, message: 'No running execution' })
+        }
+
+        // 获取 worker PID 并发送 SIGTERM
+        const pid = await brainStore.getExecutionWorkerPid(execution.id)
+        if (pid) {
+            try {
+                process.kill(pid, 'SIGTERM')
+                return c.json({ success: true, message: `Sent SIGTERM to worker PID ${pid}` })
+            } catch {
+                return c.json({ success: false, message: 'Worker process not found (may have already exited)' })
+            }
+        }
+
+        return c.json({ success: false, message: 'No worker PID found' })
     })
 
     return app

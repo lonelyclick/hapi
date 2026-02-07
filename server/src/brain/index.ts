@@ -7,11 +7,10 @@
 export { BrainStore } from './store'
 export { createBrainRoutes } from './routes'
 export { AutoBrainService } from './autoBrain'
-export { BrainSdkService, buildBrainSystemPrompt, buildReviewPrompt } from './brainSdkService'
+export { buildBrainSystemPrompt, buildReviewPrompt } from './brainSdkService'
 export type {
     StoredBrainSession,
     BrainSessionStatus,
     CreateBrainSessionParams,
     IBrainStore
 } from './types'
-export type { BrainRequestResult, BrainRequestStatus } from './brainSdkService'

@@ -60,6 +60,28 @@ export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: s
         return unsubscribe
     }, [queryClient, mainSessionId, forceUpdate])
 
+    // 定时轮询 progress-log API（worker 写 DB，前端轮询读取）
+    useEffect(() => {
+        if (!data?.isActive) return
+
+        const poll = async () => {
+            try {
+                const brainSession = await api.getActiveBrainSession(mainSessionId)
+                if (!brainSession) return
+                const result = await api.getBrainProgressLog(brainSession.id)
+                if (!result) return
+                const displayEntries = (result.entries || []).filter((e: ProgressEntry) => e.type !== 'done')
+                queryClient.setQueryData(queryKeys.brainSdkProgress(mainSessionId), {
+                    entries: displayEntries,
+                    isActive: result.isActive
+                })
+            } catch { /* ignore */ }
+        }
+
+        const interval = setInterval(poll, 3000)
+        return () => clearInterval(interval)
+    }, [data?.isActive, mainSessionId, api, queryClient])
+
     // 自动滚动到底部
     useEffect(() => {
         if (scrollRef.current) {

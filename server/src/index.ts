@@ -17,7 +17,7 @@ import { startWebServer } from './web/server'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
-import { BrainStore, AutoBrainService, BrainSdkService } from './brain'
+import { BrainStore, AutoBrainService } from './brain'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -129,11 +129,8 @@ async function main() {
 
     syncEngine = new SyncEngine(store, socketServer.io, socketServer.rpcRegistry, sseManager)
 
-    // Initialize Brain SDK Service (must be created before AutoBrainService)
-    const brainSdkService = new BrainSdkService(brainStore)
-
-    // Initialize Brain Sync Service
-    const autoBrainService = new AutoBrainService(syncEngine, brainStore, brainSdkService)
+    // Initialize Brain Sync Service (SDK review now uses detached worker process)
+    const autoBrainService = new AutoBrainService(syncEngine, brainStore)
     autoBrainService.setSseManager(sseManager)
     autoBrainService.start()
 
@@ -154,7 +151,6 @@ async function main() {
         store,
         brainStore,
         autoBrainService,
-        brainSdkService,
         socketEngine: socketServer.engine
     })
 

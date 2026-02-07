@@ -1,6 +1,6 @@
 {
   "name": "@twsxtd/hapi",
-  "version": "v2026.02.07.1542",
+  "version": "v2026.02.07.1624",
   "description": "App for agentic coding - access coding agent anywhere",
   "author": "Kirill Dubovitskiy & weishu",
   "license": "LGPL-3.0-or-later",
@@ -40,6 +40,7 @@
     "build:exe:allinone:all": "bun run scripts/build-executable.ts --with-web-assets --all",
     "build:exe:server": "bun run scripts/build-executable.ts --name hapi-server --with-web-assets",
     "build:exe:daemon": "bun run scripts/build-executable.ts --name hapi-daemon",
+    "build:exe:brain-worker": "bun run scripts/build-executable.ts --name hapi-brain-worker",
     "prepare-npm-packages": "bun run scripts/prepare-npm-packages.ts",
     "prepack": "bun run prepare-npm-packages",
     "tools:unpack": "bun run scripts/unpack-tools.ts",

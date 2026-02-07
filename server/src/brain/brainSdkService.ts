@@ -1,12 +1,12 @@
 /**
  * Brain SDK Service
  *
- * 使用 Claude Agent SDK 直接处理 Brain 请求
- * 不依赖 CLI daemon，直接在 server 端执行代码审查
+ * SDK 审查现在通过 detached worker 进程执行（brain-review-worker）。
+ * 此类保留作为能力标记 — 当 BrainSdkService 实例存在时，
+ * 表示 SDK 审查功能可用（worker 已构建并可被 spawn）。
  */
 
 import type { BrainStore } from './store'
-import { executeBrainQuery, BrainQueryController, type BrainQueryOptions, type MessageCallbacks } from './sdkAdapter'
 
 /**
  * Brain 请求状态
@@ -28,127 +28,13 @@ export interface BrainRequestResult {
 }
 
 /**
- * Brain SDK Service
+ * Brain SDK Service（能力标记）
  *
- * 管理使用 SDK 执行 Brain 请求
+ * SDK 审查的实际执行由 detached worker 进程完成。
+ * 此类的存在表示 SDK 审查功能可用。
  */
 export class BrainSdkService {
-    private activeQueries = new Map<string, BrainQueryController>()
-    private queryResults = new Map<string, BrainRequestResult>()
-
     constructor(private brainStore: BrainStore) {}
-
-    /**
-     * 执行 Brain 代码审查
-     *
-     * @param brainSessionId - Brain session ID
-     * @param prompt - 审查提示词
-     * @param options - 查询选项
-     * @param callbacks - 消息回调
-     * @returns Promise，在查询完成时 resolve
-     */
-    async executeBrainReview(
-        brainSessionId: string,
-        prompt: string,
-        options: BrainQueryOptions,
-        callbacks: MessageCallbacks = {}
-    ): Promise<BrainRequestResult> {
-        // 检查是否已有正在进行的查询
-        const existingController = this.activeQueries.get(brainSessionId)
-        if (existingController?.isRunning()) {
-            throw new Error('Brain review already in progress')
-        }
-
-        // 创建新的查询控制器
-        const controller = new BrainQueryController()
-        this.activeQueries.set(brainSessionId, controller)
-
-        // 初始化结果状态
-        const result: BrainRequestResult = {
-            status: 'running',
-            startedAt: Date.now()
-        }
-        this.queryResults.set(brainSessionId, result)
-
-        // 收集输出
-        const outputChunks: string[] = []
-
-        try {
-            await controller.start(prompt, options, {
-                ...callbacks,
-                onAssistantMessage: (message) => {
-                    outputChunks.push(message.content)
-                    callbacks.onAssistantMessage?.(message)
-                },
-                onResult: (sdkResult) => {
-                    if (sdkResult.success) {
-                        result.status = 'completed'
-                    } else if (sdkResult.error === 'Aborted by user') {
-                        result.status = 'aborted'
-                    } else if (result.status !== 'aborted') {
-                        result.status = 'error'
-                    }
-                    result.output = outputChunks.join('\n\n')
-                    result.error = sdkResult.error
-                    result.numTurns = sdkResult.numTurns
-                    result.costUsd = sdkResult.totalCostUsd
-                    result.durationMs = sdkResult.durationMs
-                    result.completedAt = Date.now()
-                    callbacks.onResult?.(sdkResult)
-                }
-            })
-
-            return result
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error)
-            const isAbort = (error as Error).name === 'AbortError' || message === 'Aborted by user'
-            result.status = isAbort ? 'aborted' : 'error'
-            result.error = message
-            result.completedAt = Date.now()
-            return result
-        } finally {
-            this.activeQueries.delete(brainSessionId)
-        }
-    }
-
-    /**
-     * 中止正在进行的 Brain 请求
-     */
-    abortBrainReview(brainSessionId: string): boolean {
-        const controller = this.activeQueries.get(brainSessionId)
-        if (controller?.isRunning()) {
-            controller.abort()
-            const result = this.queryResults.get(brainSessionId)
-            if (result) {
-                result.status = 'aborted'
-                result.completedAt = Date.now()
-            }
-            return true
-        }
-        return false
-    }
-
-    /**
-     * 获取 Brain 请求结果
-     */
-    getQueryResult(brainSessionId: string): BrainRequestResult | undefined {
-        return this.queryResults.get(brainSessionId)
-    }
-
-    /**
-     * 检查 Brain 请求是否正在运行
-     */
-    isQueryRunning(brainSessionId: string): boolean {
-        const controller = this.activeQueries.get(brainSessionId)
-        return controller?.isRunning() ?? false
-    }
-
-    /**
-     * 清理已完成的查询结果
-     */
-    cleanupQueryResult(brainSessionId: string): void {
-        this.queryResults.delete(brainSessionId)
-    }
 }
 
 /**
