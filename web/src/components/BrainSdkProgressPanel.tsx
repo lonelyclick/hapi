@@ -121,7 +121,7 @@ function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
 
 function AssistantEntry({ content }: { content: string }) {
     return (
-        <div className="px-1 min-w-0 max-w-full overflow-x-hidden text-xs [&>*+*]:mt-1.5">
+        <div className="px-1 min-w-0 max-w-full overflow-x-hidden text-sm [&>*+*]:mt-2">
             <Markdown
                 remarkPlugins={[remarkGfm]}
                 components={{
