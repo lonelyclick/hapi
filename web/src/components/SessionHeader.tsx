@@ -524,16 +524,16 @@ export function SessionHeader(props: {
                                 onClick={() => props.onOpenBrain?.(brainSession.brainSessionId)}
                                 className={`flex items-center gap-1.5 h-7 px-2 rounded-md text-xs font-medium transition-colors ${
                                     brainSession.status === 'active'
-                                        ? 'bg-indigo-500/15 text-indigo-600 animate-pulse'
+                                        ? 'bg-indigo-500/15 text-indigo-600'
                                         : brainSession.status === 'pending'
                                             ? 'bg-amber-500/15 text-amber-600'
                                             : 'bg-emerald-500/15 text-emerald-600'
                                 }`}
-                                title="Open Brain session"
+                                title="Open Brain session (new window)"
                             >
                                 <BrainIcon />
                                 <span>{
-                                    brainSession.status === 'active' ? 'Reviewing'
+                                    brainSession.status === 'active' ? 'Brain'
                                     : brainSession.status === 'pending' ? 'Pending'
                                     : 'Done'
                                 }</span>
@@ -638,10 +638,10 @@ export function SessionHeader(props: {
                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
                                     >
                                         <BrainIcon className="shrink-0" />
-                                        <span className="whitespace-nowrap">Brain: {
-                                            brainSession.status === 'active' ? 'Reviewing'
-                                            : brainSession.status === 'pending' ? 'Pending'
-                                            : 'Done'
+                                        <span className="whitespace-nowrap">{
+                                            brainSession.status === 'active' ? 'Brain'
+                                            : brainSession.status === 'pending' ? 'Brain: Pending'
+                                            : 'Brain: Done'
                                         }</span>
                                     </button>
                                 ) : null}
