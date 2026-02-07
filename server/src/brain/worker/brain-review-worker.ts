@@ -100,13 +100,12 @@ async function run(): Promise<void> {
     const isRefine = phase === 'refine'
     console.log(`[BrainWorker] run() phase=${phase} model=${config.model} cwd=${config.projectPath} promptLen=${config.prompt.length} executionId=${config.executionId}`)
 
-    // refine 阶段不需要 execution 记录
-    if (!isRefine) {
-        await brainStore.updateExecutionWorkerPid(config.executionId, process.pid)
-        heartbeatTimer = setInterval(() => {
-            brainStore.updateExecutionHeartbeat(config.executionId).catch(() => {})
-        }, 30_000)
-    }
+    await brainStore.updateExecutionWorkerPid(config.executionId, process.pid).catch(err => {
+        if (isRefine) console.warn('[BrainWorker] Failed to update worker PID for refine:', err.message)
+    })
+    heartbeatTimer = setInterval(() => {
+        brainStore.updateExecutionHeartbeat(config.executionId).catch(() => {})
+    }, 30_000)
 
     // refine 阶段设置 60 秒超时，防止 SDK 启动慢导致卡死
     if (isRefine) {
@@ -139,53 +138,45 @@ async function run(): Promise<void> {
             {
                 onAssistantMessage: (message) => {
                     outputChunks.push(message.content)
-                    if (!isRefine) {
-                        const entry = {
-                            id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                            type: 'assistant-message',
-                            content: message.content,
-                            timestamp: Date.now()
-                        }
-                        brainStore.appendProgressLog(config.executionId, entry).catch(err => {
-                            console.error('[BrainWorker] Failed to append progress log:', err.message)
-                        })
+                    const entry = {
+                        id: `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        type: 'assistant-message',
+                        content: message.content,
+                        timestamp: Date.now()
                     }
+                    brainStore.appendProgressLog(config.executionId, entry).catch(err => {
+                        console.error('[BrainWorker] Failed to append progress log:', err.message)
+                    })
                 },
                 onToolUse: (toolName, input) => {
                     lastToolEntryId = `sdk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-                    if (!isRefine) {
-                        const entry = {
-                            id: lastToolEntryId,
-                            type: 'tool-use',
-                            content: toolName,
-                            toolName,
-                            toolInput: input,
-                            timestamp: Date.now()
-                        }
-                        brainStore.appendProgressLog(config.executionId, entry).catch(err => {
-                            console.error('[BrainWorker] Failed to append progress log:', err.message)
-                        })
+                    const entry = {
+                        id: lastToolEntryId,
+                        type: 'tool-use',
+                        content: toolName,
+                        toolName,
+                        toolInput: input,
+                        timestamp: Date.now()
                     }
+                    brainStore.appendProgressLog(config.executionId, entry).catch(err => {
+                        console.error('[BrainWorker] Failed to append progress log:', err.message)
+                    })
                 },
                 onToolResult: (_toolName, result) => {
                     if (result === undefined || !lastToolEntryId) return
-                    if (!isRefine) {
-                        const entry = {
-                            id: `${lastToolEntryId}-result`,
-                            type: 'tool-result',
-                            content: typeof result === 'string' ? result : JSON.stringify(result),
-                            toolEntryId: lastToolEntryId,
-                            timestamp: Date.now()
-                        }
-                        brainStore.appendProgressLog(config.executionId, entry).catch(err => {
-                            console.error('[BrainWorker] Failed to append progress log:', err.message)
-                        })
+                    const entry = {
+                        id: `${lastToolEntryId}-result`,
+                        type: 'tool-result',
+                        content: typeof result === 'string' ? result : JSON.stringify(result),
+                        toolEntryId: lastToolEntryId,
+                        timestamp: Date.now()
                     }
+                    brainStore.appendProgressLog(config.executionId, entry).catch(err => {
+                        console.error('[BrainWorker] Failed to append progress log:', err.message)
+                    })
                 },
                 onProgress: () => {
-                    if (!isRefine) {
-                        brainStore.updateExecutionHeartbeat(config.executionId).catch(() => {})
-                    }
+                    brainStore.updateExecutionHeartbeat(config.executionId).catch(() => {})
                 }
             }
         )
@@ -194,14 +185,17 @@ async function run(): Promise<void> {
         const output = outputChunks.join('\n\n')
         console.log(`[BrainWorker] ${phase} completed, output length:`, output.length)
 
+        await brainStore.appendProgressLog(config.executionId, {
+            id: `sdk-${Date.now()}-done`,
+            type: 'done',
+            content: '',
+            timestamp: Date.now()
+        }).catch(() => {})
         if (!isRefine) {
-            await brainStore.appendProgressLog(config.executionId, {
-                id: `sdk-${Date.now()}-done`,
-                type: 'done',
-                content: '',
-                timestamp: Date.now()
-            }).catch(() => {})
             await brainStore.completeBrainExecution(config.executionId, output)
+        } else {
+            // refine 完成后标记 execution 为 completed
+            await brainStore.completeBrainExecution(config.executionId, '[refine] ' + output.slice(0, 500)).catch(() => {})
         }
 
         // 通知 server
@@ -222,12 +216,10 @@ async function run(): Promise<void> {
         console.error(`[BrainWorker] ${phase} FAILED: ${message}`)
         if (stack) console.error(`[BrainWorker] Stack: ${stack}`)
 
-        if (!isRefine) {
-            await brainStore.failBrainExecution(
-                config.executionId,
-                isAbort ? 'Aborted' : message
-            )
-        }
+        await brainStore.failBrainExecution(
+            config.executionId,
+            isAbort ? 'Aborted' : message
+        ).catch(() => {})
 
         await notifyServer({
             executionId: config.executionId,

@@ -34,7 +34,8 @@ async function spawnRefineWorker(
     engine: SyncEngine,
     mainSessionId: string,
     brainSessionId: string,
-    userMessage: string
+    userMessage: string,
+    brainStoreRef?: BrainStore
 ): Promise<boolean> {
     try {
         const { spawn } = await import('child_process')
@@ -56,8 +57,28 @@ async function spawnRefineWorker(
         const mainSession = engine.getSession(mainSessionId)
         const projectPath = mainSession?.metadata?.path || '/tmp'
 
+        // 为 refine 创建一个真实的 execution 记录，以便 worker 写进度日志
+        let executionId = `refine-${Date.now()}`
+        if (brainStoreRef) {
+            try {
+                const now = Date.now()
+                const exec = await brainStoreRef.createBrainExecution({
+                    brainSessionId,
+                    roundsReviewed: 0,
+                    reviewedRoundNumbers: [],
+                    timeRangeStart: now,
+                    timeRangeEnd: now,
+                    prompt: '[refine] ' + userMessage.slice(0, 200),
+                    status: 'running'
+                })
+                executionId = exec.id
+            } catch (err) {
+                console.warn('[Messages] Failed to create refine execution record:', (err as Error).message)
+            }
+        }
+
         const config = JSON.stringify({
-            executionId: `refine-${Date.now()}`,
+            executionId,
             brainSessionId,
             mainSessionId,
             prompt: userMessage,
@@ -127,7 +148,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
         const activeBrain = brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
         if (activeBrain) {
             console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} model=glm-4.7 msgLen=${parsed.data.text.length}`)
-            const intercepted = await spawnRefineWorker(engine, sessionId, activeBrain.id, parsed.data.text)
+            const intercepted = await spawnRefineWorker(engine, sessionId, activeBrain.id, parsed.data.text, brainStore)
             if (intercepted) {
                 refiningSessions.add(sessionId)
                 console.log(`[Messages] Brain intercept: message intercepted, waiting for refine worker callback`)
@@ -135,6 +156,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 const sseManager = getSseManager?.()
                 if (sseManager) {
                     const session = engine.getSession(sessionId)
+                    // 主 session 侧：refine-started 触发 BrainRefineIndicator
                     sseManager.broadcast({
                         type: 'brain-sdk-progress',
                         namespace: session?.namespace,
@@ -142,6 +164,17 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
                         data: {
                             brainSessionId: activeBrain.id,
                             progressType: 'refine-started',
+                            data: {}
+                        }
+                    } as unknown as import('../../sync/syncEngine.js').SyncEvent)
+                    // brain session 侧：started 触发 BrainSdkProgressPanel 开始轮询进度
+                    sseManager.broadcast({
+                        type: 'brain-sdk-progress',
+                        namespace: session?.namespace,
+                        sessionId,
+                        data: {
+                            brainSessionId: activeBrain.id,
+                            progressType: 'started',
                             data: {}
                         }
                     } as unknown as import('../../sync/syncEngine.js').SyncEvent)

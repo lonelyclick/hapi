@@ -123,9 +123,9 @@ function BrainProgressSteps({ sessionId, api }: { sessionId: string; api?: ApiCl
         }).catch(() => {})
     }, [api, sessionId])
 
-    // 轮询 review 进度日志
+    // 轮询 review/refine 进度日志
     useEffect(() => {
-        if (step !== 'reviewing' || !api || !brainSessionId) return
+        if ((step !== 'reviewing' && step !== 'refining') || !api || !brainSessionId) return
 
         let cancelled = false
         const poll = async () => {
@@ -178,7 +178,7 @@ function BrainProgressSteps({ sessionId, api }: { sessionId: string; api?: ApiCl
                         </span>
                     ))}
                 </div>
-                {step === 'reviewing' && displayEntries.length > 0 && (
+                {(step === 'reviewing' || step === 'refining') && displayEntries.length > 0 && (
                     <button
                         type="button"
                         onClick={() => setExpanded(!expanded)}
