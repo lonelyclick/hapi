@@ -13,6 +13,7 @@ import type { BrainStore } from './store'
 import type { AutoBrainService } from './autoBrain'
 import { buildBrainSystemPrompt, buildReviewPrompt, buildRefineSystemPrompt } from './brainSdkService'
 import { refiningSessions } from '../web/routes/messages'
+import { buildInitPrompt } from '../web/prompts/initPrompt'
 
 // Brain 上下文最大消息数
 const BRAIN_CONTEXT_MAX_MESSAGES = 10
@@ -316,6 +317,19 @@ export function createBrainRoutes(
         const isOnline = await waitForOnline(brainSessionId, 60_000)
         if (!isOnline) {
             return c.json({ error: 'Brain session failed to come online' }, 500)
+        }
+
+        // 发送 Brain 专用 init prompt（不含项目上下文）
+        try {
+            const brainInitPrompt = await buildInitPrompt('user', { isBrain: true })
+            if (brainInitPrompt.trim()) {
+                await engine.sendMessage(brainSessionId, {
+                    text: brainInitPrompt,
+                    sentFrom: 'webapp'
+                })
+            }
+        } catch (err) {
+            console.error('[Brain] Failed to send init prompt to brain session:', err)
         }
 
         // 保存 Brain Session 记录
