@@ -1386,10 +1386,10 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
                     sentFrom
                 })
             } else {
-                // review 阶段完成：直接发给主 session，不再 spawn refine
+                // review 阶段完成：直接发给主 session，加上发送者标识
                 console.log(`[BrainWorkerCallback] review completed, sending directly to main session, outputLen=${body.output.length}`)
                 await engine?.sendMessage(body.mainSessionId, {
-                    text: body.output,
+                    text: `[发送者: Brain 代码审查]\n\n${body.output}`,
                     sentFrom: 'brain-review'
                 })
                 // 保存 review 结果但保持 brain session 为 active（后续新对话还会继续被 review）
