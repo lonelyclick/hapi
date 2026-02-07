@@ -898,18 +898,18 @@ export class AutoBrainService {
                 }
             )
 
+            // 创建执行记录（在结果判断前，确保所有分支都能更新状态）
+            const execution = await this.brainStore.createBrainExecution({
+                brainSessionId: brainId,
+                roundsReviewed: summaries.length,
+                reviewedRoundNumbers: summaries.map(s => s.round),
+                timeRangeStart: Date.now(),
+                timeRangeEnd: Date.now(),
+                prompt: reviewPrompt
+            })
+
             if (result.status === 'completed' && result.output) {
                 console.log('[BrainSync] SDK review completed, output length:', result.output.length)
-
-                // 创建执行记录
-                await this.brainStore.createBrainExecution({
-                    brainSessionId: brainId,
-                    roundsReviewed: summaries.length,
-                    reviewedRoundNumbers: summaries.map(s => s.round),
-                    timeRangeStart: Date.now(),
-                    timeRangeEnd: Date.now(),
-                    prompt: reviewPrompt
-                })
 
                 // 将审查结果转换成消息发送到主 session
                 // 这样前端就能看到审查结果，无需修改前端代码
@@ -964,6 +964,9 @@ export class AutoBrainService {
                     })
                 }
 
+                // 标记执行记录为完成
+                await this.brainStore.completeBrainExecution(execution.id, result.output)
+
                 // 广播完成状态（用于前端状态更新）
                 this.broadcastSyncStatus(brainSession, {
                     status: 'complete',
@@ -974,11 +977,16 @@ export class AutoBrainService {
             } else if (result.status === 'error') {
                 console.error('[BrainSync] SDK review failed:', result.error)
 
+                // 标记执行记录为失败
+                await this.brainStore.failBrainExecution(execution.id, result.error || 'Unknown error')
+
                 // 发送错误消息到主 session
                 await this.engine.sendMessage(mainSessionId, {
                     text: `⚠️ Brain 审查失败: ${result.error || '未知错误'}`,
                     sentFrom: 'brain-review'
                 })
+            } else if (result.status === 'aborted') {
+                await this.brainStore.failBrainExecution(execution.id, 'Aborted by user')
             }
         } catch (err) {
             console.error('[BrainSync] SDK review error:', err)
