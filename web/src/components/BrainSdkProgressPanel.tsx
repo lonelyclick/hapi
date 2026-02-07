@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 import type { ApiClient } from '@/api/client'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { MarkdownRenderer } from '@/components/MarkdownRenderer'
+import { Spinner } from '@/components/Spinner'
+import { EyeIcon, SearchIcon } from '@/components/ToolCard/icons'
 
 type ProgressEntry = {
     id: string
@@ -18,6 +22,45 @@ type ProgressData = {
 function useForceUpdate(): [number, () => void] {
     const [tick, setTick] = useState(0)
     return [tick, () => setTick(t => t + 1)]
+}
+
+const ICON_CLASS = 'h-3.5 w-3.5'
+
+/** 根据 tool-use content 解析出 tool name 和参数 */
+function parseToolUse(content: string): { toolName: string; args: string } {
+    const spaceIdx = content.indexOf(' ')
+    if (spaceIdx === -1) return { toolName: content, args: '' }
+    return { toolName: content.slice(0, spaceIdx), args: content.slice(spaceIdx + 1) }
+}
+
+function ToolIcon({ toolName }: { toolName: string }) {
+    if (toolName === 'Read') return <EyeIcon className={ICON_CLASS} />
+    if (toolName === 'Grep') return <EyeIcon className={ICON_CLASS} />
+    if (toolName === 'Glob') return <SearchIcon className={ICON_CLASS} />
+    return <SearchIcon className={ICON_CLASS} />
+}
+
+function ToolUseEntry({ content }: { content: string }) {
+    const { toolName, args } = parseToolUse(content)
+    return (
+        <div className="flex items-start gap-2 py-0.5">
+            <span className="shrink-0 mt-0.5 text-[var(--app-hint)]">
+                <ToolIcon toolName={toolName} />
+            </span>
+            <span className="min-w-0 font-mono text-xs text-[var(--app-hint)] break-all">
+                <span className="font-medium text-[var(--app-fg)]">{toolName}</span>
+                {args && <span className="ml-1.5 opacity-70">{args}</span>}
+            </span>
+        </div>
+    )
+}
+
+function AssistantEntry({ content }: { content: string }) {
+    return (
+        <div className="py-1">
+            <MarkdownRenderer content={content} />
+        </div>
+    )
 }
 
 export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: string; api: ApiClient }) {
@@ -39,7 +82,6 @@ export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: s
             return api.getBrainProgressLog(brainSession.id)
         }).then(result => {
             if (!result?.entries?.length) return
-            // 过滤掉 done 类型的条目（它只是标记，不需要显示）
             const displayEntries = result.entries.filter(e => e.type !== 'done')
             if (!displayEntries.length) return
             queryClient.setQueryData(queryKeys.brainSdkProgress(mainSessionId), {
@@ -95,37 +137,38 @@ export function BrainSdkProgressPanel({ mainSessionId, api }: { mainSessionId: s
 
     return (
         <div className="mx-auto w-full max-w-content px-3 pb-2">
-            <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-indigo-500/10">
-                    <span className="text-xs font-medium text-indigo-400">
-                        Brain SDK Review
-                    </span>
-                    {data?.isActive && (
-                        <span className="flex items-center gap-1 text-xs text-indigo-400/70">
-                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
-                            analyzing...
+            <Card>
+                <CardHeader className="px-3 py-2 space-y-0">
+                    <div className="flex items-center gap-2">
+                        {data?.isActive ? (
+                            <Spinner size="sm" label="Brain analyzing" />
+                        ) : (
+                            <span className="text-[var(--app-hint)]">
+                                <SearchIcon className={ICON_CLASS} />
+                            </span>
+                        )}
+                        <span className="text-xs font-medium">
+                            Brain SDK Review
                         </span>
-                    )}
-                </div>
-                <div ref={scrollRef} className="max-h-48 overflow-y-auto px-3 py-2 space-y-1">
-                    {data?.entries?.map(entry => (
-                        <div key={entry.id} className="text-xs leading-relaxed">
-                            {entry.type === 'tool-use' ? (
-                                <span className="text-amber-400/80 font-mono">
-                                    <span className="text-amber-500/60">{'>'} </span>
-                                    {entry.content}
-                                </span>
+                        {data?.isActive && (
+                            <span className="text-xs text-[var(--app-hint)]">
+                                analyzing...
+                            </span>
+                        )}
+                    </div>
+                </CardHeader>
+                <CardContent className="px-3 pb-3 pt-0">
+                    <div ref={scrollRef} className="max-h-64 overflow-y-auto space-y-0.5">
+                        {data?.entries?.map(entry => (
+                            entry.type === 'tool-use' ? (
+                                <ToolUseEntry key={entry.id} content={entry.content} />
                             ) : (
-                                <span className="text-[var(--app-fg)] opacity-80 whitespace-pre-wrap">
-                                    {entry.content.length > 500
-                                        ? entry.content.slice(0, 500) + '...'
-                                        : entry.content}
-                                </span>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </div>
+                                <AssistantEntry key={entry.id} content={entry.content} />
+                            )
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     )
 }
