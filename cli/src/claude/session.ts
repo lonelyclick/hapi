@@ -13,7 +13,7 @@ type LocalLaunchFailure = {
 };
 
 export class Session extends AgentSessionBase<EnhancedMode> {
-    readonly claudeEnvVars?: Record<string, string>;
+    claudeEnvVars?: Record<string, string>;
     claudeArgs?: string[];
     readonly mcpServers: Record<string, any>;
     readonly allowedTools?: string[];

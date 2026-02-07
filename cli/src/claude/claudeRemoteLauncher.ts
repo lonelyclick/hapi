@@ -16,8 +16,10 @@ import { RawJSONLines } from "@/claude/types";
 import { OutgoingMessageQueue } from "./utils/OutgoingMessageQueue";
 import { getToolName } from "./utils/getToolName";
 import { restoreTerminalState } from "@/ui/terminalState";
+import { isAccountExhaustedError, rotateAccount } from "./utils/accountRotation";
 
 const INIT_PROMPT_PREFIX = '#InitPrompt-';
+const MAX_ACCOUNT_ROTATIONS = 3;
 const TITLE_INSTRUCTION = 'Based on this message, call mcp__hapi__change_title to change chat session title that would represent the current task. If chat idea would change dramatically - call this function again to update the title.';
 
 function isInitPromptMessage(message: string): boolean {
@@ -334,6 +336,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
             message: string;
             mode: EnhancedMode;
         } | null = null;
+        let accountRotationCount = 0;
 
         // Track session ID to detect when it actually changes
         // This prevents context loss when mode changes (permission mode, model, etc.)
@@ -444,8 +447,89 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     logger.debug('[remote]: stack trace:', errorStack);
                 }
                 console.error('[HAPI] Process error:', errorMessage);
+
+                // Auto-rotate account on 401/token exhaustion errors
+                if (!exitReason && isAccountExhaustedError(errorMessage)) {
+                    if (accountRotationCount < MAX_ACCOUNT_ROTATIONS) {
+                        logger.debug('[remote]: Account exhaustion detected, attempting rotation');
+                        session.client.sendSessionEvent({
+                            type: 'message',
+                            message: 'Account limit reached. Switching to a different account...'
+                        });
+
+                        try {
+                            const rotationResult = await rotateAccount({
+                                api: session.api,
+                                currentConfigDir: session.claudeEnvVars?.CLAUDE_CONFIG_DIR,
+                                claudeSessionId: session.sessionId,
+                                workingDirectory: session.path,
+                            });
+
+                            if (rotationResult.success && rotationResult.newAccount) {
+                                // Update CLAUDE_CONFIG_DIR
+                                process.env.CLAUDE_CONFIG_DIR = rotationResult.newAccount.configDir;
+                                if (session.claudeEnvVars) {
+                                    session.claudeEnvVars.CLAUDE_CONFIG_DIR = rotationResult.newAccount.configDir;
+                                } else {
+                                    session.claudeEnvVars = { CLAUDE_CONFIG_DIR: rotationResult.newAccount.configDir };
+                                }
+
+                                // Set --resume so the new process picks up conversation history
+                                // First strip any existing --resume flags to avoid accumulation
+                                if (session.sessionId) {
+                                    session.consumeOneTimeFlags();
+                                    session.claudeArgs = [
+                                        ...(session.claudeArgs || []),
+                                        '--resume', session.sessionId
+                                    ];
+                                }
+
+                                // Update session metadata with new account info
+                                session.client.updateMetadata((metadata) => ({
+                                    ...metadata,
+                                    claudeAccountId: rotationResult.newAccount!.id,
+                                    claudeAccountName: rotationResult.newAccount!.name,
+                                }));
+
+                                session.client.sendSessionEvent({
+                                    type: 'message',
+                                    message: `Switched to account: ${rotationResult.newAccount.name}`
+                                });
+
+                                accountRotationCount++;
+                                logger.debug(`[remote]: Account rotated to ${rotationResult.newAccount.name} (rotation ${accountRotationCount}/${MAX_ACCOUNT_ROTATIONS})`);
+                                continue; // Retry with new account
+                            } else {
+                                session.client.sendSessionEvent({
+                                    type: 'message',
+                                    message: `Could not switch account: ${rotationResult.reason}. Please try again later or switch manually.`
+                                });
+                            }
+                        } catch (rotationError) {
+                            logger.debug('[remote]: Account rotation failed:', rotationError);
+                            session.client.sendSessionEvent({
+                                type: 'message',
+                                message: `Account rotation failed: ${rotationError instanceof Error ? rotationError.message : String(rotationError)}`
+                            });
+                        }
+                    } else {
+                        session.client.sendSessionEvent({
+                            type: 'message',
+                            message: `All available accounts exhausted after ${accountRotationCount} rotations. Please try again later.`
+                        });
+                    }
+
+                    // Rotation failed or max rotations reached — wait for user action
+                    // (claudeRemote's nextMessage() will block until user sends a new message)
+                    continue;
+                }
+
                 if (!exitReason) {
-                    session.client.sendSessionEvent({ type: 'message', message: `Process exited unexpectedly: ${errorMessage}` });
+                    // Truncate long error messages (stderr can be verbose) for the UI
+                    const uiMessage = errorMessage.length > 500
+                        ? errorMessage.slice(0, 500) + '...'
+                        : errorMessage;
+                    session.client.sendSessionEvent({ type: 'message', message: `Process exited unexpectedly: ${uiMessage}` });
                     continue;
                 }
             } finally {

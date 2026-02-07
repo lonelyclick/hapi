@@ -357,12 +357,19 @@ export function query(config: {
         childStdin = child.stdin
     }
 
-    // Handle stderr in debug mode
-    if (process.env.DEBUG) {
-        child.stderr.on('data', (data) => {
-            console.error('Claude Code stderr:', data.toString())
-        })
-    }
+    // Always capture stderr for error reporting; also log in debug mode
+    const MAX_STDERR_LENGTH = 2048
+    let stderrBuffer = ''
+    child.stderr.on('data', (data: Buffer) => {
+        const chunk = data.toString()
+        stderrBuffer += chunk
+        if (stderrBuffer.length > MAX_STDERR_LENGTH) {
+            stderrBuffer = stderrBuffer.slice(-MAX_STDERR_LENGTH)
+        }
+        if (process.env.DEBUG) {
+            console.error('Claude Code stderr:', chunk)
+        }
+    })
 
     // Setup cleanup
     const cleanup = () => {
@@ -388,7 +395,11 @@ export function query(config: {
                 query.setError(new AbortError('Claude Code process aborted by user'))
             }
             if (code !== 0) {
-                query.setError(new Error(`Claude Code process exited with code ${code}`))
+                const stderrInfo = stderrBuffer.trim()
+                const errorMsg = stderrInfo
+                    ? `Claude Code process exited with code ${code}: ${stderrInfo}`
+                    : `Claude Code process exited with code ${code}`
+                query.setError(new Error(errorMsg))
             } else {
                 resolve()
             }
