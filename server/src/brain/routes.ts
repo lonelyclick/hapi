@@ -1355,6 +1355,7 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             error?: string
             phase?: 'review' | 'refine'
             refineSentFrom?: 'webapp' | 'brain-review'
+            originalPrompt?: string
         } | null
 
         if (!body?.executionId) {
@@ -1390,10 +1391,20 @@ ${recentMessages.map((msg) => `**${msg.role}**: ${msg.text}`).join('\n\n---\n\n'
             }
         } else if (body.status === 'failed') {
             console.error(`[BrainWorkerCallback] ${callbackPhase} FAILED: ${body.error || '未知错误'}`)
-            await engine?.sendMessage(body.mainSessionId, {
-                text: `Brain 审查失败: ${body.error || '未知错误'}`,
-                sentFrom: 'brain-review'
-            })
+            if (callbackPhase === 'refine' && body.originalPrompt) {
+                // refine 失败时，直接发送用户原始消息（不丢消息）
+                console.log(`[BrainWorkerCallback] refine failed, falling back to send original message directly`)
+                const sentFrom = (body.refineSentFrom as 'webapp' | 'brain-review') || 'webapp'
+                await engine?.sendMessage(body.mainSessionId, {
+                    text: body.originalPrompt,
+                    sentFrom
+                })
+            } else {
+                await engine?.sendMessage(body.mainSessionId, {
+                    text: `Brain 审查失败: ${body.error || '未知错误'}`,
+                    sentFrom: 'brain-review'
+                })
+            }
         }
 
         // SSE 广播 done 事件：review/refine 完成、失败、NO_MESSAGE 均广播

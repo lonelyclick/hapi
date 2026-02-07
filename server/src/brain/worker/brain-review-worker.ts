@@ -226,7 +226,8 @@ async function run(): Promise<void> {
             status: 'failed',
             error: isAbort ? 'Aborted' : message,
             phase,
-            ...(config.refineSentFrom ? { refineSentFrom: config.refineSentFrom } : {})
+            ...(config.refineSentFrom ? { refineSentFrom: config.refineSentFrom } : {}),
+            ...(phase === 'refine' ? { originalPrompt: config.prompt } : {})
         })
     }
 }
