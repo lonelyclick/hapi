@@ -121,29 +121,28 @@ function ToolUseEntry({ entry }: { entry: ProgressEntry }) {
 
 function AssistantEntry({ content }: { content: string }) {
     return (
-        <div className="px-1 min-w-0 max-w-full overflow-x-hidden">
+        <div className="px-1 min-w-0 max-w-full overflow-x-hidden text-xs [&>*+*]:mt-1.5">
             <Markdown
                 remarkPlugins={[remarkGfm]}
-                className="min-w-0 max-w-full break-words text-xs [&>*+*]:mt-1.5"
                 components={{
-                    pre: (props) => (
+                    pre: ({ node, ...props }) => (
                         <div className="min-w-0 w-full max-w-full overflow-x-auto">
                             <pre {...props} className="m-0 w-max min-w-full rounded-md bg-[var(--app-code-bg)] p-2 text-xs" />
                         </div>
                     ),
-                    code: (props) => {
-                        const { className, children, ...rest } = props
+                    code: ({ node, className, children, ...rest }) => {
                         const isBlock = className?.startsWith('language-')
                         if (isBlock) {
                             return <code {...rest} className={`font-mono ${className ?? ''}`}>{children}</code>
                         }
                         return <code {...rest} className="break-words rounded bg-[var(--app-inline-code-bg)] px-[0.3em] py-[0.1em] font-mono text-[0.9em]">{children}</code>
                     },
-                    p: (props) => <p {...props} className="leading-relaxed" />,
-                    ul: (props) => <ul {...props} className="list-disc pl-6" />,
-                    ol: (props) => <ol {...props} className="list-decimal pl-6" />,
-                    a: (props) => <a {...props} target="_blank" rel="noreferrer" className="text-[var(--app-link)] underline" />,
-                    strong: (props) => <strong {...props} className="font-semibold" />,
+                    p: ({ node, ...props }) => <p {...props} className="leading-relaxed" />,
+                    ul: ({ node, ...props }) => <ul {...props} className="list-disc pl-6" />,
+                    ol: ({ node, ...props }) => <ol {...props} className="list-decimal pl-6" />,
+                    li: ({ node, ...props }) => <li {...props} />,
+                    a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" className="text-[var(--app-link)] underline" />,
+                    strong: ({ node, ...props }) => <strong {...props} className="font-semibold" />,
                 }}
             >
                 {content}
