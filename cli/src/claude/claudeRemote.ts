@@ -1,5 +1,5 @@
 import { EnhancedMode, PermissionMode } from "./loop";
-import { query, type QueryOptions as Options, type SDKMessage, type SDKSystemMessage, AbortError, SDKUserMessage } from '@/claude/sdk'
+import { query, type QueryOptions as Options, type SDKMessage, type SDKSystemMessage, type SDKResultMessage, AbortError, SDKUserMessage } from '@/claude/sdk'
 import { claudeCheckSession } from "./utils/claudeCheckSession";
 import { join } from 'node:path';
 import { parseSpecialCommand } from "@/parsers/specialCommands";
@@ -186,7 +186,16 @@ export async function claudeRemote(opts: {
             // Handle result messages
             if (message.type === 'result') {
                 updateThinking(false);
+                const resultMsg = message as SDKResultMessage;
                 logger.debug('[claudeRemote] Result received, exiting claudeRemote');
+
+                // If the result is an error and the session never started (0 turns),
+                // throw so the launcher catch block can handle it (e.g. retry without --resume)
+                if (resultMsg.is_error && resultMsg.num_turns === 0) {
+                    const errors = (resultMsg as any).errors;
+                    const errorText = Array.isArray(errors) ? errors.join('; ') : 'Session failed to start';
+                    throw new Error(errorText);
+                }
 
                 // Send completion messages
                 if (isCompactCommand) {

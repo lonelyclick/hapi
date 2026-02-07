@@ -448,6 +448,18 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                 }
                 console.error('[HAPI] Process error:', errorMessage);
 
+                // Handle failed --resume (session file not found / conversation not found)
+                if (!exitReason && /no conversation found/i.test(errorMessage)) {
+                    logger.debug('[remote]: Resume failed - conversation not found, clearing resume and retrying as new session');
+                    session.consumeOneTimeFlags(); // Strip --resume from claudeArgs
+                    session.clearSessionId();      // Start fresh
+                    session.client.sendSessionEvent({
+                        type: 'message',
+                        message: 'Previous session not found. Starting a new session...'
+                    });
+                    continue;
+                }
+
                 // Auto-rotate account on 401/token exhaustion errors
                 if (!exitReason && isAccountExhaustedError(errorMessage)) {
                     if (accountRotationCount < MAX_ACCOUNT_ROTATIONS) {
