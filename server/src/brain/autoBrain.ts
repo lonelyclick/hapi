@@ -209,8 +209,10 @@ export class AutoBrainService {
      * 检查 Brain session 是否使用 SDK 模式
      */
     private isSdkMode(brainSession: StoredBrainSession): boolean {
-        // SDK 模式使用特殊值 'sdk-mode' 而非实际的 CLI session ID
-        return !brainSession.brainSessionId || brainSession.brainSessionId === 'sdk-mode'
+        if (!brainSession.brainSessionId || brainSession.brainSessionId === 'sdk-mode') return true
+        // 通过 review session 的 metadata.source 判断
+        const reviewSession = this.engine.getSession(brainSession.brainSessionId)
+        return reviewSession?.metadata?.source === 'brain-sdk'
     }
 
     start(): void {
