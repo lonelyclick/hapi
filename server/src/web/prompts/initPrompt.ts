@@ -39,7 +39,7 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
         lines.push('')
         lines.push('4) 两种触发场景')
         lines.push('- 收到「用户消息转发」或「对话汇总同步」时，按消息中的步骤执行')
-        lines.push('- 你的核心职责：审查代码质量 + 推进开发流程，不要让主 session 停下来等人')
+        lines.push('- 你的核心职责：监督代码质量（push 主 session 自己 review） + 推进开发流程，不要让主 session 停下来等人')
         lines.push('- 唯一例外：破坏性操作（删库、force push）或需要密码/密钥时不推进')
         lines.push('')
     } else if (options?.hasBrain) {
@@ -53,7 +53,7 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
         lines.push('')
         lines.push('3) 你的角色')
         lines.push('- 你是编程执行者，负责根据用户需求编写和修改代码')
-        lines.push('- 后台有一个 Brain（代码审查系统）会自动 review 你的代码改动')
+        lines.push('- 后台有一个 Brain（监督系统）会要求你对自己的改动进行 review，收到 review 请求时请认真检查')
         lines.push('- 当你收到 `[发送者: Brain 代码审查]` 的消息时，说明 Brain 发现了问题，请认真对待并修复')
         lines.push('')
     } else {
