@@ -261,6 +261,12 @@ export class AutoBrainService {
                 this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
             }
 
+            // wasThinking 信号在 CLI 收到 result 时立即发出，但此时 messageQueue 中
+            // 可能还有未发送到服务器的消息（通过 setTimeout(0) 异步处理）。
+            // 等待 3 秒确保所有消息已同步到数据库，避免 syncRounds 读取到不完整的对话。
+            console.log('[BrainSync] Waiting 3s for messages to sync to DB before syncRounds...')
+            await new Promise(resolve => setTimeout(resolve, 3000))
+
             await this.syncRounds(brainSession)
         } catch (err) {
             console.error('[BrainSync] Failed to handle main session complete:', err)
