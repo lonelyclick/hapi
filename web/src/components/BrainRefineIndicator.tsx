@@ -94,7 +94,7 @@ export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionI
                     <svg className="h-3.5 w-3.5 text-emerald-600" viewBox="0 0 16 16" fill="currentColor">
                         <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25z" />
                     </svg>
-                    <span className="text-xs text-emerald-600 font-medium">Brain: 没有问题</span>
+                    <span className="text-xs text-emerald-600 font-medium">Brain 审查通过</span>
                 </div>
             </div>
         )
