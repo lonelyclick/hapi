@@ -84,7 +84,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
             // 发通知给 Brain session
             try {
                 await engine.sendMessage(activeBrain.brainSessionId, {
-                    text: '用户消息转发：用户发送了新消息。',
+                    text: '用户消息转发：用户发送了新消息。请执行：1) 调用 brain_user_intent 获取用户原始消息 2) 分析意图，用用户口吻重写 3) 调用 brain_send_message(type: info) 发给主 session。',
                     sentFrom: 'webapp'
                 })
                 console.log(`[Messages] Brain intercept: notification sent to brain session ${activeBrain.brainSessionId}`)

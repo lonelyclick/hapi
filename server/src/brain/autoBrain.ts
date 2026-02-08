@@ -559,7 +559,7 @@ export class AutoBrainService {
         // 只发轮次标识，不发完整内容（节省 token）
         // Brain Claude 收到后调用 brain_summarize MCP tool 自行获取对话内容
         const roundNumbers = summaries.map(s => s.round).join(', ')
-        const reviewPrompt = `对话汇总同步：第 ${roundNumbers} 轮对话已完成。`
+        const reviewPrompt = `对话汇总同步：第 ${roundNumbers} 轮对话已完成。请执行：1) 调用 brain_summarize 获取对话内容 2) 用 Read/Grep/Glob 审查代码改动 3) 判断是否需要推进主 session（完成了→跑测试，测试通过→提交，AI 在问问题→替用户决策） 4) 必须调用 brain_send_message 发送结果：有问题用 type=review，需要推进用 type=info，没问题也不需要推进用 type=no_issues。`
 
         // 创建执行记录（status=running）
         await this.brainStore.createBrainExecution({
