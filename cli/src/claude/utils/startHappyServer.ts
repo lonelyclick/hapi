@@ -110,7 +110,12 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                     }
                 }
                 const targetSessionId = mainSessionId
-                const messages = await api.getSessionMessages(targetSessionId, { limit: 50 })
+                // 先获取 session 的最大 seq，然后取最新 50 条消息（而不是最早的 50 条）
+                const sessionInfo = await api.getSession(targetSessionId)
+                const latestSeq = sessionInfo.seq ?? 0
+                const afterSeq = Math.max(0, latestSeq - 50)
+                logger.debug(`[hapiMCP] brain_summarize: session seq=${latestSeq}, fetching afterSeq=${afterSeq}`)
+                const messages = await api.getSessionMessages(targetSessionId, { afterSeq, limit: 50 })
                 logger.debug(`[hapiMCP] brain_summarize: fetched ${messages.length} messages for session ${targetSessionId}`)
 
                 // 打印每条消息的 role 和 seq，帮助排查

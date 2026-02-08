@@ -20,6 +20,7 @@ import { initialMachineMetadata } from '@/daemon/run';
 import { startHappyServer } from '@/claude/utils/startHappyServer';
 import { startHookServer } from '@/claude/utils/startHookServer';
 import { generateHookSettingsFile, cleanupHookSettingsFile, updateHookSettingsFastMode } from '@/claude/utils/generateHookSettings';
+import { ensureClaudeSessionSymlink } from '@/claude/utils/sessionSymlink';
 import { registerKillSessionHandler } from './registerKillSessionHandler';
 import { runtimePath } from '../projectPath';
 import { resolve } from 'node:path';
@@ -493,39 +494,11 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     // Claude Code's claudeCheckSession will fail if it can't find the file under the new CLAUDE_CONFIG_DIR.
     // We symlink the old session file into the new account's project dir so --resume works across accounts.
     if (resumeSessionId && activeAccount) {
-        const { existsSync, symlinkSync, mkdirSync, readdirSync, lstatSync, unlinkSync } = await import('node:fs');
-        const { join, dirname } = await import('node:path');
-        // Build project path under the NEW account's config dir (don't use getProjectPath which reads process.env)
-        const projectId = resolve(workingDirectory).replace(/[^a-zA-Z0-9]/g, '-');
-        const newProjectDir = join(activeAccount.configDir, 'projects', projectId);
-        const targetFile = join(newProjectDir, `${resumeSessionId}.jsonl`);
-        // Check if target exists as a valid file (existsSync follows symlinks)
-        // Also handle broken symlinks: lstatSync succeeds but existsSync returns false
-        let needsSymlink = !existsSync(targetFile);
-        if (needsSymlink) {
-            try { lstatSync(targetFile); unlinkSync(targetFile); } catch {}  // Remove broken symlink if present
-        }
-        if (needsSymlink) {
-            // Search all account dirs for the session file
-            const accountsDir = dirname(activeAccount.configDir);
-            try {
-                const accounts = readdirSync(accountsDir, { withFileTypes: true });
-                for (const entry of accounts) {
-                    if (!entry.isDirectory()) continue;
-                    const candidateDir = join(accountsDir, entry.name);
-                    if (candidateDir === activeAccount.configDir) continue;
-                    const sourceFile = join(candidateDir, 'projects', projectId, `${resumeSessionId}.jsonl`);
-                    if (existsSync(sourceFile)) {
-                        mkdirSync(newProjectDir, { recursive: true });
-                        symlinkSync(sourceFile, targetFile);
-                        logger.debug(`[refresh] Symlinked session file: ${sourceFile} -> ${targetFile}`);
-                        break;
-                    }
-                }
-            } catch (err) {
-                logger.debug(`[refresh] Failed to search for session file across accounts:`, err);
-            }
-        }
+        ensureClaudeSessionSymlink({
+            sessionId: resumeSessionId,
+            workingDirectory,
+            newAccountConfigDir: activeAccount.configDir,
+        });
     }
 
     // Create claude loop
