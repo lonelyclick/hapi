@@ -72,10 +72,10 @@ export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionI
 
     if (state.brainInitializing) {
         return (
-            <div className="flex justify-center py-3">
-                <div className="inline-flex items-center gap-2 rounded-full bg-[var(--app-bg-secondary,rgba(128,128,128,0.08))] px-4 py-1.5">
-                    <Spinner size="sm" label="Brain initializing" />
-                    <span className="text-xs text-[var(--app-fg)] opacity-70">Brain 初始化中</span>
+            <div className="flex justify-center py-4">
+                <div className="inline-flex items-center gap-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-2 shadow-sm">
+                    <Spinner size="sm" label="Brain initializing" className="text-violet-400" />
+                    <span className="text-[11px] tracking-wide text-[var(--app-hint)]">Brain 初始化中</span>
                 </div>
             </div>
         )
@@ -89,12 +89,13 @@ export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionI
 
     if (state.noMessage) {
         return (
-            <div className="flex justify-center py-3">
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/8 px-4 py-1.5">
-                    <svg className="h-3.5 w-3.5 text-emerald-600" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25z" />
+            <div className="flex justify-center py-4">
+                <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2">
+                    <svg className="h-3.5 w-3.5 text-emerald-500/80" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <circle cx="8" cy="8" r="6.25" />
+                        <path d="M5.5 8.25l1.75 1.75 3.25-3.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    <span className="text-xs text-emerald-600 font-medium">Brain 审查通过</span>
+                    <span className="text-[11px] tracking-wide text-emerald-600/80">审查通过</span>
                 </div>
             </div>
         )
@@ -194,61 +195,66 @@ function BrainProgressSteps({ sessionId, api }: { sessionId: string; api?: ApiCl
     )
 
     return (
-        <div className="flex flex-col items-center py-3 gap-2">
-            <div className="inline-flex items-center gap-2.5 rounded-full bg-[var(--app-bg-secondary,rgba(128,128,128,0.08))] pl-3 pr-4 py-1.5">
-                <Spinner size="sm" label="Brain processing" className="text-indigo-500" />
-                <div className="flex items-center gap-1">
+        <div className="flex flex-col items-center py-4 gap-2.5">
+            <div className="inline-flex items-center gap-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-2 shadow-sm">
+                {/* Dot stepper */}
+                <div className="flex items-center gap-0">
                     {steps.map((s, i) => (
-                        <span key={s.key} className="flex items-center gap-1">
-                            <span className={`text-xs transition-colors ${
-                                i < currentIndex ? 'text-emerald-600' :
-                                i === currentIndex ? 'text-[var(--app-fg)] font-medium' :
-                                'text-[var(--app-hint)]'
-                            }`}>
-                                {i < currentIndex && (
-                                    <svg className="inline h-3 w-3 mr-0.5 -mt-px" viewBox="0 0 16 16" fill="currentColor">
-                                        <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z" />
-                                    </svg>
-                                )}
-                                {s.label}
-                            </span>
+                        <div key={s.key} className="flex items-center">
+                            {/* Step dot */}
+                            <div className="flex flex-col items-center gap-1">
+                                <div className="flex items-center gap-1.5">
+                                    {i < currentIndex ? (
+                                        <div className="h-2 w-2 rounded-full bg-emerald-500/70" />
+                                    ) : i === currentIndex ? (
+                                        <div className="relative h-2 w-2">
+                                            <div className="absolute inset-0 rounded-full bg-violet-400 animate-pulse" />
+                                            <div className="absolute inset-0 rounded-full bg-violet-400" />
+                                        </div>
+                                    ) : (
+                                        <div className="h-1.5 w-1.5 rounded-full bg-[var(--app-hint)] opacity-25" />
+                                    )}
+                                    <span className={`text-[11px] tracking-wide transition-colors ${
+                                        i < currentIndex ? 'text-emerald-600/70 ' :
+                                        i === currentIndex ? 'text-[var(--app-fg)] opacity-80' :
+                                        'text-[var(--app-hint)] opacity-50'
+                                    }`}>
+                                        {s.label}
+                                    </span>
+                                </div>
+                            </div>
+                            {/* Connector line */}
                             {i < steps.length - 1 && (
-                                <svg className="h-3 w-3 text-[var(--app-hint)] opacity-40" viewBox="0 0 16 16" fill="currentColor">
-                                    <path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06z" />
-                                </svg>
+                                <div className={`w-4 h-px mx-1.5 ${
+                                    i < currentIndex ? 'bg-emerald-500/30' : 'bg-[var(--app-hint)] opacity-15'
+                                }`} />
                             )}
-                        </span>
+                        </div>
                     ))}
                 </div>
                 {(step === 'reviewing' || step === 'refining') && displayEntries.length > 0 && (
                     <button
                         type="button"
                         onClick={() => setExpanded(!expanded)}
-                        className="text-[10px] text-[var(--app-hint)] hover:text-[var(--app-fg)] transition-colors ml-1"
+                        className="text-[10px] text-[var(--app-hint)] opacity-60 hover:opacity-100 transition-opacity ml-0.5"
                     >
                         {expanded ? '收起' : `${displayEntries.length} 步`}
                     </button>
                 )}
             </div>
             {expanded && displayEntries.length > 0 && (
-                <div className="w-full max-w-md space-y-1 px-4">
+                <div className="w-full max-w-sm space-y-0.5 px-6">
                     {displayEntries.map((entry) => (
-                        <div key={entry.id} className="text-[11px] text-[var(--app-hint)] flex items-center gap-1.5 justify-center">
-                            {entry.type === 'tool-use' ? (
-                                <>
-                                    <svg className="shrink-0 h-3 w-3 text-indigo-500" viewBox="0 0 16 16" fill="currentColor">
-                                        <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" />
-                                    </svg>
-                                    <span className="truncate">{entry.toolName || entry.content}</span>
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="shrink-0 h-3 w-3 text-emerald-500" viewBox="0 0 16 16" fill="currentColor">
-                                        <path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25v-7.5z" />
-                                    </svg>
-                                    <span className="truncate">{entry.content.slice(0, 80)}{entry.content.length > 80 ? '...' : ''}</span>
-                                </>
-                            )}
+                        <div key={entry.id} className="flex items-center gap-2 justify-center py-0.5">
+                            <div className={`h-1 w-1 rounded-full shrink-0 ${
+                                entry.type === 'tool-use' ? 'bg-violet-400/60' : 'bg-emerald-400/60'
+                            }`} />
+                            <span className="text-[10px] text-[var(--app-hint)] opacity-60 truncate">
+                                {entry.type === 'tool-use'
+                                    ? (entry.toolName || entry.content)
+                                    : `${entry.content.slice(0, 60)}${entry.content.length > 60 ? '...' : ''}`
+                                }
+                            </span>
                         </div>
                     ))}
                 </div>
