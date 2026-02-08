@@ -159,7 +159,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             const role = c.get('role')  // Role from Keycloak token
             const userName = c.get('name')
             // Wait for session to be online, then set createdBy and send init prompt
-            (async () => {
+            void (async () => {
                 console.log(`[machines/spawn] Waiting for session ${result.sessionId} to come online...`)
                 const isOnline = await waitForSessionOnline(engine, result.sessionId, 60_000)
                 if (!isOnline) {
