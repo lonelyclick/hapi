@@ -657,6 +657,7 @@ export class SyncEngine {
         permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
         modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
         modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
+        fastMode?: boolean
     }): Promise<void> {
         if (this.deletingSessions.has(payload.sid)) {
             return
@@ -750,7 +751,8 @@ export class SyncEngine {
                         wasThinking: false,
                         permissionMode: session.permissionMode,
                         modelMode: session.modelMode,
-                        modelReasoningEffort: session.modelReasoningEffort
+                        modelReasoningEffort: session.modelReasoningEffort,
+                        fastMode: session.fastMode
                     }
                 })
             }
@@ -781,7 +783,8 @@ export class SyncEngine {
                     wasThinking: true,
                     permissionMode: session.permissionMode,
                     modelMode: session.modelMode,
-                    modelReasoningEffort: session.modelReasoningEffort
+                    modelReasoningEffort: session.modelReasoningEffort,
+                    fastMode: session.fastMode
                 },
                 notifyRecipientClientIds: recipientClientIds
             })
@@ -802,7 +805,8 @@ export class SyncEngine {
                     wasThinking: true,
                     permissionMode: session.permissionMode,
                     modelMode: session.modelMode,
-                    modelReasoningEffort: session.modelReasoningEffort
+                    modelReasoningEffort: session.modelReasoningEffort,
+                    fastMode: session.fastMode
                 },
                 notifyRecipientClientIds: []  // 空数组，防止广播
             })
@@ -1025,7 +1029,8 @@ export class SyncEngine {
             todos,
             permissionMode: existing?.permissionMode,
             modelMode: existing?.modelMode,
-            modelReasoningEffort: existing?.modelReasoningEffort
+            modelReasoningEffort: existing?.modelReasoningEffort,
+            fastMode: existing?.fastMode
         }
 
         this.sessions.set(sessionId, session)

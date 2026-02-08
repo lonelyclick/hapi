@@ -356,7 +356,6 @@ export function SessionChat(props: {
                     refreshAccountDisabled={isPending}
                     modelMode={resolvedModelMode}
                     modelReasoningEffort={resolvedReasoningEffort}
-                    fastMode={props.session.fastMode}
                 />
 
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

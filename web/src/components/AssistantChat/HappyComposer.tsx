@@ -1315,6 +1315,29 @@ export function HappyComposer(props: {
             return (
                 <div className="absolute bottom-[100%] mb-2 w-full">
                     <FloatingOverlay maxHeight={320}>
+                        {/* Fast Mode Toggle (Claude only) */}
+                        {isClaude ? (
+                            <>
+                                <div className="py-2">
+                                    <div className="px-3 pb-1 text-xs font-semibold text-[var(--app-hint)]">
+                                        Fast Mode
+                                    </div>
+                                    <button
+                                        type="button"
+                                        disabled={controlsDisabled}
+                                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors ${controlsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[var(--app-secondary-bg)]'}`}
+                                        onClick={handleFastModeToggle}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                    >
+                                        <span>Higher throughput (higher cost)</span>
+                                        <div className={`relative h-5 w-9 rounded-full transition-colors ${fastMode ? 'bg-amber-500' : 'bg-gray-300'}`}>
+                                            <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${fastMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                        </div>
+                                    </button>
+                                </div>
+                                <div className="mx-3 h-px bg-[var(--app-divider)]" />
+                            </>
+                        ) : null}
                         {/* Auto Optimize Toggle */}
                         <div className="py-2">
                             <div className="px-3 pb-1 text-xs font-semibold text-[var(--app-hint)]">
