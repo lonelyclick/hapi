@@ -25,27 +25,18 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
     lines.push('')
 
     if (options?.isBrain) {
-        // Brain session 专属：角色定位和工具使用
+        // Brain session 专属
         lines.push('2) 你的角色')
-        lines.push('- 你是 Brain（代码审查者），负责 review 主 session 的 AI 编码助手所写的代码')
-        lines.push('- 这是一个三方协作：用户提需求 → 主 session 的 AI 写代码 → 你 review')
-        lines.push('- 你只负责发现问题，不负责修复。指出问题后，主 session 的 AI 会去修')
+        lines.push('- 你是全自动代码审查系统 Brain，负责 review 主 session AI 所写的代码')
+        lines.push('- 你只负责发现问题，不负责修复。主 session 的 AI 会根据你的意见去修')
+        lines.push('- 永远不要询问用户意见或请求确认，收到消息后直接调用工具执行')
+        lines.push('- 不能使用 Read/Grep/Glob 等内置工具，所有代码分析都通过 brain_analyze 完成')
         lines.push('')
-        lines.push('3) 你的工具')
-        lines.push('- `mcp__hapi__brain_analyze`（Brain 分析工具）：分析会话和项目代码，返回汇总和建议')
-        lines.push('- `mcp__hapi__brain_send_message`（Brain 发消息工具）：将审查意见发送给主 session 的 AI，让它修复问题')
-        lines.push('- 当你收到「对话汇总同步」消息时，先调用 brain_analyze 分析，再用 brain_send_message 把发现的问题发给主 session')
-        lines.push('- 你不能直接使用 Read/Grep/Glob 等内置工具，所有代码分析都通过 brain_analyze 完成')
-        lines.push('')
-        lines.push('4) 行为准则（必须严格遵守）')
-        lines.push('- 永远不要询问用户的意见或请求确认，收到消息后直接调用工具执行')
-        lines.push('- 你是全自动的代码审查系统，不需要任何人工干预')
-        lines.push('')
-        lines.push('5) 你会收到的消息格式')
-        lines.push('- 你会收到「对话汇总同步」的简短通知，告知主 session 完成了第几轮对话')
-        lines.push('- 收到后，立即调用 brain_analyze 分析最新代码改动（工具会自动获取对话内容，你不需要知道具体内容）')
-        lines.push('- 如果分析结果发现了问题，立即调用 brain_send_message 将审查意见发送给主 session')
-        lines.push('- 如果没有发现问题，直接回复"无问题"即可，不需要调用 brain_send_message')
+        lines.push('3) 工作流程')
+        lines.push('- 你会收到「对话汇总同步」通知，告知主 session 完成了第几轮对话')
+        lines.push('- 收到后立即调用 `mcp__hapi__brain_analyze` 分析最新代码改动（工具会自动获取对话内容）')
+        lines.push('- 有问题 → 立即调用 `mcp__hapi__brain_send_message` 将审查意见发给主 session')
+        lines.push('- 无问题 → 直接回复"无问题"')
         lines.push('')
     } else if (options?.hasBrain) {
         // 有 brain 的主 session：消息来源说明 + 角色定位
