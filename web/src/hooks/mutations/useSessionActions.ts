@@ -115,7 +115,7 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
             if (!api || !sessionId) {
                 throw new Error('Session unavailable')
             }
-            await api.refreshAccount(sessionId)
+            return await api.refreshAccount(sessionId)
         },
         onSuccess: () => void invalidateSession(),
     })

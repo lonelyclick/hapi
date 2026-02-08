@@ -3,7 +3,7 @@ import { Session } from "./session";
 import { MessageBuffer } from "@/ui/ink/messageBuffer";
 import { RemoteModeDisplay } from "@/ui/ink/RemoteModeDisplay";
 import React from "react";
-import { claudeRemote, ThinkingTimeoutError } from "./claudeRemote";
+import { claudeRemote, ThinkingTimeoutError, HitLimitError } from "./claudeRemote";
 import { PermissionHandler } from "./utils/permissionHandler";
 import { Future } from "@/utils/future";
 import { SDKAssistantMessage, SDKMessage, SDKSystemMessage, SDKUserMessage } from "./sdk";
@@ -337,6 +337,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
             mode: EnhancedMode;
         } | null = null;
         let accountRotationCount = 0;
+        let lastKnownMode: EnhancedMode | null = null; // Track last mode for auto-continue after rotation
 
         // Track session ID to detect when it actually changes
         // This prevents context loss when mode changes (permission mode, model, etc.)
@@ -400,6 +401,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             }
                             modeHash = msg.hash;
                             mode = msg.mode;
+                            lastKnownMode = msg.mode;
                             permissionHandler.handleModeChange(mode.permissionMode);
                             return {
                                 message: appendTitleInstructionIfNeeded(msg.message),
@@ -456,6 +458,86 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                         message: 'Response timed out. Retrying...'
                     });
                     continue;
+                }
+
+                // Handle hit limit - auto-rotate account and continue
+                if (!exitReason && e instanceof HitLimitError) {
+                    if (accountRotationCount < MAX_ACCOUNT_ROTATIONS) {
+                        logger.debug(`[remote]: Hit limit detected: ${e.resultText}`);
+                        session.client.sendSessionEvent({
+                            type: 'message',
+                            message: `${e.resultText} — Switching account...`
+                        });
+
+                        try {
+                            const rotationResult = await rotateAccount({
+                                api: session.api,
+                                currentConfigDir: session.claudeEnvVars?.CLAUDE_CONFIG_DIR,
+                                claudeSessionId: session.sessionId,
+                                workingDirectory: session.path,
+                            });
+
+                            if (rotationResult.success && rotationResult.newAccount) {
+                                // Update CLAUDE_CONFIG_DIR
+                                process.env.CLAUDE_CONFIG_DIR = rotationResult.newAccount.configDir;
+                                if (session.claudeEnvVars) {
+                                    session.claudeEnvVars.CLAUDE_CONFIG_DIR = rotationResult.newAccount.configDir;
+                                } else {
+                                    session.claudeEnvVars = { CLAUDE_CONFIG_DIR: rotationResult.newAccount.configDir };
+                                }
+
+                                // Set --resume so the new process picks up conversation history
+                                if (session.sessionId) {
+                                    session.consumeOneTimeFlags();
+                                    session.claudeArgs = [
+                                        ...(session.claudeArgs || []),
+                                        '--resume', session.sessionId
+                                    ];
+                                }
+
+                                // Update session metadata
+                                session.client.updateMetadata((metadata) => ({
+                                    ...metadata,
+                                    claudeAccountId: rotationResult.newAccount!.id,
+                                    claudeAccountName: rotationResult.newAccount!.name,
+                                }));
+
+                                session.client.sendSessionEvent({
+                                    type: 'message',
+                                    message: `Switched to ${rotationResult.newAccount.name}. Continuing...`
+                                });
+
+                                // Inject a "continue" message so Claude resumes work automatically
+                                if (lastKnownMode) {
+                                    session.queue.pushImmediate(
+                                        'Continue from where you left off. You were interrupted by a rate limit on the previous account.',
+                                        lastKnownMode
+                                    );
+                                }
+
+                                accountRotationCount++;
+                                logger.debug(`[remote]: Hit limit rotation to ${rotationResult.newAccount.name} (${accountRotationCount}/${MAX_ACCOUNT_ROTATIONS})`);
+                                continue;
+                            } else {
+                                session.client.sendSessionEvent({
+                                    type: 'message',
+                                    message: `Could not switch account: ${rotationResult.reason}. ${e.resultText}`
+                                });
+                            }
+                        } catch (rotationError) {
+                            logger.debug('[remote]: Hit limit rotation failed:', rotationError);
+                            session.client.sendSessionEvent({
+                                type: 'message',
+                                message: `Account switch failed. ${e.resultText}`
+                            });
+                        }
+                    } else {
+                        session.client.sendSessionEvent({
+                            type: 'message',
+                            message: `All accounts exhausted. ${e.resultText}`
+                        });
+                    }
+                    // Fall through to normal exit if rotation fails
                 }
 
                 // Handle failed --resume (session file not found / conversation not found)

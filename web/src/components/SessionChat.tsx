@@ -240,7 +240,10 @@ export function SessionChat(props: {
 
     const handleRefreshAccount = useCallback(async () => {
         try {
-            await refreshAccount()
+            const result = await refreshAccount()
+            if (result?.usedResume && result.resumeVerified === false) {
+                console.warn('[session] refresh-account: resume failed, fallback context sent', result)
+            }
             haptic.notification('success')
         } catch (error) {
             haptic.notification('error')

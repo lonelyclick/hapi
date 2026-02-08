@@ -161,8 +161,76 @@ const createSessionSchema = z.object({
 })
 
 const RESUME_TIMEOUT_MS = 60_000
-const RESUME_CONTEXT_MAX_LINES = 20
+const RESUME_CONTEXT_MAX_LINES = 60
 const RESUME_CONTEXT_MAX_CHARS = 16_000
+const RESUME_VERIFY_TIMEOUT_MS = 5_000
+
+function extractBackendSessionId(session: Session | null | undefined, flavor: 'claude' | 'codex'): string | null {
+    if (!session?.metadata) {
+        return null
+    }
+    const raw = flavor === 'claude'
+        ? session.metadata.claudeSessionId
+        : session.metadata.codexSessionId
+    if (typeof raw !== 'string') {
+        return null
+    }
+    const trimmed = raw.trim()
+    return trimmed.length > 0 ? trimmed : null
+}
+
+async function waitForBackendSessionIdMismatch(
+    engine: SyncEngine,
+    sessionId: string,
+    flavor: 'claude' | 'codex',
+    expectedSessionId: string,
+    timeoutMs: number
+): Promise<string | null> {
+    const checkMismatch = (): string | null => {
+        const session = engine.getSession(sessionId)
+        if (!session) {
+            return null
+        }
+        const actual = extractBackendSessionId(session, flavor)
+        if (!actual || actual === expectedSessionId) {
+            return null
+        }
+        return actual
+    }
+
+    const immediate = checkMismatch()
+    if (immediate) {
+        return immediate
+    }
+
+    return await new Promise((resolve) => {
+        let resolved = false
+        let unsubscribe = () => {}
+
+        const finalize = (result: string | null) => {
+            if (resolved) return
+            resolved = true
+            clearTimeout(timer)
+            unsubscribe()
+            resolve(result)
+        }
+
+        const timer = setTimeout(() => finalize(null), timeoutMs)
+
+        unsubscribe = engine.subscribe((event) => {
+            if (event.sessionId !== sessionId) {
+                return
+            }
+            if (event.type !== 'session-added' && event.type !== 'session-updated') {
+                return
+            }
+            const mismatch = checkMismatch()
+            if (mismatch) {
+                finalize(mismatch)
+            }
+        })
+    })
+}
 
 // Note: Role is now extracted from Keycloak token in auth middleware
 // Use c.get('role') directly instead of the old resolveUserRole function
@@ -1017,15 +1085,39 @@ export function createSessionsRoutes(
             return c.json({ error: 'Session failed to come online after refresh' }, 409)
         }
 
+        const hasSocket = await engine.waitForSocketInRoom(sessionId, 5000)
+        if (!hasSocket) {
+            console.warn(`[refresh-account] No socket joined room for session ${sessionId} within 5s, sending anyway`)
+        }
+
         // Set createdBy after session is confirmed online
         const email = c.get('email')
         if (email) {
             void store.setSessionCreatedBy(sessionId, email, namespace)
         }
 
-        // Only send init prompt and context if we couldn't use Claude --resume
-        // When --resume is used, Claude Code already has the full conversation history
-        if (!resumeSessionId) {
+        // Only send init prompt and context if we couldn't use Claude --resume,
+        // OR when we attempted --resume but Claude started a new backend session anyway.
+        // (This happens when the session file can't be found under the new CLAUDE_CONFIG_DIR.)
+        let resumeVerified = Boolean(resumeSessionId)
+        let resumeMismatchSessionId: string | null = null
+        if (resumeSessionId) {
+            resumeMismatchSessionId = await waitForBackendSessionIdMismatch(
+                engine,
+                sessionId,
+                'claude',
+                resumeSessionId,
+                RESUME_VERIFY_TIMEOUT_MS
+            )
+            if (resumeMismatchSessionId) {
+                resumeVerified = false
+                console.warn(
+                    `[refresh-account] resume not applied: expected=${resumeSessionId}, actual=${resumeMismatchSessionId}; sending ResumeContext fallback`
+                )
+            }
+        }
+
+        if (!resumeSessionId || !resumeVerified) {
             const role = c.get('role')
             const userName = c.get('name')
             const hasBrainSession = brainStore ? !!(await brainStore.getActiveBrainSession(sessionId).catch(() => null)) : false
@@ -1041,7 +1133,9 @@ export function createSessionsRoutes(
         return c.json({
             type: 'success',
             sessionId,
-            usedResume: Boolean(resumeSessionId)
+            usedResume: Boolean(resumeSessionId),
+            resumeVerified,
+            resumeMismatchSessionId
         })
     })
 

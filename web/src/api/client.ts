@@ -484,8 +484,8 @@ export class ApiClient {
         })
     }
 
-    async refreshAccount(sessionId: string): Promise<{ type: 'success'; sessionId: string }> {
-        return await this.request<{ type: 'success'; sessionId: string }>(`/api/sessions/${encodeURIComponent(sessionId)}/refresh-account`, {
+    async refreshAccount(sessionId: string): Promise<{ type: 'success'; sessionId: string; usedResume?: boolean; resumeVerified?: boolean; resumeMismatchSessionId?: string | null }> {
+        return await this.request<{ type: 'success'; sessionId: string; usedResume?: boolean; resumeVerified?: boolean; resumeMismatchSessionId?: string | null }>(`/api/sessions/${encodeURIComponent(sessionId)}/refresh-account`, {
             method: 'POST',
             body: JSON.stringify({})
         })

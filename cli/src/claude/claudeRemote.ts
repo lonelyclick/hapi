@@ -21,6 +21,13 @@ export class ThinkingTimeoutError extends Error {
     }
 }
 
+export class HitLimitError extends Error {
+    constructor(public readonly resultText: string) {
+        super(resultText);
+        this.name = 'HitLimitError';
+    }
+}
+
 export async function claudeRemote(opts: {
 
     // Fixed parameters
@@ -243,6 +250,12 @@ export async function claudeRemote(opts: {
                     const errors = (resultMsg as any).errors;
                     const errorText = Array.isArray(errors) ? errors.join('; ') : 'Session failed to start';
                     throw new Error(errorText);
+                }
+
+                // Detect hit limit — throw so launcher can auto-rotate account
+                const resultText = typeof resultMsg.result === 'string' ? resultMsg.result : '';
+                if (resultMsg.is_error && /hit your limit|hit.your.limit/i.test(resultText)) {
+                    throw new HitLimitError(resultText);
                 }
 
                 // Send completion messages
