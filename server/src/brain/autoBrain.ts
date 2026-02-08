@@ -184,6 +184,7 @@ export class AutoBrainService {
     private sseManager: SSEManager | null = null
     private syncingBrainIds: Set<string> = new Set()
     private brainToMainMap: Map<string, string> = new Map()
+    private unsubscribe: (() => void) | null = null
     constructor(engine: SyncEngine, brainStore: BrainStore) {
         this.engine = engine
         this.brainStore = brainStore
@@ -221,13 +222,36 @@ export class AutoBrainService {
     }
 
     start(): void {
-        this.engine.subscribe(this.handleEvent.bind(this))
+        this.unsubscribe = this.engine.subscribe(this.handleEvent.bind(this))
         console.log('[BrainSync] Service started - auto sync enabled')
     }
 
+    stop(): void {
+        if (this.unsubscribe) {
+            this.unsubscribe()
+            this.unsubscribe = null
+        }
+        this.brainToMainMap.clear()
+        this.syncingBrainIds.clear()
+        console.log('[BrainSync] Service stopped')
+    }
+
     private async handleEvent(event: SyncEvent): Promise<void> {
-        if (event.type !== 'session-updated') return
         if (!event.sessionId) return
+
+        // 清理已删除 session 的映射，防止内存泄漏
+        if (event.type === 'session-removed') {
+            const sessionId = event.sessionId
+            this.brainToMainMap.delete(sessionId)
+            for (const [brainId, mainId] of this.brainToMainMap.entries()) {
+                if (mainId === sessionId) {
+                    this.brainToMainMap.delete(brainId)
+                }
+            }
+            return
+        }
+
+        if (event.type !== 'session-updated') return
 
         const data = event.data as { wasThinking?: boolean } | undefined
         if (!data?.wasThinking) return
@@ -282,6 +306,13 @@ export class AutoBrainService {
                 return
             }
 
+            // 只处理有 running execution 的回复（即 review 回复），忽略 init prompt 等其他回复
+            const latestExecution = await this.brainStore.getLatestExecutionWithProgress(brainSession.id)
+            if (!latestExecution || latestExecution.status !== 'running') {
+                console.log('[BrainSync] No running execution found, skipping (likely init prompt response)')
+                return
+            }
+
             console.log('[BrainSync] Waiting for message to sync to DB...')
             await new Promise(resolve => setTimeout(resolve, 2000))
 
@@ -321,11 +352,8 @@ export class AutoBrainService {
                 } as unknown as SyncEvent)
             }
 
-            // 完成最新的 execution 记录（标记 reviewed rounds 为已 brain）
-            const latestExecution = await this.brainStore.getLatestExecutionWithProgress(brainSession.id)
-            if (latestExecution && latestExecution.status === 'running') {
-                await this.brainStore.completeBrainExecution(latestExecution.id, brainText.slice(0, 500))
-            }
+            // 完成 execution 记录（标记 reviewed rounds 为已 brain）
+            await this.brainStore.completeBrainExecution(latestExecution.id, brainText.slice(0, 500))
         } catch (err) {
             console.error('[BrainSync] Failed to handle brain AI response:', err)
         }
@@ -383,7 +411,11 @@ export class AutoBrainService {
         try {
             this.syncingBrainIds.add(brainId)
 
-            const glmApiKey = process.env.LITELLM_API_KEY || 'sk-litellm-41e2a2d4d101255ea6e76fd59f96548a'
+            const glmApiKey = process.env.LITELLM_API_KEY
+            if (!glmApiKey) {
+                console.error('[BrainSync] LITELLM_API_KEY not set, cannot generate summaries')
+                return
+            }
 
             let continueSync = true
             while (continueSync) {
@@ -528,28 +560,23 @@ export class AutoBrainService {
                         messageLines.push('')
                         messageLines.push('读取 `.yoho-brain/MEMORY.md` 了解上下文，重要发现更新到 `.yoho-brain/`。')
 
-                        if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
+                        if (this.isSdkMode(brainSession)) {
+                            // SDK 模式（含常驻 brain session）：由 triggerSdkReview 统一发送 review prompt
+                            // 不单独发汇总消息，避免 brain 收到两条内容重叠的消息导致重复回复
+                            const reviewableSummaries = savedSummaries.filter(s => !brainReviewRoundNumbers.has(s.round))
+                            if (reviewableSummaries.length > 0) {
+                                console.log('[BrainSync] Using SDK mode for brain analysis, reviewable:', reviewableSummaries.length, 'of', savedSummaries.length)
+                                await this.triggerSdkReview(brainSession, reviewableSummaries, projectPath)
+                            } else {
+                                console.log('[BrainSync] All saved rounds are brain-review rounds, skipping SDK review')
+                            }
+                        } else if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
+                            // CLI 模式：发送汇总消息，Brain session 自行根据消息做分析
                             await this.engine.sendMessage(brainSession.brainSessionId, {
                                 text: messageLines.join('\n'),
                                 sentFrom: 'webapp'
                             })
                             console.log('[BrainSync] Sent', savedSummaries.length, 'round summaries to brain session', brainSession.brainSessionId)
-                        } else {
-                            console.warn('[BrainSync] Brain session id missing, skipping summary send')
-                        }
-
-                        if (this.isSdkMode(brainSession)) {
-                            // 常驻 brain session 模式：发消息给 brain session 进行代码审查
-                            // 排除 brain-review 开头的 round（防止 review 自己的审查结果）
-                            const reviewableSummaries = savedSummaries.filter(s => !brainReviewRoundNumbers.has(s.round))
-                            if (reviewableSummaries.length > 0) {
-                                console.log('[BrainSync] Using SDK mode for brain analysis (detached worker), reviewable:', reviewableSummaries.length, 'of', savedSummaries.length)
-                                await this.triggerSdkReview(brainSession, reviewableSummaries, projectPath)
-                            } else {
-                                console.log('[BrainSync] All saved rounds are brain-review rounds, skipping SDK review')
-                            }
-                        } else {
-                            // CLI 模式：此处不额外处理，Brain session 会自行根据消息做分析
                         }
                     } catch (sendErr) {
                         console.error('[BrainSync] Failed to send summaries to brain session:', sendErr)
@@ -609,160 +636,6 @@ export class AutoBrainService {
             })
         } finally {
             this.syncingBrainIds.delete(brainId)
-        }
-    }
-
-    private async saveSummary(brainSession: StoredBrainSession): Promise<number> {
-        const brainId = brainSession.id
-        const mainSessionId = brainSession.mainSessionId
-
-        try {
-            const messagesResult = await this.engine.getMessagesPage(brainSession.brainSessionId, { limit: 10, beforeSeq: null })
-
-            let summaries: Array<{ round: number; summary: string }> = []
-
-            console.log('[BrainSync] Messages count:', messagesResult.messages.length)
-            for (let i = messagesResult.messages.length - 1; i >= 0; i--) {
-                const m = messagesResult.messages[i]
-                const content = m.content as Record<string, unknown>
-                console.log('[BrainSync] Message', i, 'role:', content?.role)
-                if (content?.role !== 'agent') continue
-
-                let payload: Record<string, unknown> | null = null
-                const rawContent = content?.content
-                if (typeof rawContent === 'string') {
-                    try {
-                        payload = JSON.parse(rawContent)
-                    } catch {
-                        payload = null
-                    }
-                } else if (typeof rawContent === 'object' && rawContent) {
-                    payload = rawContent as Record<string, unknown>
-                }
-
-                if (!payload) continue
-
-                const data = payload.data as Record<string, unknown>
-                if (!data || data.type !== 'assistant') continue
-
-                const message = data.message as Record<string, unknown>
-                if (message?.content) {
-                    const contentArr = message.content as Array<{ type?: string; text?: string }>
-                    for (const item of contentArr) {
-                        if (item.type === 'text' && item.text) {
-                            console.log('[BrainSync] Found text content, length:', item.text.length, 'preview:', item.text.substring(0, 200))
-                            const jsonBlocks = [...item.text.matchAll(/```json\s*([\s\S]*?)\s*```/g)]
-                            const jsonMatch = jsonBlocks.length > 0 ? jsonBlocks[jsonBlocks.length - 1] : null
-                            if (jsonMatch) {
-                                let jsonContent = jsonMatch[1].trim()
-                                const lines = jsonContent.split('\n')
-                                const fixedLines = lines.map(line => {
-                                    const summaryMatch = line.match(/^(\s*"summary":\s*")(.*)("(?:,)?)\s*$/)
-                                    if (summaryMatch) {
-                                        let content = summaryMatch[2]
-                                        content = content.replace(/(?<!\\)"/g, '\\"')
-                                        return summaryMatch[1] + content + summaryMatch[3]
-                                    }
-                                    return line
-                                })
-                                jsonContent = fixedLines.join('\n')
-
-                                try {
-                                    const parsed = JSON.parse(jsonContent)
-                                    if (Array.isArray(parsed)) {
-                                        summaries = parsed.filter(p => p.round && p.summary)
-                                    } else if (parsed.round && parsed.summary) {
-                                        summaries = [parsed]
-                                    }
-                                    if (summaries.length > 0) break
-                                } catch {
-                                    // continue
-                                }
-                            }
-                            try {
-                                const parsed = JSON.parse(item.text)
-                                if (Array.isArray(parsed)) {
-                                    summaries = parsed.filter(p => p.round && p.summary)
-                                } else if (parsed.round && parsed.summary) {
-                                    summaries = [parsed]
-                                }
-                                if (summaries.length > 0) break
-                            } catch {
-                                // continue
-                            }
-                        }
-                    }
-                }
-                if (summaries.length > 0) break
-            }
-
-            console.log('[BrainSync] Parsed summaries:', summaries.length, summaries.map(s => s.round))
-            if (summaries.length === 0) {
-                console.log('[BrainSync] No summaries parsed from AI response')
-                return 0
-            }
-
-            const allMessages = await this.engine.getAllMessages(mainSessionId)
-            const allRounds = groupMessagesIntoRounds(allMessages)
-
-            const existingRounds = await this.brainStore.getBrainRounds(brainId)
-            const existingRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
-
-            const savedRounds: number[] = []
-            const savedSummaries: Array<{ round: number; summary: string }> = []
-            console.log('[BrainSync] Existing rounds:', [...existingRoundNumbers])
-            for (const summary of summaries) {
-                if (existingRoundNumbers.has(summary.round)) {
-                    console.log('[BrainSync] Round', summary.round, 'already exists, skipping')
-                    continue
-                }
-                const targetRound = allRounds.find(r => r.roundNumber === summary.round)
-                if (!targetRound) {
-                    console.log('[BrainSync] Round', summary.round, 'not found in main session')
-                    continue
-                }
-                try {
-                    await this.brainStore.createBrainRound({
-                        brainSessionId: brainId,
-                        roundNumber: summary.round,
-                        userInput: targetRound.userInput,
-                        aiSummary: summary.summary,
-                        originalMessageIds: targetRound.messageIds,
-                        startedAt: targetRound.startedAt,
-                        endedAt: targetRound.endedAt
-                    })
-                    savedRounds.push(summary.round)
-                    savedSummaries.push({ round: summary.round, summary: summary.summary })
-                    console.log('[BrainSync] Saved round', summary.round)
-                } catch (e) {
-                    console.error('[BrainSync] Failed to save round', summary.round, e)
-                }
-            }
-
-            const newExistingRounds = await this.brainStore.getBrainRounds(brainId)
-            const initPromptSkipped = allRounds.filter(r => r.userInput.trimStart().startsWith('#InitPrompt-')).length
-            const pendingCount = allRounds.length - newExistingRounds.length - initPromptSkipped
-
-            const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId)
-            const brainReviewRoundNums = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
-            const unbrainedCount = newExistingRounds.filter(r =>
-                !brainedRoundNumbers.has(r.roundNumber) && !brainReviewRoundNums.has(r.roundNumber)
-            ).length
-
-            this.broadcastSyncStatus(brainSession, {
-                status: pendingCount > 0 ? 'syncing' : 'complete',
-                totalRounds: allRounds.length,
-                summarizedRounds: newExistingRounds.length,
-                pendingRounds: pendingCount,
-                savedRounds,
-                savedSummaries,
-                unbrainedRounds: unbrainedCount
-            })
-
-            return savedRounds.length
-        } catch (err) {
-            console.error('[BrainSync] Failed to save summary:', err)
-            return 0
         }
     }
 
@@ -862,8 +735,8 @@ export class AutoBrainService {
 
         // 直接发消息给常驻 brain session（不再 spawn worker）
         try {
-            if (!brainDisplaySessionId) {
-                console.error('[BrainSync] No brain display session ID, cannot send review')
+            if (!brainDisplaySessionId || brainDisplaySessionId === 'sdk-mode') {
+                console.error('[BrainSync] No valid brain display session ID (got:', brainDisplaySessionId, '), cannot send review')
                 return
             }
 

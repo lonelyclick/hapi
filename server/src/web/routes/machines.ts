@@ -159,7 +159,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
             const role = c.get('role')  // Role from Keycloak token
             const userName = c.get('name')
             // Wait for session to be online, then set createdBy and send init prompt
-            void (async () => {
+            (async () => {
                 console.log(`[machines/spawn] Waiting for session ${result.sessionId} to come online...`)
                 const isOnline = await waitForSessionOnline(engine, result.sessionId, 60_000)
                 if (!isOnline) {
@@ -283,20 +283,25 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                                 } as unknown as import('../../sync/syncEngine.js').SyncEvent)
                             }
 
-                            // 触发初始 Brain 分析（延迟等主 session init prompt 回复完成）
+                            // 触发初始 Brain 分析（等待 brain session socket 就绪后再触发）
                             if (autoBrainService) {
-                                setTimeout(() => {
-                                    autoBrainService.triggerSync(result.sessionId).catch(err => {
-                                        console.error('[machines/spawn] Failed to trigger brain sync:', err)
-                                    })
-                                }, 3000)
+                                // 等待 brain session 的 socket 真正加入 room
+                                const brainSocketReady = await engine.waitForSocketInRoom(brainSessionId, 10000)
+                                if (!brainSocketReady) {
+                                    console.warn(`[machines/spawn] Brain session ${brainSessionId} socket not ready within 10s, triggering sync anyway`)
+                                }
+                                autoBrainService.triggerSync(result.sessionId).catch(err => {
+                                    console.error('[machines/spawn] Failed to trigger brain sync:', err)
+                                })
                             }
                         }
                     } catch (err) {
                         console.error(`[machines/spawn] Failed to create Brain session:`, err)
                     }
                 }
-            })()
+            })().catch((err: unknown) => {
+                console.error(`[machines/spawn] Post-spawn setup failed for session ${result.sessionId}:`, err)
+            })
         }
 
         return c.json(result)
