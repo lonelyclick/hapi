@@ -252,10 +252,13 @@ export async function claudeRemote(opts: {
                     throw new Error(errorText);
                 }
 
-                // Detect hit limit — throw so launcher can auto-rotate account
+                // Detect hit limit or auth errors — throw so launcher can auto-rotate account
                 const resultText = typeof resultMsg.result === 'string' ? resultMsg.result : '';
                 if (resultMsg.is_error && /hit your limit|hit.your.limit/i.test(resultText)) {
                     throw new HitLimitError(resultText);
+                }
+                if (resultMsg.is_error && /does not have access/i.test(resultText)) {
+                    throw new Error(resultText);
                 }
 
                 // Send completion messages

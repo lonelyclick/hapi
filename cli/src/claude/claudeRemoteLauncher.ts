@@ -461,13 +461,31 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                 }
                 console.error('[HAPI] Process error:', errorMessage);
 
-                // Handle thinking timeout - restart the process
+                // Handle thinking timeout - restart the process with auto-continue
                 if (!exitReason && e instanceof ThinkingTimeoutError) {
-                    logger.debug('[remote]: Thinking timeout - restarting Claude process');
+                    logger.debug('[remote]: Thinking timeout - restarting Claude process with auto-continue');
                     session.client.sendSessionEvent({
                         type: 'message',
                         message: 'Response timed out. Retrying...'
                     });
+
+                    // Set --resume so the new process picks up conversation history
+                    if (session.sessionId) {
+                        session.consumeOneTimeFlags();
+                        session.claudeArgs = [
+                            ...(session.claudeArgs || []),
+                            '--resume', session.sessionId
+                        ];
+                    }
+
+                    // Inject a continue message so the session doesn't block waiting for user input
+                    if (lastKnownMode) {
+                        session.queue.pushImmediate(
+                            'Continue from where you left off. Your previous response timed out.',
+                            lastKnownMode
+                        );
+                    }
+
                     continue;
                 }
 
