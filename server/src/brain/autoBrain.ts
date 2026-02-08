@@ -10,13 +10,7 @@ import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { SSEManager } from '../sse/sseManager'
 import type { BrainStore } from './store'
 import type { StoredBrainSession } from './types'
-import { generateSummariesWithGlm } from './glmSync'
 import { buildReviewPrompt } from './brainSdkService'
-
-// 同步配置
-const MAX_BATCH_CHARS = 50000  // 每批最大字符数
-const MAX_ROUNDS_PER_BATCH = 10  // 每批最大轮数
-const MIN_ROUNDS_PER_BATCH = 1   // 每批最小轮数
 
 /**
  * 从消息内容中提取用户文本
@@ -411,242 +405,76 @@ export class AutoBrainService {
         try {
             this.syncingBrainIds.add(brainId)
 
-            const glmApiKey = process.env.LITELLM_API_KEY
-            if (!glmApiKey) {
-                console.error('[BrainSync] LITELLM_API_KEY not set, cannot generate summaries')
+            this.keepBrainDisplaySessionAlive(brainSession)
+
+            const allMessages = await this.engine.getAllMessages(mainSessionId)
+            const allRounds = groupMessagesIntoRounds(allMessages)
+            console.log('[BrainSync] Got', allMessages.length, 'messages,', allRounds.length, 'rounds')
+
+            const existingRounds = await this.brainStore.getBrainRounds(brainId)
+            const existingRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
+
+            const brainReviewRoundNumbers = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
+            const initPromptRoundNumbers = new Set(allRounds.filter(r => r.userInput.trimStart().startsWith('#InitPrompt-')).map(r => r.roundNumber))
+
+            // 找出需要处理的新 round（跳过 initPrompt、已处理的、没有 AI 回应的）
+            const pendingRounds = allRounds.filter(r =>
+                !existingRoundNumbers.has(r.roundNumber) &&
+                r.aiMessages.length > 0 &&
+                !initPromptRoundNumbers.has(r.roundNumber)
+            )
+            console.log('[BrainSync] Pending rounds:', pendingRounds.length)
+
+            if (pendingRounds.length === 0) {
+                console.log('[BrainSync] No pending rounds, nothing to do')
                 return
             }
 
-            let syncingBroadcasted = false
-            let continueSync = true
-            while (continueSync) {
-                this.keepBrainDisplaySessionAlive(brainSession)
-                console.log('[BrainSync] Getting all messages for main session...')
+            // 广播 syncing 事件
+            this.broadcastBrainSyncing(brainId, mainSessionId)
 
-                const allMessages = await this.engine.getAllMessages(mainSessionId)
-                console.log('[BrainSync] Got', allMessages.length, 'messages')
-                const allRounds = groupMessagesIntoRounds(allMessages)
-                console.log('[BrainSync] Grouped into', allRounds.length, 'rounds')
+            // 直接保存 round（不经过 GLM，用 AI 原始回应文本）
+            const savedRounds: Array<{ round: number; userInput: string; aiText: string }> = []
+            for (const round of pendingRounds) {
+                // 跳过 brain-review 触发的 round（防止循环）
+                if (brainReviewRoundNumbers.has(round.roundNumber)) {
+                    console.log('[BrainSync] Skipping brain-review round', round.roundNumber)
+                    continue
+                }
 
-                const existingRounds = await this.brainStore.getBrainRounds(brainId)
-                const summarizedRoundNumbers = new Set(existingRounds.map(r => r.roundNumber))
-
-                // brain-review 开头的 round 也需要汇总，但不触发 SDK review
-                const brainReviewRoundNumbers = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
-                // InitPrompt 开头的 round（通常是 round 1）跳过汇总
-                const initPromptRoundNumbers = new Set(allRounds.filter(r => r.userInput.trimStart().startsWith('#InitPrompt-')).map(r => r.roundNumber))
-                const pendingRounds = allRounds.filter(r =>
-                    !summarizedRoundNumbers.has(r.roundNumber) &&
-                    r.aiMessages.length > 0 &&
-                    !initPromptRoundNumbers.has(r.roundNumber)
-                )
-                console.log('[BrainSync] Pending rounds:', pendingRounds.length, 'summarized:', summarizedRoundNumbers.size, 'brainReviewRounds:', brainReviewRoundNumbers.size, 'initPromptRounds:', initPromptRoundNumbers.size)
-
-                this.broadcastSyncStatus(brainSession, {
-                    status: 'checking',
-                    totalRounds: allRounds.length,
-                    summarizedRounds: existingRounds.length,
-                    pendingRounds: pendingRounds.length
-                })
-
-                if (pendingRounds.length === 0) {
-                    const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId)
-                    // 排除 brain-review 开头的 round（这些只需汇总，不需要 review，否则会形成无限循环）
-                    const unbrainedRounds = existingRounds.filter(r =>
-                        !brainedRoundNumbers.has(r.roundNumber) && !brainReviewRoundNumbers.has(r.roundNumber)
-                    )
-
-                    // 如果有已同步但未 brain 的 rounds，补触发 SDK review
-                    if (unbrainedRounds.length > 0 && this.isSdkMode(brainSession)) {
-                        // 有实际工作要做，广播 syncing 事件
-                        if (!syncingBroadcasted) {
-                            this.broadcastBrainSyncing(brainId, mainSessionId)
-                            syncingBroadcasted = true
-                        }
-                        const mainSessionObj = this.engine.getSession(mainSessionId)
-                        const projectPath = mainSessionObj?.metadata?.path
-                        if (projectPath) {
-                            console.log('[BrainSync] Found', unbrainedRounds.length, 'unbrained rounds (excluding brain-review rounds), triggering SDK review')
-                            const summaries = unbrainedRounds.map(r => ({ round: r.roundNumber, summary: r.aiSummary, userInput: r.userInput }))
-                            await this.triggerSdkReview(brainSession, summaries, projectPath)
-                        }
-                    }
-
-                    this.broadcastSyncStatus(brainSession, {
-                        status: 'complete',
-                        totalRounds: allRounds.length,
-                        summarizedRounds: existingRounds.length,
-                        pendingRounds: 0,
-                        unbrainedRounds: unbrainedRounds.length
+                const aiText = round.aiMessages.join('\n\n')
+                try {
+                    await this.brainStore.createBrainRound({
+                        brainSessionId: brainId,
+                        roundNumber: round.roundNumber,
+                        userInput: round.userInput,
+                        aiSummary: aiText,  // 直接存原始 AI 文本
+                        originalMessageIds: round.messageIds,
+                        startedAt: round.startedAt,
+                        endedAt: round.endedAt
                     })
-                    // 如果没有触发 SDK review（无实际工作），不需要广播 done（前端不知道 syncing）
-                    continueSync = false
-                    break
+                    savedRounds.push({ round: round.roundNumber, userInput: round.userInput, aiText })
+                    console.log('[BrainSync] Saved round', round.roundNumber)
+                } catch (e) {
+                    console.error('[BrainSync] Failed to save round', round.roundNumber, e)
                 }
+            }
 
-                // 有 pending rounds 需要汇总，广播 syncing 事件禁用前端输入
-                if (!syncingBroadcasted) {
-                    this.broadcastBrainSyncing(brainId, mainSessionId)
-                    syncingBroadcasted = true
+            // 将当前新增的 round 发给 brain session 做 review
+            if (savedRounds.length > 0 && this.isSdkMode(brainSession)) {
+                const mainSessionObj = this.engine.getSession(mainSessionId)
+                const projectPath = mainSessionObj?.metadata?.path
+                if (projectPath) {
+                    const summaries = savedRounds.map(r => ({ round: r.round, summary: r.aiText, userInput: r.userInput }))
+                    await this.triggerSdkReview(brainSession, summaries, projectPath)
                 }
+            }
 
-                const batchRounds: typeof pendingRounds = []
-                let currentBatchSize = 0
-
-                for (const round of pendingRounds) {
-                    const roundSize = round.userInput.length + round.aiMessages.join('').length + 200
-                    if (currentBatchSize + roundSize > MAX_BATCH_CHARS && batchRounds.length >= MIN_ROUNDS_PER_BATCH) {
-                        break
-                    }
-                    batchRounds.push(round)
-                    currentBatchSize += roundSize
-                    if (batchRounds.length >= MAX_ROUNDS_PER_BATCH) {
-                        break
-                    }
-                }
-
-                this.broadcastSyncStatus(brainSession, {
-                    status: 'syncing',
-                    totalRounds: allRounds.length,
-                    summarizedRounds: existingRounds.length,
-                    pendingRounds: pendingRounds.length,
-                    syncingRounds: batchRounds.map(r => r.roundNumber)
-                })
-
-                console.log('[BrainSync] Calling GLM API for', batchRounds.length, 'rounds')
-
-                const summaries = await generateSummariesWithGlm(glmApiKey, batchRounds)
-                console.log('[BrainSync] GLM returned', summaries.length, 'summaries')
-
-                const savedRounds: number[] = []
-                const savedSummaries: Array<{ round: number; summary: string; userInput: string }> = []
-                for (const summary of summaries) {
-                    if (summarizedRoundNumbers.has(summary.round)) {
-                        console.log('[BrainSync] Round', summary.round, 'already exists, skipping')
-                        continue
-                    }
-                    const targetRound = allRounds.find(r => r.roundNumber === summary.round)
-                    if (!targetRound) {
-                        console.log('[BrainSync] Round', summary.round, 'not found in main session')
-                        continue
-                    }
-                    try {
-                        await this.brainStore.createBrainRound({
-                            brainSessionId: brainId,
-                            roundNumber: summary.round,
-                            userInput: targetRound.userInput,
-                            aiSummary: summary.summary,
-                            originalMessageIds: targetRound.messageIds,
-                            startedAt: targetRound.startedAt,
-                            endedAt: targetRound.endedAt
-                        })
-                        savedRounds.push(summary.round)
-                        savedSummaries.push({ round: summary.round, summary: summary.summary, userInput: targetRound.userInput })
-                        summarizedRoundNumbers.add(summary.round)
-                        console.log('[BrainSync] Saved round', summary.round)
-                    } catch (e) {
-                        console.error('[BrainSync] Failed to save round', summary.round, e)
-                    }
-                }
-
-                // 将汇总内容发送到 Brain session（CLI 模式）或使用 SDK 处理（SDK 模式）
-                if (savedSummaries.length > 0) {
-                    try {
-                        const mainSessionObj = this.engine.getSession(mainSessionId)
-                        const projectPath = mainSessionObj?.metadata?.path || '(未知)'
-
-                        const messageLines: string[] = [
-                            '## 对话汇总同步\n',
-                            `**项目路径：** \`${projectPath}\``,
-                            `**记忆目录：** \`${projectPath}/.yoho-brain/\``,
-                            ''
-                        ]
-                        for (const s of savedSummaries) {
-                            messageLines.push(`### 第 ${s.round} 轮`)
-                            messageLines.push(`**用户：**\n${s.userInput}`)
-                            messageLines.push('')
-                            messageLines.push(`**AI 回应汇总：**\n${s.summary}`)
-                            messageLines.push('')
-                        }
-                        messageLines.push('---')
-                        messageLines.push('review 代码改动，有问题就指出，没问题回复"知道了"。不要给修复方案。')
-                        messageLines.push('')
-                        messageLines.push('读取 `.yoho-brain/MEMORY.md` 了解上下文，重要发现更新到 `.yoho-brain/`。')
-
-                        if (this.isSdkMode(brainSession)) {
-                            // SDK 模式（含常驻 brain session）：由 triggerSdkReview 统一发送 review prompt
-                            // 不单独发汇总消息，避免 brain 收到两条内容重叠的消息导致重复回复
-                            const reviewableSummaries = savedSummaries.filter(s => !brainReviewRoundNumbers.has(s.round))
-                            if (reviewableSummaries.length > 0) {
-                                console.log('[BrainSync] Using SDK mode for brain analysis, reviewable:', reviewableSummaries.length, 'of', savedSummaries.length)
-                                await this.triggerSdkReview(brainSession, reviewableSummaries, projectPath)
-                            } else {
-                                console.log('[BrainSync] All saved rounds are brain-review rounds, skipping SDK review')
-                            }
-                        } else if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
-                            // CLI 模式：发送汇总消息，Brain session 自行根据消息做分析
-                            await this.engine.sendMessage(brainSession.brainSessionId, {
-                                text: messageLines.join('\n'),
-                                sentFrom: 'webapp'
-                            })
-                            console.log('[BrainSync] Sent', savedSummaries.length, 'round summaries to brain session', brainSession.brainSessionId)
-                        }
-                    } catch (sendErr) {
-                        console.error('[BrainSync] Failed to send summaries to brain session:', sendErr)
-                    }
-                }
-
-                const newSummarizedCount = existingRounds.length + savedRounds.length
-                const newPendingCount = allRounds.length - newSummarizedCount - initPromptRoundNumbers.size
-
-                const brainedRoundNumbersForStatus = await this.brainStore.getBrainedRoundNumbers(brainId)
-                const newExistingRounds = await this.brainStore.getBrainRounds(brainId)
-                const unbrainedCount = newExistingRounds.filter(r =>
-                    !brainedRoundNumbersForStatus.has(r.roundNumber) && !brainReviewRoundNumbers.has(r.roundNumber)
-                ).length
-
-                this.broadcastSyncStatus(brainSession, {
-                    status: newPendingCount > 0 ? 'syncing' : 'complete',
-                    totalRounds: allRounds.length,
-                    summarizedRounds: newSummarizedCount,
-                    pendingRounds: newPendingCount,
-                    savedRounds,
-                    savedSummaries,
-                    unbrainedRounds: unbrainedCount
-                })
-
-                if (brainSession.status === 'pending') {
-                    await this.brainStore.updateBrainSessionStatus(brainId, 'active')
-                    brainSession.status = 'active'
-                }
-
-                if (newPendingCount > 0 && savedRounds.length > 0) {
-                    console.log('[BrainSync] More rounds pending, continuing sync...')
-                    await new Promise(resolve => setTimeout(resolve, 1000))
-                } else {
-                    continueSync = false
-                }
+            if (brainSession.status === 'pending') {
+                await this.brainStore.updateBrainSessionStatus(brainId, 'active')
             }
         } catch (err) {
             console.error('[BrainSync] syncRounds error:', err)
-            const allMessages = await this.engine.getAllMessages(mainSessionId).catch(() => [])
-            const allRounds = groupMessagesIntoRounds(allMessages)
-            const brainReviewRoundNums = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
-            const initPromptRoundNums = new Set(allRounds.filter(r => r.userInput.trimStart().startsWith('#InitPrompt-')).map(r => r.roundNumber))
-            const skippedCount = initPromptRoundNums.size
-            const existingRounds = await this.brainStore.getBrainRounds(brainId).catch(() => [])
-            const brainedRoundNumbers = await this.brainStore.getBrainedRoundNumbers(brainId).catch(() => new Set<number>())
-            const unbrainedCount = existingRounds.filter(r =>
-                !brainedRoundNumbers.has(r.roundNumber) && !brainReviewRoundNums.has(r.roundNumber)
-            ).length
-
-            this.broadcastSyncStatus(brainSession, {
-                status: 'complete',
-                totalRounds: allRounds.length,
-                summarizedRounds: existingRounds.length,
-                pendingRounds: allRounds.length - existingRounds.length - skippedCount,
-                unbrainedRounds: unbrainedCount
-            })
         } finally {
             this.syncingBrainIds.delete(brainId)
         }
