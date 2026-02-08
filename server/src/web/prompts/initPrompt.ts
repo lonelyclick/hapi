@@ -18,9 +18,11 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
     // 1) 最高优先级规则
     lines.push('1) 最高优先级规则（不可违背）')
     lines.push('- 始终使用中文沟通')
-    lines.push('- 安装软件和依赖时，永远不使用 docker')
-    if (userName) {
-        lines.push(`- 称呼当前用户为：${userName}`)
+    if (!options?.isBrain) {
+        lines.push('- 安装软件和依赖时，永远不使用 docker')
+        if (userName) {
+            lines.push(`- 称呼当前用户为：${userName}`)
+        }
     }
     lines.push('')
 
