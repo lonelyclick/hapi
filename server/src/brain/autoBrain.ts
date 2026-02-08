@@ -563,12 +563,17 @@ export class AutoBrainService {
 1) 调用 brain_summarize 获取对话内容
 2) 判断当前处于哪个阶段：开发中 → 代码审查 → 测试验证 → 部署上线
 3) 用 Read/Grep/Glob 审查代码改动，发现问题 → brain_send_message(type=review) 指出问题
-4) 根据当前阶段推进到下一步：
-   - 开发中/AI说完成了 → 让它运行 lint 和测试
+4) 阶段转换前的双重审查（重要）：
+   当 AI 说"开发完了"/"测试通过了"/"部署完了"等阶段性完成时，不要直接推进到下一步，而是：
+   a) 先让主 session 自查：brain_send_message(type=info) 发送"请先 review 一下你刚才的改动，检查有没有遗漏或问题"
+   b) 等主 session review 完（你会收到下一轮对话汇总），你再亲自审查代码
+   c) 双方都确认没问题后，再推进到下一步
+5) 推进到下一步（双重审查通过后）：
+   - 开发完成 → 让它运行 lint 和测试
    - 测试通过 → 让它提交代码
    - AI 在问问题/给选项 → 替用户决策，选最合理的
    - 推进用 brain_send_message(type=info)
-5) 没问题也不需要推进 → brain_send_message(type=no_issues)`
+6) 没问题也不需要推进 → brain_send_message(type=no_issues)`
 
         // 创建执行记录（status=running）
         await this.brainStore.createBrainExecution({
