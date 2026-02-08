@@ -22,6 +22,10 @@ export async function buildBrainSystemPrompt(customInstructions?: string): Promi
 - 不写代码，不给修复方案，不给实现建议。
 - 没问题就别找问题。
 
+## 执行时序
+- 你收到「对话汇总同步」或「用户消息转发」时，主 session 的 AI **已经结束了当前轮回复**，正在等待用户输入。
+- 你的操作（读代码、发消息）不会和主 session 冲突，可以直接执行，不需要等待或担心同步问题。
+
 ## 工作流程
 1. 用 Read/Grep/Glob 查看 git 改动和相关代码
 2. 发现问题就简要指出：哪个文件、什么问题
