@@ -10,7 +10,6 @@ import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { SSEManager } from '../sse/sseManager'
 import type { BrainStore } from './store'
 import type { StoredBrainSession } from './types'
-import { buildReviewPrompt } from './brainSdkService'
 
 /**
  * 从消息内容中提取用户文本
@@ -317,23 +316,21 @@ export class AutoBrainService {
             }
             console.log('[BrainSync] Got brain text, length:', brainText.length)
 
-            // 判断 brain 输出：[NO_MESSAGE] 表示没有问题，否则作为 review 意见发给主 session
-            if (brainText.includes('[NO_MESSAGE]')) {
+            // Brain 通过 MCP tool (brain_send_message) 主动发消息给主 session
+            // 这里只做状态记录，不再重复发消息
+            const noIssues = brainText.includes('[NO_MESSAGE]')
+            if (noIssues) {
                 console.log('[BrainSync] Brain review: no issues found')
                 await this.brainStore.completeBrainSession(brainSession.id, '[NO_MESSAGE]')
             } else {
-                console.log('[BrainSync] Brain review: sending review to main session')
-                await this.engine.sendMessage(mainSessionId, {
-                    text: `[发送者: Brain 代码审查]\n\n${brainText}`,
-                    sentFrom: 'brain-review'
-                })
+                console.log('[BrainSync] Brain review completed with findings (message sent via MCP tool)')
                 await this.brainStore.updateBrainResult(brainSession.id, brainText)
             }
 
             // SSE 广播 done 事件
             if (this.sseManager) {
                 const mainSession = this.engine.getSession(mainSessionId)
-                const noMessage = brainText.includes('[NO_MESSAGE]')
+                const noMessage = noIssues
                 this.sseManager.broadcast({
                     type: 'brain-sdk-progress',
                     namespace: mainSession?.namespace,
@@ -550,10 +547,10 @@ export class AutoBrainService {
 
         console.log('[BrainSync] Triggering review for', summaries.length, 'rounds (persistent brain session)')
 
-        // 构建审查提示词：用户消息原文 + AI 回应汇总
-        const roundsSummary = summaries.map(s => `### 第 ${s.round} 轮\n**用户：**\n${s.userInput}\n\n**AI 回应汇总：**\n${s.summary}`).join('\n\n')
-        const contextSummary = brainSession.contextSummary || '(无上下文)'
-        const reviewPrompt = buildReviewPrompt(contextSummary, roundsSummary)
+        // 只发轮次标识，不发完整内容（节省 token）
+        // Brain Claude 收到后调用 brain_analyze MCP tool 自行获取对话内容
+        const roundNumbers = summaries.map(s => s.round).join(', ')
+        const reviewPrompt = `对话汇总同步：主 session 完成了第 ${roundNumbers} 轮对话。请调用 brain_analyze 工具分析最新代码改动。`
 
         // 创建执行记录（status=running）
         await this.brainStore.createBrainExecution({
