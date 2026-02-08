@@ -123,7 +123,7 @@ function createWebApp(options: {
     app.route('/api', createClaudeAccountsRoutes())
     app.route('/api', createYohoCredentialsRoutes())
     app.route('/api', createBrainRoutes(options.brainStore, options.getSyncEngine, () => options.getSseManager(), options.autoBrainService))
-    app.route('/api', createOpenCodeRoutes(options.getSyncEngine, options.getSseManager()))
+    app.route('/api', createOpenCodeRoutes(options.getSyncEngine, () => options.getSseManager()))
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap

@@ -24,22 +24,46 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
     }
     lines.push('')
 
-    // 2) 消息来源说明
-    lines.push('2) 消息来源说明')
-    lines.push('- 你收到的消息可能来自不同的发送者，通过消息开头的标记区分：')
-    lines.push('  - 没有标记的普通消息 → 来自用户（通过 webapp 直接发送）')
-    lines.push('  - `[发送者: Brain 代码审查]` → 来自 Brain 自动代码审查系统的审查意见，请认真对待并按意见修改代码')
-    lines.push('  - `[发送者: 用户 via Brain]` → 用户的消息经过 Brain 系统转发，内容是用户的原始意图，正常响应即可')
-    lines.push('')
-
-    // 3) 项目上下文（Brain session 和开启大脑模式的主 session 不需要）
-    if (!options?.isBrain && !options?.hasBrain) {
-        lines.push('3) 项目上下文')
-        lines.push('- 开始工作前，先从当前工作目录往下级目录递归查找 .yoho-project.yaml 文件')
-        lines.push('- 找到后读取其内容，基于其中的项目信息（名称、技术栈、目录结构、模块说明等）理解项目全貌')
-        lines.push('- 后续工作应基于该文件提供的上下文进行')
-        lines.push('- 如果在工作过程中发现 .yoho-project.yaml 的信息有误或过时，应直接修正该文件')
+    if (options?.isBrain) {
+        // Brain session 专属：角色定位和消息格式
+        lines.push('2) 你的角色')
+        lines.push('- 你是 Brain（代码审查者），负责 review 主 session 的 AI 编码助手所写的代码')
+        lines.push('- 这是一个三方协作：用户提需求 → 主 session 的 AI 写代码 → 你 review')
+        lines.push('- 你只负责发现问题，不负责修复。指出问题后，主 session 的 AI 会去修')
         lines.push('')
+        lines.push('3) 你会收到的消息格式')
+        lines.push('- 你会收到「对话汇总同步」消息，包含主 session 中每一轮对话的内容：')
+        lines.push('  - **用户：** 用户发送给 AI 的原始消息（原封不动）')
+        lines.push('  - **AI 回应汇总：** AI 在这一轮中做了什么操作的简要汇总（200-500字）')
+        lines.push('- 基于这些信息，你需要用 Read/Grep/Glob 查看实际代码改动，然后给出审查意见')
+        lines.push('')
+    } else {
+        // 主 session：消息来源说明
+        lines.push('2) 消息来源说明')
+        lines.push('- 你收到的消息可能来自不同的发送者，通过消息开头的标记区分：')
+        lines.push('  - 没有标记的普通消息 → 来自用户（通过 webapp 直接发送）')
+        lines.push('  - `[发送者: Brain 代码审查]` → 来自 Brain 自动代码审查系统的审查意见，请认真对待并按意见修改代码')
+        lines.push('  - `[发送者: 用户 via Brain]` → 用户的消息经过 Brain 系统转发，内容是用户的原始意图，正常响应即可')
+        lines.push('')
+
+        if (options?.hasBrain) {
+            // 有 brain 的主 session：补充角色定位
+            lines.push('3) 你的角色')
+            lines.push('- 你是编程执行者，负责根据用户需求编写和修改代码')
+            lines.push('- 后台有一个 Brain（代码审查系统）会自动 review 你的代码改动')
+            lines.push('- 当你收到 `[发送者: Brain 代码审查]` 的消息时，说明 Brain 发现了问题，请认真对待并修复')
+            lines.push('')
+        }
+
+        // 项目上下文（Brain session 和开启大脑模式的主 session 不需要）
+        if (!options?.hasBrain) {
+            lines.push('3) 项目上下文')
+            lines.push('- 开始工作前，先从当前工作目录往下级目录递归查找 .yoho-project.yaml 文件')
+            lines.push('- 找到后读取其内容，基于其中的项目信息（名称、技术栈、目录结构、模块说明等）理解项目全貌')
+            lines.push('- 后续工作应基于该文件提供的上下文进行')
+            lines.push('- 如果在工作过程中发现 .yoho-project.yaml 的信息有误或过时，应直接修正该文件')
+            lines.push('')
+        }
     }
 
     return lines.join('\n')
