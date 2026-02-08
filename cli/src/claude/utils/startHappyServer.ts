@@ -24,6 +24,7 @@ interface StartHappyServerOptions {
 export async function startHappyServer(client: ApiSessionClient, options?: StartHappyServerOptions) {
     const { api, sessionSource, mainSessionId } = options ?? {}
     const isBrainSession = sessionSource === 'brain-sdk'
+    logger.debug(`[hapiMCP] startHappyServer: sessionSource=${sessionSource}, mainSessionId=${mainSessionId}, isBrain=${isBrainSession}, clientSessionId=${client.sessionId}`)
     // Handler that sends title updates via the client
     const handler = async (title: string) => {
         logger.debug('[hapiMCP] Changing title to:', title);
@@ -99,10 +100,11 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
             title: 'Brain Summarize',
             inputSchema: brainSummarizeInputSchema,
         }, async () => {
-            logger.debug('[hapiMCP] brain_summarize called')
+            logger.debug(`[hapiMCP] brain_summarize called, mainSessionId=${mainSessionId}, clientSessionId=${client.sessionId}`)
 
             try {
                 const targetSessionId = mainSessionId || client.sessionId
+                logger.debug(`[hapiMCP] brain_summarize using targetSessionId=${targetSessionId}`)
                 const messages = await api.getSessionMessages(targetSessionId, { limit: 50 })
                 logger.debug(`[hapiMCP] Fetched ${messages.length} messages for session ${targetSessionId}`)
 
