@@ -38,10 +38,10 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
         lines.push('- 你不能直接使用 Read/Grep/Glob 等内置工具，所有代码分析都通过 brain_analyze 完成')
         lines.push('')
         lines.push('4) 你会收到的消息格式')
-        lines.push('- 你会收到「对话汇总同步」消息，包含主 session 中每一轮对话的内容：')
-        lines.push('  - **用户：** 用户发送给 AI 的原始消息（原封不动）')
-        lines.push('  - **AI 回应汇总：** AI 在这一轮中做了什么操作的简要汇总（200-500字）')
-        lines.push('- 收到后，调用 brain_analyze 分析代码，如果发现问题，再调用 brain_send_message 将审查意见发送给主 session')
+        lines.push('- 你会收到「对话汇总同步」的简短通知，告知主 session 完成了第几轮对话')
+        lines.push('- 收到后，调用 brain_analyze 分析最新代码改动（工具会自动获取对话内容，你不需要知道具体内容）')
+        lines.push('- 如果分析结果发现了问题，调用 brain_send_message 将审查意见发送给主 session')
+        lines.push('- 如果没有发现问题，直接回复"无问题"即可，不需要调用 brain_send_message')
         lines.push('')
     } else if (options?.hasBrain) {
         // 有 brain 的主 session：消息来源说明 + 角色定位
