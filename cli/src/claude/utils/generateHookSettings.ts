@@ -91,6 +91,30 @@ export function generateHookSettingsFile(port: number, token: string, claudeSett
 }
 
 /**
+ * Update the fastMode setting in an existing hook settings file.
+ * When fastMode is true, adds "fastMode": true to the settings.
+ * When fastMode is false, removes the "fastMode" key from the settings.
+ */
+export function updateHookSettingsFastMode(filepath: string, fastMode: boolean): void {
+    try {
+        if (!existsSync(filepath)) {
+            logger.warn(`[generateHookSettings] Settings file not found for fastMode update: ${filepath}`);
+            return;
+        }
+        const settings = JSON.parse(readFileSync(filepath, 'utf-8'));
+        if (fastMode) {
+            settings.fastMode = true;
+        } else {
+            delete settings.fastMode;
+        }
+        writeFileSync(filepath, JSON.stringify(settings, null, 4));
+        logger.debug(`[generateHookSettings] Updated fastMode=${fastMode} in ${filepath}`);
+    } catch (error) {
+        logger.warn(`[generateHookSettings] Failed to update fastMode in settings file: ${error}`);
+    }
+}
+
+/**
  * Clean up the temporary hook settings file.
  */
 export function cleanupHookSettingsFile(filepath: string): void {

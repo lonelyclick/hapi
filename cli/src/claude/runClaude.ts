@@ -19,7 +19,7 @@ import { notifyDaemonSessionStarted } from '@/daemon/controlClient';
 import { initialMachineMetadata } from '@/daemon/run';
 import { startHappyServer } from '@/claude/utils/startHappyServer';
 import { startHookServer } from '@/claude/utils/startHookServer';
-import { generateHookSettingsFile, cleanupHookSettingsFile } from '@/claude/utils/generateHookSettings';
+import { generateHookSettingsFile, cleanupHookSettingsFile, updateHookSettingsFastMode } from '@/claude/utils/generateHookSettings';
 import { registerKillSessionHandler } from './registerKillSessionHandler';
 import { runtimePath } from '../projectPath';
 import { resolve } from 'node:path';
@@ -256,7 +256,8 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         customSystemPrompt: mode.customSystemPrompt,
         appendSystemPrompt: mode.appendSystemPrompt,
         allowedTools: mode.allowedTools,
-        disallowedTools: mode.disallowedTools
+        disallowedTools: mode.disallowedTools,
+        fastMode: mode.fastMode
     }));
 
     // Forward messages to the queue
@@ -274,6 +275,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     if (envPermissionMode || modeEnv.modelMode) {
         logger.debug(`[loop] Using mode settings from environment: permissionMode=${envPermissionMode}, modelMode=${modeEnv.modelMode}, reasoningEffort=${modeEnv.modelReasoningEffort}`);
     }
+    let currentFastMode = false; // Track fast mode state
     let currentCustomSystemPrompt: string | undefined = undefined; // Track current custom system prompt
     let currentAppendSystemPrompt: string | undefined = undefined; // Track current append system prompt
     let currentAllowedTools: string[] | undefined = undefined; // Track current allowed tools
@@ -286,7 +288,8 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         }
         sessionInstance.setPermissionMode(currentPermissionMode);
         sessionInstance.setModelMode(currentModelMode);
-        logger.debug(`[loop] Synced session modes for keepalive: permissionMode=${currentPermissionMode}, modelMode=${currentModelMode}`);
+        sessionInstance.setFastMode(currentFastMode || undefined);
+        logger.debug(`[loop] Synced session modes for keepalive: permissionMode=${currentPermissionMode}, modelMode=${currentModelMode}, fastMode=${currentFastMode}`);
     };
     session.onUserMessage((message) => {
         const sessionPermissionMode = currentSessionRef.current?.getPermissionMode();
@@ -360,7 +363,8 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             customSystemPrompt: messageCustomSystemPrompt,
             appendSystemPrompt: messageAppendSystemPrompt,
             allowedTools: messageAllowedTools,
-            disallowedTools: messageDisallowedTools
+            disallowedTools: messageDisallowedTools,
+            fastMode: currentFastMode || undefined
         };
 
         const trimmedMessage = message.content.text.trimStart();
@@ -454,7 +458,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         if (!payload || typeof payload !== 'object') {
             throw new Error('Invalid session config payload');
         }
-        const config = payload as { permissionMode?: PermissionMode; modelMode?: SessionModelMode; modelReasoningEffort?: SessionModelReasoningEffort };
+        const config = payload as { permissionMode?: PermissionMode; modelMode?: SessionModelMode; modelReasoningEffort?: SessionModelReasoningEffort; fastMode?: boolean };
 
         if (config.permissionMode !== undefined) {
             const validModes: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
@@ -473,8 +477,14 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             currentModel = config.modelMode === 'default' ? 'opus' : config.modelMode;
         }
 
+        if (config.fastMode !== undefined) {
+            currentFastMode = config.fastMode;
+            updateHookSettingsFastMode(hookSettingsPath, currentFastMode);
+            logger.debug(`[loop] Fast mode ${currentFastMode ? 'enabled' : 'disabled'}, settings file updated`);
+        }
+
         syncSessionModes();
-        return { applied: { permissionMode: currentPermissionMode, modelMode: currentModelMode } };
+        return { applied: { permissionMode: currentPermissionMode, modelMode: currentModelMode, fastMode: currentFastMode } };
     });
 
     const resumeSessionId = (options.resumeSessionId ?? response.metadata?.claudeSessionId ?? null) || null;

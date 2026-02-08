@@ -90,6 +90,7 @@ export type Session = {
     permissionMode?: PermissionMode
     modelMode?: ModelMode
     modelReasoningEffort?: ModelReasoningEffort
+    fastMode?: boolean
 }
 
 export type ResumeSessionResponse = {
@@ -180,6 +181,7 @@ export type SessionSummary = {
     pendingRequestsCount: number
     modelMode?: ModelMode
     modelReasoningEffort?: ModelReasoningEffort
+    fastMode?: boolean
     viewers?: SessionViewer[]
     hasBrain?: boolean
     brainStatus?: string

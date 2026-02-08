@@ -18,6 +18,7 @@ export interface EnhancedMode {
     appendSystemPrompt?: string;
     allowedTools?: string[];
     disallowedTools?: string[];
+    fastMode?: boolean;
 }
 
 interface LoopOptions {

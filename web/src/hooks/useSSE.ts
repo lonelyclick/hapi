@@ -135,6 +135,7 @@ export function useSSE(options: {
                             permissionMode?: string
                             modelMode?: string
                             modelReasoningEffort?: string
+                            fastMode?: boolean
                             sid?: string  // 仅包含 sid 表示是 metadata/todos/agentState 更新
                         } | null
 
@@ -157,7 +158,8 @@ export function useSSE(options: {
                             data.thinking !== undefined ||
                             data.permissionMode !== undefined ||
                             data.modelMode !== undefined ||
-                            data.modelReasoningEffort !== undefined
+                            data.modelReasoningEffort !== undefined ||
+                            data.fastMode !== undefined
                         )
 
                         // 检查是否只是 metadata/todos/agentState 更新（只包含 sid）
@@ -182,6 +184,7 @@ export function useSSE(options: {
                                             ...(data.permissionMode !== undefined && { permissionMode: data.permissionMode as Session['permissionMode'] }),
                                             ...(data.modelMode !== undefined && { modelMode: data.modelMode as Session['modelMode'] }),
                                             ...(data.modelReasoningEffort !== undefined && { modelReasoningEffort: data.modelReasoningEffort as Session['modelReasoningEffort'] }),
+                                            ...(data.fastMode !== undefined && { fastMode: data.fastMode }),
                                         }
                                     }
                                 }
@@ -201,6 +204,7 @@ export function useSSE(options: {
                                                     ...(data.activeAt !== undefined && { activeAt: data.activeAt }),
                                                     ...(data.modelMode !== undefined && { modelMode: data.modelMode as SessionSummary['modelMode'] }),
                                                     ...(data.modelReasoningEffort !== undefined && { modelReasoningEffort: data.modelReasoningEffort as SessionSummary['modelReasoningEffort'] }),
+                                                    ...(data.fastMode !== undefined && { fastMode: data.fastMode }),
                                                 }
                                                 : s
                                         )

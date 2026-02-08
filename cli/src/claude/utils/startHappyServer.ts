@@ -111,20 +111,49 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                 }
                 const targetSessionId = mainSessionId
                 const messages = await api.getSessionMessages(targetSessionId, { limit: 50 })
-                logger.debug(`[hapiMCP] Fetched ${messages.length} messages for session ${targetSessionId}`)
+                logger.debug(`[hapiMCP] brain_summarize: fetched ${messages.length} messages for session ${targetSessionId}`)
 
-                const extractText = (body: unknown): string => {
-                    if (typeof body === 'string') return body
+                // 打印每条消息的 role 和 seq，帮助排查
+                for (const msg of messages) {
+                    const c = msg.content as Record<string, unknown> | null
+                    logger.debug(`[hapiMCP] brain_summarize: msg seq=${msg.seq} role=${c?.role} contentType=${typeof c?.content}`)
+                }
+
+                const extractUserText = (content: Record<string, unknown>): string | null => {
+                    if (content.role !== 'user') return null
+                    const body = content.content
+                    if (typeof body === 'string') return body.trim() || null
                     if (typeof body === 'object' && body && 'text' in (body as Record<string, unknown>)) {
-                        return String((body as Record<string, unknown>).text)
+                        return String((body as Record<string, unknown>).text).trim() || null
                     }
-                    if (Array.isArray(body)) {
-                        return (body as Array<Record<string, unknown>>)
-                            .filter(b => b.type === 'text' && typeof b.text === 'string')
-                            .map(b => String(b.text))
-                            .join('\n')
+                    return null
+                }
+
+                const extractAgentText = (content: Record<string, unknown>): string | null => {
+                    if (content.role !== 'agent') return null
+                    let payload: Record<string, unknown> | null = null
+                    const rawContent = content.content
+                    if (typeof rawContent === 'string') {
+                        try { payload = JSON.parse(rawContent) } catch { return null }
+                    } else if (typeof rawContent === 'object' && rawContent) {
+                        payload = rawContent as Record<string, unknown>
                     }
-                    return ''
+                    if (!payload) return null
+                    const data = payload.data as Record<string, unknown>
+                    if (!data) return null
+                    if (data.type === 'assistant') {
+                        const message = data.message as Record<string, unknown>
+                        if (!message?.content) return null
+                        const contentArr = message.content as Array<{ type?: string; text?: string }>
+                        const texts: string[] = []
+                        for (const item of contentArr) {
+                            if (item.type === 'text' && item.text) texts.push(item.text)
+                        }
+                        return texts.length > 0 ? texts.join('\n\n') : null
+                    }
+                    if (data.type === 'message' && typeof data.message === 'string') return data.message.trim() || null
+                    if (data.type === 'text' && typeof data.text === 'string') return data.text.trim() || null
+                    return null
                 }
 
                 // Find the last user message index
@@ -136,23 +165,33 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                         break
                     }
                 }
+                logger.debug(`[hapiMCP] brain_summarize: lastUserIdx=${lastUserIdx}, totalMessages=${messages.length}`)
 
                 const parts: string[] = []
                 const startIdx = lastUserIdx >= 0 ? lastUserIdx : Math.max(0, messages.length - 2)
+                logger.debug(`[hapiMCP] brain_summarize: scanning from idx=${startIdx} to ${messages.length - 1}`)
                 for (let i = startIdx; i < messages.length; i++) {
                     const content = messages[i].content as Record<string, unknown> | null
                     if (!content) continue
-                    const role = content.role as string
-                    const text = extractText(content.content).trim()
-                    if (!text) continue
-                    if (role === 'user') {
-                        parts.push(`**用户：** ${text.slice(0, 2000)}`)
-                    } else if (role === 'assistant') {
-                        parts.push(`**AI：** ${text.slice(0, 4000)}`)
+                    const userText = extractUserText(content)
+                    if (userText) {
+                        logger.debug(`[hapiMCP] brain_summarize: idx=${i} → user text, len=${userText.length}`)
+                        parts.push(`**用户：** ${userText.slice(0, 2000)}`)
+                        continue
+                    }
+                    const agentText = extractAgentText(content)
+                    if (agentText) {
+                        logger.debug(`[hapiMCP] brain_summarize: idx=${i} → agent text, len=${agentText.length}`)
+                        parts.push(`**AI：** ${agentText.slice(0, 4000)}`)
+                    } else {
+                        logger.debug(`[hapiMCP] brain_summarize: idx=${i} → role=${content.role}, no text extracted`)
                     }
                 }
 
+                logger.debug(`[hapiMCP] brain_summarize: extracted ${parts.length} parts`)
+
                 if (parts.length === 0) {
+                    logger.debug(`[hapiMCP] brain_summarize: no parts extracted, returning empty`)
                     return {
                         content: [{ type: 'text' as const, text: '当前没有可汇总的对话记录。' }],
                         isError: false,
@@ -160,6 +199,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                 }
 
                 const summary = parts.join('\n\n')
+                logger.debug(`[hapiMCP] brain_summarize: returning summary, len=${summary.length}`)
 
                 return {
                     content: [{ type: 'text' as const, text: summary }],
@@ -197,17 +237,24 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                         ? '[发送者: Brain 代码审查]'
                         : msgType === 'suggestion'
                             ? '[发送者: Brain 改进建议]'
-                            : '[发送者: Brain]'
+                            : '[发送者: 用户 via Brain]'
 
                     const fullMessage = `${prefix}\n\n${args.message}`
+                    logger.debug(`[hapiMCP] brain_send_message: type=${msgType}, prefix=${prefix}, msgLen=${args.message.length}, mainSessionId=${mainSessionId}`)
 
                     // Send message to main session via server API
                     await api.sendMessageToSession(mainSessionId, fullMessage, 'brain-sdk-review')
+                    logger.debug(`[hapiMCP] brain_send_message: sent to main session`)
 
-                    // 清除 pending 用户消息（如果有的话）
-                    await api.clearPendingUserMessage(mainSessionId).catch(() => {})
+                    // 只在用户消息转发（info）时清除 pending 消息
+                    if (msgType === 'info') {
+                        logger.debug(`[hapiMCP] brain_send_message: clearing pending user message`)
+                        await api.clearPendingUserMessage(mainSessionId).catch((e) => {
+                            logger.debug(`[hapiMCP] brain_send_message: clearPending failed:`, e)
+                        })
+                    }
 
-                    logger.debug(`[hapiMCP] Message sent to main session ${mainSessionId}`)
+                    logger.debug(`[hapiMCP] brain_send_message: done`)
 
                     return {
                         content: [{ type: 'text' as const, text: `已成功发送${msgType === 'review' ? '代码审查' : msgType === 'suggestion' ? '改进建议' : ''}消息给主 session` }],
@@ -237,14 +284,17 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
 
                 try {
                     const result = await api.getPendingUserMessage(mainSessionId)
+                    logger.debug(`[hapiMCP] brain_user_intent: result.text=${result.text ? `"${result.text.slice(0, 100)}..."` : 'null'}, timestamp=${result.timestamp}`)
 
                     if (!result.text) {
+                        logger.debug(`[hapiMCP] brain_user_intent: no pending message`)
                         return {
                             content: [{ type: 'text' as const, text: '当前没有待处理的用户消息。' }],
                             isError: false,
                         }
                     }
 
+                    logger.debug(`[hapiMCP] brain_user_intent: returning pending message, len=${result.text.length}`)
                     return {
                         content: [{ type: 'text' as const, text: result.text }],
                         isError: false,

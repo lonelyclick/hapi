@@ -165,6 +165,7 @@ export type Session = {
     permissionMode?: SessionPermissionMode
     modelMode?: SessionModelMode
     modelReasoningEffort?: SessionModelReasoningEffort
+    fastMode?: boolean
 }
 
 export const MachineMetadataSchema = z.object({

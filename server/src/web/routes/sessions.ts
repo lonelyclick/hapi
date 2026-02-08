@@ -100,7 +100,8 @@ function toSessionSummary(session: Session): SessionSummary {
         todoProgress,
         pendingRequestsCount,
         modelMode: session.modelMode,
-        modelReasoningEffort: session.modelReasoningEffort
+        modelReasoningEffort: session.modelReasoningEffort,
+        fastMode: session.fastMode
     }
 }
 
@@ -1144,6 +1145,38 @@ export function createSessionsRoutes(
             return c.json({ ok: true })
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to apply model mode'
+            return c.json({ error: message }, 409)
+        }
+    })
+
+    app.post('/sessions/:id/fast-mode', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = await requireSessionFromParamWithShareCheck(c, engine, store, { requireActive: true })
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const flavor = sessionResult.session.metadata?.flavor ?? 'claude'
+        if (flavor !== 'claude') {
+            return c.json({ error: 'Fast mode is only supported for Claude sessions' }, 400)
+        }
+
+        const body = await c.req.json().catch(() => null)
+        if (!body || typeof body.fastMode !== 'boolean') {
+            return c.json({ error: 'Invalid body, expected { fastMode: boolean }' }, 400)
+        }
+
+        try {
+            await engine.applySessionConfig(sessionResult.sessionId, {
+                fastMode: body.fastMode
+            })
+            return c.json({ ok: true, fastMode: body.fastMode })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to toggle fast mode'
             return c.json({ error: message }, 409)
         }
     })

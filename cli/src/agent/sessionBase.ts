@@ -40,6 +40,7 @@ export class AgentSessionBase<Mode> {
     protected permissionMode?: SessionPermissionMode;
     protected modelMode?: SessionModelMode;
     protected modelReasoningEffort?: SessionModelReasoningEffort;
+    protected fastMode?: boolean;
 
     constructor(opts: AgentSessionBaseOptions<Mode>) {
         this.path = opts.path;
@@ -105,14 +106,15 @@ export class AgentSessionBase<Mode> {
         }
     };
 
-    protected getKeepAliveRuntime(): { permissionMode?: SessionPermissionMode; modelMode?: SessionModelMode; modelReasoningEffort?: SessionModelReasoningEffort } | undefined {
-        if (this.permissionMode === undefined && this.modelMode === undefined && this.modelReasoningEffort === undefined) {
+    protected getKeepAliveRuntime(): { permissionMode?: SessionPermissionMode; modelMode?: SessionModelMode; modelReasoningEffort?: SessionModelReasoningEffort; fastMode?: boolean } | undefined {
+        if (this.permissionMode === undefined && this.modelMode === undefined && this.modelReasoningEffort === undefined && this.fastMode === undefined) {
             return undefined;
         }
         return {
             permissionMode: this.permissionMode,
             modelMode: this.modelMode,
-            modelReasoningEffort: this.modelReasoningEffort
+            modelReasoningEffort: this.modelReasoningEffort,
+            fastMode: this.fastMode
         };
     }
 
@@ -134,5 +136,13 @@ export class AgentSessionBase<Mode> {
 
     getModelReasoningEffort(): SessionModelReasoningEffort | undefined {
         return this.modelReasoningEffort;
+    }
+
+    setFastMode(fastMode?: boolean): void {
+        this.fastMode = fastMode;
+    }
+
+    getFastMode(): boolean | undefined {
+        return this.fastMode;
     }
 }

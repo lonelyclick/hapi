@@ -505,6 +505,13 @@ export class ApiClient {
         })
     }
 
+    async setFastMode(sessionId: string, fastMode: boolean): Promise<void> {
+        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/fast-mode`, {
+            method: 'POST',
+            body: JSON.stringify({ fastMode })
+        })
+    }
+
     async approvePermission(
         sessionId: string,
         requestId: string,

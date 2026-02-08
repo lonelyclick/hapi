@@ -29,6 +29,7 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
     switchSession: () => Promise<void>
     setPermissionMode: (mode: PermissionMode) => Promise<void>
     setModelMode: (config: ModelConfig) => Promise<void>
+    setFastMode: (fastMode: boolean) => Promise<void>
     deleteSession: () => Promise<void>
     refreshAccount: () => Promise<void>
     isPending: boolean
@@ -100,6 +101,15 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         },
     })
 
+    const fastModeMutation = useMutation({
+        mutationFn: async (fastMode: boolean) => {
+            if (!api || !sessionId) {
+                throw new Error('Session unavailable')
+            }
+            await api.setFastMode(sessionId, fastMode)
+        },
+    })
+
     const refreshAccountMutation = useMutation({
         mutationFn: async () => {
             if (!api || !sessionId) {
@@ -115,12 +125,14 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         switchSession: switchMutation.mutateAsync,
         setPermissionMode: permissionMutation.mutateAsync,
         setModelMode: modelMutation.mutateAsync,
+        setFastMode: fastModeMutation.mutateAsync,
         deleteSession: deleteMutation.mutateAsync,
         refreshAccount: refreshAccountMutation.mutateAsync,
         isPending: abortMutation.isPending
             || switchMutation.isPending
             || permissionMutation.isPending
             || modelMutation.isPending
+            || fastModeMutation.isPending
             || deleteMutation.isPending
             || refreshAccountMutation.isPending,
     }

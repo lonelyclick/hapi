@@ -27,6 +27,7 @@ const BUILTIN_COMMANDS: Record<string, SlashCommand[]> = {
         { name: 'compact', description: 'Compact conversation context', source: 'builtin' },
         { name: 'context', description: 'Show context information', source: 'builtin' },
         { name: 'cost', description: 'Show session cost', source: 'builtin' },
+        { name: 'fast', description: 'Toggle fast mode (higher throughput)', source: 'builtin' },
         { name: 'plan', description: 'Toggle plan mode', source: 'builtin' },
     ],
     codex: [

@@ -255,13 +255,17 @@ function formatRuntimeModel(session: Session, modelMode?: ModelMode, modelReason
     // 优先使用用户设置的 modelMode 和 modelReasoningEffort
     const displayModel = modelMode && modelMode !== 'default' ? modelMode : session.metadata?.runtimeModel?.trim()
     if (!displayModel) {
-        return null
+        return session.fastMode ? '\u21af Fast' : null
     }
+    const parts: string[] = [displayModel]
     const displayEffort = modelReasoningEffort ?? session.metadata?.runtimeModelReasoningEffort
     if (displayEffort) {
-        return `${displayModel} (${displayEffort})`
+        parts.push(`(${displayEffort})`)
     }
-    return displayModel
+    if (session.fastMode) {
+        parts.push('\u21af')
+    }
+    return parts.join(' ')
 }
 
 export function SessionHeader(props: {

@@ -301,9 +301,19 @@ function SessionPage() {
             return
         }
 
+        // Handle /fast - toggle fast mode (Claude only)
+        if (trimmed === '/fast') {
+            const flavor = session?.metadata?.flavor ?? 'claude'
+            if (flavor === 'claude' && api && sessionId) {
+                const newFastMode = !session?.fastMode
+                api.setFastMode(sessionId, newFastMode).catch(console.error)
+            }
+            return
+        }
+
         // All other messages go to the agent
         rawSendMessage(text)
-    }, [rawSendMessage, navigate])
+    }, [rawSendMessage, navigate, api, sessionId, session])
 
     // Get agent type from session metadata for slash commands
     const agentType = session?.metadata?.flavor ?? 'claude'

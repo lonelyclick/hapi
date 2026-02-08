@@ -94,6 +94,7 @@ export interface Session {
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
+    fastMode?: boolean
 }
 
 export interface Machine {
@@ -682,6 +683,7 @@ export class SyncEngine {
         const previousPermissionMode = session.permissionMode
         const previousModelMode = session.modelMode
         const previousReasoningEffort = session.modelReasoningEffort
+        const previousFastMode = session.fastMode
 
         session.active = true
         session.activeAt = Math.max(session.activeAt, t)
@@ -699,6 +701,9 @@ export class SyncEngine {
         if (payload.modelReasoningEffort !== undefined && session.modelReasoningEffort === undefined) {
             session.modelReasoningEffort = payload.modelReasoningEffort
         }
+        if (payload.fastMode !== undefined && session.fastMode === undefined) {
+            session.fastMode = payload.fastMode
+        }
 
         // If session just became active, persist to database
         if (!wasActive) {
@@ -712,6 +717,7 @@ export class SyncEngine {
         const modeChanged = previousPermissionMode !== session.permissionMode
             || previousModelMode !== session.modelMode
             || previousReasoningEffort !== session.modelReasoningEffort
+            || previousFastMode !== session.fastMode
         const shouldBroadcast = (!wasActive && session.active)
             || (wasThinking !== session.thinking)
             || modeChanged
@@ -1299,17 +1305,19 @@ export class SyncEngine {
             permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
             modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
             modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
+            fastMode?: boolean
         }
     ): Promise<{
         permissionMode?: Session['permissionMode']
         modelMode?: Session['modelMode']
         modelReasoningEffort?: Session['modelReasoningEffort']
+        fastMode?: Session['fastMode']
     }> {
         const result = await this.sessionRpc(sessionId, 'set-session-config', config)
         if (!result || typeof result !== 'object') {
             throw new Error('Invalid response from session config RPC')
         }
-        const obj = result as { applied?: { permissionMode?: Session['permissionMode']; modelMode?: Session['modelMode']; modelReasoningEffort?: Session['modelReasoningEffort'] } }
+        const obj = result as { applied?: { permissionMode?: Session['permissionMode']; modelMode?: Session['modelMode']; modelReasoningEffort?: Session['modelReasoningEffort']; fastMode?: boolean } }
         const applied = obj.applied
         if (!applied || typeof applied !== 'object') {
             throw new Error('Missing applied session config')
@@ -1326,6 +1334,9 @@ export class SyncEngine {
             if (applied.modelReasoningEffort !== undefined) {
                 session.modelReasoningEffort = applied.modelReasoningEffort
             }
+            if (applied.fastMode !== undefined) {
+                session.fastMode = applied.fastMode
+            }
             if (applied.modelMode === undefined && config.modelMode !== undefined) {
                 session.modelMode = config.modelMode
             }
@@ -1336,7 +1347,8 @@ export class SyncEngine {
             return {
                 permissionMode: session.permissionMode,
                 modelMode: session.modelMode,
-                modelReasoningEffort: session.modelReasoningEffort
+                modelReasoningEffort: session.modelReasoningEffort,
+                fastMode: session.fastMode
             }
         }
         return applied
