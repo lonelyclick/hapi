@@ -430,18 +430,28 @@ export class ApiSessionClient extends EventEmitter {
         })
     }
 
+    private _lastSentThinking: boolean | null = null
+
     keepAlive(
         thinking: boolean,
         mode: 'local' | 'remote',
         runtime?: { permissionMode?: SessionPermissionMode; modelMode?: SessionModelMode; modelReasoningEffort?: SessionModelReasoningEffort; fastMode?: boolean }
     ): void {
-        this.socket.volatile.emit('session-alive', {
+        const payload = {
             sid: this.sessionId,
             time: Date.now(),
             thinking,
             mode,
             ...(runtime ?? {})
-        })
+        }
+
+        // thinking 状态变化时用可靠发送（不可丢包），否则用 volatile（容许丢包）
+        if (this._lastSentThinking !== null && this._lastSentThinking !== thinking) {
+            this.socket.emit('session-alive', payload)
+        } else {
+            this.socket.volatile.emit('session-alive', payload)
+        }
+        this._lastSentThinking = thinking
     }
 
     sendSessionDeath(): void {

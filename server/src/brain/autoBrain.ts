@@ -262,15 +262,35 @@ export class AutoBrainService {
             }
 
             // wasThinking 信号在 CLI 收到 result 时立即发出，但此时 messageQueue 中
-            // 可能还有未发送到服务器的消息（通过 setTimeout(0) 异步处理）。
-            // 等待 3 秒确保所有消息已同步到数据库，避免 syncRounds 读取到不完整的对话。
-            console.log('[BrainSync] Waiting 3s for messages to sync to DB before syncRounds...')
-            await new Promise(resolve => setTimeout(resolve, 3000))
+            // 可能还有未发送到服务器的消息。轮询 message count 直到稳定，确保所有消息已入库。
+            await this.waitForMessagesStable(mainSessionId)
 
             await this.syncRounds(brainSession)
         } catch (err) {
             console.error('[BrainSync] Failed to handle main session complete:', err)
         }
+    }
+
+    /**
+     * 等待消息稳定：轮询 message count，直到连续 stableMs 不再变化
+     */
+    private async waitForMessagesStable(sessionId: string, stableMs = 1000, maxWaitMs = 10000): Promise<void> {
+        const start = Date.now()
+        let lastCount = await this.engine.getMessageCount(sessionId)
+        let lastChangeTime = Date.now()
+
+        while (Date.now() - start < maxWaitMs) {
+            await new Promise(r => setTimeout(r, 300))
+            const currentCount = await this.engine.getMessageCount(sessionId)
+            if (currentCount !== lastCount) {
+                lastCount = currentCount
+                lastChangeTime = Date.now()
+            } else if (Date.now() - lastChangeTime >= stableMs) {
+                console.log(`[BrainSync] Messages stable: count=${currentCount}, waited ${Date.now() - start}ms`)
+                return
+            }
+        }
+        console.log(`[BrainSync] waitForMessagesStable timeout after ${maxWaitMs}ms, proceeding with count=${lastCount}`)
     }
 
     private async handleBrainAIResponse(brainSessionId: string): Promise<void> {
