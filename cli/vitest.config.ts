@@ -12,6 +12,7 @@ export default defineConfig({
         globals: false,
         environment: 'node',
         include: ['src/**/*.test.ts'],
+        exclude: ['src/**/*.integration.test.ts', 'node_modules/**'],
         coverage: {
             provider: 'v8',
             reporter: ['text', 'json', 'html'],
