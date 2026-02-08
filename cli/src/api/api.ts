@@ -242,6 +242,17 @@ export class ApiClient {
         return response.data
     }
 
+    async brainNoIssues(mainSessionId: string): Promise<void> {
+        await axios.post(
+            `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(mainSessionId)}/brain-no-issues`,
+            {},
+            {
+                headers: { Authorization: `Bearer ${this.token}` },
+                timeout: 10_000
+            }
+        )
+    }
+
     async clearPendingUserMessage(sessionId: string): Promise<void> {
         await axios.delete(
             `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(sessionId)}/pending-user-message`,

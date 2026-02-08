@@ -226,18 +226,30 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
         if (mainSessionId) {
             const brainSendMessageInputSchema: z.ZodTypeAny = z.object({
                 message: z.string().describe('The review message to send to the main session'),
-                type: z.enum(['review', 'suggestion', 'info']).optional().describe('Message type: review (code review), suggestion (improvement suggestion), info (general info). Defaults to review.'),
+                type: z.enum(['review', 'suggestion', 'info', 'no_issues']).optional().describe('Message type: review (code review), suggestion (improvement suggestion), info (general info), no_issues (审查通过，没有问题). Defaults to review.'),
             })
 
             mcp.registerTool<any, any>('brain_send_message', {
-                description: 'Send a message from Brain to the main AI session. Use this to deliver code review results, suggestions, or other feedback to the main session where the AI coding assistant is working.',
+                description: 'Send a message from Brain to the main AI session. Use this to deliver code review results, suggestions, or other feedback. When review finds no issues, call with type="no_issues" to signal completion.',
                 title: 'Brain Send Message',
                 inputSchema: brainSendMessageInputSchema,
-            }, async (args: { message: string; type?: 'review' | 'suggestion' | 'info' }) => {
+            }, async (args: { message: string; type?: 'review' | 'suggestion' | 'info' | 'no_issues' }) => {
                 logger.debug(`[hapiMCP] brain_send_message called, type=${args.type}, mainSessionId=${mainSessionId}`)
 
                 try {
                     const msgType = args.type ?? 'review'
+
+                    // no_issues: 审查通过，不发消息给主 session，直接通知服务端完成
+                    if (msgType === 'no_issues') {
+                        logger.debug(`[hapiMCP] brain_send_message: no issues, notifying server`)
+                        await api.brainNoIssues(mainSessionId)
+                        logger.debug(`[hapiMCP] brain_send_message: no_issues done`)
+                        return {
+                            content: [{ type: 'text' as const, text: '已通知：审查通过，无问题' }],
+                            isError: false,
+                        }
+                    }
+
                     const prefix = msgType === 'review'
                         ? '[发送者: Brain 代码审查]'
                         : msgType === 'suggestion'

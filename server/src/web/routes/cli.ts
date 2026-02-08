@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { configuration, getConfiguration } from '../../configuration'
 import { safeCompareStrings } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
-import type { Machine, Session, SyncEngine } from '../../sync/syncEngine'
+import type { Machine, Session, SyncEngine, SyncEvent } from '../../sync/syncEngine'
+import type { BrainStore } from '../../brain/store'
+import type { SSEManager } from '../../sse/sseManager'
 import {
     getActiveAccount,
     selectBestAccount,
@@ -72,7 +74,11 @@ function resolveMachineForNamespace(
     return { ok: false, status: 404, error: 'Machine not found' }
 }
 
-export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<CliEnv> {
+export function createCliRoutes(
+    getSyncEngine: () => SyncEngine | null,
+    brainStore?: BrainStore,
+    getSseManager?: () => SSEManager | null
+): Hono<CliEnv> {
     const app = new Hono<CliEnv>()
 
     app.use('*', async (c, next) => {
@@ -194,6 +200,47 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
 
         pendingUserMessages.delete(sessionId)
         refiningSessions.delete(sessionId)
+
+        return c.json({ ok: true })
+    })
+
+    // Brain 审查通过，没有问题 — 由 brain_send_message(type='no_issues') MCP tool 调用
+    app.post('/sessions/:id/brain-no-issues', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not ready' }, 503)
+        }
+        if (!brainStore) {
+            return c.json({ error: 'Brain store not available' }, 503)
+        }
+        const mainSessionId = c.req.param('id')
+
+        const brainSession = await brainStore.getActiveBrainSession(mainSessionId)
+        if (!brainSession) {
+            return c.json({ error: 'No active brain session' }, 404)
+        }
+
+        // 完成 execution（标记 reviewed rounds）
+        const latestExecution = await brainStore.getLatestExecutionWithProgress(brainSession.id)
+        if (latestExecution && latestExecution.status === 'running') {
+            await brainStore.completeBrainExecution(latestExecution.id, '[NO_MESSAGE]')
+        }
+
+        // 广播 SSE done 事件（noMessage: true 触发前端显示"一切正常"）
+        const sseManager = getSseManager?.()
+        if (sseManager) {
+            const mainSession = engine.getSession(mainSessionId)
+            sseManager.broadcast({
+                type: 'brain-sdk-progress',
+                namespace: mainSession?.namespace,
+                sessionId: mainSessionId,
+                data: {
+                    brainSessionId: brainSession.id,
+                    progressType: 'done',
+                    data: { status: 'completed', noMessage: true }
+                }
+            } as unknown as SyncEvent)
+        }
 
         return c.json({ ok: true })
     })

@@ -97,7 +97,7 @@ function createWebApp(options: {
     app.use('/cli/*', corsMiddleware)
     app.use('/v1/*', corsMiddleware)
 
-    app.route('/cli', createCliRoutes(options.getSyncEngine))
+    app.route('/cli', createCliRoutes(options.getSyncEngine, options.brainStore, options.getSseManager))
 
     // OpenAI Compatible API for Codex CLI (public, no auth required)
     app.route('/v1', createCodexOpenAIRoutes())
