@@ -328,6 +328,7 @@ export function SessionChat(props: {
     }, [props.session.modelMode, props.session.metadata?.runtimeModel])
     const resolvedReasoningEffort = props.session.modelReasoningEffort
         ?? props.session.metadata?.runtimeModelReasoningEffort
+    const isBrainWorkerSession = props.session.metadata?.source === 'brain-sdk' || props.session.metadata?.source === 'brain'
 
     return (
         <div className="flex h-full">
@@ -415,6 +416,7 @@ export function SessionChat(props: {
                         }
                     />
 
+                    {isBrainWorkerSession ? null : (
                     <HappyComposer
                         apiClient={props.api}
                         sessionId={props.session.id}
@@ -439,6 +441,7 @@ export function SessionChat(props: {
                         otherUserTyping={props.otherUserTyping}
                         setTextRef={composerSetTextRef}
                     />
+                    )}
                 </div>
             </AssistantRuntimeProvider>
             </div>
