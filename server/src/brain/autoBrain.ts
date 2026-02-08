@@ -10,11 +10,8 @@ import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { SSEManager } from '../sse/sseManager'
 import type { BrainStore } from './store'
 import type { StoredBrainSession } from './types'
-import { generateSummariesWithGlm, parseBrainResultWithGlm, type BrainResult } from './glmSync'
-import { buildBrainSystemPrompt, buildReviewPrompt } from './brainSdkService'
-import { spawn } from 'child_process'
-import { existsSync } from 'fs'
-import path from 'path'
+import { generateSummariesWithGlm } from './glmSync'
+import { buildReviewPrompt } from './brainSdkService'
 
 // 同步配置
 const MAX_BATCH_CHARS = 50000  // 每批最大字符数
@@ -240,14 +237,9 @@ export class AutoBrainService {
 
         console.log('[BrainSync] AI response ended:', sessionId, 'source:', session?.metadata?.source)
 
-        if (session?.metadata?.source === 'brain') {
-            console.log('[BrainSync] Brain AI response, triggering save')
+        if (session?.metadata?.source === 'brain' || session?.metadata?.source === 'brain-sdk') {
+            console.log('[BrainSync] Brain AI response, triggering save, source:', session?.metadata?.source)
             await this.handleBrainAIResponse(sessionId)
-            return
-        }
-
-        if (session?.metadata?.source === 'brain-sdk') {
-            // review session 本身的 AI response，不触发主 session sync
             return
         }
 
@@ -300,70 +292,42 @@ export class AutoBrainService {
             }
             console.log('[BrainSync] Got brain text, length:', brainText.length)
 
-            const apiKey = process.env.LITELLM_API_KEY || 'sk-litellm-41e2a2d4d101255ea6e76fd59f96548a'
-
-            console.log('[BrainSync] Parsing brain result with GLM...')
-            const result = await parseBrainResultWithGlm(apiKey, brainText)
-            if (!result) {
-                console.log('[BrainSync] Failed to parse brain result')
-                return
+            // 判断 brain 输出：[NO_MESSAGE] 表示没有问题，否则作为 review 意见发给主 session
+            if (brainText.includes('[NO_MESSAGE]')) {
+                console.log('[BrainSync] Brain review: no issues found')
+                await this.brainStore.completeBrainSession(brainSession.id, '[NO_MESSAGE]')
+            } else {
+                console.log('[BrainSync] Brain review: sending review to main session')
+                await this.engine.sendMessage(mainSessionId, {
+                    text: `[发送者: Brain 代码审查]\n\n${brainText}`,
+                    sentFrom: 'brain-review'
+                })
+                await this.brainStore.updateBrainResult(brainSession.id, brainText)
             }
 
-            console.log('[BrainSync] Parsed brain result:', result.suggestions.length, 'suggestions')
+            // SSE 广播 done 事件
+            if (this.sseManager) {
+                const mainSession = this.engine.getSession(mainSessionId)
+                const noMessage = brainText.includes('[NO_MESSAGE]')
+                this.sseManager.broadcast({
+                    type: 'brain-sdk-progress',
+                    namespace: mainSession?.namespace,
+                    sessionId: mainSessionId,
+                    data: {
+                        brainSessionId: brainSession.id,
+                        progressType: 'done',
+                        data: { status: 'completed', noMessage }
+                    }
+                } as unknown as SyncEvent)
+            }
 
-            await this.injectParsedResultToSession(brainSessionId, result)
+            // 完成最新的 execution 记录（标记 reviewed rounds 为已 brain）
+            const latestExecution = await this.brainStore.getLatestExecutionWithProgress(brainSession.id)
+            if (latestExecution && latestExecution.status === 'running') {
+                await this.brainStore.completeBrainExecution(latestExecution.id, brainText.slice(0, 500))
+            }
         } catch (err) {
             console.error('[BrainSync] Failed to handle brain AI response:', err)
-        }
-    }
-
-    private async injectParsedResultToSession(brainSessionId: string, result: BrainResult): Promise<void> {
-        try {
-            const stats = {
-                total: result.suggestions.length,
-                byType: {
-                    bug: result.suggestions.filter(s => s.type === 'bug').length,
-                    security: result.suggestions.filter(s => s.type === 'security').length,
-                    performance: result.suggestions.filter(s => s.type === 'performance').length,
-                    improvement: result.suggestions.filter(s => s.type === 'improvement').length
-                },
-                bySeverity: {
-                    high: result.suggestions.filter(s => s.severity === 'high').length,
-                    medium: result.suggestions.filter(s => s.severity === 'medium').length,
-                    low: result.suggestions.filter(s => s.severity === 'low').length
-                }
-            }
-
-            const jsonContent = JSON.stringify({
-                suggestions: result.suggestions,
-                summary: result.summary,
-                stats
-            }, null, 2)
-
-            const messageText = `## 结构化审查结果\n\n\`\`\`json\n${jsonContent}\n\`\`\``
-
-            const agentMessage = {
-                role: 'agent',
-                content: {
-                    type: 'output',
-                    data: {
-                        type: 'assistant',
-                        message: {
-                            content: [
-                                {
-                                    type: 'text',
-                                    text: messageText
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-
-            await this.engine.addMessage(brainSessionId, agentMessage)
-            console.log('[BrainSync] Injected parsed result to Brain Session, stats:', stats)
-        } catch (err) {
-            console.error('[BrainSync] Failed to inject parsed result:', err)
         }
     }
 
@@ -575,7 +539,7 @@ export class AutoBrainService {
                         }
 
                         if (this.isSdkMode(brainSession)) {
-                            // SDK 模式：spawn detached worker 进行代码审查
+                            // 常驻 brain session 模式：发消息给 brain session 进行代码审查
                             // 排除 brain-review 开头的 round（防止 review 自己的审查结果）
                             const reviewableSummaries = savedSummaries.filter(s => !brainReviewRoundNumbers.has(s.round))
                             if (reviewableSummaries.length > 0) {
@@ -844,29 +808,26 @@ export class AutoBrainService {
     }
 
     /**
-     * 使用 SDK 触发代码审查（spawn detached worker 进程）
+     * 触发代码审查（发消息给常驻 brain session）
      */
     private async triggerSdkReview(
         brainSession: StoredBrainSession,
         summaries: Array<{ round: number; summary: string; userInput: string }>,
-        projectPath: string
+        _projectPath: string
     ): Promise<void> {
         const brainId = brainSession.id
         const mainSessionId = brainSession.mainSessionId
+        const brainDisplaySessionId = brainSession.brainSessionId
 
-        console.log('[BrainSync] Triggering SDK review for', summaries.length, 'rounds (detached worker)')
+        console.log('[BrainSync] Triggering review for', summaries.length, 'rounds (persistent brain session)')
 
         // 构建审查提示词：用户消息原文 + AI 回应汇总
         const roundsSummary = summaries.map(s => `### 第 ${s.round} 轮\n**用户：**\n${s.userInput}\n\n**AI 回应汇总：**\n${s.summary}`).join('\n\n')
         const contextSummary = brainSession.contextSummary || '(无上下文)'
         const reviewPrompt = buildReviewPrompt(contextSummary, roundsSummary)
-        const systemPrompt = await buildBrainSystemPrompt()
-
-        // 使用 glm-4.7（LiteLLM 代理支持，claude-sonnet-4-5 映射的 API 返回 401）
-        const model = 'glm-4.7'
 
         // 创建执行记录（status=running）
-        const execution = await this.brainStore.createBrainExecution({
+        await this.brainStore.createBrainExecution({
             brainSessionId: brainId,
             roundsReviewed: summaries.length,
             reviewedRoundNumbers: summaries.map(s => s.round),
@@ -899,48 +860,24 @@ export class AutoBrainService {
             } as unknown as SyncEvent)
         }
 
-        // spawn detached worker
+        // 直接发消息给常驻 brain session（不再 spawn worker）
         try {
-            const workerPath = this.resolveWorkerPath()
-            const config = JSON.stringify({
-                executionId: execution.id,
-                brainSessionId: brainId,
-                mainSessionId,
-                prompt: reviewPrompt,
-                projectPath,
-                model,
-                systemPrompt,
-                serverCallbackUrl: `http://127.0.0.1:${process.env.WEBAPP_PORT || '3006'}`,
-                serverToken: process.env.CLI_API_TOKEN || '',
-            })
+            if (!brainDisplaySessionId) {
+                console.error('[BrainSync] No brain display session ID, cannot send review')
+                return
+            }
 
-            const child = spawn(workerPath, [config], {
-                detached: true,
-                stdio: 'ignore',
-                env: process.env as NodeJS.ProcessEnv
-            })
-            child.unref()
+            // 确保 brain → main 映射存在（用于回复时识别）
+            this.brainToMainMap.set(brainDisplaySessionId, mainSessionId)
 
-            console.log('[BrainSync] Spawned detached worker PID:', child.pid, 'for execution:', execution.id)
+            await this.engine.sendMessage(brainDisplaySessionId, {
+                text: reviewPrompt,
+                sentFrom: 'webapp'
+            })
+            console.log('[BrainSync] Sent review prompt to persistent brain session:', brainDisplaySessionId)
         } catch (err) {
-            console.error('[BrainSync] Failed to spawn worker:', err)
-            await this.brainStore.failBrainExecution(execution.id, `Failed to spawn worker: ${(err as Error).message}`)
+            console.error('[BrainSync] Failed to send review to brain session:', err)
         }
     }
 
-    /**
-     * 查找 brain-worker 可执行文件路径
-     */
-    private resolveWorkerPath(): string {
-        // 方案1: 与当前可执行文件同目录
-        const serverDir = path.dirname(process.execPath)
-        const candidate1 = path.join(serverDir, 'hapi-brain-worker')
-        if (existsSync(candidate1)) return candidate1
-
-        // 方案2: 项目构建目录
-        const candidate2 = '/home/guang/softwares/hapi/cli/dist-exe/bun-linux-x64/hapi-brain-worker'
-        if (existsSync(candidate2)) return candidate2
-
-        throw new Error('hapi-brain-worker executable not found')
-    }
 }

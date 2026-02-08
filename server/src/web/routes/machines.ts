@@ -179,10 +179,10 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 }
                 await sendInitPrompt(engine, result.sessionId, role, userName, parsed.data.enableBrain)
 
-                // 如果启用 Brain，创建 Brain session（使用 SDK 方式，不依赖 CLI daemon）
+                // 如果启用 Brain，spawn 常驻 Brain session（与主 session 同样有持久 Claude 进程）
                 if (parsed.data.enableBrain && brainStore) {
                     try {
-                        console.log(`[machines/spawn] Creating Brain session for ${result.sessionId} (SDK mode)...`)
+                        console.log(`[machines/spawn] Creating persistent Brain session for ${result.sessionId}...`)
 
                         const existing = await brainStore.getActiveBrainSession(result.sessionId)
                         if (existing) {
@@ -193,22 +193,52 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                         const mainSession = engine.getSession(result.sessionId)
                         const directory = mainSession?.metadata?.path
                         if (directory) {
-                            const brainTag = `brain-sdk:${result.sessionId}`
-                            const brainMetadata = {
-                                ...(mainSession?.metadata ?? { path: directory, host: 'unknown' }),
-                                path: directory,
-                                host: mainSession?.metadata?.host ?? 'unknown',
-                                source: 'brain-sdk',
-                                name: `Brain: ${(mainSession?.metadata?.name ?? '').trim() || directory.split('/').filter(Boolean).slice(-1)[0] || result.sessionId.slice(0, 8)}`,
-                                mainSessionId: result.sessionId
+                            // Spawn 真正的 Brain session（有持久 Claude 进程）
+                            const brainSpawnResult = await engine.spawnSession(
+                                machineId,
+                                directory,
+                                'claude',
+                                false,  // yolo
+                                'simple',
+                                undefined,
+                                {
+                                    permissionMode: 'bypassPermissions',
+                                    source: 'brain-sdk',
+                                }
+                            )
+
+                            if (brainSpawnResult.type !== 'success') {
+                                console.error(`[machines/spawn] Failed to spawn Brain session: ${brainSpawnResult.message}`)
+                                return
                             }
 
-                            const brainDisplaySession = await engine.getOrCreateSession(brainTag, brainMetadata, null, namespace)
+                            const brainSessionId = brainSpawnResult.sessionId
+                            console.log(`[machines/spawn] Brain session spawned: ${brainSessionId}`)
+
                             if (email) {
-                                await store.setSessionCreatedBy(brainDisplaySession.id, email, namespace)
+                                await store.setSessionCreatedBy(brainSessionId, email, namespace)
                             }
 
-                            // 构建上下文（复用 brain 模块的消息解析逻辑）
+                            // 等待 Brain session 上线
+                            console.log(`[machines/spawn] Waiting for Brain session ${brainSessionId} to come online...`)
+                            const brainOnline = await waitForSessionOnline(engine, brainSessionId, 60_000)
+                            if (!brainOnline) {
+                                console.warn(`[machines/spawn] Brain session ${brainSessionId} did not come online within 60s`)
+                                return
+                            }
+                            await engine.waitForSocketInRoom(brainSessionId, 5000)
+
+                            // 发送 Brain init prompt
+                            const brainInitPrompt = await buildInitPrompt(role, { isBrain: true, userName })
+                            if (brainInitPrompt.trim()) {
+                                await engine.sendMessage(brainSessionId, {
+                                    text: brainInitPrompt,
+                                    sentFrom: 'webapp'
+                                })
+                                console.log(`[machines/spawn] Sent init prompt to Brain session ${brainSessionId}`)
+                            }
+
+                            // 构建上下文
                             const page = await engine.getMessagesPage(result.sessionId, { limit: 20, beforeSeq: null })
                             const contextMessages: string[] = []
                             for (const m of page.messages) {
@@ -226,20 +256,19 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                             }
                             const contextSummary = contextMessages.join('\n') || 'New session'
 
-                            // 创建 Brain session（不使用 CLI daemon，brainSessionId 使用特殊值标识 SDK 模式）
+                            // 创建 Brain session 记录
                             const brainSession = await brainStore.createBrainSession({
                                 namespace,
                                 mainSessionId: result.sessionId,
-                                brainSessionId: brainDisplaySession.id,
+                                brainSessionId,
                                 brainModel: 'claude',
                                 contextSummary,
                             })
-                            console.log(`[machines/spawn] Brain session created (SDK mode): ${brainSession.id}`)
+                            console.log(`[machines/spawn] Brain session record created: ${brainSession.id}`)
 
-                            // 立即设为 active，避免 status 卡在 pending（syncRounds 不一定有 pending rounds 来触发）
                             await brainStore.updateBrainSessionStatus(brainSession.id, 'active')
 
-                            // SSE 广播 brain-ready，前端刷新 brain 状态并解除输入禁用
+                            // SSE 广播 brain-ready
                             const sseManager = getSseManager?.()
                             if (sseManager) {
                                 sseManager.broadcast({
@@ -247,14 +276,14 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                                     namespace,
                                     sessionId: result.sessionId,
                                     data: {
-                                        brainSessionId: brainDisplaySession.id,
+                                        brainSessionId,
                                         progressType: 'brain-ready',
                                         data: {}
                                     }
                                 } as unknown as import('../../sync/syncEngine.js').SyncEvent)
                             }
 
-                            // 触发初始 Brain 分析
+                            // 触发初始 Brain 分析（延迟等主 session init prompt 回复完成）
                             if (autoBrainService) {
                                 setTimeout(() => {
                                     autoBrainService.triggerSync(result.sessionId).catch(err => {
