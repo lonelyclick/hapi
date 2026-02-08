@@ -339,8 +339,7 @@ export class AutoBrainService {
                 return
             }
 
-            console.log('[BrainSync] Waiting for message to sync to DB...')
-            await new Promise(resolve => setTimeout(resolve, 2000))
+            await this.waitForMessagesStable(brainSessionId)
 
             const brainText = await this.extractBrainAIText(brainSessionId)
             if (!brainText) {
