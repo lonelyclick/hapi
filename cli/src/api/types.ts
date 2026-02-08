@@ -429,6 +429,7 @@ export interface ClientToServerEvents {
         permissionMode?: SessionPermissionMode
         modelMode?: SessionModelMode
         modelReasoningEffort?: SessionModelReasoningEffort
+        fastMode?: boolean
     }) => void
     'session-end': (data: { sid: string; time: number }) => void
     'update-metadata': (data: { sid: string; expectedVersion: number; metadata: unknown }, cb: (answer: {

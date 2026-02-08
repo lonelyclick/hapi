@@ -59,6 +59,7 @@ type SessionSummary = {
     pendingRequestsCount: number
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
+    fastMode?: boolean
     viewers?: SessionViewer[]
     hasBrain?: boolean
     brainStatus?: string

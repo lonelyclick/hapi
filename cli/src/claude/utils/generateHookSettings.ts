@@ -115,6 +115,20 @@ export function updateHookSettingsFastMode(filepath: string, fastMode: boolean):
 }
 
 /**
+ * Read the current fastMode value from an existing hook settings file.
+ * Returns true if the settings file contains "fastMode": true.
+ */
+export function readHookSettingsFastMode(filepath: string): boolean {
+    try {
+        if (!existsSync(filepath)) return false;
+        const settings = JSON.parse(readFileSync(filepath, 'utf-8'));
+        return settings.fastMode === true;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Clean up the temporary hook settings file.
  */
 export function cleanupHookSettingsFile(filepath: string): void {
