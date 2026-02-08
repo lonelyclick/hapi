@@ -1,8 +1,9 @@
 /**
- * Generate temporary settings file with Claude hooks for session tracking.
+ * Generate temporary settings file with Claude hooks and optional litellm/claude settings.
  *
- * Creates a settings.json file that configures Claude's SessionStart hook
- * to notify our HTTP server when sessions change (new session, resume, compact, etc.).
+ * Creates a per-process settings file passed via --settings to Claude Code.
+ * This avoids overwriting the shared settings.json and eliminates race conditions
+ * when multiple sessions run with different settings concurrently.
  */
 
 import { join } from 'node:path';
@@ -11,40 +12,6 @@ import { writeFileSync, mkdirSync, unlinkSync, existsSync, readFileSync } from '
 import { configuration } from '@/configuration';
 import { logger } from '@/ui/logger';
 import { getHappyCliCommand } from '@/utils/spawnHappyCLI';
-
-/**
- * Copy the appropriate settings file based on claudeSettingsType.
- * @param claudeSettingsType - 'litellm' or 'claude'
- * @returns true if copied successfully, false otherwise
- */
-export function setupClaudeSettings(claudeSettingsType?: 'litellm' | 'claude'): boolean {
-    try {
-        const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
-        const settingsPath = join(claudeConfigDir, 'settings.json');
-
-        // If claudeSettingsType is specified, copy the appropriate settings file
-        if (claudeSettingsType) {
-            const sourceFileName = claudeSettingsType === 'litellm' ? 'settings.litellm.json' : 'settings.claude.json';
-            const sourcePath = join(claudeConfigDir, sourceFileName);
-
-            if (existsSync(sourcePath)) {
-                const sourceContent = readFileSync(sourcePath, 'utf-8');
-                writeFileSync(settingsPath, sourceContent);
-                logger.info(`[setupClaudeSettings] Copied ${sourceFileName} to settings.json`);
-                return true;
-            } else {
-                logger.warn(`[setupClaudeSettings] Source file not found: ${sourcePath}`);
-                return false;
-            }
-        }
-
-        // No claudeSettingsType specified, keep existing settings.json as-is
-        return true;
-    } catch (error) {
-        logger.warn(`[setupClaudeSettings] Error: ${error}`);
-        return false;
-    }
-}
 
 function shellQuote(value: string): string {
     if (value.length === 0) {
@@ -63,9 +30,10 @@ function shellJoin(parts: string[]): string {
 }
 
 /**
- * Generate a temporary settings file with SessionStart hook configuration.
+ * Generate a temporary settings file with SessionStart hook configuration
+ * and optional litellm/claude settings merged in.
  */
-export function generateHookSettingsFile(port: number, token: string): string {
+export function generateHookSettingsFile(port: number, token: string, claudeSettingsType?: 'litellm' | 'claude'): string {
     const hooksDir = join(configuration.happyHomeDir, 'tmp', 'hooks');
     mkdirSync(hooksDir, { recursive: true });
 
@@ -75,7 +43,8 @@ export function generateHookSettingsFile(port: number, token: string): string {
     const { command, args } = getHappyCliCommand(['hook-forwarder', '--port', String(port), '--token', token]);
     const hookCommand = shellJoin([command, ...args]);
 
-    const settings = {
+    // Start with hooks config
+    const settings: Record<string, unknown> = {
         hooks: {
             SessionStart: [
                 {
@@ -90,6 +59,30 @@ export function generateHookSettingsFile(port: number, token: string): string {
             ]
         }
     };
+
+    // Merge settings from litellm/claude source file if specified
+    if (claudeSettingsType) {
+        const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
+        const sourceFileName = claudeSettingsType === 'litellm' ? 'settings.litellm.json' : 'settings.claude.json';
+        const sourcePath = join(claudeConfigDir, sourceFileName);
+
+        if (existsSync(sourcePath)) {
+            try {
+                const sourceSettings = JSON.parse(readFileSync(sourcePath, 'utf-8'));
+                // Merge source settings into hook settings (source settings take precedence, but hooks are preserved)
+                for (const [key, value] of Object.entries(sourceSettings)) {
+                    if (key !== 'hooks') {
+                        settings[key] = value;
+                    }
+                }
+                logger.info(`[generateHookSettings] Merged ${sourceFileName} into hook settings`);
+            } catch (err) {
+                logger.warn(`[generateHookSettings] Failed to read ${sourcePath}: ${err}`);
+            }
+        } else {
+            logger.warn(`[generateHookSettings] Source file not found: ${sourcePath}`);
+        }
+    }
 
     writeFileSync(filepath, JSON.stringify(settings, null, 4));
     logger.debug(`[generateHookSettings] Created hook settings file: ${filepath}`);

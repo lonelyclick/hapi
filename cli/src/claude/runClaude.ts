@@ -26,7 +26,7 @@ import { resolve } from 'node:path';
 import type { Session } from './session';
 import { readWorktreeEnv } from '@/utils/worktreeEnv';
 import { readModeEnv } from '@/utils/modeEnv';
-import { setupClaudeSettings } from './utils/generateHookSettings';
+import {} from './utils/generateHookSettings';
 
 const INIT_PROMPT_PREFIX = '#InitPrompt-';
 

@@ -65,14 +65,15 @@ function filterSessions(
         if (!archiveFilter && !session.active) return false
 
         // Owner filter
-        const isBrainSession = session.metadata?.source === 'brain' || session.metadata?.source === 'brain-sdk'
+        const isBrainWorkerSession = session.metadata?.source === 'brain' || session.metadata?.source === 'brain-sdk'
         if (ownerFilter === 'mine') {
-            // Show only my sessions (no ownerEmail means it's mine, exclude brain sessions)
+            // Show only my sessions (no ownerEmail means it's mine, exclude brain worker sessions)
             if (session.ownerEmail) return false
-            if (isBrainSession) return false
+            if (isBrainWorkerSession) return false
         } else if (ownerFilter === 'brain') {
-            // Show only brain sessions
-            if (!isBrainSession) return false
+            // Show main sessions that have brain enabled (not brain worker sessions)
+            if (isBrainWorkerSession) return false
+            if (!session.hasBrain) return false
         } else if (ownerFilter === 'others') {
             // Show only others' sessions (has ownerEmail)
             if (!session.ownerEmail) return false
@@ -409,7 +410,7 @@ export function SessionList(props: {
 
     // Check if there are any brain sessions
     const hasBrainSessions = useMemo(() =>
-        props.sessions.some(s => s.metadata?.source === 'brain' || s.metadata?.source === 'brain-sdk'),
+        props.sessions.some(s => s.hasBrain),
         [props.sessions]
     )
 
