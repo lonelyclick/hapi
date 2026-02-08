@@ -201,6 +201,7 @@ export function createCliRoutes(
         pendingUserMessages.delete(sessionId)
         const wasRefining = refiningSessions.has(sessionId)
         refiningSessions.delete(sessionId)
+        console.log('[CLI] clearPendingUserMessage:', sessionId, 'wasRefining=', wasRefining)
 
         // 通知前端 refine 结束（isRefining → false）
         if (wasRefining) {
@@ -240,11 +241,13 @@ export function createCliRoutes(
 
         const brainSession = await brainStore.getActiveBrainSession(mainSessionId)
         if (!brainSession) {
+            console.log('[CLI] brain-no-issues: no active brain session for', mainSessionId)
             return c.json({ error: 'No active brain session' }, 404)
         }
 
         // 完成 execution（标记 reviewed rounds）
         const latestExecution = await brainStore.getLatestExecutionWithProgress(brainSession.id)
+        console.log('[CLI] brain-no-issues:', mainSessionId, 'execution=', latestExecution?.status ?? 'none')
         if (latestExecution && latestExecution.status === 'running') {
             await brainStore.completeBrainExecution(latestExecution.id, '[NO_MESSAGE]')
         }
@@ -253,6 +256,7 @@ export function createCliRoutes(
         const sseManager = getSseManager?.()
         if (sseManager) {
             const mainSession = engine.getSession(mainSessionId)
+            console.log('[CLI] brain-no-issues: broadcasting done(noMessage=true) for', mainSessionId)
             sseManager.broadcast({
                 type: 'brain-sdk-progress',
                 namespace: mainSession?.namespace,

@@ -289,10 +289,12 @@ export class AutoBrainService {
                 return
             }
 
-            // 检查是否正在 refine（用户消息拦截），如果是则广播 done 事件
+            // 检查是否正在 refine（用户消息拦截）
+            // 注意：正常情况下 refine 的 done 已由 clearPendingUserMessage 路由广播，
+            // 这里作为兜底，防止 clearPendingUserMessage 未被调用的情况
             const wasRefining = refiningSessions.has(mainSessionId)
             if (wasRefining) {
-                console.log('[BrainSync] Refine completed, broadcasting done event')
+                console.log('[BrainSync] handleBrainAIResponse: refine fallback - refiningSessions still has', mainSessionId, ', broadcasting done')
                 refiningSessions.delete(mainSessionId)
                 if (this.sseManager) {
                     const mainSession = this.engine.getSession(mainSessionId)
@@ -311,8 +313,9 @@ export class AutoBrainService {
 
             // 只处理有 running execution 的回复（即 review 回复），忽略 init prompt 和 refine 等其他回复
             const latestExecution = await this.brainStore.getLatestExecutionWithProgress(brainSession.id)
+            console.log('[BrainSync] handleBrainAIResponse: latestExecution status=', latestExecution?.status ?? 'none')
             if (!latestExecution || latestExecution.status !== 'running') {
-                console.log('[BrainSync] No running execution found, skipping (likely init prompt or refine response)')
+                console.log('[BrainSync] No running execution found, skipping (likely init prompt, refine, or no_issues already completed)')
                 return
             }
 
@@ -353,6 +356,7 @@ export class AutoBrainService {
             }
 
             // SSE 广播 done 事件
+            console.log('[BrainSync] handleBrainAIResponse: broadcasting done, noMessage=', noIssues)
             if (this.sseManager) {
                 const mainSession = this.engine.getSession(mainSessionId)
                 const noMessage = noIssues
@@ -371,7 +375,25 @@ export class AutoBrainService {
             // 完成 execution 记录（标记 reviewed rounds 为已 brain）
             await this.brainStore.completeBrainExecution(latestExecution.id, brainText.slice(0, 500))
         } catch (err) {
-            console.error('[BrainSync] Failed to handle brain AI response:', err)
+            console.error('[BrainSync] handleBrainAIResponse error:', err)
+            // 异常时也广播 done，防止前端卡住
+            if (this.sseManager && mainSessionId) {
+                const mainSession = this.engine.getSession(mainSessionId)
+                const brainSession = await this.brainStore.getActiveBrainSession(mainSessionId).catch(() => null)
+                if (brainSession) {
+                    console.log('[BrainSync] handleBrainAIResponse: error fallback, broadcasting done')
+                    this.sseManager.broadcast({
+                        type: 'brain-sdk-progress',
+                        namespace: mainSession?.namespace,
+                        sessionId: mainSessionId,
+                        data: {
+                            brainSessionId: brainSession.id,
+                            progressType: 'done',
+                            data: { status: 'completed', noMessage: true }
+                        }
+                    } as unknown as SyncEvent)
+                }
+            }
         }
     }
 
@@ -438,6 +460,9 @@ export class AutoBrainService {
 
             const brainReviewRoundNumbers = new Set(allRounds.filter(r => r.fromBrainReview).map(r => r.roundNumber))
             const initPromptRoundNumbers = new Set(allRounds.filter(r => r.userInput.trimStart().startsWith('#InitPrompt-')).map(r => r.roundNumber))
+            if (brainReviewRoundNumbers.size > 0) {
+                console.log('[BrainSync] Brain-review rounds:', [...brainReviewRoundNumbers].join(', '))
+            }
 
             // 找出需要处理的新 round（跳过 initPrompt、已处理的、没有 AI 回应的）
             const pendingRounds = allRounds.filter(r =>
@@ -454,6 +479,7 @@ export class AutoBrainService {
 
             // 先过滤掉 brain-review 触发的 round，确认是否有真正需要审查的 round
             const reviewableRounds = pendingRounds.filter(r => !brainReviewRoundNumbers.has(r.roundNumber))
+            console.log('[BrainSync] Reviewable rounds:', reviewableRounds.length, '(filtered from', pendingRounds.length, 'pending)')
             if (reviewableRounds.length === 0) {
                 console.log('[BrainSync] All pending rounds are brain-review rounds, skipping')
                 // 保存 round 记录（标记为已处理）但不触发审查
@@ -535,6 +561,7 @@ export class AutoBrainService {
         } catch (err) {
             console.error('[BrainSync] syncRounds error:', err)
             // 异常时广播 done，防止前端卡在 "Brain 处理中"
+            console.log('[BrainSync] syncRounds: error fallback, broadcasting done')
             if (this.sseManager) {
                 const mainSession = this.engine.getSession(mainSessionId)
                 this.sseManager.broadcast({
@@ -583,6 +610,7 @@ export class AutoBrainService {
 
     private broadcastBrainSyncing(brainId: string, mainSessionId: string): void {
         if (!this.sseManager) return
+        console.log('[BrainSync] Broadcasting SSE: syncing for', mainSessionId)
         const mainSession = this.engine.getSession(mainSessionId)
         this.sseManager.broadcast({
             type: 'brain-sdk-progress',
@@ -661,6 +689,7 @@ export class AutoBrainService {
         })
 
         // SSE 广播 started 事件
+        console.log('[BrainSync] Broadcasting SSE: started for', mainSessionId)
         if (this.sseManager) {
             const mainSession = this.engine.getSession(mainSessionId)
             this.sseManager.broadcast({
