@@ -282,6 +282,8 @@ export function HappyComposer(props: {
     resumeError?: string | null
     onPermissionModeChange?: (mode: PermissionMode) => void
     onModelModeChange?: (config: { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }) => void
+    fastMode?: boolean
+    onFastModeChange?: (fastMode: boolean) => void
     onSwitchToRemote?: () => void
     onTerminal?: () => void
     autocompletePrefixes?: string[]
@@ -307,6 +309,8 @@ export function HappyComposer(props: {
         resumeError = null,
         onPermissionModeChange,
         onModelModeChange,
+        fastMode: rawFastMode,
+        onFastModeChange,
         onSwitchToRemote,
         onTerminal,
         autocompletePrefixes = ['@', '/'],
@@ -317,6 +321,8 @@ export function HappyComposer(props: {
     // Use ?? so missing values fall back to default (destructuring defaults only handle undefined)
     const permissionMode = rawPermissionMode ?? 'default'
     const modelMode = rawModelMode ?? 'default'
+    const fastMode = rawFastMode ?? false
+    const isClaude = agentFlavor === 'claude' || !agentFlavor
 
     const assistantApi = useAssistantApi()
     const composerText = useAssistantState(({ composer }) => composer.text)
@@ -355,6 +361,7 @@ export function HappyComposer(props: {
     })
     const [optimizePreview, setOptimizePreview] = useState<{ original: string; optimized: string } | null>(null)
     const [showYohoCredentialPicker, setShowYohoCredentialPicker] = useState(false)
+    const fastModeSyncedRef = useRef(false)
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)
@@ -435,6 +442,22 @@ export function HappyComposer(props: {
         if (!draftLoadedRef.current) return
         setDraft(composerText)
     }, [composerText, setDraft])
+
+    // Sync stored fast mode preference to new active sessions (Claude only)
+    useEffect(() => {
+        if (!isClaude || !active || !onFastModeChange) return
+        if (fastModeSyncedRef.current) return
+        fastModeSyncedRef.current = true
+        const stored = localStorage.getItem('hapi-fast-mode') === 'true'
+        if (stored && !fastMode) {
+            onFastModeChange(true)
+        }
+    }, [sessionId, active]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Reset sync flag when session changes
+    useEffect(() => {
+        fastModeSyncedRef.current = false
+    }, [sessionId])
 
     // 同步输入给其他用户（防抖 500ms，增加防抖时间减少请求频率）
     // 用 ref 跟踪是否是本地输入，避免把远程同步的内容再发回去
@@ -946,6 +969,14 @@ export function HappyComposer(props: {
         setShowSettings(false)
         haptic('light')
     }, [onModelModeChange, controlsDisabled, haptic])
+
+    const handleFastModeToggle = useCallback(() => {
+        if (!onFastModeChange || controlsDisabled) return
+        const newValue = !fastMode
+        localStorage.setItem('hapi-fast-mode', String(newValue))
+        onFastModeChange(newValue)
+        haptic('light')
+    }, [onFastModeChange, controlsDisabled, fastMode, haptic])
 
     const handleAutoOptimizeToggle = useCallback(() => {
         setAutoOptimize(prev => {
