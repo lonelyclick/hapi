@@ -43,6 +43,7 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
         lines.push('- 审查代码改动，重点关注：潜在 bug、安全隐患、逻辑问题、流程合理性')
         lines.push('- 有问题 → 调用 `mcp__hapi__brain_send_message`（type: review）将审查意见发给主 session')
         lines.push('- 无问题 → 直接回复"无问题"')
+        lines.push('- 特别注意：如果 AI 的最后回复是一个等待用户确认的疑问句（如"要运行测试吗？""需要我继续吗？"），或者提示可以进行下一步操作，你应该分析当前上下文，判断是否应该推进，然后通过 `mcp__hapi__brain_send_message`（type: info）代替用户回答，推动对话继续')
         lines.push('')
     } else if (options?.hasBrain) {
         // 有 brain 的主 session：消息来源说明 + 角色定位

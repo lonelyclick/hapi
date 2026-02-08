@@ -71,7 +71,7 @@ export function SessionChat(props: {
     const controlsDisabled = !props.session.active
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
-    const { abortSession, switchSession, setPermissionMode, setModelMode, deleteSession, refreshAccount, isPending } = useSessionActions(props.api, props.session.id)
+    const { abortSession, switchSession, setPermissionMode, setModelMode, setFastMode, deleteSession, refreshAccount, isPending } = useSessionActions(props.api, props.session.id)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [isResuming, setIsResuming] = useState(false)
     const [resumeError, setResumeError] = useState<string | null>(null)
@@ -189,6 +189,17 @@ export function SessionChat(props: {
             console.error('Failed to set model mode:', e)
         }
     }, [setModelMode, props.onRefresh, haptic])
+
+    // Fast mode change handler
+    const handleFastModeChange = useCallback(async (fastMode: boolean) => {
+        try {
+            await setFastMode(fastMode)
+            haptic.notification('success')
+        } catch (e) {
+            haptic.notification('error')
+            console.error('Failed to set fast mode:', e)
+        }
+    }, [setFastMode, haptic])
 
     // Abort handler
     const handleAbort = useCallback(async () => {
@@ -345,6 +356,7 @@ export function SessionChat(props: {
                     refreshAccountDisabled={isPending}
                     modelMode={resolvedModelMode}
                     modelReasoningEffort={resolvedReasoningEffort}
+                    fastMode={props.session.fastMode}
                 />
 
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -424,6 +436,7 @@ export function SessionChat(props: {
                         permissionMode={props.session.permissionMode}
                         modelMode={resolvedModelMode}
                         modelReasoningEffort={resolvedReasoningEffort}
+                        fastMode={props.session.fastMode}
                         agentFlavor={props.session.metadata?.flavor ?? 'claude'}
                         active={props.session.active}
                         thinking={props.session.thinking}
@@ -435,6 +448,7 @@ export function SessionChat(props: {
                         resumeError={resumeError}
                         onPermissionModeChange={handlePermissionModeChange}
                         onModelModeChange={handleModelModeChange}
+                        onFastModeChange={handleFastModeChange}
                         onSwitchToRemote={handleSwitchToRemote}
                         onTerminal={props.session.active ? handleViewTerminal : undefined}
                         autocompleteSuggestions={props.autocompleteSuggestions}
