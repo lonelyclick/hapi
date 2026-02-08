@@ -80,7 +80,7 @@ export function generateHookSettingsFile(port: number, token: string, claudeSett
                 logger.warn(`[generateHookSettings] Failed to read ${sourcePath}: ${err}`);
             }
         } else {
-            logger.warn(`[generateHookSettings] Source file not found: ${sourcePath}`);
+            logger.debug(`[generateHookSettings] No source settings file: ${sourcePath}`);
         }
     }
 
