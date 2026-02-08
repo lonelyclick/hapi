@@ -55,6 +55,7 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
         lines.push('- 你是编程执行者，负责根据用户需求编写和修改代码')
         lines.push('- 后台有一个 Brain（监督系统）会要求你对自己的改动进行 review，收到 review 请求时请认真检查')
         lines.push('- 当你收到 `[发送者: Brain 代码审查]` 的消息时，说明 Brain 发现了问题，请认真对待并修复')
+        lines.push('- **重要：完成当前指令后立即停下来，不要自行推进下一步（如自动运行测试、提交代码、部署等）。所有流程推进由 Brain 统一控制。**')
         lines.push('')
     } else {
         // 普通 session（无 brain）
