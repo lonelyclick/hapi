@@ -178,9 +178,6 @@ export class AutoBrainService {
     private syncingBrainIds: Set<string> = new Set()
     private brainToMainMap: Map<string, string> = new Map()
     private unsubscribe: (() => void) | null = null
-    /** 防抖定时器：等 AI 真正完成一轮后再触发 brain sync */
-    private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
-    private static readonly DEBOUNCE_MS = 5000
     constructor(engine: SyncEngine, brainStore: BrainStore) {
         this.engine = engine
         this.brainStore = brainStore
@@ -229,10 +226,6 @@ export class AutoBrainService {
         }
         this.brainToMainMap.clear()
         this.syncingBrainIds.clear()
-        for (const timer of this.debounceTimers.values()) {
-            clearTimeout(timer)
-        }
-        this.debounceTimers.clear()
         console.log('[BrainSync] Service stopped')
     }
 
@@ -267,25 +260,9 @@ export class AutoBrainService {
             return
         }
 
-        // 主 session：防抖处理，AI 在一轮对话中工具调用会多次触发 wasThinking
-        // 每次收到都重置计时器，等稳定后再触发 brain sync
-        const existing = this.debounceTimers.get(sessionId)
-        if (existing) {
-            clearTimeout(existing)
-            console.log('[BrainSync] Debounce reset for', sessionId)
-        }
-        const timer = setTimeout(async () => {
-            this.debounceTimers.delete(sessionId)
-            // 再次检查 session 是否仍然不在 thinking
-            const currentSession = this.engine.getSession(sessionId)
-            if (currentSession?.thinking) {
-                console.log('[BrainSync] Session still thinking after debounce, skip:', sessionId)
-                return
-            }
-            console.log('[BrainSync] Debounce fired, session idle. Triggering brain sync:', sessionId)
-            await this.handleMainSessionComplete(sessionId)
-        }, AutoBrainService.DEBOUNCE_MS)
-        this.debounceTimers.set(sessionId, timer)
+        // wasThinking=true 只在 CLI 收到 result 时触发（一轮对话真正结束）
+        // 中间的工具调用不会触发，所以这个信号是可靠的
+        await this.handleMainSessionComplete(sessionId)
     }
 
     private async handleMainSessionComplete(mainSessionId: string): Promise<void> {
