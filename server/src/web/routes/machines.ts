@@ -204,6 +204,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                                 {
                                     permissionMode: 'bypassPermissions',
                                     source: 'brain-sdk',
+                                    mainSessionId: result.sessionId,
                                 }
                             )
 
