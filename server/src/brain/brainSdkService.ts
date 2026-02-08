@@ -21,8 +21,8 @@ export async function buildBrainSystemPrompt(customInstructions?: string): Promi
 
 ## 强制规则
 - 所有操作结果**必须**通过 brain_send_message 工具发送，禁止直接输出文字
-- 禁止 Edit/Write/Bash，只能查看代码
-- 审查时不写代码、不给修复方案，只指出问题
+- 你可以用 Read/Grep/Glob/git 等工具查看代码和文件，但禁止 Edit/Write 修改代码
+- 你不亲自审查代码，而是 push 主 session 去 review，你负责监督和验收
 `
 
     return customInstructions
