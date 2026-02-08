@@ -128,10 +128,12 @@ async function run(): Promise<void> {
                 cwd: config.projectPath,
                 model: config.model,
                 systemPrompt: config.systemPrompt,
-                maxTurns: isRefine ? 3 : 30,
-                tools: ['Read', 'Grep', 'Glob'],
-                allowedTools: ['Read', 'Grep', 'Glob'],
-                disallowedTools: ['Bash', 'Edit', 'Write', 'Task'],
+                maxTurns: isRefine ? 1 : 30,
+                tools: isRefine ? [] : ['Read', 'Grep', 'Glob'],
+                allowedTools: isRefine ? [] : ['Read', 'Grep', 'Glob'],
+                disallowedTools: isRefine
+                    ? ['Bash', 'Edit', 'Write', 'Task', 'Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'TodoWrite', 'NotebookEdit']
+                    : ['Bash', 'Edit', 'Write', 'Task'],
                 permissionMode: 'dontAsk',
                 abortController
             },
