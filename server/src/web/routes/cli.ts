@@ -32,7 +32,7 @@ const cliSendMessageSchema = z.object({
 })
 
 const getMessagesQuerySchema = z.object({
-    afterSeq: z.coerce.number().int().min(0),
+    afterSeq: z.coerce.number().int().min(0).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional()
 })
 
@@ -144,7 +144,8 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
         }
 
         const limit = parsed.data.limit ?? 200
-        const messages = await engine.getMessagesAfter(sessionId, { afterSeq: parsed.data.afterSeq, limit })
+        const afterSeq = parsed.data.afterSeq ?? 0
+        const messages = await engine.getMessagesAfter(sessionId, { afterSeq, limit })
         return c.json({ messages })
     })
 
