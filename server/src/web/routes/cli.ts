@@ -193,13 +193,36 @@ export function createCliRoutes(
         return c.json({ text: pending.text, timestamp: pending.timestamp })
     })
 
-    // Brain 处理完毕后清除暂存的用户消息
+    // Brain 处理完毕后清除暂存的用户消息，并通知前端 refine 结束
     app.delete('/sessions/:id/pending-user-message', async (c) => {
         const { pendingUserMessages, refiningSessions } = await import('./messages.js')
         const sessionId = c.req.param('id')
 
         pendingUserMessages.delete(sessionId)
+        const wasRefining = refiningSessions.has(sessionId)
         refiningSessions.delete(sessionId)
+
+        // 通知前端 refine 结束（isRefining → false）
+        if (wasRefining) {
+            const engine = getSyncEngine()
+            const sseManager = getSseManager?.()
+            if (engine && sseManager && brainStore) {
+                const brainSession = await brainStore.getActiveBrainSession(sessionId)
+                if (brainSession) {
+                    const mainSession = engine.getSession(sessionId)
+                    sseManager.broadcast({
+                        type: 'brain-sdk-progress',
+                        namespace: mainSession?.namespace,
+                        sessionId,
+                        data: {
+                            brainSessionId: brainSession.id,
+                            progressType: 'done',
+                            data: { status: 'completed', noMessage: false }
+                        }
+                    } as unknown as SyncEvent)
+                }
+            }
+        }
 
         return c.json({ ok: true })
     })
