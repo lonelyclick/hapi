@@ -105,61 +105,57 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
             logger.debug('[hapiMCP] brain_analyze called with context:', args.context)
 
             try {
-                // 1. Fetch conversation history (prefer main session if available)
+                // 1. Fetch latest messages from main session
                 const targetSessionId = mainSessionId || client.sessionId
-                const messages = await api.getSessionMessages(targetSessionId, { limit: 200 })
+                const messages = await api.getSessionMessages(targetSessionId, { limit: 50 })
                 logger.debug(`[hapiMCP] Fetched ${messages.length} messages for session ${targetSessionId}`)
 
-                // 2. Build conversation summary from messages
-                const conversationParts: string[] = []
-                for (const msg of messages) {
-                    const content = msg.content as Record<string, unknown> | null
-                    if (!content) continue
+                // 2. Extract only the latest round (last user message + subsequent assistant messages)
+                const extractText = (body: unknown): string => {
+                    if (typeof body === 'string') return body
+                    if (typeof body === 'object' && body && 'text' in (body as Record<string, unknown>)) {
+                        return String((body as Record<string, unknown>).text)
+                    }
+                    if (Array.isArray(body)) {
+                        return (body as Array<Record<string, unknown>>)
+                            .filter(b => b.type === 'text' && typeof b.text === 'string')
+                            .map(b => String(b.text))
+                            .join('\n')
+                    }
+                    return ''
+                }
 
-                    const role = content.role as string
-                    const body = content.content
-
-                    if (role === 'user') {
-                        let text = ''
-                        if (typeof body === 'string') {
-                            text = body
-                        } else if (typeof body === 'object' && body && 'text' in (body as Record<string, unknown>)) {
-                            text = String((body as Record<string, unknown>).text)
-                        } else if (Array.isArray(body)) {
-                            text = (body as Array<Record<string, unknown>>)
-                                .filter(b => b.type === 'text' && typeof b.text === 'string')
-                                .map(b => String(b.text))
-                                .join('\n')
-                        }
-                        if (text.trim()) {
-                            conversationParts.push(`**用户：** ${text.trim().slice(0, 500)}`)
-                        }
-                    } else if (role === 'assistant') {
-                        let text = ''
-                        if (typeof body === 'string') {
-                            text = body
-                        } else if (Array.isArray(body)) {
-                            text = (body as Array<Record<string, unknown>>)
-                                .filter(b => b.type === 'text' && typeof b.text === 'string')
-                                .map(b => String(b.text))
-                                .join('\n')
-                        }
-                        if (text.trim()) {
-                            conversationParts.push(`**AI：** ${text.trim().slice(0, 500)}`)
-                        }
+                // Find the last user message index
+                let lastUserIdx = -1
+                for (let i = messages.length - 1; i >= 0; i--) {
+                    const content = messages[i].content as Record<string, unknown> | null
+                    if (content?.role === 'user') {
+                        lastUserIdx = i
+                        break
                     }
                 }
 
-                // Limit conversation summary length
-                const maxParts = 30
-                const conversationSummary = conversationParts.length > maxParts
-                    ? conversationParts.slice(-maxParts).join('\n\n')
-                    : conversationParts.join('\n\n')
+                const conversationParts: string[] = []
+                const startIdx = lastUserIdx >= 0 ? lastUserIdx : Math.max(0, messages.length - 2)
+                for (let i = startIdx; i < messages.length; i++) {
+                    const content = messages[i].content as Record<string, unknown> | null
+                    if (!content) continue
+                    const role = content.role as string
+                    const text = extractText(content.content).trim()
+                    if (!text) continue
+                    if (role === 'user') {
+                        conversationParts.push(`**用户：** ${text.slice(0, 1000)}`)
+                    } else if (role === 'assistant') {
+                        conversationParts.push(`**AI：** ${text.slice(0, 2000)}`)
+                    }
+                }
+
+                const conversationSummary = conversationParts.join('\n\n')
 
                 // 3. Build prompt for temporary Claude agent
-                const analysisPrompt = `你是一个资深的代码审查和项目分析专家。请基于以下 AI 编程会话的对话记录，分析当前项目状态并给出建议。
+                const analysisPrompt = `你是一个资深的代码审查和项目分析专家。请基于以下最新一轮 AI 编程会话的对话记录，审查代码改动并给出建议。
 
-## 对话记录
+## 最新一轮对话
 
 ${conversationSummary || '（无对话记录）'}
 
@@ -167,26 +163,24 @@ ${args.context ? `## 额外关注点\n${args.context}\n` : ''}
 
 ## 任务
 
-1. **会话汇总**：总结这次 AI 编程会话中做了什么（200-300字）
-2. **代码审查**：用 Read/Grep/Glob 工具查看相关代码文件，检查是否有问题：
+1. **本轮汇总**：总结这轮对话中 AI 做了什么（100-200字）
+2. **代码审查**：用 Read/Grep/Glob 工具查看本轮涉及的代码文件，检查是否有问题：
    - 潜在的 bug 或逻辑错误
    - 安全隐患
    - 性能问题
    - 代码风格和最佳实践
-3. **改进建议**：给出 3-5 条具体的、可操作的改进建议
+3. **改进建议**：给出具体的、可操作的改进建议（如果没有问题就说没有）
 
 请用以下格式输出：
 
-## 会话汇总
+## 本轮汇总
 （总结内容）
 
 ## 发现的问题
-（如果有的话，列出问题）
+（如果有的话，列出问题；没有就写"无明显问题"）
 
 ## 改进建议
-1. （建议1）
-2. （建议2）
-...`
+（如果有的话列出；没有就写"暂无"）`
 
                 // 4. Call SDK query() to spawn temporary Claude agent
                 logger.debug('[hapiMCP] Spawning temporary Claude agent for brain analysis...')
