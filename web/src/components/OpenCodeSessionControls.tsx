@@ -15,12 +15,13 @@ export function OpenCodeSessionControls({ session, onUpdate }: OpenCodeSessionCo
 
     // OpenCode 模型选项
     const openCodeModels = [
-        { value: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'Anthropic' },
-        { value: 'anthropic/claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku', provider: 'Anthropic' },
-        { value: 'openai/gpt-4o-2024-08-06', label: 'GPT-4o', provider: 'OpenAI' },
-        { value: 'openai/gpt-4o-mini-2024-07-18', label: 'GPT-4o Mini', provider: 'OpenAI' },
-        { value: 'openai/o1-preview-2024-12-17', label: 'o1 Preview', provider: 'OpenAI' },
-        { value: 'openai/o1-mini-2024-12-17', label: 'o1 Mini', provider: 'OpenAI' }
+        { value: 'anthropic.claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'Anthropic' },
+        { value: 'anthropic.claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', provider: 'Anthropic' },
+        { value: 'anthropic.claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', provider: 'Anthropic' },
+        { value: 'anthropic.claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'Anthropic' },
+        { value: 'openai/gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI' },
+        { value: 'gemini.gemini-2.5', label: 'Gemini 2.5', provider: 'Google' },
+        { value: 'openrouter.openrouter/pony-alpha', label: 'Pony Alpha', provider: 'OpenRouter' },
     ]
 
     const reasoningEfforts = [

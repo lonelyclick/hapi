@@ -58,13 +58,14 @@ const CODEX_REASONING_EFFORTS = [
 
 // OpenCode supported models - using OpenCode's native model ID format
 const OPENCODE_MODELS = [
-    // Anthropic (Claude)
+    // Anthropic (Claude) - latest generation
+    { value: 'anthropic.claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'Anthropic' },
+    { value: 'anthropic.claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', provider: 'Anthropic' },
+    { value: 'anthropic.claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', provider: 'Anthropic' },
+    // Anthropic (Claude) - legacy
+    { value: 'anthropic.claude-opus-4-5-20251101', label: 'Claude Opus 4.5', provider: 'Anthropic' },
     { value: 'anthropic.claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'Anthropic' },
     { value: 'anthropic.claude-opus-4-20250514', label: 'Claude Opus 4', provider: 'Anthropic' },
-    { value: 'anthropic.claude-3-7-sonnet-latest', label: 'Claude 3.7 Sonnet', provider: 'Anthropic' },
-    { value: 'anthropic.claude-3-5-sonnet-latest', label: 'Claude 3.5 Sonnet', provider: 'Anthropic' },
-    { value: 'anthropic.claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku', provider: 'Anthropic' },
-    { value: 'anthropic.claude-3-opus-latest', label: 'Claude 3 Opus', provider: 'Anthropic' },
     // OpenAI (from `opencode models openai`)
     { value: 'openai/gpt-5.2', label: 'GPT-5.2', provider: 'OpenAI' },
     // Google Gemini
@@ -95,6 +96,8 @@ const OPENCODE_MODELS = [
     { value: 'copilot.gemini-2.0-flash', label: 'Gemini 2.0 Flash', provider: 'Copilot' },
     // AWS Bedrock
     { value: 'bedrock.claude-3.7-sonnet', label: 'Claude 3.7 Sonnet', provider: 'Bedrock' },
+    // OpenRouter
+    { value: 'openrouter.openrouter/pony-alpha', label: 'Pony Alpha', provider: 'OpenRouter' },
     // MiniMax (OpenAI-compatible API)
     { value: 'minimax-openai/MiniMax-M2.1', label: 'MiniMax-M2.1', provider: 'MiniMax' },
     { value: 'minimax-openai/MiniMax-Text-01', label: 'MiniMax-Text-01', provider: 'MiniMax' },
