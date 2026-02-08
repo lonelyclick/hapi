@@ -289,14 +289,10 @@ export function SessionHeader(props: {
     )
 
     // 确定用哪个 ID 去查询活跃的 Brain session：
-    // 1. 如果当前是 brain-sdk display session → 用它的 mainSessionId
-    // 2. 如果当前是 brain CLI session → 跳过（不需要再嵌套查询）
-    // 3. 普通主 session → 用自身 ID 查询
-    const mainSessionIdForBrain = props.session.metadata?.source === 'brain-sdk'
-        ? (props.session.metadata?.mainSessionId ?? null)
-        : props.session.metadata?.source === 'brain'
-            ? null
-            : props.session.id
+    // brain-sdk / brain session 本身不需要显示 Brain 按钮，跳过查询
+    // 普通主 session → 用自身 ID 查询
+    const isBrainWorkerSession = props.session.metadata?.source === 'brain-sdk' || props.session.metadata?.source === 'brain'
+    const mainSessionIdForBrain = isBrainWorkerSession ? null : props.session.id
 
     const { brainSession } = useActiveBrainSession(api, mainSessionIdForBrain)
 
