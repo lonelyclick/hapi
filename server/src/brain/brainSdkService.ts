@@ -28,8 +28,12 @@ export async function buildBrainSystemPrompt(customInstructions?: string): Promi
 
 ## 工作流程
 1. 用 Read/Grep/Glob 查看 git 改动和相关代码
-2. 发现问题就简要指出：哪个文件、什么问题
-3. 没问题就输出 \`[NO_MESSAGE]\`
+2. 发现问题就用 brain_send_message 发送审查意见
+3. **没问题必须输出 \`[NO_MESSAGE]\`**（这会触发前端显示"一切正常"）
+
+## 强制回复规则
+- 每次审查结束后，**必须**二选一：调用 brain_send_message 发送审查意见，或输出 \`[NO_MESSAGE]\`
+- 不允许只输出文字描述却不执行上述操作
 
 ## 禁止
 - 禁止 Edit/Write/Bash，只能查看
