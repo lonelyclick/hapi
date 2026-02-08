@@ -656,21 +656,20 @@ export class AutoBrainService {
         const reviewPrompt = `对话汇总同步：第 ${roundNumbers} 轮对话已完成。请执行：
 1) 调用 brain_summarize 获取对话内容
 2) 判断当前处于哪个阶段：开发中 → 代码审查 → 测试验证 → 部署上线
-3) 用 Read/Grep/Glob/git diff 等查看主 session 改了哪些代码，了解改动范围
-4) push 主 session 进行 review（核心职责，至少 2 遍，最多 10 遍）：
-   第 1 遍：brain_send_message(type=info) 发送"请 review 你刚才的改动，从以下角度检查：1) 功能正确性——是否完整实现了需求 2) 边界情况——空值、异常、并发 3) 类型安全——类型定义是否完整准确"
-   第 2 遍（等收到下一轮汇总后）：brain_send_message(type=info) 发送"再 review 一遍，这次关注：1) 代码风格——是否与项目现有风格一致 2) 性能——有没有不必要的重复计算或 N+1 查询 3) 安全性——有没有注入、越权等风险"
-   后续遍次（根据你的判断决定是否继续）：
-   - 如果你查看代码后发现主 session 的 review 遗漏了明显问题，继续 push 它 review，指出具体要检查的方向
-   - 如果你觉得改动风险较高（涉及核心逻辑、数据库、认证等），增加 review 遍数
+3) push 主 session 进行 review（核心职责，至少 2 遍，最多 10 遍）：
+   第 1 遍：brain_send_message(type=info) 发送"请 review 你刚才的所有改动，从以下角度逐一检查：1) 功能正确性——是否完整实现了需求，有没有遗漏的场景 2) 边界情况——空值、异常输入、并发竞态 3) 类型安全——类型定义是否完整准确，有没有 any 或类型断言的滥用"
+   第 2 遍（等收到下一轮汇总后）：brain_send_message(type=info) 发送"再 review 一遍你的改动，这次换角度：1) 代码风格——变量命名、函数拆分是否与项目现有风格一致 2) 性能——有没有不必要的重复计算、N+1 查询、大循环 3) 安全性——有没有注入、越权、敏感信息泄露等风险"
+   后续遍次（根据你从汇总中看到的情况决定是否继续）：
+   - 如果主 session 的 review 结果看起来敷衍或遗漏了明显问题，继续 push，指出具体要检查的方向
+   - 如果改动涉及核心逻辑、数据库 schema、认证授权等高风险区域，增加 review 遍数
    - 每次给不同的审查角度，不要重复已经检查过的方面
-   - 当主 session 连续确认没问题，且你自己查看代码也没发现问题时，结束 review
-5) review 完成后推进到下一步：
+   - 当主 session 连续确认没问题时，结束 review
+4) review 完成后推进到下一步：
    - 开发完成 → 让它运行 lint 和测试
    - 测试通过 → 让它提交代码
    - AI 在问问题/给选项 → 替用户决策，选最合理的
    - 推进用 brain_send_message(type=info)
-6) 没问题也不需要推进 → brain_send_message(type=no_issues)`
+5) 没问题也不需要推进 → brain_send_message(type=no_issues)`
 
         // 创建执行记录（status=running）
         await this.brainStore.createBrainExecution({
