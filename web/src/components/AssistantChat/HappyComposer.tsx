@@ -448,9 +448,11 @@ export function HappyComposer(props: {
         if (!isClaude || !active || !onFastModeChange) return
         if (fastModeSyncedRef.current) return
         fastModeSyncedRef.current = true
-        const stored = localStorage.getItem('hapi-fast-mode') === 'true'
-        if (stored && !fastMode) {
+        const stored = localStorage.getItem('hapi-fast-mode')
+        if (stored === 'true' && !fastMode) {
             onFastModeChange(true)
+        } else if (stored === 'false' && fastMode) {
+            onFastModeChange(false)
         }
     }, [sessionId, active]) // eslint-disable-line react-hooks/exhaustive-deps
 
