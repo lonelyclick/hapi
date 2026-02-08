@@ -65,17 +65,6 @@ export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionI
         onBrainBusy?.(state.brainInitializing === true || state.isRefining)
     }, [state.brainInitializing, state.isRefining, onBrainBusy])
 
-    // noMessage 自动消失：显示 5 秒后淡出
-    const [dismissing, setDismissing] = useState(false)
-    useEffect(() => {
-        if (!state.noMessage) { setDismissing(false); return }
-        const fadeTimer = setTimeout(() => setDismissing(true), 4000)
-        const clearTimer = setTimeout(() => {
-            setState(prev => prev.noMessage ? { ...prev, noMessage: false } : prev)
-        }, 5000)
-        return () => { clearTimeout(fadeTimer); clearTimeout(clearTimer) }
-    }, [state.noMessage])
-
     if (state.brainInitializing) {
         return (
             <div className="flex justify-center py-4">
@@ -93,20 +82,7 @@ export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionI
         )
     }
 
-    if (state.noMessage) {
-        return (
-            <div className={`flex justify-center py-4 transition-opacity duration-1000 ${dismissing ? 'opacity-0' : 'opacity-100'}`}>
-                <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2">
-                    <svg className="h-3.5 w-3.5 text-emerald-500/80" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <circle cx="8" cy="8" r="6.25" />
-                        <path d="M5.5 8.25l1.75 1.75 3.25-3.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className="text-[11px] tracking-wide text-emerald-600/80">审查通过</span>
-                </div>
-            </div>
-        )
-    }
-
+    // noMessage 的显示已移到 SessionChat 中作为 AgentEventBlock 插入消息流
     return null
 }
 

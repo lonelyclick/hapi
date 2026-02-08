@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
 import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session, SessionViewer, TypingUser } from '@/types/api'
-import type { ChatBlock, NormalizedMessage } from '@/chat/types'
+import type { AgentEventBlock, ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { reduceChatBlocks } from '@/chat/reducer'
@@ -76,6 +76,8 @@ export function SessionChat(props: {
     const [isResuming, setIsResuming] = useState(false)
     const [resumeError, setResumeError] = useState<string | null>(null)
     const [brainBusy, setBrainBusy] = useState(false)
+    const brainReviewEventsRef = useRef<AgentEventBlock[]>([])
+    const [brainReviewEventsVersion, setBrainReviewEventsVersion] = useState(0)
     const pendingMessageRef = useRef<string | null>(null)
     const composerSetTextRef = useRef<((text: string) => void) | null>(null)
 
@@ -85,6 +87,8 @@ export function SessionChat(props: {
         setIsResuming(false)
         setResumeError(null)
         setBrainBusy(false)
+        brainReviewEventsRef.current = []
+        setBrainReviewEventsVersion(0)
         pendingMessageRef.current = null
     }, [props.session.id])
 
@@ -134,6 +138,33 @@ export function SessionChat(props: {
     useEffect(() => {
         blocksByIdRef.current = reconciled.byId
     }, [reconciled.byId])
+
+    // 监听 brain-refine done 事件，将"审查通过"作为 AgentEventBlock 插入消息流
+    useEffect(() => {
+        const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+            if (event.type === 'updated' && event.query.queryKey[0] === 'brain-refine' && event.query.queryKey[1] === props.session.id) {
+                const data = queryClient.getQueryData<{ isRefining: boolean; noMessage: boolean }>(queryKeys.brainRefine(props.session.id))
+                if (data && !data.isRefining && data.noMessage) {
+                    const eventBlock: AgentEventBlock = {
+                        kind: 'agent-event',
+                        id: `brain-review-${Date.now()}`,
+                        createdAt: Date.now(),
+                        event: { type: 'message', message: '审查通过' }
+                    }
+                    brainReviewEventsRef.current = [...brainReviewEventsRef.current, eventBlock]
+                    setBrainReviewEventsVersion(v => v + 1)
+                }
+            }
+        })
+        return unsubscribe
+    }, [queryClient, props.session.id])
+
+    // 将 brain review 事件追加到 blocks 末尾
+    const blocksWithBrainEvents = useMemo(() => {
+        if (brainReviewEventsRef.current.length === 0) return reconciled.blocks
+        return [...reconciled.blocks, ...brainReviewEventsRef.current]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [reconciled.blocks, brainReviewEventsVersion])
 
     // Permission mode change handler
     const handlePermissionModeChange = useCallback(async (mode: PermissionMode) => {
@@ -283,7 +314,7 @@ export function SessionChat(props: {
 
     const runtime = useHappyRuntime({
         session: props.session,
-        blocks: reconciled.blocks,
+        blocks: blocksWithBrainEvents,
         isSending: props.isSending,
         onSendMessage: handleSendMessage,
         onAbort: handleAbort
