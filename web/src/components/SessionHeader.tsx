@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project, Session, SessionViewer, ModelMode, ModelReasoningEffort } from '@/types/api'
 import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
@@ -277,6 +278,7 @@ export function SessionHeader(props: {
 }) {
     const { api, userEmail } = useAppContext()
     const queryClient = useQueryClient()
+    const navigate = useNavigate()
     const title = useMemo(() => getSessionTitle(props.session), [props.session])
     const worktreeBranch = props.session.metadata?.worktree?.branch
     const agentLabel = useMemo(() => getAgentLabel(props.session), [props.session])
@@ -342,6 +344,9 @@ export function SessionHeader(props: {
     })
     const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
     const project = useMemo(() => matchSessionToProject(props.session, projects), [props.session, projects])
+
+    const isBrainSdkSession = props.session.metadata?.source === 'brain-sdk'
+    const brainMainSessionId = isBrainSdkSession ? (props.session.metadata?.mainSessionId as string | undefined) : undefined
 
     const claudeAccountName = props.session.metadata?.claudeAccountName || null
     const claudeAccountDisplay = useMemo(() => {
@@ -438,13 +443,23 @@ export function SessionHeader(props: {
                             <div className="truncate font-medium text-sm leading-none">
                                 {title}
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowAgentDetails(!showAgentDetails)}
-                                className="text-[10px] text-[var(--app-hint)] truncate text-left leading-none"
-                            >
-                                {[agentLabel, project?.name].filter(Boolean).join(' · ')}
-                            </button>
+                            {brainMainSessionId ? (
+                                <button
+                                    type="button"
+                                    onClick={() => navigate({ to: '/sessions/$sessionId', params: { sessionId: brainMainSessionId } })}
+                                    className="text-[10px] text-indigo-500 truncate text-left leading-none"
+                                >
+                                    ← 查看原 Session
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAgentDetails(!showAgentDetails)}
+                                    className="text-[10px] text-[var(--app-hint)] truncate text-left leading-none"
+                                >
+                                    {[agentLabel, project?.name].filter(Boolean).join(' · ')}
+                                </button>
+                            )}
                         </div>
                         {/* PC端：标题 */}
                         <div className="hidden sm:block max-w-[180px] truncate font-medium text-sm sm:max-w-none">
@@ -452,7 +467,17 @@ export function SessionHeader(props: {
                         </div>
                         {/* PC端：显示完整 agentMeta */}
                         <div className="hidden sm:block text-[10px] text-[var(--app-hint)] truncate">
-                            {agentMeta}
+                            {brainMainSessionId ? (
+                                <button
+                                    type="button"
+                                    onClick={() => navigate({ to: '/sessions/$sessionId', params: { sessionId: brainMainSessionId } })}
+                                    className="text-indigo-500 hover:text-indigo-600 transition-colors"
+                                >
+                                    ← 查看原 Session
+                                </button>
+                            ) : (
+                                agentMeta
+                            )}
                         </div>
                         {/* 移动端详情弹出框 */}
                         {showAgentDetails && (
