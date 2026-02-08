@@ -13,8 +13,7 @@ import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
 import { ApiClient } from "@/api/api";
 import { randomUUID } from "node:crypto";
-import { query as sdkQuery } from "@/claude/sdk/query";
-import type { SDKMessage } from "@/claude/sdk/types";
+// SDK query removed – brain_summarize no longer spawns a temp agent
 
 interface StartHappyServerOptions {
     api?: ApiClient
@@ -93,24 +92,20 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
     const toolNames = ['change_title']
 
     if (isBrainSession && api) {
-        const brainAnalyzeInputSchema: z.ZodTypeAny = z.object({
-            context: z.string().optional().describe('Optional extra context about what to focus on'),
-        })
+        const brainSummarizeInputSchema: z.ZodTypeAny = z.object({})
 
-        mcp.registerTool<any, any>('brain_analyze', {
-            description: 'Analyze the current AI session conversation and project code. Spawns a temporary Claude agent that reads the conversation history and project files, then returns a structured summary with actionable suggestions.',
-            title: 'Brain Analyze',
-            inputSchema: brainAnalyzeInputSchema,
-        }, async (args: { context?: string }) => {
-            logger.debug('[hapiMCP] brain_analyze called with context:', args.context)
+        mcp.registerTool<any, any>('brain_summarize', {
+            description: 'Fetch and summarize the latest conversation round from the main session. Returns: the original user request, what was changed, how it was changed, and any complex/noteworthy flows.',
+            title: 'Brain Summarize',
+            inputSchema: brainSummarizeInputSchema,
+        }, async () => {
+            logger.debug('[hapiMCP] brain_summarize called')
 
             try {
-                // 1. Fetch latest messages from main session
                 const targetSessionId = mainSessionId || client.sessionId
                 const messages = await api.getSessionMessages(targetSessionId, { limit: 50 })
                 logger.debug(`[hapiMCP] Fetched ${messages.length} messages for session ${targetSessionId}`)
 
-                // 2. Extract only the latest round (last user message + subsequent assistant messages)
                 const extractText = (body: unknown): string => {
                     if (typeof body === 'string') return body
                     if (typeof body === 'object' && body && 'text' in (body as Record<string, unknown>)) {
@@ -135,7 +130,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                     }
                 }
 
-                const conversationParts: string[] = []
+                const parts: string[] = []
                 const startIdx = lastUserIdx >= 0 ? lastUserIdx : Math.max(0, messages.length - 2)
                 for (let i = startIdx; i < messages.length; i++) {
                     const content = messages[i].content as Record<string, unknown> | null
@@ -144,90 +139,36 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                     const text = extractText(content.content).trim()
                     if (!text) continue
                     if (role === 'user') {
-                        conversationParts.push(`**用户：** ${text.slice(0, 1000)}`)
+                        parts.push(`**用户：** ${text.slice(0, 2000)}`)
                     } else if (role === 'assistant') {
-                        conversationParts.push(`**AI：** ${text.slice(0, 2000)}`)
+                        parts.push(`**AI：** ${text.slice(0, 4000)}`)
                     }
                 }
 
-                const conversationSummary = conversationParts.join('\n\n')
-
-                // 3. Build prompt for temporary Claude agent
-                const analysisPrompt = `你是一个资深的代码审查和项目分析专家。请基于以下最新一轮 AI 编程会话的对话记录，审查代码改动并给出建议。
-
-## 最新一轮对话
-
-${conversationSummary || '（无对话记录）'}
-
-${args.context ? `## 额外关注点\n${args.context}\n` : ''}
-
-## 任务
-
-1. **本轮汇总**：总结这轮对话中 AI 做了什么（100-200字）
-2. **代码审查**：用 Read/Grep/Glob 工具查看本轮涉及的代码文件，检查是否有问题：
-   - 潜在的 bug 或逻辑错误
-   - 安全隐患
-   - 性能问题
-   - 代码风格和最佳实践
-3. **改进建议**：给出具体的、可操作的改进建议（如果没有问题就说没有）
-
-请用以下格式输出：
-
-## 本轮汇总
-（总结内容）
-
-## 发现的问题
-（如果有的话，列出问题；没有就写"无明显问题"）
-
-## 改进建议
-（如果有的话列出；没有就写"暂无"）`
-
-                // 4. Call SDK query() to spawn temporary Claude agent
-                logger.debug('[hapiMCP] Spawning temporary Claude agent for brain analysis...')
-
-                let resultText = ''
-                const queryInstance = sdkQuery({
-                    prompt: analysisPrompt,
-                    options: {
-                        cwd: process.cwd(),
-                        allowedTools: ['Read', 'Grep', 'Glob'],
-                        disallowedTools: ['Bash', 'Edit', 'Write', 'Task', 'WebFetch', 'WebSearch', 'TodoWrite', 'NotebookEdit'],
-                        permissionMode: 'bypassPermissions',
-                        maxTurns: 15,
-                        pathToClaudeCodeExecutable: 'claude',
-                    }
-                })
-
-                for await (const message of queryInstance) {
-                    if (message.type === 'result') {
-                        const resultMsg = message as SDKMessage & { result?: string; subtype?: string }
-                        if (resultMsg.result) {
-                            resultText = resultMsg.result
-                        }
+                if (parts.length === 0) {
+                    return {
+                        content: [{ type: 'text' as const, text: '当前没有可汇总的对话记录。' }],
+                        isError: false,
                     }
                 }
 
-                logger.debug(`[hapiMCP] Brain analysis completed, result length: ${resultText.length}`)
-
-                if (!resultText) {
-                    resultText = '分析完成，但未能生成结果。请稍后重试。'
-                }
+                const summary = parts.join('\n\n')
 
                 return {
-                    content: [{ type: 'text' as const, text: resultText }],
+                    content: [{ type: 'text' as const, text: summary }],
                     isError: false,
                 }
             } catch (error) {
-                logger.debug('[hapiMCP] brain_analyze error:', error)
+                logger.debug('[hapiMCP] brain_summarize error:', error)
                 return {
-                    content: [{ type: 'text' as const, text: `Brain 分析失败: ${error instanceof Error ? error.message : String(error)}` }],
+                    content: [{ type: 'text' as const, text: `对话汇总失败: ${error instanceof Error ? error.message : String(error)}` }],
                     isError: true,
                 }
             }
         })
 
-        toolNames.push('brain_analyze')
-        logger.debug('[hapiMCP] Registered brain_analyze tool for brain session')
+        toolNames.push('brain_summarize')
+        logger.debug('[hapiMCP] Registered brain_summarize tool for brain session')
 
         // brain_send_message: Send review results to the main session
         if (mainSessionId) {

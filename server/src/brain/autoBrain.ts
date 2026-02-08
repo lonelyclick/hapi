@@ -548,9 +548,9 @@ export class AutoBrainService {
         console.log('[BrainSync] Triggering review for', summaries.length, 'rounds (persistent brain session)')
 
         // 只发轮次标识，不发完整内容（节省 token）
-        // Brain Claude 收到后调用 brain_analyze MCP tool 自行获取对话内容
+        // Brain Claude 收到后调用 brain_summarize MCP tool 自行获取对话内容
         const roundNumbers = summaries.map(s => s.round).join(', ')
-        const reviewPrompt = `对话汇总同步：主 session 完成了第 ${roundNumbers} 轮对话。请调用 brain_analyze 工具分析最新代码改动。`
+        const reviewPrompt = `对话汇总同步：主 session 完成了第 ${roundNumbers} 轮对话。请调用 brain_summarize 获取对话汇总，然后审查代码改动。`
 
         // 创建执行记录（status=running）
         await this.brainStore.createBrainExecution({
