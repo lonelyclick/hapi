@@ -208,20 +208,6 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                                 await store.setSessionCreatedBy(brainDisplaySession.id, email, namespace)
                             }
 
-                            // 给 brain display session 发送 init prompt
-                            try {
-                                const brainInitPrompt = await buildInitPrompt(role, { isBrain: true, userName })
-                                if (brainInitPrompt.trim()) {
-                                    await engine.sendMessage(brainDisplaySession.id, {
-                                        text: brainInitPrompt,
-                                        sentFrom: 'webapp'
-                                    })
-                                    console.log(`[machines/spawn] Sent init prompt to brain display session ${brainDisplaySession.id}`)
-                                }
-                            } catch (err) {
-                                console.error('[machines/spawn] Failed to send init prompt to brain session:', err)
-                            }
-
                             // 构建上下文（复用 brain 模块的消息解析逻辑）
                             const page = await engine.getMessagesPage(result.sessionId, { limit: 20, beforeSeq: null })
                             const contextMessages: string[] = []
