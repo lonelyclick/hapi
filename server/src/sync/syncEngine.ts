@@ -1141,7 +1141,8 @@ export class SyncEngine {
                 text: payload.text
             },
             meta: {
-                sentFrom
+                sentFrom,
+                ...(payload.meta ?? {})
             }
         }
 

@@ -197,7 +197,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     }
 
     // Start HAPI MCP server
-    const happyServer = await startHappyServer(session);
+    const happyServer = await startHappyServer(session, { api, sessionSource: sessionSource || undefined });
     logger.debug(`[START] HAPI MCP server started at ${happyServer.url}`);
 
     // Variable to track current session instance (updated via onSessionReady callback)

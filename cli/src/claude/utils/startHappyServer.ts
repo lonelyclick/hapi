@@ -1,6 +1,7 @@
 /**
  * HAPI MCP server
  * Provides HAPI CLI specific tools including chat session title management
+ * and brain analysis capabilities
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -10,9 +11,19 @@ import { AddressInfo } from "node:net";
 import { z } from "zod";
 import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
+import { ApiClient } from "@/api/api";
 import { randomUUID } from "node:crypto";
+import { query as sdkQuery } from "@/claude/sdk/query";
+import type { SDKMessage } from "@/claude/sdk/types";
 
-export async function startHappyServer(client: ApiSessionClient) {
+interface StartHappyServerOptions {
+    api?: ApiClient
+    sessionSource?: string
+}
+
+export async function startHappyServer(client: ApiSessionClient, options?: StartHappyServerOptions) {
+    const { api, sessionSource } = options ?? {}
+    const isBrainSession = sessionSource === 'brain-sdk'
     // Handler that sends title updates via the client
     const handler = async (title: string) => {
         logger.debug('[hapiMCP] Changing title to:', title);
@@ -75,6 +86,154 @@ export async function startHappyServer(client: ApiSessionClient) {
         }
     });
 
+    //
+    // Brain Analyze tool (only for brain sessions)
+    //
+    const toolNames = ['change_title']
+
+    if (isBrainSession && api) {
+        const brainAnalyzeInputSchema: z.ZodTypeAny = z.object({
+            context: z.string().optional().describe('Optional extra context about what to focus on'),
+        })
+
+        mcp.registerTool<any, any>('brain_analyze', {
+            description: 'Analyze the current AI session conversation and project code. Spawns a temporary Claude agent that reads the conversation history and project files, then returns a structured summary with actionable suggestions.',
+            title: 'Brain Analyze',
+            inputSchema: brainAnalyzeInputSchema,
+        }, async (args: { context?: string }) => {
+            logger.debug('[hapiMCP] brain_analyze called with context:', args.context)
+
+            try {
+                // 1. Fetch conversation history
+                const messages = await api.getSessionMessages(client.sessionId, { limit: 200 })
+                logger.debug(`[hapiMCP] Fetched ${messages.length} messages for session ${client.sessionId}`)
+
+                // 2. Build conversation summary from messages
+                const conversationParts: string[] = []
+                for (const msg of messages) {
+                    const content = msg.content as Record<string, unknown> | null
+                    if (!content) continue
+
+                    const role = content.role as string
+                    const body = content.content
+
+                    if (role === 'user') {
+                        let text = ''
+                        if (typeof body === 'string') {
+                            text = body
+                        } else if (typeof body === 'object' && body && 'text' in (body as Record<string, unknown>)) {
+                            text = String((body as Record<string, unknown>).text)
+                        } else if (Array.isArray(body)) {
+                            text = (body as Array<Record<string, unknown>>)
+                                .filter(b => b.type === 'text' && typeof b.text === 'string')
+                                .map(b => String(b.text))
+                                .join('\n')
+                        }
+                        if (text.trim()) {
+                            conversationParts.push(`**用户：** ${text.trim().slice(0, 500)}`)
+                        }
+                    } else if (role === 'assistant') {
+                        let text = ''
+                        if (typeof body === 'string') {
+                            text = body
+                        } else if (Array.isArray(body)) {
+                            text = (body as Array<Record<string, unknown>>)
+                                .filter(b => b.type === 'text' && typeof b.text === 'string')
+                                .map(b => String(b.text))
+                                .join('\n')
+                        }
+                        if (text.trim()) {
+                            conversationParts.push(`**AI：** ${text.trim().slice(0, 500)}`)
+                        }
+                    }
+                }
+
+                // Limit conversation summary length
+                const maxParts = 30
+                const conversationSummary = conversationParts.length > maxParts
+                    ? conversationParts.slice(-maxParts).join('\n\n')
+                    : conversationParts.join('\n\n')
+
+                // 3. Build prompt for temporary Claude agent
+                const analysisPrompt = `你是一个资深的代码审查和项目分析专家。请基于以下 AI 编程会话的对话记录，分析当前项目状态并给出建议。
+
+## 对话记录
+
+${conversationSummary || '（无对话记录）'}
+
+${args.context ? `## 额外关注点\n${args.context}\n` : ''}
+
+## 任务
+
+1. **会话汇总**：总结这次 AI 编程会话中做了什么（200-300字）
+2. **代码审查**：用 Read/Grep/Glob 工具查看相关代码文件，检查是否有问题：
+   - 潜在的 bug 或逻辑错误
+   - 安全隐患
+   - 性能问题
+   - 代码风格和最佳实践
+3. **改进建议**：给出 3-5 条具体的、可操作的改进建议
+
+请用以下格式输出：
+
+## 会话汇总
+（总结内容）
+
+## 发现的问题
+（如果有的话，列出问题）
+
+## 改进建议
+1. （建议1）
+2. （建议2）
+...`
+
+                // 4. Call SDK query() to spawn temporary Claude agent
+                logger.debug('[hapiMCP] Spawning temporary Claude agent for brain analysis...')
+
+                let resultText = ''
+                const queryInstance = sdkQuery({
+                    prompt: analysisPrompt,
+                    options: {
+                        cwd: process.cwd(),
+                        allowedTools: ['Read', 'Grep', 'Glob'],
+                        disallowedTools: ['Bash', 'Edit', 'Write', 'Task', 'WebFetch', 'WebSearch', 'TodoWrite', 'NotebookEdit'],
+                        permissionMode: 'bypassPermissions',
+                        maxTurns: 15,
+                        pathToClaudeCodeExecutable: 'claude',
+                    }
+                })
+
+                for await (const message of queryInstance) {
+                    if (message.type === 'result') {
+                        const resultMsg = message as SDKMessage & { result?: string; subtype?: string }
+                        if (resultMsg.result) {
+                            resultText = resultMsg.result
+                        }
+                    }
+                }
+
+                logger.debug(`[hapiMCP] Brain analysis completed, result length: ${resultText.length}`)
+
+                if (!resultText) {
+                    resultText = '分析完成，但未能生成结果。请稍后重试。'
+                }
+
+                return {
+                    content: [{ type: 'text' as const, text: resultText }],
+                    isError: false,
+                }
+            } catch (error) {
+                logger.debug('[hapiMCP] brain_analyze error:', error)
+                return {
+                    content: [{ type: 'text' as const, text: `Brain 分析失败: ${error instanceof Error ? error.message : String(error)}` }],
+                    isError: true,
+                }
+            }
+        })
+
+        toolNames.push('brain_analyze')
+        logger.debug('[hapiMCP] Registered brain_analyze tool for brain session')
+    }
+
     const transport = new StreamableHTTPServerTransport({
         // NOTE: Returning session id here will result in claude
         // sdk spawn to fail with `Invalid Request: Server already initialized`
@@ -106,7 +265,7 @@ export async function startHappyServer(client: ApiSessionClient) {
 
     return {
         url: baseUrl.toString(),
-        toolNames: ['change_title'],
+        toolNames,
         stop: () => {
             logger.debug('[hapiMCP] Stopping server');
             mcp.close();

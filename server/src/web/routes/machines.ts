@@ -229,14 +229,20 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                             }
                             await engine.waitForSocketInRoom(brainSessionId, 5000)
 
-                            // 发送 Brain init prompt
+                            // 发送 Brain init prompt（禁用所有内置 tools，只保留 MCP tools）
                             const brainInitPrompt = await buildInitPrompt(role, { isBrain: true, userName })
                             if (brainInitPrompt.trim()) {
                                 await engine.sendMessage(brainSessionId, {
                                     text: brainInitPrompt,
-                                    sentFrom: 'webapp'
+                                    sentFrom: 'webapp',
+                                    meta: {
+                                        disallowedTools: [
+                                            'Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob',
+                                            'Task', 'WebFetch', 'WebSearch', 'TodoWrite', 'NotebookEdit'
+                                        ]
+                                    }
                                 })
-                                console.log(`[machines/spawn] Sent init prompt to Brain session ${brainSessionId}`)
+                                console.log(`[machines/spawn] Sent init prompt to Brain session ${brainSessionId} (built-in tools disabled, MCP only)`)
                             }
 
                             // 构建上下文

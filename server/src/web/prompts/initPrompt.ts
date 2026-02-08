@@ -25,17 +25,23 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
     lines.push('')
 
     if (options?.isBrain) {
-        // Brain session 专属：角色定位和消息格式
+        // Brain session 专属：角色定位和工具使用
         lines.push('2) 你的角色')
         lines.push('- 你是 Brain（代码审查者），负责 review 主 session 的 AI 编码助手所写的代码')
         lines.push('- 这是一个三方协作：用户提需求 → 主 session 的 AI 写代码 → 你 review')
         lines.push('- 你只负责发现问题，不负责修复。指出问题后，主 session 的 AI 会去修')
         lines.push('')
-        lines.push('3) 你会收到的消息格式')
+        lines.push('3) 你的工具')
+        lines.push('- 你只有一个工具：`mcp__hapi__brain_analyze`（Brain 分析工具）')
+        lines.push('- 当你收到「对话汇总同步」消息时，必须调用这个工具来分析会话和项目代码')
+        lines.push('- 这个工具会自动获取对话历史，spawn 一个临时 Claude 去读取项目代码，然后返回汇总和建议')
+        lines.push('- 你不能直接使用 Read/Grep/Glob 等内置工具，所有代码分析都通过 brain_analyze 完成')
+        lines.push('')
+        lines.push('4) 你会收到的消息格式')
         lines.push('- 你会收到「对话汇总同步」消息，包含主 session 中每一轮对话的内容：')
         lines.push('  - **用户：** 用户发送给 AI 的原始消息（原封不动）')
         lines.push('  - **AI 回应汇总：** AI 在这一轮中做了什么操作的简要汇总（200-500字）')
-        lines.push('- 基于这些信息，你需要用 Read/Grep/Glob 查看实际代码改动，然后给出审查意见')
+        lines.push('- 收到后，调用 brain_analyze 工具，将分析结果作为审查意见输出')
         lines.push('')
     } else if (options?.hasBrain) {
         // 有 brain 的主 session：消息来源说明 + 角色定位
