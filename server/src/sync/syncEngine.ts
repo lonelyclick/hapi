@@ -1142,7 +1142,7 @@ export class SyncEngine {
         return false
     }
 
-    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'brain-review' | 'brain-sdk-review'; meta?: Record<string, unknown> }): Promise<void> {
+    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'brain-review' | 'brain-sdk-review' | 'brain-sdk-info'; meta?: Record<string, unknown> }): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
 
         const content = {

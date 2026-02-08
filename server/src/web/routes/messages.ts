@@ -73,7 +73,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
 
         // 大脑模式：拦截用户消息，暂存后通知 Brain session 分析意图
         // 跳过来自 brain 的消息，避免循环拦截
-        const activeBrain = (sentFrom !== 'brain-sdk-review') && brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
+        const activeBrain = (sentFrom !== 'brain-sdk-review' && sentFrom !== 'brain-sdk-info') && brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
         if (activeBrain && activeBrain.brainSessionId) {
             console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} brainDisplayId=${activeBrain.brainSessionId} msgLen=${parsed.data.text.length}`)
 
@@ -93,7 +93,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 pendingUserMessages.delete(sessionId)
                 refiningSessions.delete(sessionId)
                 // fallback: 直接发给主 session
-                await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: sentFrom as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review' })
+                await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: sentFrom as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review' | 'brain-sdk-info' })
                 return c.json({ ok: true })
             }
 
@@ -115,7 +115,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
             return c.json({ ok: true, intercepted: true })
         }
 
-        await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: sentFrom as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review' })
+        await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: sentFrom as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review' | 'brain-sdk-info' })
         return c.json({ ok: true })
     })
 

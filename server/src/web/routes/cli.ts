@@ -175,7 +175,7 @@ export function createCliRoutes(
 
         await engine.sendMessage(sessionId, {
             text: parsed.data.text,
-            sentFrom: (parsed.data.sentFrom || 'webapp') as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review'
+            sentFrom: (parsed.data.sentFrom || 'webapp') as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review' | 'brain-sdk-info'
         })
         return c.json({ ok: true })
     })

@@ -260,7 +260,10 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                     logger.debug(`[hapiMCP] brain_send_message: type=${msgType}, prefix=${prefix}, msgLen=${args.message.length}, mainSessionId=${mainSessionId}`)
 
                     // Send message to main session via server API
-                    await api.sendMessageToSession(mainSessionId, fullMessage, 'brain-sdk-review')
+                    // Use different sentFrom for info (user forwarding) vs review/suggestion
+                    // so that autoBrain's syncRounds doesn't filter out user-forwarded rounds
+                    const sentFromValue = msgType === 'info' ? 'brain-sdk-info' : 'brain-sdk-review'
+                    await api.sendMessageToSession(mainSessionId, fullMessage, sentFromValue)
                     logger.debug(`[hapiMCP] brain_send_message: sent to main session`)
 
                     // 只在用户消息转发（info）时清除 pending 消息
