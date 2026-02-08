@@ -24,7 +24,7 @@ function extractUserText(content: unknown): { text: string; fromBrainReview: boo
         return null
     }
     const meta = record.meta as Record<string, unknown> | undefined
-    const fromBrainReview = meta?.sentFrom === 'brain-review'
+    const fromBrainReview = meta?.sentFrom === 'brain-review' || meta?.sentFrom === 'brain-sdk-review'
     const body = record.content as Record<string, unknown> | string | undefined
     if (!body) {
         return null
@@ -437,7 +437,28 @@ export class AutoBrainService {
                 return
             }
 
-            // 广播 syncing 事件
+            // 先过滤掉 brain-review 触发的 round，确认是否有真正需要审查的 round
+            const reviewableRounds = pendingRounds.filter(r => !brainReviewRoundNumbers.has(r.roundNumber))
+            if (reviewableRounds.length === 0) {
+                console.log('[BrainSync] All pending rounds are brain-review rounds, skipping')
+                // 保存 round 记录（标记为已处理）但不触发审查
+                for (const round of pendingRounds) {
+                    try {
+                        await this.brainStore.createBrainRound({
+                            brainSessionId: brainId,
+                            roundNumber: round.roundNumber,
+                            userInput: round.userInput,
+                            aiSummary: round.aiMessages.join('\n\n'),
+                            originalMessageIds: round.messageIds,
+                            startedAt: round.startedAt,
+                            endedAt: round.endedAt
+                        })
+                    } catch { /* ignore duplicate */ }
+                }
+                return
+            }
+
+            // 有真正需要审查的 round，广播 syncing 事件
             this.broadcastBrainSyncing(brainId, mainSessionId)
 
             // 直接保存 round（不经过 GLM，用 AI 原始回应文本）
