@@ -149,7 +149,7 @@ export function SessionChat(props: {
                         kind: 'agent-event',
                         id: `brain-review-${Date.now()}`,
                         createdAt: Date.now(),
-                        event: { type: 'message', message: '审查通过' }
+                        event: { type: 'message', message: 'Brain: 一切正常' }
                     }
                     brainReviewEventsRef.current = [...brainReviewEventsRef.current, eventBlock]
                     setBrainReviewEventsVersion(v => v + 1)
