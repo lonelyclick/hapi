@@ -321,7 +321,22 @@ export class AutoBrainService {
 
             const brainText = await this.extractBrainAIText(brainSessionId)
             if (!brainText) {
-                console.log('[BrainSync] No brain text found')
+                console.log('[BrainSync] No brain text found, completing execution and broadcasting done')
+                // 即使没有提取到文本，也要完成 execution 并广播 done，防止前端卡住
+                await this.brainStore.completeBrainExecution(latestExecution.id, '[NO_TEXT]')
+                if (this.sseManager) {
+                    const mainSession = this.engine.getSession(mainSessionId)
+                    this.sseManager.broadcast({
+                        type: 'brain-sdk-progress',
+                        namespace: mainSession?.namespace,
+                        sessionId: mainSessionId,
+                        data: {
+                            brainSessionId: brainSession.id,
+                            progressType: 'done',
+                            data: { status: 'completed', noMessage: true }
+                        }
+                    } as unknown as SyncEvent)
+                }
                 return
             }
             console.log('[BrainSync] Got brain text, length:', brainText.length)
@@ -495,6 +510,22 @@ export class AutoBrainService {
                 if (projectPath) {
                     const summaries = savedRounds.map(r => ({ round: r.round, summary: r.aiText, userInput: r.userInput }))
                     await this.triggerSdkReview(brainSession, summaries, projectPath)
+                } else {
+                    // projectPath 为空时无法触发 review，广播 done 防止前端卡住
+                    console.log('[BrainSync] No projectPath, skipping review and broadcasting done')
+                    if (this.sseManager) {
+                        const mainSession = this.engine.getSession(mainSessionId)
+                        this.sseManager.broadcast({
+                            type: 'brain-sdk-progress',
+                            namespace: mainSession?.namespace,
+                            sessionId: mainSessionId,
+                            data: {
+                                brainSessionId: brainId,
+                                progressType: 'done',
+                                data: { status: 'completed', noMessage: true }
+                            }
+                        } as unknown as SyncEvent)
+                    }
                 }
             }
 
@@ -503,6 +534,20 @@ export class AutoBrainService {
             }
         } catch (err) {
             console.error('[BrainSync] syncRounds error:', err)
+            // 异常时广播 done，防止前端卡在 "Brain 处理中"
+            if (this.sseManager) {
+                const mainSession = this.engine.getSession(mainSessionId)
+                this.sseManager.broadcast({
+                    type: 'brain-sdk-progress',
+                    namespace: mainSession?.namespace,
+                    sessionId: mainSessionId,
+                    data: {
+                        brainSessionId: brainId,
+                        progressType: 'done',
+                        data: { status: 'completed', noMessage: true }
+                    }
+                } as unknown as SyncEvent)
+            }
         } finally {
             this.syncingBrainIds.delete(brainId)
         }
