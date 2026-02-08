@@ -8,6 +8,7 @@ const ACCOUNT_EXHAUSTION_PATTERNS = [
     /\b401\b/,
     /unauthorized/i,
     /authentication.*failed/i,
+    /does not have access/i,
     /token.*exhaust/i,
     /rate.*limit/i,
     /quota.*exceeded/i,
