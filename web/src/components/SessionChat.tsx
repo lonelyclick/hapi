@@ -196,10 +196,9 @@ export function SessionChat(props: {
             await setFastMode(fastMode)
             haptic.notification('success')
         } catch (e) {
-            // Rollback localStorage on failure
-            localStorage.setItem('hapi-fast-mode', String(!fastMode))
             haptic.notification('error')
             console.error('Failed to set fast mode:', e)
+            throw e // Re-throw so optimistic UI can revert
         }
     }, [setFastMode, haptic])
 

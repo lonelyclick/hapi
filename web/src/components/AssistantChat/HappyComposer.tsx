@@ -283,7 +283,7 @@ export function HappyComposer(props: {
     onPermissionModeChange?: (mode: PermissionMode) => void
     onModelModeChange?: (config: { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }) => void
     fastMode?: boolean
-    onFastModeChange?: (fastMode: boolean) => void
+    onFastModeChange?: (fastMode: boolean) => Promise<void>
     onSwitchToRemote?: () => void
     onTerminal?: () => void
     autocompletePrefixes?: string[]
@@ -321,7 +321,9 @@ export function HappyComposer(props: {
     // Use ?? so missing values fall back to default (destructuring defaults only handle undefined)
     const permissionMode = rawPermissionMode ?? 'default'
     const modelMode = rawModelMode ?? 'default'
-    const fastMode = rawFastMode ?? false
+    const serverFastMode = rawFastMode ?? false
+    const [optimisticFastMode, setOptimisticFastMode] = useState<boolean | null>(null)
+    const fastMode = optimisticFastMode ?? serverFastMode
     const isClaude = agentFlavor === 'claude' || !agentFlavor
 
     const assistantApi = useAssistantApi()
@@ -443,15 +445,20 @@ export function HappyComposer(props: {
         setDraft(composerText)
     }, [composerText, setDraft])
 
+    // Clear optimistic fast mode when server value catches up
+    useEffect(() => {
+        setOptimisticFastMode(null)
+    }, [serverFastMode])
+
     // Sync stored fast mode preference to new active sessions (Claude only)
     useEffect(() => {
         if (!isClaude || !active || !onFastModeChange) return
         if (fastModeSyncedRef.current) return
         fastModeSyncedRef.current = true
         const stored = localStorage.getItem('hapi-fast-mode')
-        if (stored === 'true' && !fastMode) {
+        if (stored === 'true' && !serverFastMode) {
             onFastModeChange(true)
-        } else if (stored === 'false' && fastMode) {
+        } else if (stored === 'false' && serverFastMode) {
             onFastModeChange(false)
         }
     }, [sessionId, active]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -972,13 +979,20 @@ export function HappyComposer(props: {
         haptic('light')
     }, [onModelModeChange, controlsDisabled, haptic])
 
-    const handleFastModeToggle = useCallback(() => {
-        if (!onFastModeChange || controlsDisabled) return
+    const handleFastModeToggle = useCallback(async () => {
+        if (!onFastModeChange) return
         const newValue = !fastMode
+        setOptimisticFastMode(newValue)
         localStorage.setItem('hapi-fast-mode', String(newValue))
-        onFastModeChange(newValue)
         haptic('light')
-    }, [onFastModeChange, controlsDisabled, fastMode, haptic])
+        try {
+            await onFastModeChange(newValue)
+        } catch {
+            // Revert optimistic state on failure
+            setOptimisticFastMode(null)
+            localStorage.setItem('hapi-fast-mode', String(!newValue))
+        }
+    }, [onFastModeChange, fastMode, haptic])
 
     const handleAutoOptimizeToggle = useCallback(() => {
         setAutoOptimize(prev => {
@@ -1326,8 +1340,7 @@ export function HappyComposer(props: {
                                     </div>
                                     <button
                                         type="button"
-                                        disabled={controlsDisabled}
-                                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors ${controlsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[var(--app-secondary-bg)]'}`}
+                                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors cursor-pointer hover:bg-[var(--app-secondary-bg)]"
                                         onClick={handleFastModeToggle}
                                         onMouseDown={(e) => e.preventDefault()}
                                     >
