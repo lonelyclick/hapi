@@ -100,11 +100,16 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
             title: 'Brain Summarize',
             inputSchema: brainSummarizeInputSchema,
         }, async () => {
-            logger.debug(`[hapiMCP] brain_summarize called, mainSessionId=${mainSessionId}, clientSessionId=${client.sessionId}`)
+            logger.debug(`[hapiMCP] brain_summarize called, mainSessionId=${mainSessionId}`)
 
             try {
-                const targetSessionId = mainSessionId || client.sessionId
-                logger.debug(`[hapiMCP] brain_summarize using targetSessionId=${targetSessionId}`)
+                if (!mainSessionId) {
+                    return {
+                        content: [{ type: 'text' as const, text: '错误：未配置 mainSessionId，无法获取主 session 对话。请重新创建 Brain session。' }],
+                        isError: true,
+                    }
+                }
+                const targetSessionId = mainSessionId
                 const messages = await api.getSessionMessages(targetSessionId, { limit: 50 })
                 logger.debug(`[hapiMCP] Fetched ${messages.length} messages for session ${targetSessionId}`)
 

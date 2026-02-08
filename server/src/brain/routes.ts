@@ -291,7 +291,8 @@ export function createBrainRoutes(
             undefined,
             {
                 modelMode: brainModelVariant as 'opus' | 'sonnet' | undefined,
-                source: 'brain'
+                source: 'brain-sdk',
+                mainSessionId,
             }
         )
 
