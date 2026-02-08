@@ -21,12 +21,10 @@ export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionI
     const queryClient = useQueryClient()
     const [state, setState] = useState<BrainRefineState>({ isRefining: false, noMessage: false })
 
-    // 从 brainSession 数据恢复持久化状态（noMessage + isRefining + brainInitializing）
+    // 从 brainSession 数据恢复持久化状态（isRefining + brainInitializing）
+    // noMessage 不恢复：它会自动消失，刷新后无需再显示
     useEffect(() => {
         const brainData = queryClient.getQueryData<BrainSession | null>(['brain-active-session', sessionId])
-        if (brainData?.status === 'completed' && brainData.brainResult?.includes('[NO_MESSAGE]')) {
-            setState(prev => prev.noMessage ? prev : { ...prev, noMessage: true })
-        }
         if (brainData?.isRefining) {
             setState(prev => prev.isRefining ? prev : { ...prev, isRefining: true })
         }
@@ -48,9 +46,6 @@ export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionI
             // 当 brain-active-session 查询完成时恢复持久化状态
             if (event.type === 'updated' && event.query.queryKey[0] === 'brain-active-session' && event.query.queryKey[1] === sessionId) {
                 const brainData = queryClient.getQueryData<BrainSession | null>(['brain-active-session', sessionId])
-                if (brainData?.status === 'completed' && brainData.brainResult?.includes('[NO_MESSAGE]')) {
-                    setState(prev => prev.noMessage ? prev : { ...prev, noMessage: true })
-                }
                 if (brainData?.isRefining) {
                     setState(prev => prev.isRefining ? prev : { ...prev, isRefining: true })
                 }
@@ -69,6 +64,17 @@ export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionI
     useEffect(() => {
         onBrainBusy?.(state.brainInitializing === true || state.isRefining)
     }, [state.brainInitializing, state.isRefining, onBrainBusy])
+
+    // noMessage 自动消失：显示 5 秒后淡出
+    const [dismissing, setDismissing] = useState(false)
+    useEffect(() => {
+        if (!state.noMessage) { setDismissing(false); return }
+        const fadeTimer = setTimeout(() => setDismissing(true), 4000)
+        const clearTimer = setTimeout(() => {
+            setState(prev => prev.noMessage ? { ...prev, noMessage: false } : prev)
+        }, 5000)
+        return () => { clearTimeout(fadeTimer); clearTimeout(clearTimer) }
+    }, [state.noMessage])
 
     if (state.brainInitializing) {
         return (
@@ -89,7 +95,7 @@ export function BrainRefineIndicator({ sessionId, api, onBrainBusy }: { sessionI
 
     if (state.noMessage) {
         return (
-            <div className="flex justify-center py-4">
+            <div className={`flex justify-center py-4 transition-opacity duration-1000 ${dismissing ? 'opacity-0' : 'opacity-100'}`}>
                 <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2">
                     <svg className="h-3.5 w-3.5 text-emerald-500/80" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                         <circle cx="8" cy="8" r="6.25" />
