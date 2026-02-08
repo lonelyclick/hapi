@@ -26,6 +26,11 @@ const createOrLoadMachineSchema = z.object({
     daemonState: z.unknown().nullable().optional()
 })
 
+const cliSendMessageSchema = z.object({
+    text: z.string().min(1),
+    sentFrom: z.string().optional()
+})
+
 const getMessagesQuerySchema = z.object({
     afterSeq: z.coerce.number().int().min(0),
     limit: z.coerce.number().int().min(1).max(200).optional()
@@ -141,6 +146,31 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
         const limit = parsed.data.limit ?? 200
         const messages = await engine.getMessagesAfter(sessionId, { afterSeq: parsed.data.afterSeq, limit })
         return c.json({ messages })
+    })
+
+    app.post('/sessions/:id/messages', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not ready' }, 503)
+        }
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        if (!resolved.ok) {
+            return c.json({ error: resolved.error }, resolved.status)
+        }
+
+        const body = await c.req.json().catch(() => null)
+        const parsed = cliSendMessageSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid body' }, 400)
+        }
+
+        await engine.sendMessage(sessionId, {
+            text: parsed.data.text,
+            sentFrom: (parsed.data.sentFrom || 'webapp') as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review'
+        })
+        return c.json({ ok: true })
     })
 
     app.post('/machines', async (c) => {

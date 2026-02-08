@@ -69,6 +69,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     const startedBy = options.startedBy ?? 'terminal';
     const runtimeAgent = extractClaudeAgent(options.claudeArgs);
     const sessionSource = process.env.HAPI_SESSION_SOURCE?.trim();
+    const mainSessionId = process.env.HAPI_MAIN_SESSION_ID?.trim();
 
     // Log environment info at startup
     logger.debugLargeJson('[START] HAPI process started', getEnvironmentInfo());
@@ -197,7 +198,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     }
 
     // Start HAPI MCP server
-    const happyServer = await startHappyServer(session, { api, sessionSource: sessionSource || undefined });
+    const happyServer = await startHappyServer(session, { api, sessionSource: sessionSource || undefined, mainSessionId: mainSessionId || undefined });
     logger.debug(`[START] HAPI MCP server started at ${happyServer.url}`);
 
     // Variable to track current session instance (updated via onSessionReady callback)

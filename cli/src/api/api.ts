@@ -217,6 +217,20 @@ export class ApiClient {
         }))
     }
 
+    async sendMessageToSession(sessionId: string, text: string, sentFrom?: string): Promise<void> {
+        await axios.post(
+            `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(sessionId)}/messages`,
+            { text, sentFrom },
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15_000
+            }
+        )
+    }
+
     /**
      * 获取当前活跃的 Claude 账号
      * 如果没有配置多账号，返回 null

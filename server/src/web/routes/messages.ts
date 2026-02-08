@@ -15,7 +15,8 @@ const querySchema = z.object({
 
 const sendMessageBodySchema = z.object({
     text: z.string().min(1),
-    localId: z.string().min(1).optional()
+    localId: z.string().min(1).optional(),
+    sentFrom: z.string().optional()
 })
 
 const clearMessagesBodySchema = z.object({
@@ -144,8 +145,11 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
             return c.json({ error: 'Invalid body' }, 400)
         }
 
+        const sentFrom = parsed.data.sentFrom || 'webapp'
+
         // 大脑模式：拦截用户消息，让 Brain Worker 先处理再发给主 session
-        const activeBrain = brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
+        // 跳过来自 brain 的消息，避免循环拦截
+        const activeBrain = (sentFrom !== 'brain-sdk-review') && brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
         if (activeBrain) {
             console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} model=glm-4.7 msgLen=${parsed.data.text.length}`)
             const intercepted = await spawnRefineWorker(engine, sessionId, activeBrain.id, parsed.data.text, brainStore)
@@ -184,7 +188,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
             console.warn(`[Messages] Brain intercept: failed to spawn refine worker, falling back to direct send`)
         }
 
-        await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: 'webapp' })
+        await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: sentFrom as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review' })
         return c.json({ ok: true })
     })
 

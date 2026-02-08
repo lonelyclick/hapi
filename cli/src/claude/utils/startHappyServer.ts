@@ -19,10 +19,11 @@ import type { SDKMessage } from "@/claude/sdk/types";
 interface StartHappyServerOptions {
     api?: ApiClient
     sessionSource?: string
+    mainSessionId?: string
 }
 
 export async function startHappyServer(client: ApiSessionClient, options?: StartHappyServerOptions) {
-    const { api, sessionSource } = options ?? {}
+    const { api, sessionSource, mainSessionId } = options ?? {}
     const isBrainSession = sessionSource === 'brain-sdk'
     // Handler that sends title updates via the client
     const handler = async (title: string) => {
@@ -232,6 +233,52 @@ ${args.context ? `## 额外关注点\n${args.context}\n` : ''}
 
         toolNames.push('brain_analyze')
         logger.debug('[hapiMCP] Registered brain_analyze tool for brain session')
+
+        // brain_send_message: Send review results to the main session
+        if (mainSessionId) {
+            const brainSendMessageInputSchema: z.ZodTypeAny = z.object({
+                message: z.string().describe('The review message to send to the main session'),
+                type: z.enum(['review', 'suggestion', 'info']).optional().describe('Message type: review (code review), suggestion (improvement suggestion), info (general info). Defaults to review.'),
+            })
+
+            mcp.registerTool<any, any>('brain_send_message', {
+                description: 'Send a message from Brain to the main AI session. Use this to deliver code review results, suggestions, or other feedback to the main session where the AI coding assistant is working.',
+                title: 'Brain Send Message',
+                inputSchema: brainSendMessageInputSchema,
+            }, async (args: { message: string; type?: 'review' | 'suggestion' | 'info' }) => {
+                logger.debug(`[hapiMCP] brain_send_message called, type=${args.type}, mainSessionId=${mainSessionId}`)
+
+                try {
+                    const msgType = args.type ?? 'review'
+                    const prefix = msgType === 'review'
+                        ? '[发送者: Brain 代码审查]'
+                        : msgType === 'suggestion'
+                            ? '[发送者: Brain 改进建议]'
+                            : '[发送者: Brain]'
+
+                    const fullMessage = `${prefix}\n\n${args.message}`
+
+                    // Send message to main session via server API
+                    await api.sendMessageToSession(mainSessionId, fullMessage, 'brain-sdk-review')
+
+                    logger.debug(`[hapiMCP] Message sent to main session ${mainSessionId}`)
+
+                    return {
+                        content: [{ type: 'text' as const, text: `已成功发送${msgType === 'review' ? '代码审查' : msgType === 'suggestion' ? '改进建议' : ''}消息给主 session` }],
+                        isError: false,
+                    }
+                } catch (error) {
+                    logger.debug('[hapiMCP] brain_send_message error:', error)
+                    return {
+                        content: [{ type: 'text' as const, text: `发送消息失败: ${error instanceof Error ? error.message : String(error)}` }],
+                        isError: true,
+                    }
+                }
+            })
+
+            toolNames.push('brain_send_message')
+            logger.debug('[hapiMCP] Registered brain_send_message tool for brain session')
+        }
     }
 
     const transport = new StreamableHTTPServerTransport({
