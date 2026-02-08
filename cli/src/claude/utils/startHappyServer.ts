@@ -105,9 +105,10 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
             logger.debug('[hapiMCP] brain_analyze called with context:', args.context)
 
             try {
-                // 1. Fetch conversation history
-                const messages = await api.getSessionMessages(client.sessionId, { limit: 200 })
-                logger.debug(`[hapiMCP] Fetched ${messages.length} messages for session ${client.sessionId}`)
+                // 1. Fetch conversation history (prefer main session if available)
+                const targetSessionId = mainSessionId || client.sessionId
+                const messages = await api.getSessionMessages(targetSessionId, { limit: 200 })
+                logger.debug(`[hapiMCP] Fetched ${messages.length} messages for session ${targetSessionId}`)
 
                 // 2. Build conversation summary from messages
                 const conversationParts: string[] = []
