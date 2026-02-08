@@ -407,6 +407,12 @@ export function SessionList(props: {
         return sortSessions(filtered)
     }, [props.sessions, archiveFilter, ownerFilter])
 
+    // Check if there are any brain sessions
+    const hasBrainSessions = useMemo(() =>
+        props.sessions.some(s => s.metadata?.source === 'brain' || s.metadata?.source === 'brain-sdk'),
+        [props.sessions]
+    )
+
     // Statistics
     const activeCount = filteredSessions.filter(s => s.active).length
 
@@ -447,49 +453,54 @@ export function SessionList(props: {
                         {archiveFilter ? 'Archive' : 'Active'}
                     </button>
                 </div>
-                {viewOthersSessions && (
+                {(viewOthersSessions || hasBrainSessions) && (
                     <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-xs text-[var(--app-hint)] shrink-0">Owner:</span>
                         <div className="flex items-center gap-1">
-                            <button
-                                type="button"
-                                onClick={() => setOwnerFilter('mine')}
-                                className={`
-                                    px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
-                                    ${ownerFilter === 'mine'
-                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
-                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
-                                    }
-                                `}
-                            >
-                                Mine
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setOwnerFilter('brain')}
-                                className={`
-                                    px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
-                                    ${ownerFilter === 'brain'
-                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
-                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
-                                    }
-                                `}
-                            >
-                                Brain
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setOwnerFilter('others')}
-                                className={`
-                                    px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
-                                    ${ownerFilter === 'others'
-                                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
-                                        : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
-                                    }
-                                `}
-                            >
-                                Others
-                            </button>
+                            {(viewOthersSessions || hasBrainSessions) && (
+                                <button
+                                    type="button"
+                                    onClick={() => setOwnerFilter('mine')}
+                                    className={`
+                                        px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                                        ${ownerFilter === 'mine'
+                                            ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                            : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                        }
+                                    `}
+                                >
+                                    Mine
+                                </button>
+                            )}
+                            {hasBrainSessions && (
+                                <button
+                                    type="button"
+                                    onClick={() => setOwnerFilter('brain')}
+                                    className={`
+                                        px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                                        ${ownerFilter === 'brain'
+                                            ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                            : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                        }
+                                    `}
+                                >
+                                    Brain
+                                </button>
+                            )}
+                            {viewOthersSessions && (
+                                <button
+                                    type="button"
+                                    onClick={() => setOwnerFilter('others')}
+                                    className={`
+                                        px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                                        ${ownerFilter === 'others'
+                                            ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm'
+                                            : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                        }
+                                    `}
+                                >
+                                    Others
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
