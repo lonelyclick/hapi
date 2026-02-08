@@ -10,6 +10,7 @@ import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { SSEManager } from '../sse/sseManager'
 import type { BrainStore } from './store'
 import type { StoredBrainSession } from './types'
+import { refiningSessions } from '../web/routes/messages'
 
 /**
  * 从消息内容中提取用户文本
@@ -282,10 +283,30 @@ export class AutoBrainService {
                 return
             }
 
-            // 只处理有 running execution 的回复（即 review 回复），忽略 init prompt 等其他回复
+            // 检查是否正在 refine（用户消息拦截），如果是则广播 done 事件
+            const wasRefining = refiningSessions.has(mainSessionId)
+            if (wasRefining) {
+                console.log('[BrainSync] Refine completed, broadcasting done event')
+                refiningSessions.delete(mainSessionId)
+                if (this.sseManager) {
+                    const mainSession = this.engine.getSession(mainSessionId)
+                    this.sseManager.broadcast({
+                        type: 'brain-sdk-progress',
+                        namespace: mainSession?.namespace,
+                        sessionId: mainSessionId,
+                        data: {
+                            brainSessionId: brainSession.id,
+                            progressType: 'done',
+                            data: { status: 'completed', noMessage: false }
+                        }
+                    } as unknown as SyncEvent)
+                }
+            }
+
+            // 只处理有 running execution 的回复（即 review 回复），忽略 init prompt 和 refine 等其他回复
             const latestExecution = await this.brainStore.getLatestExecutionWithProgress(brainSession.id)
             if (!latestExecution || latestExecution.status !== 'running') {
-                console.log('[BrainSync] No running execution found, skipping (likely init prompt response)')
+                console.log('[BrainSync] No running execution found, skipping (likely init prompt or refine response)')
                 return
             }
 
