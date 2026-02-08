@@ -1657,7 +1657,10 @@ export function HappyComposer(props: {
         handleYohoCredentialSelect,
         apiClient,
         autoOptimize,
-        handleAutoOptimizeToggle
+        handleAutoOptimizeToggle,
+        isClaude,
+        fastMode,
+        handleFastModeToggle
     ])
 
     const volumePercent = Math.max(0, Math.min(100, Math.round((speechToText.volume ?? 0) * 100)))
