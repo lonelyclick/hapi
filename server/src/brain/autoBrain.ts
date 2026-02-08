@@ -655,14 +655,10 @@ export class AutoBrainService {
         const roundNumbers = summaries.map(s => s.round).join(', ')
         const reviewPrompt = `对话汇总同步：第 ${roundNumbers} 轮对话已完成。请执行：
 1) 调用 brain_summarize 获取对话内容，判断当前处于哪个阶段：开发中 → 代码审查 → 测试验证 → 部署上线
-2) push 主 session 进行 review（核心职责，至少 2 遍，最多 10 遍）：
-   第 1 遍：brain_send_message(type=info) 发送"请 review 你刚才的所有改动，从以下角度逐一检查：1) 功能正确性——是否完整实现了需求，有没有遗漏的场景 2) 边界情况——空值、异常输入、并发竞态 3) 类型安全——类型定义是否完整准确，有没有 any 或类型断言的滥用"
-   第 2 遍（等收到下一轮汇总后）：brain_send_message(type=info) 发送"再 review 一遍你的改动，这次换角度：1) 代码风格——变量命名、函数拆分是否与项目现有风格一致 2) 性能——有没有不必要的重复计算、N+1 查询、大循环 3) 安全性——有没有注入、越权、敏感信息泄露等风险"
-   后续遍次（根据你从汇总中看到的情况决定是否继续）：
-   - 如果主 session 的 review 结果看起来敷衍或遗漏了明显问题，继续 push，指出具体要检查的方向
-   - 如果改动涉及核心逻辑、数据库 schema、认证授权等高风险区域，增加 review 遍数
-   - 每次给不同的审查角度，不要重复已经检查过的方面
-   - 当主 session 连续确认没问题时，结束 review
+2) push 主 session 进行多轮 review（至少 2 遍，最多 10 遍，你自己判断轮次）：
+   - 每遍用 brain_send_message(type=info) 给出不同的审查角度（功能正确性、边界情况、类型安全、代码风格、性能、安全性等）
+   - 高风险改动（核心逻辑、数据库、认证）多审几遍，简单改动少审几遍
+   - 主 session 连续确认没问题时结束 review
 3) review 完成后推进到下一步：
    - 开发完成 → 让它运行 lint 和测试
    - 测试通过 → 让它提交代码
