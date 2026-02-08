@@ -74,7 +74,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
         // 大脑模式：拦截用户消息，暂存后通知 Brain session 分析意图
         // 跳过来自 brain 的消息，避免循环拦截
         const activeBrain = (sentFrom !== 'brain-sdk-review') && brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
-        if (activeBrain && activeBrain.brainSessionId && activeBrain.brainSessionId !== 'sdk-mode') {
+        if (activeBrain && activeBrain.brainSessionId) {
             console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} brainDisplayId=${activeBrain.brainSessionId} msgLen=${parsed.data.text.length}`)
 
             // 暂存用户消息，供 brain_user_intent MCP 工具取用

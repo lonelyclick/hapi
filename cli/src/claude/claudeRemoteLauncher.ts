@@ -338,6 +338,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         } | null = null;
         let accountRotationCount = 0;
         let lastKnownMode: EnhancedMode | null = null; // Track last mode for auto-continue after rotation
+        let capturedInitPrompt: string | null = null; // Remember init prompt for re-injection after rotation
 
         // Track session ID to detect when it actually changes
         // This prevents context loss when mode changes (permission mode, model, etc.)
@@ -384,6 +385,11 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             let p = pending;
                             pending = null;
                             permissionHandler.handleModeChange(p.mode.permissionMode);
+                            // Capture init prompt for re-injection after rotation (only first time)
+                            if (!capturedInitPrompt && isInitPromptMessage(p.message)) {
+                                capturedInitPrompt = p.message;
+                                logger.debug(`[remote]: Captured init prompt (${p.message.length} chars) for rotation reuse`);
+                            }
                             return {
                                 ...p,
                                 message: appendTitleInstructionIfNeeded(p.message)
@@ -403,6 +409,11 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             mode = msg.mode;
                             lastKnownMode = msg.mode;
                             permissionHandler.handleModeChange(mode.permissionMode);
+                            // Capture init prompt for re-injection after rotation (only first time)
+                            if (!capturedInitPrompt && isInitPromptMessage(msg.message)) {
+                                capturedInitPrompt = msg.message;
+                                logger.debug(`[remote]: Captured init prompt (${msg.message.length} chars) for rotation reuse`);
+                            }
                             return {
                                 message: appendTitleInstructionIfNeeded(msg.message),
                                 mode: msg.mode
@@ -507,12 +518,15 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                                     message: `Switched to ${rotationResult.newAccount.name}. Continuing...`
                                 });
 
-                                // Inject a "continue" message so Claude resumes work automatically
+                                // Inject continue message with init prompt rules so Claude retains language/rules
                                 if (lastKnownMode) {
-                                    session.queue.pushImmediate(
-                                        'Continue from where you left off. You were interrupted by a rate limit on the previous account.',
-                                        lastKnownMode
-                                    );
+                                    const continueMsg = capturedInitPrompt
+                                        ? `${capturedInitPrompt}\n\nContinue from where you left off. You were interrupted by a rate limit on the previous account.`
+                                        : 'Continue from where you left off. You were interrupted by a rate limit on the previous account.';
+                                    session.queue.pushImmediate(continueMsg, lastKnownMode);
+                                    if (capturedInitPrompt) {
+                                        logger.debug('[remote]: Re-injected init prompt after hit limit rotation');
+                                    }
                                 }
 
                                 accountRotationCount++;
@@ -545,6 +559,11 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     logger.debug('[remote]: Resume failed - conversation not found, clearing resume and retrying as new session');
                     session.consumeOneTimeFlags(); // Strip --resume from claudeArgs
                     session.clearSessionId();      // Start fresh
+                    // Re-inject init prompt since we're starting fresh (no conversation history)
+                    if (capturedInitPrompt && lastKnownMode) {
+                        session.queue.pushImmediate(capturedInitPrompt, lastKnownMode);
+                        logger.debug('[remote]: Re-injected init prompt after resume failure');
+                    }
                     session.client.sendSessionEvent({
                         type: 'message',
                         message: 'Previous session not found. Starting a new session...'
@@ -599,6 +618,12 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                                     type: 'message',
                                     message: `Switched to account: ${rotationResult.newAccount.name}`
                                 });
+
+                                // Re-inject init prompt so language/rules are preserved
+                                if (capturedInitPrompt && lastKnownMode) {
+                                    session.queue.pushImmediate(capturedInitPrompt, lastKnownMode);
+                                    logger.debug('[remote]: Re-injected init prompt after 401 rotation');
+                                }
 
                                 accountRotationCount++;
                                 logger.debug(`[remote]: Account rotated to ${rotationResult.newAccount.name} (rotation ${accountRotationCount}/${MAX_ACCOUNT_ROTATIONS})`);

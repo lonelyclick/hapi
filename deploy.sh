@@ -103,11 +103,6 @@ fi
 
 echo "=== Server build verified (age: ${SERVER_AGE}s)"
 
-# 构建 brain-worker（detached 独立进程，用于 SDK 审查）
-echo "=== Building hapi-brain-worker..."
-(cd cli && bun run build:exe:brain-worker)
-sync
-
 # 构建主 CLI (用于 spawn session，不会触发 daemon 重启)
 echo "=== Building hapi CLI..."
 (cd cli && bun run build:exe)

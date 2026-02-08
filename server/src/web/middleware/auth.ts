@@ -20,7 +20,6 @@ const publicPaths = [
     '/api/auth/keycloak/callback',
     '/api/auth/keycloak/refresh',
     '/api/auth/keycloak/logout',
-    '/api/brain/worker-callback',  // Internal: detached brain worker callback (localhost only)
 ]
 
 export function createAuthMiddleware(): MiddlewareHandler<WebAppEnv> {

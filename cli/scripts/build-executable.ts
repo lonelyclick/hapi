@@ -211,7 +211,6 @@ const ENTRYPOINTS: Record<string, string> = {
     'hapi': 'bootstrap.ts',
     'hapi-server': 'bootstrap-server.ts',
     'hapi-daemon': 'bootstrap-daemon.ts',
-    'hapi-brain-worker': 'bootstrap-brain-worker.ts'
 };
 
 async function main(): Promise<void> {

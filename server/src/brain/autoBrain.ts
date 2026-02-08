@@ -188,30 +188,14 @@ export class AutoBrainService {
     }
 
     /**
-     * 给 brain-sdk display session 发心跳，防止被判定为 inactive
+     * 给 brain display session 发心跳，防止被判定为 inactive
      */
     private keepBrainDisplaySessionAlive(brainSession: StoredBrainSession): void {
-        if (!brainSession.brainSessionId || brainSession.brainSessionId === 'sdk-mode') return
+        if (!brainSession.brainSessionId) return
         this.engine.handleSessionAlive({
             sid: brainSession.brainSessionId,
             time: Date.now()
         }).catch(() => {})
-    }
-
-    /**
-     * 检查 Brain session 是否使用 SDK 模式
-     */
-    private isSdkMode(brainSession: StoredBrainSession): boolean {
-        if (!brainSession.brainSessionId || brainSession.brainSessionId === 'sdk-mode') {
-            console.log('[BrainSync] isSdkMode: brainSessionId is', brainSession.brainSessionId, '→ true')
-            return true
-        }
-        // 通过 review session 的 metadata.source 判断
-        const reviewSession = this.engine.getSession(brainSession.brainSessionId)
-        const source = reviewSession?.metadata?.source
-        const result = source === 'brain-sdk'
-        console.log('[BrainSync] isSdkMode: brainSessionId=', brainSession.brainSessionId, 'reviewSession found=', !!reviewSession, 'source=', source, '→', result)
-        return result
     }
 
     start(): void {
@@ -254,7 +238,7 @@ export class AutoBrainService {
 
         console.log('[BrainSync] AI response ended:', sessionId, 'source:', session?.metadata?.source)
 
-        if (session?.metadata?.source === 'brain' || session?.metadata?.source === 'brain-sdk') {
+        if (session?.metadata?.source === 'brain-sdk') {
             console.log('[BrainSync] Brain AI response, triggering save, source:', session?.metadata?.source)
             await this.handleBrainAIResponse(sessionId)
             return
@@ -272,8 +256,7 @@ export class AutoBrainService {
                 return
             }
 
-            // SDK 模式下不需要设置映射（brainSessionId 为 'sdk-mode'）
-            if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
+            if (brainSession.brainSessionId) {
                 this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
             }
 
@@ -458,7 +441,7 @@ export class AutoBrainService {
             }
 
             // 将当前新增的 round 发给 brain session 做 review
-            if (savedRounds.length > 0 && this.isSdkMode(brainSession)) {
+            if (savedRounds.length > 0) {
                 const mainSessionObj = this.engine.getSession(mainSessionId)
                 const projectPath = mainSessionObj?.metadata?.path
                 if (projectPath) {
@@ -525,8 +508,7 @@ export class AutoBrainService {
         const brainSession = await this.brainStore.getActiveBrainSession(mainSessionId)
         console.log('[BrainSync] triggerSync brainSession:', brainSession?.id ?? 'null')
         if (brainSession) {
-            // SDK 模式下 brainSessionId 为 'sdk-mode'，不需要设置映射
-            if (brainSession.brainSessionId && brainSession.brainSessionId !== 'sdk-mode') {
+            if (brainSession.brainSessionId) {
                 this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
             }
             await this.syncRounds(brainSession)
@@ -588,8 +570,8 @@ export class AutoBrainService {
 
         // 直接发消息给常驻 brain session（不再 spawn worker）
         try {
-            if (!brainDisplaySessionId || brainDisplaySessionId === 'sdk-mode') {
-                console.error('[BrainSync] No valid brain display session ID (got:', brainDisplaySessionId, '), cannot send review')
+            if (!brainDisplaySessionId) {
+                console.error('[BrainSync] No valid brain display session ID, cannot send review')
                 return
             }
 

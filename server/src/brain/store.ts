@@ -8,15 +8,6 @@ import { Pool } from 'pg'
 import { randomUUID } from 'node:crypto'
 import type { IBrainStore, StoredBrainSession, BrainSessionStatus } from './types'
 
-function isProcessAlive(pid: number): boolean {
-    try {
-        process.kill(pid, 0)
-        return true
-    } catch {
-        return false
-    }
-}
-
 export class BrainStore implements IBrainStore {
     private pool: Pool
 
@@ -101,38 +92,8 @@ export class BrainStore implements IBrainStore {
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_executions' AND column_name = 'progress_log') THEN
                     ALTER TABLE brain_executions ADD COLUMN progress_log JSONB DEFAULT '[]';
                 END IF;
-                -- 添加 worker_pid 字段到 brain_executions（detached worker 进程 PID）
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_executions' AND column_name = 'worker_pid') THEN
-                    ALTER TABLE brain_executions ADD COLUMN worker_pid INTEGER;
-                END IF;
-                -- 添加 last_heartbeat 字段到 brain_executions（worker 心跳时间戳）
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_executions' AND column_name = 'last_heartbeat') THEN
-                    ALTER TABLE brain_executions ADD COLUMN last_heartbeat BIGINT;
-                END IF;
             END $$;
         `)
-
-        // 启动时清理：检查 running executions 的 worker 进程是否还活着
-        const runningExecs = await this.pool.query(
-            `SELECT id, worker_pid FROM brain_executions WHERE status = 'running'`
-        )
-        let cleanedCount = 0
-        for (const row of runningExecs.rows) {
-            const pid = row.worker_pid as number | null
-            const isAlive = pid ? isProcessAlive(pid) : false
-            if (!isAlive) {
-                await this.pool.query(
-                    `UPDATE brain_executions SET status = 'failed', result = 'Worker process died', completed_at = $1 WHERE id = $2`,
-                    [Date.now(), row.id]
-                )
-                cleanedCount++
-            } else {
-                console.log(`[BrainStore] Worker PID ${pid} for execution ${row.id} is still alive, skipping cleanup`)
-            }
-        }
-        if (cleanedCount > 0) {
-            console.log(`[BrainStore] Cleaned ${cleanedCount} dead worker executions from previous run`)
-        }
     }
 
     async createBrainSession(data: {
@@ -488,29 +449,6 @@ export class BrainStore implements IBrainStore {
             [suggestionIds, now, brainSessionId]
         )
         return (queryResult.rowCount ?? 0) > 0
-    }
-
-    async updateExecutionWorkerPid(executionId: string, pid: number): Promise<void> {
-        await this.pool.query(
-            `UPDATE brain_executions SET worker_pid = $1, last_heartbeat = $2 WHERE id = $3`,
-            [pid, Date.now(), executionId]
-        )
-    }
-
-    async updateExecutionHeartbeat(executionId: string): Promise<void> {
-        await this.pool.query(
-            `UPDATE brain_executions SET last_heartbeat = $1 WHERE id = $2`,
-            [Date.now(), executionId]
-        )
-    }
-
-    async getExecutionWorkerPid(executionId: string): Promise<number | null> {
-        const result = await this.pool.query(
-            `SELECT worker_pid FROM brain_executions WHERE id = $1`,
-            [executionId]
-        )
-        if (result.rows.length === 0) return null
-        return (result.rows[0].worker_pid as number) ?? null
     }
 
     async deleteBrainRounds(brainSessionId: string): Promise<number> {

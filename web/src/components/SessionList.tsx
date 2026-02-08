@@ -70,7 +70,7 @@ function filterSessions(
             if (session.ownerEmail) return false
             if (isBrainWorkerSession) return false
         } else if (ownerFilter === 'brain') {
-            // Show only brain worker sessions (source=brain/brain-sdk)
+            // Show only brain sessions (source=brain-sdk)
             if (!isBrainWorkerSession) return false
         } else if (ownerFilter === 'others') {
             if (!session.ownerEmail) return false
