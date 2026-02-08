@@ -174,6 +174,30 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
         return c.json({ ok: true })
     })
 
+    // 获取被 Brain 拦截的待处理用户消息
+    app.get('/sessions/:id/pending-user-message', async (c) => {
+        const { pendingUserMessages } = await import('./messages.js')
+        const sessionId = c.req.param('id')
+
+        const pending = pendingUserMessages.get(sessionId)
+        if (!pending) {
+            return c.json({ text: null })
+        }
+
+        return c.json({ text: pending.text, timestamp: pending.timestamp })
+    })
+
+    // Brain 处理完毕后清除暂存的用户消息
+    app.delete('/sessions/:id/pending-user-message', async (c) => {
+        const { pendingUserMessages, refiningSessions } = await import('./messages.js')
+        const sessionId = c.req.param('id')
+
+        pendingUserMessages.delete(sessionId)
+        refiningSessions.delete(sessionId)
+
+        return c.json({ ok: true })
+    })
+
     app.post('/machines', async (c) => {
         const engine = getSyncEngine()
         if (!engine) {

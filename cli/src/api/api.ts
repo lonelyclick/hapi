@@ -231,6 +231,27 @@ export class ApiClient {
         )
     }
 
+    async getPendingUserMessage(sessionId: string): Promise<{ text: string | null; timestamp?: number }> {
+        const response = await axios.get(
+            `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(sessionId)}/pending-user-message`,
+            {
+                headers: { Authorization: `Bearer ${this.token}` },
+                timeout: 10_000
+            }
+        )
+        return response.data
+    }
+
+    async clearPendingUserMessage(sessionId: string): Promise<void> {
+        await axios.delete(
+            `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(sessionId)}/pending-user-message`,
+            {
+                headers: { Authorization: `Bearer ${this.token}` },
+                timeout: 10_000
+            }
+        )
+    }
+
     /**
      * 获取当前活跃的 Claude 账号
      * 如果没有配置多账号，返回 null

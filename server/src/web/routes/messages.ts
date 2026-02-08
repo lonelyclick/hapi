@@ -6,7 +6,6 @@ import type { BrainStore } from '../../brain/store'
 import type { SSEManager } from '../../sse/sseManager'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParamWithShareCheck, requireSyncEngine } from './guards'
-import { buildRefineSystemPrompt } from '../../brain/brainSdkService'
 
 const querySchema = z.object({
     limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -27,84 +26,9 @@ const clearMessagesBodySchema = z.object({
 // 跟踪正在 refine 的主 session（用于页面刷新后恢复状态）
 export const refiningSessions = new Set<string>()
 
-/**
- * Spawn 一个 refine worker 来预处理用户消息
- * 返回 true 表示成功拦截，false 表示 fallback 到直接发送
- */
-async function spawnRefineWorker(
-    engine: SyncEngine,
-    mainSessionId: string,
-    brainSessionId: string,
-    userMessage: string,
-    brainStoreRef?: BrainStore
-): Promise<boolean> {
-    try {
-        const { spawn } = await import('child_process')
-        const { existsSync } = await import('fs')
-        const pathMod = await import('path')
-
-        let workerPath: string | null = null
-        const serverDir = pathMod.dirname(process.execPath)
-        const candidate1 = pathMod.join(serverDir, 'hapi-brain-worker')
-        const candidate2 = '/home/guang/softwares/hapi/cli/dist-exe/bun-linux-x64/hapi-brain-worker'
-        if (existsSync(candidate1)) workerPath = candidate1
-        else if (existsSync(candidate2)) workerPath = candidate2
-
-        if (!workerPath) {
-            console.warn('[Messages] Brain worker not found, skipping intercept')
-            return false
-        }
-
-        const mainSession = engine.getSession(mainSessionId)
-        const projectPath = mainSession?.metadata?.path || '/tmp'
-
-        // 为 refine 创建一个真实的 execution 记录，以便 worker 写进度日志
-        let executionId = `refine-${Date.now()}`
-        if (brainStoreRef) {
-            try {
-                const now = Date.now()
-                const exec = await brainStoreRef.createBrainExecution({
-                    brainSessionId,
-                    roundsReviewed: 0,
-                    reviewedRoundNumbers: [],
-                    timeRangeStart: now,
-                    timeRangeEnd: now,
-                    prompt: '[refine] ' + userMessage.slice(0, 200),
-                    status: 'running'
-                })
-                executionId = exec.id
-            } catch (err) {
-                console.warn('[Messages] Failed to create refine execution record:', (err as Error).message)
-            }
-        }
-
-        const config = JSON.stringify({
-            executionId,
-            brainSessionId,
-            mainSessionId,
-            prompt: userMessage,
-            projectPath,
-            model: 'glm-4.7',
-            systemPrompt: buildRefineSystemPrompt(),
-            serverCallbackUrl: `http://127.0.0.1:${process.env.WEBAPP_PORT || '3006'}`,
-            serverToken: process.env.CLI_API_TOKEN || '',
-            phase: 'refine',
-            refineSentFrom: 'webapp'
-        })
-
-        const child = spawn(workerPath, [config], {
-            detached: true,
-            stdio: 'ignore',
-            env: process.env as NodeJS.ProcessEnv
-        })
-        child.unref()
-        console.log('[Messages] Spawned refine worker PID:', child.pid, 'for message intercept')
-        return true
-    } catch (err) {
-        console.error('[Messages] Failed to spawn refine worker:', err)
-        return false
-    }
-}
+// 暂存被拦截的用户消息，供 Brain MCP 工具 brain_user_intent 取用
+// key: mainSessionId, value: { text, timestamp }
+export const pendingUserMessages = new Map<string, { text: string; timestamp: number }>()
 
 export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, store: IStore, brainStore?: BrainStore, getSseManager?: () => SSEManager | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
@@ -147,45 +71,48 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
 
         const sentFrom = parsed.data.sentFrom || 'webapp'
 
-        // 大脑模式：拦截用户消息，让 Brain Worker 先处理再发给主 session
+        // 大脑模式：拦截用户消息，暂存后通知 Brain session 分析意图
         // 跳过来自 brain 的消息，避免循环拦截
         const activeBrain = (sentFrom !== 'brain-sdk-review') && brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
-        if (activeBrain) {
-            console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} model=glm-4.7 msgLen=${parsed.data.text.length}`)
-            const intercepted = await spawnRefineWorker(engine, sessionId, activeBrain.id, parsed.data.text, brainStore)
-            if (intercepted) {
-                refiningSessions.add(sessionId)
-                console.log(`[Messages] Brain intercept: message intercepted, waiting for refine worker callback`)
-                // SSE 广播 refine-started，前端显示 loading
-                const sseManager = getSseManager?.()
-                if (sseManager) {
-                    const session = engine.getSession(sessionId)
-                    // 主 session 侧：refine-started 触发 BrainRefineIndicator
-                    sseManager.broadcast({
-                        type: 'brain-sdk-progress',
-                        namespace: session?.namespace,
-                        sessionId,
-                        data: {
-                            brainSessionId: activeBrain.id,
-                            progressType: 'refine-started',
-                            data: {}
-                        }
-                    } as unknown as import('../../sync/syncEngine.js').SyncEvent)
-                    // brain session 侧：started 触发 BrainSdkProgressPanel 开始轮询进度
-                    sseManager.broadcast({
-                        type: 'brain-sdk-progress',
-                        namespace: session?.namespace,
-                        sessionId,
-                        data: {
-                            brainSessionId: activeBrain.id,
-                            progressType: 'started',
-                            data: {}
-                        }
-                    } as unknown as import('../../sync/syncEngine.js').SyncEvent)
-                }
-                return c.json({ ok: true, intercepted: true })
+        if (activeBrain && activeBrain.brainSessionId && activeBrain.brainSessionId !== 'sdk-mode') {
+            console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} brainDisplayId=${activeBrain.brainSessionId} msgLen=${parsed.data.text.length}`)
+
+            // 暂存用户消息，供 brain_user_intent MCP 工具取用
+            pendingUserMessages.set(sessionId, { text: parsed.data.text, timestamp: Date.now() })
+            refiningSessions.add(sessionId)
+
+            // 发通知给 Brain session
+            try {
+                await engine.sendMessage(activeBrain.brainSessionId, {
+                    text: '用户消息转发：用户发送了新消息。请调用 brain_user_intent 获取用户消息，分析意图后用用户口吻重新表达，通过 brain_send_message 发给主 session。',
+                    sentFrom: 'webapp'
+                })
+                console.log(`[Messages] Brain intercept: notification sent to brain session ${activeBrain.brainSessionId}`)
+            } catch (err) {
+                console.error(`[Messages] Brain intercept: failed to notify brain session, falling back to direct send`, err)
+                pendingUserMessages.delete(sessionId)
+                refiningSessions.delete(sessionId)
+                // fallback: 直接发给主 session
+                await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: sentFrom as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review' })
+                return c.json({ ok: true })
             }
-            console.warn(`[Messages] Brain intercept: failed to spawn refine worker, falling back to direct send`)
+
+            // SSE 广播 refine-started
+            const sseManager = getSseManager?.()
+            if (sseManager) {
+                const session = engine.getSession(sessionId)
+                sseManager.broadcast({
+                    type: 'brain-sdk-progress',
+                    namespace: session?.namespace,
+                    sessionId,
+                    data: {
+                        brainSessionId: activeBrain.id,
+                        progressType: 'refine-started',
+                        data: {}
+                    }
+                } as unknown as import('../../sync/syncEngine.js').SyncEvent)
+            }
+            return c.json({ ok: true, intercepted: true })
         }
 
         await engine.sendMessage(sessionId, { text: parsed.data.text, localId: parsed.data.localId, sentFrom: sentFrom as 'webapp' | 'telegram-bot' | 'brain-review' | 'brain-sdk-review' })

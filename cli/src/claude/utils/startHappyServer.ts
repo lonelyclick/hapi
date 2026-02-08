@@ -204,6 +204,9 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                     // Send message to main session via server API
                     await api.sendMessageToSession(mainSessionId, fullMessage, 'brain-sdk-review')
 
+                    // 清除 pending 用户消息（如果有的话）
+                    await api.clearPendingUserMessage(mainSessionId).catch(() => {})
+
                     logger.debug(`[hapiMCP] Message sent to main session ${mainSessionId}`)
 
                     return {
@@ -221,6 +224,42 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
 
             toolNames.push('brain_send_message')
             logger.debug('[hapiMCP] Registered brain_send_message tool for brain session')
+
+            // brain_user_intent: 获取被拦截的用户消息
+            const brainUserIntentInputSchema: z.ZodTypeAny = z.object({})
+
+            mcp.registerTool<any, any>('brain_user_intent', {
+                description: 'Fetch the intercepted user message that was sent to the main session. The message is held pending while Brain analyzes the user intent.',
+                title: 'Brain User Intent',
+                inputSchema: brainUserIntentInputSchema,
+            }, async () => {
+                logger.debug(`[hapiMCP] brain_user_intent called, mainSessionId=${mainSessionId}`)
+
+                try {
+                    const result = await api.getPendingUserMessage(mainSessionId)
+
+                    if (!result.text) {
+                        return {
+                            content: [{ type: 'text' as const, text: '当前没有待处理的用户消息。' }],
+                            isError: false,
+                        }
+                    }
+
+                    return {
+                        content: [{ type: 'text' as const, text: result.text }],
+                        isError: false,
+                    }
+                } catch (error) {
+                    logger.debug('[hapiMCP] brain_user_intent error:', error)
+                    return {
+                        content: [{ type: 'text' as const, text: `获取用户消息失败: ${error instanceof Error ? error.message : String(error)}` }],
+                        isError: true,
+                    }
+                }
+            })
+
+            toolNames.push('brain_user_intent')
+            logger.debug('[hapiMCP] Registered brain_user_intent tool for brain session')
         }
     }
 
