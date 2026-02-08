@@ -270,8 +270,8 @@ export function useSSE(options: {
                         queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: false, noMessage: false, brainInitializing: false })
                     }
 
-                    // Brain refine loading 状态（主 session 侧）
-                    if (progressData.progressType === 'refine-started') {
+                    // Brain refine/syncing loading 状态（主 session 侧）
+                    if (progressData.progressType === 'refine-started' || progressData.progressType === 'syncing') {
                         queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: true, noMessage: false })
                     } else if (progressData.progressType === 'done') {
                         const noMessage = !!(progressData.data as Record<string, unknown> | undefined)?.noMessage

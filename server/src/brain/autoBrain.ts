@@ -411,6 +411,21 @@ export class AutoBrainService {
         try {
             this.syncingBrainIds.add(brainId)
 
+            // 立即广播 syncing 事件，前端禁用输入框
+            if (this.sseManager) {
+                const mainSession = this.engine.getSession(mainSessionId)
+                this.sseManager.broadcast({
+                    type: 'brain-sdk-progress',
+                    namespace: mainSession?.namespace,
+                    sessionId: mainSessionId,
+                    data: {
+                        brainSessionId: brainId,
+                        progressType: 'syncing',
+                        data: {}
+                    }
+                } as unknown as SyncEvent)
+            }
+
             const glmApiKey = process.env.LITELLM_API_KEY
             if (!glmApiKey) {
                 console.error('[BrainSync] LITELLM_API_KEY not set, cannot generate summaries')
