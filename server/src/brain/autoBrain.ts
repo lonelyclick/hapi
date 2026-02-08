@@ -411,27 +411,13 @@ export class AutoBrainService {
         try {
             this.syncingBrainIds.add(brainId)
 
-            // 立即广播 syncing 事件，前端禁用输入框
-            if (this.sseManager) {
-                const mainSession = this.engine.getSession(mainSessionId)
-                this.sseManager.broadcast({
-                    type: 'brain-sdk-progress',
-                    namespace: mainSession?.namespace,
-                    sessionId: mainSessionId,
-                    data: {
-                        brainSessionId: brainId,
-                        progressType: 'syncing',
-                        data: {}
-                    }
-                } as unknown as SyncEvent)
-            }
-
             const glmApiKey = process.env.LITELLM_API_KEY
             if (!glmApiKey) {
                 console.error('[BrainSync] LITELLM_API_KEY not set, cannot generate summaries')
                 return
             }
 
+            let syncingBroadcasted = false
             let continueSync = true
             while (continueSync) {
                 this.keepBrainDisplaySessionAlive(brainSession)
@@ -472,6 +458,11 @@ export class AutoBrainService {
 
                     // 如果有已同步但未 brain 的 rounds，补触发 SDK review
                     if (unbrainedRounds.length > 0 && this.isSdkMode(brainSession)) {
+                        // 有实际工作要做，广播 syncing 事件
+                        if (!syncingBroadcasted) {
+                            this.broadcastBrainSyncing(brainId, mainSessionId)
+                            syncingBroadcasted = true
+                        }
                         const mainSessionObj = this.engine.getSession(mainSessionId)
                         const projectPath = mainSessionObj?.metadata?.path
                         if (projectPath) {
@@ -488,8 +479,15 @@ export class AutoBrainService {
                         pendingRounds: 0,
                         unbrainedRounds: unbrainedRounds.length
                     })
+                    // 如果没有触发 SDK review（无实际工作），不需要广播 done（前端不知道 syncing）
                     continueSync = false
                     break
+                }
+
+                // 有 pending rounds 需要汇总，广播 syncing 事件禁用前端输入
+                if (!syncingBroadcasted) {
+                    this.broadcastBrainSyncing(brainId, mainSessionId)
+                    syncingBroadcasted = true
                 }
 
                 const batchRounds: typeof pendingRounds = []
@@ -678,6 +676,21 @@ export class AutoBrainService {
             data: {
                 brainSessionId: brainSession.id,
                 ...data
+            }
+        } as unknown as SyncEvent)
+    }
+
+    private broadcastBrainSyncing(brainId: string, mainSessionId: string): void {
+        if (!this.sseManager) return
+        const mainSession = this.engine.getSession(mainSessionId)
+        this.sseManager.broadcast({
+            type: 'brain-sdk-progress',
+            namespace: mainSession?.namespace,
+            sessionId: mainSessionId,
+            data: {
+                brainSessionId: brainId,
+                progressType: 'syncing',
+                data: {}
             }
         } as unknown as SyncEvent)
     }
