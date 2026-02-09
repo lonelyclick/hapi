@@ -73,6 +73,7 @@ export type BrainSignal =
     | 'commit_ok'
     | 'commit_fail'
     | 'deploy_ok'
+    | 'dev_complete'
     | 'deploy_fail'
     | 'waiting'
     | 'user_message'
@@ -81,6 +82,7 @@ export type BrainSignal =
 /** 状态机上下文（持久化到 DB） */
 export type BrainStateContext = {
     retries: {
+        developing: number
         reviewing: number
         linting: number
         testing: number
@@ -96,6 +98,7 @@ export type BrainStateContext = {
 /** 默认状态上下文 */
 export const DEFAULT_STATE_CONTEXT: BrainStateContext = {
     retries: {
+        developing: 0,
         reviewing: 0,
         linting: 0,
         testing: 0,

@@ -439,7 +439,7 @@ export class AutoBrainService {
                 await this.brainStore.completeBrainExecution(latestExecution.id, brainText.slice(0, 500))
 
                 // SSE 广播 done 事件
-                const noIssues = signal === 'no_issue' || signal === 'lint_pass' || signal === 'test_pass' || signal === 'commit_ok' || signal === 'deploy_ok'
+                const noIssues = signal === 'no_issue' || signal === 'dev_complete' || signal === 'lint_pass' || signal === 'test_pass' || signal === 'commit_ok' || signal === 'deploy_ok'
                 if (this.sseManager) {
                     const mainSession = this.engine.getSession(mainSessionId)
                     this.sseManager.broadcast({

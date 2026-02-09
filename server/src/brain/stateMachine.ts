@@ -14,6 +14,7 @@ import { DEFAULT_STATE_CONTEXT } from './types'
 
 /** 各状态回退到 developing 的最大重试次数 */
 const MAX_RETRIES = {
+    developing: 5,
     reviewing: 5,
     linting: 3,
     testing: 3,
@@ -28,6 +29,7 @@ export const brainMachine = setup({
         events: {} as { type: BrainSignal; detail?: string },
     },
     guards: {
+        canRetryDeveloping: ({ context }) => context.retries.developing < MAX_RETRIES.developing,
         canRetryReviewing: ({ context }) => context.retries.reviewing < MAX_RETRIES.reviewing,
         canRetryLinting: ({ context }) => context.retries.linting < MAX_RETRIES.linting,
         canRetryTesting: ({ context }) => context.retries.testing < MAX_RETRIES.testing,
@@ -35,6 +37,7 @@ export const brainMachine = setup({
         canRetryDeploying: ({ context }) => context.retries.deploying < MAX_RETRIES.deploying,
     },
     actions: {
+        incrementDevRetry: ({ context }) => { context.retries.developing++ },
         incrementReviewRetry: ({ context }) => { context.retries.reviewing++ },
         incrementLintRetry: ({ context }) => { context.retries.linting++ },
         incrementTestRetry: ({ context }) => { context.retries.testing++ },
@@ -61,7 +64,27 @@ export const brainMachine = setup({
         developing: {
             on: {
                 ai_reply_done: {
+                    target: 'developing',
+                    actions: 'recordSignal',
+                },
+                dev_complete: {
                     target: 'reviewing',
+                    actions: 'recordSignal',
+                },
+                has_issue: [
+                    {
+                        guard: 'canRetryDeveloping',
+                        target: 'developing',
+                        actions: ['incrementDevRetry', 'recordSignal'],
+                    },
+                    {
+                        // 超过重试上限，强制进入 reviewing
+                        target: 'reviewing',
+                        actions: 'recordSignal',
+                    },
+                ],
+                waiting: {
+                    target: 'developing',
                     actions: 'recordSignal',
                 },
             },
@@ -273,7 +296,7 @@ export function sendSignal(
 export function getAllowedSignals(state: BrainMachineState): BrainSignal[] {
     const signalMap: Record<BrainMachineState, BrainSignal[]> = {
         idle: ['ai_reply_done'],
-        developing: ['ai_reply_done'],
+        developing: ['ai_reply_done', 'dev_complete', 'has_issue', 'waiting'],
         reviewing: ['has_issue', 'no_issue', 'ai_question', 'skip'],
         linting: ['lint_pass', 'lint_fail', 'waiting', 'skip'],
         testing: ['test_pass', 'test_fail', 'waiting', 'skip'],

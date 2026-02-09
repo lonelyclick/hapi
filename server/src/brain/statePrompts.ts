@@ -26,13 +26,14 @@ const STATE_LABELS: Record<BrainMachineState, string> = {
 
 /** 流程可视化（标注当前位置） */
 function renderPipeline(current: BrainMachineState): string {
-    const stages: BrainMachineState[] = ['idle', 'developing', 'reviewing', 'linting', 'testing', 'committing', 'done']
+    const stages: BrainMachineState[] = ['idle', 'developing', 'reviewing', 'linting', 'testing', 'committing', 'deploying', 'done']
     return stages.map(s => s === current ? `【${STATE_LABELS[s]}】` : STATE_LABELS[s]).join(' → ')
 }
 
 /** 信号说明 */
 const SIGNAL_DESCRIPTIONS: Record<string, string> = {
-    ai_reply_done: 'AI 回复结束，开发阶段完成',
+    ai_reply_done: 'AI 回复结束，触发开发阶段质量检查',
+    dev_complete: '多维质量检查全部通过，进入代码审查',
     has_issue: '代码有问题，需要修改',
     no_issue: '代码没问题，可以进入下一步',
     ai_question: '主 session 在等用户回答问题，你来替用户决策',
@@ -52,12 +53,22 @@ const SIGNAL_DESCRIPTIONS: Record<string, string> = {
 const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
     idle: '主 session 尚未开始工作，等待中。',
 
-    developing: `主 session 正在开发中。调用 brain_summarize 获取最新对话内容，判断：
-- AI 是否还在写代码（有 Edit/Write 工具调用）？
-- AI 是否已经完成当前任务并在等待下一步指示？
-- AI 是否在问用户问题或给出选项等待决策？
+    developing: `主 session 完成了一轮开发。调用 brain_summarize 获取最新对话内容。
 
-根据判断返回对应 signal。`,
+你的任务是进行**多维质量检查**，确保开发完备后再进入代码审查阶段。
+
+## 检查维度（根据改动内容选择适用项）
+
+1. **前后端适配** — 如果改的是前端代码，检查后端是否也需要对应改动（新接口、字段变更等）；如果改的是后端代码，检查前端是否已经适配了（调用方式、数据结构等）
+2. **流程完整性** — 如果涉及复杂业务流程，至少从头到尾检查 3 遍完整流程，确认各环节衔接正确、无遗漏
+3. **视觉一致性** — 如果改了样式或 UI，从各个角度审视整体视觉风格是否一致，是否达到高标准
+4. **基本完成度** — AI 是否已经完成了用户要求的所有改动？是否还有未实现的部分？
+
+## 判断逻辑
+
+- 如果发现任何维度有问题 → 用 brain_send_message(type=info) 详细说明问题并给出修改指令，然后返回 has_issue
+- 如果 AI 还在等待用户决策（问问题、给选项）→ 替用户做决策，用 brain_send_message(type=info) 发送决策，然后返回 waiting
+- 如果所有适用维度都检查通过，开发完备 → 返回 dev_complete`,
 
     reviewing: `代码开发告一段落，请进行代码审查。调用 brain_summarize 获取最新对话。
 
@@ -177,7 +188,7 @@ function buildRetryInfo(state: BrainMachineState, ctx: BrainStateContext): strin
     if (!count || count === 0) return ''
 
     const maxRetries: Record<string, number> = {
-        reviewing: 5, linting: 3, testing: 3, committing: 2, deploying: 2,
+        developing: 5, reviewing: 5, linting: 3, testing: 3, committing: 2, deploying: 2,
     }
     const max = maxRetries[retryKey]
     if (!max) return ''
