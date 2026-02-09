@@ -262,11 +262,16 @@ export function sendSignal(
     signal: BrainSignal,
     detail?: string
 ): TransitionResult {
-    // 从持久化数据重建 actor
+    console.log('[StateMachine] sendSignal:', signal, 'in state:', currentState, 'retries:', JSON.stringify(stateContext.retries))
+
+    // 从持久化数据重建 actor（深拷贝 context 避免污染调用方数据）
     const actor = createActor(brainMachine, {
         snapshot: {
             value: currentState,
-            context: { ...stateContext },
+            context: {
+                ...stateContext,
+                retries: { ...stateContext.retries },
+            },
             status: 'active',
             output: undefined,
             error: undefined,
@@ -287,10 +292,13 @@ export function sendSignal(
 
     actor.stop()
 
+    const changed = newState !== stateBefore
+    console.log('[StateMachine] Result:', stateBefore, '→', newState, changed ? '(CHANGED)' : '(same)', 'retries:', JSON.stringify(newContext.retries))
+
     return {
         newState,
         newContext,
-        changed: newState !== stateBefore,
+        changed,
     }
 }
 
@@ -318,7 +326,9 @@ export function getAllowedSignals(state: BrainMachineState): BrainSignal[] {
  */
 export function needsImmediateAction(state: BrainMachineState): boolean {
     // reviewing/linting/testing/committing/deploying 需要 Brain 主动 push 指令
-    return ['reviewing', 'linting', 'testing', 'committing', 'deploying'].includes(state)
+    const result = ['reviewing', 'linting', 'testing', 'committing', 'deploying'].includes(state)
+    console.log('[StateMachine] needsImmediateAction:', state, '→', result)
+    return result
 }
 
 /**
@@ -326,7 +336,10 @@ export function needsImmediateAction(state: BrainMachineState): boolean {
  * （主 session AI 回复结束时，是否应触发状态转换）
  */
 export function acceptsAiReplyDone(state: BrainMachineState): boolean {
-    return getAllowedSignals(state).includes('ai_reply_done')
+    const allowed = getAllowedSignals(state)
+    const result = allowed.includes('ai_reply_done')
+    console.log('[StateMachine] acceptsAiReplyDone:', state, '→', result, '(allowedSignals:', allowed.join(','), ')')
+    return result
 }
 
 /**

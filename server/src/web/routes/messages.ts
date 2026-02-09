@@ -76,7 +76,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
         // 跳过来自 brain 的消息，避免循环拦截
         const activeBrain = (sentFrom !== 'brain-sdk-review' && sentFrom !== 'brain-sdk-info') && brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
         if (activeBrain && activeBrain.brainSessionId) {
-            console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} brainDisplayId=${activeBrain.brainSessionId} msgLen=${parsed.data.text.length}`)
+            console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} state=${activeBrain.currentState} brainDisplayId=${activeBrain.brainSessionId} msgLen=${parsed.data.text.length} msgPreview=${parsed.data.text.slice(0, 100)}`)
 
             // 暂存用户消息，供 brain_user_intent MCP 工具取用
             pendingUserMessages.set(sessionId, { text: parsed.data.text, timestamp: Date.now() })
@@ -85,6 +85,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
             // 发通知给 Brain session（使用状态驱动的 refine prompt）
             try {
                 const refinePrompt = buildRefinePrompt(activeBrain.currentState)
+                console.log(`[Messages] Brain intercept: refine prompt for state=${activeBrain.currentState}, promptLen=${refinePrompt.length}`)
                 await engine.sendMessage(activeBrain.brainSessionId, {
                     text: refinePrompt,
                     sentFrom: 'webapp'

@@ -12,6 +12,14 @@
 import type { BrainMachineState, BrainStateContext, BrainSignal } from './types'
 import { getAllowedSignals } from './stateMachine'
 
+/** 所有有效的 BrainSignal 值 */
+const VALID_SIGNALS = new Set<string>([
+    'ai_reply_done', 'has_issue', 'no_issue', 'ai_question',
+    'lint_pass', 'lint_fail', 'test_pass', 'test_fail',
+    'commit_ok', 'commit_fail', 'deploy_ok', 'dev_complete',
+    'deploy_fail', 'waiting', 'user_message', 'skip',
+])
+
 /** 状态中文名映射 */
 const STATE_LABELS: Record<BrainMachineState, string> = {
     idle: '空闲',
@@ -205,12 +213,21 @@ SIGNAL:<你选择的信号>`
 export function parseSignalFromResponse(text: string): BrainSignal | null {
     // 从末尾往前找 SIGNAL:xxx
     const lines = text.trim().split('\n')
+    const lastLines = lines.slice(Math.max(0, lines.length - 5))
+    console.log('[StatePrompts] parseSignal: scanning last', lastLines.length, 'lines:', lastLines.map(l => l.trim()).join(' | '))
     for (let i = lines.length - 1; i >= Math.max(0, lines.length - 5); i--) {
         const match = lines[i].match(/SIGNAL:\s*(\S+)/i)
         if (match) {
-            return match[1] as BrainSignal
+            const signal = match[1]
+            if (!VALID_SIGNALS.has(signal)) {
+                console.log('[StatePrompts] parseSignal: INVALID signal:', signal, 'at line', i, '- ignoring')
+                continue
+            }
+            console.log('[StatePrompts] parseSignal: found valid signal:', signal, 'at line', i)
+            return signal as BrainSignal
         }
     }
+    console.log('[StatePrompts] parseSignal: no valid signal found in text (length:', text.length, ', total lines:', lines.length, ')')
     return null
 }
 

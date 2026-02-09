@@ -499,6 +499,7 @@ export class BrainStore implements IBrainStore {
             const raw = row.state_context as Partial<BrainStateContext>
             stateContext = {
                 retries: {
+                    developing: raw.retries?.developing ?? 0,
                     reviewing: raw.retries?.reviewing ?? 0,
                     linting: raw.retries?.linting ?? 0,
                     testing: raw.retries?.testing ?? 0,

@@ -11,7 +11,7 @@ import type { SSEManager } from '../sse/sseManager'
 import type { BrainStore } from './store'
 import type { StoredBrainSession } from './types'
 import { refiningSessions } from '../web/routes/messages'
-import { sendSignal, needsImmediateAction, acceptsAiReplyDone, shouldReviewBrainTriggeredRounds, isFinalState } from './stateMachine'
+import { sendSignal, needsImmediateAction, acceptsAiReplyDone, shouldReviewBrainTriggeredRounds } from './stateMachine'
 import { buildStateReviewPrompt, parseSignalFromResponse } from './statePrompts'
 
 /**
@@ -132,6 +132,7 @@ function hasCodeChangeToolUse(content: unknown): boolean {
 
     for (const block of message.content) {
         if (block && typeof block === 'object' && block.type === 'tool_use' && CODE_CHANGE_TOOLS.has(block.name)) {
+            console.log('[BrainSync] Code change tool detected:', block.name)
             return true
         }
     }
@@ -295,8 +296,11 @@ export class AutoBrainService {
         try {
             const brainSession = await this.brainStore.getActiveBrainSession(mainSessionId)
             if (!brainSession) {
+                console.log('[BrainSync] handleMainSessionComplete: no active brain session for', mainSessionId)
                 return
             }
+
+            console.log('[BrainSync] handleMainSessionComplete: brainId=', brainSession.id, 'state=', brainSession.currentState, 'mainSessionId=', mainSessionId)
 
             if (brainSession.brainSessionId) {
                 this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
@@ -307,10 +311,13 @@ export class AutoBrainService {
 
             // 状态机：主 session AI 回复结束 → 发送 ai_reply_done 信号
             // 但仅当最新 round 有代码修改时才触发（纯问答不进 developing）
-            if (acceptsAiReplyDone(brainSession.currentState)) {
+            const canAccept = acceptsAiReplyDone(brainSession.currentState)
+            console.log('[BrainSync] handleMainSessionComplete: acceptsAiReplyDone=', canAccept, 'state=', brainSession.currentState)
+            if (canAccept) {
                 const allMessages = await this.engine.getAllMessages(mainSessionId)
                 const rounds = groupMessagesIntoRounds(allMessages)
                 const latest = rounds.length > 0 ? rounds[rounds.length - 1] : null
+                console.log('[BrainSync] handleMainSessionComplete: totalRounds=', rounds.length, 'latestRound=', latest?.roundNumber, 'hasCodeChanges=', latest?.hasCodeChanges, 'fromBrainReview=', latest?.fromBrainReview)
                 if (latest?.hasCodeChanges) {
                     const result = sendSignal(brainSession.currentState, brainSession.stateContext, 'ai_reply_done')
                     if (result.changed) {
@@ -318,11 +325,15 @@ export class AutoBrainService {
                         await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
                         brainSession.currentState = result.newState
                         brainSession.stateContext = result.newContext
+                    } else {
+                        console.log('[BrainSync] ai_reply_done self-loop, state stays:', result.newState)
                     }
                 } else {
                     console.log('[BrainSync] No code changes in latest round, skipping ai_reply_done (state stays:', brainSession.currentState, ')')
                     return
                 }
+            } else {
+                console.log('[BrainSync] State', brainSession.currentState, 'does not accept ai_reply_done, proceeding to syncRounds directly')
             }
 
             await this.syncRounds(brainSession)
@@ -384,7 +395,14 @@ export class AutoBrainService {
 
             // 检查是否正在 refine（用户消息拦截）
             const wasRefining = refiningSessions.has(mainSessionId)
-            if (wasRefining) {
+            // 如果有 running execution，说明这是 review 回复而非 refine 回复
+            // （避免 review 和 refine 同时进行时误判）
+            const latestExecForCheck = wasRefining ? await this.brainStore.getLatestExecutionWithProgress(brainSession.id) : null
+            const isActuallyReview = wasRefining && latestExecForCheck?.status === 'running'
+            if (isActuallyReview) {
+                console.log('[BrainSync] handleBrainAIResponse: refiningSessions is set BUT latestExecution is running — this is a review response, not refine. Keeping refiningSessions for next response.')
+            }
+            if (wasRefining && !isActuallyReview) {
                 console.log('[BrainSync] handleBrainAIResponse: refine response detected for', mainSessionId)
                 refiningSessions.delete(mainSessionId)
                 if (this.sseManager) {
@@ -404,15 +422,17 @@ export class AutoBrainService {
                 // refine 回复也需要解析 signal 驱动状态机（如 skip、ai_reply_done）
                 await this.waitForMessagesStable(brainSessionId)
                 const refineText = await this.extractBrainAIText(brainSessionId)
+                console.log('[BrainSync] Refine text:', refineText ? `length=${refineText.length}, preview=${refineText.slice(-200)}` : 'null')
                 if (refineText) {
                     const refineSignal = parseSignalFromResponse(refineText)
                     console.log('[BrainSync] Refine signal:', refineSignal, 'currentState:', brainSession.currentState)
                     if (refineSignal) {
                         const result = sendSignal(brainSession.currentState, brainSession.stateContext, refineSignal)
-                        if (result.changed) {
-                            console.log('[BrainSync] Refine state transition:', brainSession.currentState, '→', result.newState)
-                            await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
+                        console.log('[BrainSync] Refine state transition:', brainSession.currentState, '→', result.newState, 'changed:', result.changed)
+                        // 始终持久化 context（即使 self-loop 也会更新 lastSignal 等）
+                        await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
 
+                        if (result.changed) {
                             // skip 后如果新状态需要立即行动，主动触发
                             if (needsImmediateAction(result.newState)) {
                                 const refreshed = await this.brainStore.getActiveBrainSession(mainSessionId)
@@ -432,8 +452,9 @@ export class AutoBrainService {
             }
 
             // 只处理有 running execution 的回复（即 review 回复），忽略 init prompt 等其他回复
-            const latestExecution = await this.brainStore.getLatestExecutionWithProgress(brainSession.id)
-            console.log('[BrainSync] handleBrainAIResponse: latestExecution status=', latestExecution?.status ?? 'none')
+            // 复用 refine 检查中已查询的结果（如果有的话）
+            const latestExecution = latestExecForCheck ?? await this.brainStore.getLatestExecutionWithProgress(brainSession.id)
+            console.log('[BrainSync] handleBrainAIResponse: latestExecution=', latestExecution ? `id=${latestExecution.id} status=${latestExecution.status}` : 'none')
             if (!latestExecution || latestExecution.status !== 'running') {
                 console.log('[BrainSync] No running execution found, skipping (likely init prompt or already completed)')
                 return
@@ -461,7 +482,7 @@ export class AutoBrainService {
                 }
                 return
             }
-            console.log('[BrainSync] Got brain text, length:', brainText.length)
+            console.log('[BrainSync] Got brain text, length:', brainText.length, 'preview:', brainText.slice(-200))
 
             // 从 Brain 回复中解析 signal，驱动状态机转换
             const signal = parseSignalFromResponse(brainText)
@@ -473,19 +494,18 @@ export class AutoBrainService {
 
                 // 持久化新状态
                 await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
+                console.log('[BrainSync] State persisted to DB:', result.newState)
 
-                // 如果到达终态，完成 brain session
-                if (isFinalState(result.newState)) {
-                    await this.brainStore.completeBrainSession(brainSession.id, brainText.slice(0, 500))
-                } else {
-                    await this.brainStore.updateBrainResult(brainSession.id, brainText.slice(0, 500))
-                }
+                // 更新 brain result（done 不是终态，brain session 保持 active 可随时恢复）
+                await this.brainStore.updateBrainResult(brainSession.id, brainText.slice(0, 500))
 
                 // 完成当前 execution
                 await this.brainStore.completeBrainExecution(latestExecution.id, brainText.slice(0, 500))
+                console.log('[BrainSync] Execution completed:', latestExecution.id)
 
                 // SSE 广播 done 事件
-                const noIssues = signal === 'no_issue' || signal === 'dev_complete' || signal === 'lint_pass' || signal === 'test_pass' || signal === 'commit_ok' || signal === 'deploy_ok'
+                const noIssues = signal === 'no_issue' || signal === 'dev_complete' || signal === 'lint_pass' || signal === 'test_pass' || signal === 'commit_ok' || signal === 'deploy_ok' || signal === 'waiting' || signal === 'skip'
+                console.log('[BrainSync] noIssues=', noIssues, 'signal=', signal)
                 if (this.sseManager) {
                     const mainSession = this.engine.getSession(mainSessionId)
                     this.sseManager.broadcast({
@@ -590,10 +610,16 @@ export class AutoBrainService {
             const message = data.message as Record<string, unknown>
             if (message?.content) {
                 const contentArr = message.content as Array<{ type?: string; text?: string }>
+                // 拼接所有 text block（SIGNAL 可能在最后一个 text block 中，中间可能有 tool_use）
+                const texts: string[] = []
                 for (const item of contentArr) {
                     if (item.type === 'text' && item.text) {
-                        return item.text
+                        texts.push(item.text)
                     }
+                }
+                if (texts.length > 0) {
+                    console.log('[BrainSync] extractBrainAIText: found', texts.length, 'text blocks in message')
+                    return texts.join('\n\n')
                 }
             }
         }
@@ -817,7 +843,16 @@ export class AutoBrainService {
         const mainSessionId = brainSession.mainSessionId
         const brainDisplaySessionId = brainSession.brainSessionId
 
-        console.log('[BrainSync] Triggering review for', summaries.length, 'rounds (persistent brain session), state:', brainSession.currentState)
+        console.log('[BrainSync] triggerSdkReview:', {
+            brainId,
+            mainSessionId,
+            brainDisplaySessionId,
+            state: brainSession.currentState,
+            retries: brainSession.stateContext.retries,
+            lastSignal: brainSession.stateContext.lastSignal,
+            roundCount: summaries.length,
+            rounds: summaries.map(s => s.round),
+        })
 
         const roundNumbers = summaries.map(s => s.round)
 
@@ -827,6 +862,14 @@ export class AutoBrainService {
             brainSession.stateContext,
             roundNumbers
         )
+        console.log('[BrainSync] Review prompt preview (first 300 chars):', reviewPrompt.slice(0, 300))
+
+        // 如果有未完成的 running execution，先标记为 completed（被新一轮取代）
+        const prevExec = await this.brainStore.getLatestExecutionWithProgress(brainId)
+        if (prevExec?.status === 'running') {
+            console.log('[BrainSync] Found stale running execution:', prevExec.id, '- completing before new review')
+            await this.brainStore.completeBrainExecution(prevExec.id, '[SUPERSEDED] New review cycle started')
+        }
 
         // 创建执行记录（status=running）
         await this.brainStore.createBrainExecution({
@@ -867,6 +910,11 @@ export class AutoBrainService {
         try {
             if (!brainDisplaySessionId) {
                 console.error('[BrainSync] No valid brain display session ID, cannot send review')
+                // 标记 execution 失败，防止永远卡在 running
+                const latestExec = await this.brainStore.getLatestExecutionWithProgress(brainId)
+                if (latestExec?.status === 'running') {
+                    await this.brainStore.completeBrainExecution(latestExec.id, '[ERROR] No brain display session ID')
+                }
                 return
             }
 
@@ -880,6 +928,25 @@ export class AutoBrainService {
             console.log('[BrainSync] Sent review prompt to persistent brain session:', brainDisplaySessionId)
         } catch (err) {
             console.error('[BrainSync] Failed to send review to brain session:', err)
+            // 发送失败时标记 execution 完成，防止卡在 running
+            const latestExec = await this.brainStore.getLatestExecutionWithProgress(brainId)
+            if (latestExec?.status === 'running') {
+                await this.brainStore.completeBrainExecution(latestExec.id, `[ERROR] Failed to send: ${err}`)
+            }
+            // 广播 done，防止前端卡住
+            if (this.sseManager) {
+                const mainSession = this.engine.getSession(mainSessionId)
+                this.sseManager.broadcast({
+                    type: 'brain-sdk-progress',
+                    namespace: mainSession?.namespace,
+                    sessionId: mainSessionId,
+                    data: {
+                        brainSessionId: brainId,
+                        progressType: 'done',
+                        data: { status: 'completed', noMessage: true }
+                    }
+                } as unknown as SyncEvent)
+            }
         }
     }
 
