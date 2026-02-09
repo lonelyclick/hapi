@@ -114,10 +114,6 @@ export const brainMachine = setup({
                     target: 'developing',
                     actions: ['incrementReviewRetry', 'recordSignal'],
                 },
-                skip: {
-                    target: 'linting',
-                    actions: 'recordSignal',
-                },
             },
         },
         linting: {
@@ -141,10 +137,6 @@ export const brainMachine = setup({
                 // waiting: 已发 lint 指令，等主 session 跑完
                 waiting: {
                     target: 'linting',
-                    actions: 'recordSignal',
-                },
-                skip: {
-                    target: 'testing',
                     actions: 'recordSignal',
                 },
             },
@@ -171,10 +163,6 @@ export const brainMachine = setup({
                     target: 'testing',
                     actions: 'recordSignal',
                 },
-                skip: {
-                    target: 'committing',
-                    actions: 'recordSignal',
-                },
             },
         },
         committing: {
@@ -198,10 +186,6 @@ export const brainMachine = setup({
                     target: 'committing',
                     actions: 'recordSignal',
                 },
-                skip: {
-                    target: 'deploying',
-                    actions: 'recordSignal',
-                },
             },
         },
         deploying: {
@@ -223,10 +207,6 @@ export const brainMachine = setup({
                 ],
                 waiting: {
                     target: 'deploying',
-                    actions: 'recordSignal',
-                },
-                skip: {
-                    target: 'done',
                     actions: 'recordSignal',
                 },
             },
@@ -315,11 +295,11 @@ export function getAllowedSignals(state: BrainMachineState): BrainSignal[] {
     const signalMap: Record<BrainMachineState, BrainSignal[]> = {
         idle: ['ai_reply_done'],
         developing: ['dev_complete', 'has_issue', 'waiting'],
-        reviewing: ['has_issue', 'no_issue', 'ai_question', 'skip'],
-        linting: ['lint_pass', 'lint_fail', 'waiting', 'skip'],
-        testing: ['test_pass', 'test_fail', 'waiting', 'skip'],
-        committing: ['commit_ok', 'commit_fail', 'waiting', 'skip'],
-        deploying: ['deploy_ok', 'deploy_fail', 'waiting', 'skip'],
+        reviewing: ['has_issue', 'no_issue', 'ai_question'],
+        linting: ['lint_pass', 'lint_fail', 'waiting'],
+        testing: ['test_pass', 'test_fail', 'waiting'],
+        committing: ['commit_ok', 'commit_fail', 'waiting'],
+        deploying: ['deploy_ok', 'deploy_fail', 'waiting'],
         done: ['ai_reply_done'],
     }
     return signalMap[state] ?? []

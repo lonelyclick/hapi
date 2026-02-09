@@ -77,7 +77,6 @@ export type BrainSignal =
     | 'deploy_fail'
     | 'waiting'
     | 'user_message'
-    | 'skip'
 
 /** 状态机上下文（持久化到 DB） */
 export type BrainStateContext = {
@@ -91,8 +90,6 @@ export type BrainStateContext = {
     }
     lastSignal?: BrainSignal
     lastSignalDetail?: string
-    /** 用户请求跳过时的目标状态 */
-    skipTarget?: BrainMachineState
 }
 
 /** 默认状态上下文 */

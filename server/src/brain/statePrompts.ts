@@ -17,7 +17,7 @@ const VALID_SIGNALS = new Set<string>([
     'ai_reply_done', 'has_issue', 'no_issue', 'ai_question',
     'lint_pass', 'lint_fail', 'test_pass', 'test_fail',
     'commit_ok', 'commit_fail', 'deploy_ok', 'dev_complete',
-    'deploy_fail', 'waiting', 'user_message', 'skip',
+    'deploy_fail', 'waiting', 'user_message',
 ])
 
 /** 状态中文名映射 */
@@ -54,7 +54,6 @@ const SIGNAL_DESCRIPTIONS: Record<string, string> = {
     deploy_ok: '部署成功',
     deploy_fail: '部署失败',
     waiting: '已发指令给主 session，等它执行完（保持当前阶段）',
-    skip: '跳过当前阶段',
 }
 
 /** 各状态的 Brain 指令 */
@@ -242,10 +241,12 @@ export function buildRefinePrompt(currentState: BrainMachineState): string {
 
 请执行：
 1) 调用 brain_user_intent 获取用户原始消息
-2) 分析用户意图的合理性，结合当前处于「${STATE_LABELS[currentState]}」阶段
-3) 如果用户想跳过当前阶段（如"别测了""直接提交""先不部署"），在回复末尾写 SIGNAL:skip
-4) 如果用户在补充需求或修改方向，整合为清晰指令，用 brain_send_message(type=info) 发给主 session，然后写 SIGNAL:ai_reply_done
-5) 其他情况正常改写转发，用 brain_send_message(type=info) 发送，然后写 SIGNAL:waiting
+2) 分析用户意图，结合当前处于「${STATE_LABELS[currentState]}」阶段
+
+**流程不可跳过**：无论用户说什么（如"部署一下""别测了""直接提交"），都不能跳过任何阶段。流程必须按顺序完成：开发 → 审查 → 检查 → 测试 → 提交 → 部署。如果用户要求跳过，用 brain_send_message(type=info) 礼貌告知用户当前阶段还没完成，需要按流程走完，然后返回 waiting。
+
+3) 如果用户在补充需求或修改方向，整合为清晰指令，用 brain_send_message(type=info) 发给主 session，然后写 SIGNAL:ai_reply_done
+4) 其他情况正常改写转发，用 brain_send_message(type=info) 发送，然后写 SIGNAL:waiting
 
 ## 格式要求
 完成上述操作后，在回复的**最后一行**写：
