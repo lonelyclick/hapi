@@ -412,6 +412,7 @@ export class AutoBrainService {
                 console.log('[BrainSync] Refine text:', refineText ? `length=${refineText.length}, preview=${refineText.slice(-200)}` : 'null')
 
                 let refineNoMessage = !refineText  // 没文本 → noMessage
+                let refineNewState = brainSession.currentState  // 默认保持当前状态
                 if (refineText) {
                     const refineSignal = parseSignalFromResponse(refineText)
                     console.log('[BrainSync] Refine signal:', refineSignal, 'currentState:', brainSession.currentState)
@@ -420,6 +421,7 @@ export class AutoBrainService {
                         refineNoMessage = refineSignal === 'skip' || refineSignal === 'waiting'
                         const result = sendSignal(brainSession.currentState, brainSession.stateContext, refineSignal)
                         console.log('[BrainSync] Refine state transition:', brainSession.currentState, '→', result.newState, 'changed:', result.changed)
+                        refineNewState = result.newState
                         // 始终持久化 context（即使 self-loop 也会更新 lastSignal 等）
                         await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
 
@@ -440,7 +442,7 @@ export class AutoBrainService {
                     }
                 }
 
-                // 广播 done（在解析完 signal 后，用正确的 noMessage 值）
+                // 广播 done（在解析完 signal 后，用正确的 noMessage 和 currentState）
                 if (this.sseManager) {
                     const mainSession = this.engine.getSession(mainSessionId)
                     this.sseManager.broadcast({
@@ -450,7 +452,7 @@ export class AutoBrainService {
                         data: {
                             brainSessionId: brainSession.id,
                             progressType: 'done',
-                            data: { status: 'completed', noMessage: refineNoMessage }
+                            data: { status: 'completed', noMessage: refineNoMessage, currentState: refineNewState }
                         }
                     } as unknown as SyncEvent)
                 }
