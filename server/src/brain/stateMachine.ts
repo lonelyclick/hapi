@@ -14,10 +14,10 @@ import { DEFAULT_STATE_CONTEXT } from './types'
 
 /** 各状态回退到 developing 的最大重试次数 */
 const MAX_RETRIES = {
-    developing: 5,
-    reviewing: 5,
+    developing: 8,
+    reviewing: 10,
     linting: 3,
-    testing: 3,
+    testing: 5,
     committing: 2,
     deploying: 2,
 } as const

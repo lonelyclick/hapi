@@ -63,94 +63,127 @@ const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
 
     developing: `主 session 完成了一轮开发。调用 brain_summarize 获取最新对话内容。
 
-你的任务是进行**多维质量检查**，确保开发完备后再进入代码审查阶段。不要急于通过，要像一个严谨的技术负责人一样逐项审视。
+**核心原则：你看不到代码，所有检查必须 push 给主 session 执行。每次只 push 一个维度，等它做完再 push 下一个。不要一次性列一堆检查项。**
 
-## 检查维度（根据改动内容选择适用项，每个适用维度都必须通过）
+## 你的任务
 
-### 1. 前后端适配
-- 改了前端组件或页面 → 后端是否有对应的 API 新增/修改？字段名、类型是否一致？
-- 改了后端接口（路由、返回结构、参数）→ 前端调用方是否已同步更新？
-- 新增了数据模型/表结构 → 前端的类型定义、表单、展示逻辑是否都适配了？
-- WebSocket/SSE 事件结构变更 → 发送端和接收端是否对齐？
-- 如果只改了纯前端（样式、布局）或纯后端（内部逻辑不影响接口），此项可跳过
+调用 brain_summarize 后，根据对话内容判断当前状态：
 
-### 2. 流程完整性
-- 梳理改动涉及的完整用户流程，从触发入口到最终结果，至少走查 3 遍
-- 第 1 遍：正常路径（happy path）— 主流程是否通畅？
-- 第 2 遍：边界路径 — 空数据、首次使用、大量数据、并发操作
-- 第 3 遍：异常路径 — 网络断开、权限不足、数据不一致、超时
-- 检查状态流转是否有死路（进入后出不来）或遗漏的状态处理
-- 如果改动很简单（单文件局部修改），此项可简化
+1. **AI 在等用户回答问题** → 替用户做决策，用 brain_send_message(type=info) 发送决策，返回 waiting
 
-### 3. 视觉一致性
-- 新增/修改的 UI 元素是否与现有页面的视觉风格统一（间距、字号、颜色、圆角等）？
-- 不同屏幕尺寸下布局是否合理？有没有溢出或挤压？
-- 交互状态是否完整（hover、active、disabled、loading、empty state）？
-- 暗色/亮色主题是否都覆盖？
-- 如果没改 UI/样式，此项跳过
+2. **AI 还在写代码/调试** → 不要打断，返回 waiting
 
-### 4. 基本完成度
-- 用户原始需求的每一条是否都实现了？逐条对照检查
-- 有没有半成品代码（TODO、placeholder、硬编码的临时值）？
-- 错误处理是否到位（try-catch、用户提示、降级方案）？
-- 新增功能是否有对应的清理逻辑（卸载、销毁、取消订阅）？
+3. **AI 刚完成代码修改** → 开始分轮 push 自查。每次只 push 一个角度，用 brain_send_message(type=info) 发送，然后返回 has_issue 等主 session 执行完。角度包括但不限于（根据改动灵活选择，用你自己的话说，不要照搬模板）：
+   - 需求对照：让主 session 回顾用户原始需求，逐条列出是否实现
+   - 前后端适配：如果改了接口，让主 session 检查前后端是否对齐
+   - 边界情况：让主 session 检查空值、异常路径等
+   - 半成品搜索：让主 session 用 Grep 搜索 TODO、placeholder、硬编码
+   - 依赖检查：让主 session 用 Grep 搜索被修改函数的调用方
+   - 错误处理：让主 session 检查新增的异步操作是否有异常处理
 
-### 5. 数据一致性
-- 新增/修改的数据存储（DB、文件、缓存）是否有对应的读取和写入逻辑？
-- 数据迁移：旧数据在新逻辑下是否兼容？会不会因为字段缺失而崩溃？
-- 并发安全：多个 session/用户同时操作是否会产生竞态条件？
+4. **主 session 刚完成了你上一轮 push 的检查** → 看它的报告：
+   - 如果发现了问题但还没修 → 让它修，返回 has_issue
+   - 如果发现了问题并已修 → 继续 push 下一个检查角度，返回 has_issue
+   - 如果这个角度没问题 → 继续 push 下一个检查角度，返回 has_issue
+   - 如果所有角度都已检查完毕（至少 3 个角度） → 返回 dev_complete
 
-### 6. 依赖影响
-- 修改的函数/模块是否被其他地方引用？引用方是否需要同步调整？
-- 类型签名变更是否影响到其他 TypeScript 文件的类型推断？
-- 配置项/环境变量的新增或变更是否有文档或默认值？
+**关键：每次返回 has_issue 推一个新角度，而不是一次性全推。这样能确保每个角度都被认真对待。用你自己的语言组织指令，根据具体改动内容灵活调整检查重点。**`,
 
-## 判断逻辑
+    reviewing: `代码审查阶段。调用 brain_summarize 获取最新对话内容。
 
-- 逐个维度检查（跳过不适用的），**任意一个维度发现问题** → 用 brain_send_message(type=info) 详细说明问题并给出**具体的修改指令**（不要含糊，要告诉主 session 改哪个文件、怎么改），然后返回 has_issue
-- 如果 AI 还在等待用户决策（问问题、给选项）→ 替用户做决策，用 brain_send_message(type=info) 发送决策，然后返回 waiting
-- **所有适用维度都检查通过**，开发完备无遗漏 → 返回 dev_complete`,
+**核心原则：你看不到代码，所有审查必须 push 给主 session 执行。每次只 push 一个审查角度，等它做完再 push 下一个。只要上一轮审查还发现了问题，就继续推下一轮，不要停。最多 10 轮。**
 
-    reviewing: `代码开发告一段落，请进行代码审查。调用 brain_summarize 获取最新对话。
+## 你的任务
 
-审查角度（选择适用的）：
-1. 功能正确性 — 是否实现了用户需求
-2. 边界情况 — 空值、异常路径、并发
-3. 类型安全 — TypeScript 类型是否正确
-4. 安全性 — 注入、XSS、敏感信息泄露
-5. 性能 — 不必要的循环、N+1 查询
+调用 brain_summarize 后，根据对话内容判断当前状态：
 
-如果发现问题，用 brain_send_message(type=info) 告诉主 session 修改，然后返回 has_issue。
-如果主 session 在等用户决策，替用户做选择后返回 ai_question。
-如果没问题，返回 no_issue。`,
+1. **AI 在等用户回答问题** → 替用户做决策，用 brain_send_message(type=info) 发送决策，返回 ai_question
 
-    linting: `当前阶段是代码检查（lint）。先调用 brain_summarize 获取最新对话。
+2. **主 session 还没有开始审查，或者刚完成上一轮且上一轮有问题** → 用 brain_send_message(type=info) push 下一个审查角度。角度包括但不限于（根据改动灵活选择，用你自己的话说）：
+   - 功能正确性：让主 session 逐个检查实现逻辑是否和需求一致
+   - 边界情况：让主 session 检查空值、异常路径、并发
+   - 类型安全：让主 session 检查 TypeScript 类型是否正确
+   - 安全性：让主 session 检查注入、XSS、敏感信息泄露
+   - 性能：让主 session 检查不必要的循环、N+1 查询、内存泄漏
+   - 可读性：让主 session 检查命名、结构是否清晰
+   - 回归风险：让主 session 检查改动是否可能破坏已有功能
+   然后返回 has_issue
 
-判断主 session 是否已经执行了 lint：
-- 如果还没有执行 lint → 用 brain_send_message(type=info) 发送指令：「请运行 lint 检查（如 bun run lint 或项目配置的 lint 命令），告诉我结果。」然后返回 waiting
-- 如果已经执行了 lint 且通过（退出码 0，无 error）→ 返回 lint_pass
-- 如果已经执行了 lint 且失败 → 分析错误并用 brain_send_message(type=info) 告诉主 session 修复，然后返回 lint_fail`,
+3. **主 session 完成了审查且本轮没有发现新问题** → 判断是否已审查了足够多的角度（至少 3 个角度）：
+   - 还不够 → 继续 push 下一个角度，返回 has_issue
+   - 够了 → 返回 no_issue
 
-    testing: `当前阶段是测试。先调用 brain_summarize 获取最新对话。
+**关键：每次只推一个角度。只要还有问题就继续。用你自己的语言描述，根据这个项目的具体改动灵活调整审查重点，不要生搬硬套。**`,
 
-判断主 session 是否已经执行了测试：
-- 如果还没有执行测试 → 用 brain_send_message(type=info) 发送指令：「请运行测试（如 bun run test 或项目配置的测试命令），告诉我结果。」然后返回 waiting
-- 如果已经执行了测试且全部通过 → 返回 test_pass
-- 如果已经执行了测试且失败 → 分析失败原因并用 brain_send_message(type=info) 给出修复建议，然后返回 test_fail`,
+    linting: `代码检查（lint）阶段。调用 brain_summarize 获取最新对话内容。
 
-    committing: `当前阶段是提交代码。先调用 brain_summarize 获取最新对话。
+**核心原则：你看不到代码，所有操作 push 给主 session 执行。**
 
-判断主 session 是否已经提交了代码：
-- 如果还没有提交 → 用 brain_send_message(type=info) 发送指令：「请提交代码。commit message 要清晰描述改动内容。」然后返回 waiting
-- 如果已经提交成功 → 返回 commit_ok
-- 如果提交失败（pre-commit hook 失败、冲突等）→ 分析原因并给出修复建议，然后返回 commit_fail`,
+## 你的任务
 
-    deploying: `当前阶段是部署。先调用 brain_summarize 获取最新对话。
+调用 brain_summarize 后，根据对话内容判断当前状态：
 
-判断主 session 是否已经执行了部署：
-- 如果还没有部署 → 用 brain_send_message(type=info) 发送指令：「请执行部署。」然后返回 waiting
-- 如果已经部署成功 → 返回 deploy_ok
-- 如果部署失败 → 分析原因，然后返回 deploy_fail`,
+1. **主 session 还没有执行 lint** → 用 brain_send_message(type=info) 让主 session 去执行。用你自己的话告诉它运行项目的 lint 命令并报告完整结果。返回 waiting
+
+2. **主 session 报告 lint 通过** → 返回 lint_pass
+
+3. **主 session 报告 lint 失败** → 用 brain_send_message(type=info) 让主 session 修复 lint 错误并重新运行。返回 lint_fail`,
+
+    testing: `测试阶段。调用 brain_summarize 获取最新对话内容。
+
+**核心原则：你看不到代码，所有操作 push 给主 session 执行。测试要多轮推进，确保覆盖充分。**
+
+## 你的任务
+
+调用 brain_summarize 后，根据对话内容判断当前状态：
+
+1. **主 session 还没有执行测试** → 用 brain_send_message(type=info) 让主 session 运行项目的测试命令并报告完整结果。返回 waiting
+
+2. **主 session 报告测试通过，但还没有做过额外验证** → 继续 push 下一轮验证，比如（根据改动灵活选择，用你自己的话说）：
+   - 让主 session 手动验证关键功能路径（用 curl 或类似方式测试 API）
+   - 让主 session 检查是否有未覆盖的边界场景需要补测试
+   - 让主 session 检查改动是否影响了其他模块的测试
+   返回 test_fail（推回 developing 让它做额外验证）
+
+3. **主 session 已经完成多轮验证（至少跑过测试 + 做过一次额外验证）** → 返回 test_pass
+
+4. **主 session 报告测试失败** → 用 brain_send_message(type=info) 让主 session 修复失败的测试并重新运行。返回 test_fail`,
+
+    committing: `当前阶段是提交代码。调用 brain_summarize 获取最新对话内容。
+
+**你的任务是推动主 session 提交代码，并根据对话中主 session 报告的结果判断。**
+
+### 情况 1：主 session 还没有提交代码
+→ 用 brain_send_message(type=info) 发送指令：
+
+\`\`\`
+请提交代码。commit message 要清晰描述改动内容。
+\`\`\`
+然后返回 waiting
+
+### 情况 2：主 session 报告提交成功
+→ 返回 commit_ok
+
+### 情况 3：主 session 报告提交失败（pre-commit hook 失败、冲突等）
+→ 用 brain_send_message(type=info) 告诉主 session 修复问题后重新提交，然后返回 commit_fail`,
+
+    deploying: `当前阶段是部署。调用 brain_summarize 获取最新对话内容。
+
+**你的任务是推动主 session 执行部署，并根据对话中主 session 报告的结果判断。**
+
+### 情况 1：主 session 还没有执行部署
+→ 用 brain_send_message(type=info) 发送指令：
+
+\`\`\`
+请执行部署（如 git push origin main 或项目配置的部署命令），然后告诉我执行结果。
+\`\`\`
+然后返回 waiting
+
+### 情况 2：主 session 报告部署成功
+→ 返回 deploy_ok
+
+### 情况 3：主 session 报告部署失败
+→ 用 brain_send_message(type=info) 告诉主 session 检查并修复部署问题，然后返回 deploy_fail`,
 
     done: '任务已完成，不需要进一步操作。',
 }
@@ -186,6 +219,10 @@ ${renderPipeline(currentState)}
 ${retryInfo}
 ## 你现在该做什么
 ${STATE_INSTRUCTIONS[currentState]}
+
+## 边界约束
+你通过 brain_send_message 发给主 session 的每条指令末尾，都必须附加以下约束（用你自己的话说，但意思不能变）：
+「只执行上述指令，完成后立即停下。不要自行推进下一步（如运行测试、提交代码、部署等），等待后续指令。」
 
 ## 你必须返回一个 signal（在回复末尾单独一行，格式: SIGNAL:xxx）
 ${signalList}
@@ -246,7 +283,7 @@ function buildRetryInfo(state: BrainMachineState, ctx: BrainStateContext): strin
     if (!count || count === 0) return ''
 
     const maxRetries: Record<string, number> = {
-        developing: 5, reviewing: 5, linting: 3, testing: 3, committing: 2, deploying: 2,
+        developing: 8, reviewing: 10, linting: 3, testing: 5, committing: 2, deploying: 2,
     }
     const max = maxRetries[retryKey]
     if (!max) return ''
