@@ -603,8 +603,13 @@ export class AutoBrainService {
             }
 
             // 先过滤掉 brain-review 触发的 round，确认是否有真正需要审查的 round
-            const reviewableRounds = pendingRounds.filter(r => !brainReviewRoundNumbers.has(r.roundNumber))
-            console.log('[BrainSync] Reviewable rounds:', reviewableRounds.length, '(filtered from', pendingRounds.length, 'pending)')
+            // 但如果当前状态是 reviewing（说明 brain 之前发了 has_issue，AI 修改完了），
+            // 则 brain-review round 也需要被 review（检查修改结果）
+            const shouldReviewBrainRounds = brainSession.currentState === 'reviewing'
+            const reviewableRounds = shouldReviewBrainRounds
+                ? pendingRounds
+                : pendingRounds.filter(r => !brainReviewRoundNumbers.has(r.roundNumber))
+            console.log('[BrainSync] Reviewable rounds:', reviewableRounds.length, '(filtered from', pendingRounds.length, 'pending, reviewBrainRounds:', shouldReviewBrainRounds, ')')
             if (reviewableRounds.length === 0) {
                 console.log('[BrainSync] All pending rounds are brain-review rounds, skipping')
                 // 保存 round 记录（标记为已处理）但不触发审查
@@ -630,8 +635,8 @@ export class AutoBrainService {
             // 直接保存 round（不经过 GLM，用 AI 原始回应文本）
             const savedRounds: Array<{ round: number; userInput: string; aiText: string }> = []
             for (const round of pendingRounds) {
-                // 跳过 brain-review 触发的 round（防止循环）
-                if (brainReviewRoundNumbers.has(round.roundNumber)) {
+                // 跳过 brain-review 触发的 round（防止循环），除非当前状态是 reviewing（需要检查修改结果）
+                if (!shouldReviewBrainRounds && brainReviewRoundNumbers.has(round.roundNumber)) {
                     console.log('[BrainSync] Skipping brain-review round', round.roundNumber)
                     continue
                 }
