@@ -542,7 +542,7 @@ export class AutoBrainService {
                 console.log('[BrainSync] Execution completed:', latestExecution.id)
 
                 // SSE 广播 done 事件
-                const noIssues = signal === 'no_issue' || signal === 'dev_complete' || signal === 'lint_pass' || signal === 'test_pass' || signal === 'commit_ok' || signal === 'deploy_ok' || signal === 'waiting' || signal === 'skip'
+                const noIssues = signal === 'no_issue' || signal === 'dev_complete' || signal === 'lint_pass' || signal === 'test_pass' || signal === 'commit_ok' || signal === 'deploy_ok'
                 console.log('[BrainSync] Review done broadcast: signal=', signal, 'noMessage=', noIssues, 'newState=', result.newState, 'changed=', result.changed, 'brainId=', brainSession.id)
                 if (this.sseManager) {
                     const mainSession = this.engine.getSession(mainSessionId)
