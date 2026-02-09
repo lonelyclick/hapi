@@ -109,6 +109,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                         isError: true,
                     }
                 }
+                client.sendSessionEvent({ type: 'message', message: '正在获取主 session 对话记录...' })
                 const targetSessionId = mainSessionId
                 // 先获取 session 的最大 seq，然后取最新 50 条消息（而不是最早的 50 条）
                 const sessionInfo = await api.getSession(targetSessionId)
@@ -117,6 +118,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                 logger.debug(`[hapiMCP] brain_summarize: session seq=${latestSeq}, fetching afterSeq=${afterSeq}`)
                 const messages = await api.getSessionMessages(targetSessionId, { afterSeq, limit: 50 })
                 logger.debug(`[hapiMCP] brain_summarize: fetched ${messages.length} messages for session ${targetSessionId}`)
+                client.sendSessionEvent({ type: 'message', message: `已获取 ${messages.length} 条消息，正在提取对话内容...` })
 
                 // 打印每条消息的 role 和 seq，帮助排查
                 for (const msg of messages) {
@@ -206,8 +208,17 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                 const summary = parts.join('\n\n')
                 logger.debug(`[hapiMCP] brain_summarize: returning summary, len=${summary.length}`)
 
+                // 附带当前状态机信息（从 session metadata 或 brain session 获取）
+                let stateInfo = ''
+                try {
+                    const brainSession = await api.getActiveBrainSession(mainSessionId)
+                    if (brainSession?.currentState) {
+                        stateInfo = `\n\n---\n📊 当前状态机阶段: ${brainSession.currentState}`
+                    }
+                } catch { /* ignore */ }
+
                 return {
-                    content: [{ type: 'text' as const, text: summary }],
+                    content: [{ type: 'text' as const, text: summary + stateInfo }],
                     isError: false,
                 }
             } catch (error) {
@@ -225,30 +236,21 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
         // brain_send_message: Send review results to the main session
         if (mainSessionId) {
             const brainSendMessageInputSchema: z.ZodTypeAny = z.object({
-                message: z.string().describe('The review message to send to the main session'),
-                type: z.enum(['review', 'suggestion', 'info', 'no_issues']).optional().describe('Message type: review (code review), suggestion (improvement suggestion), info (general info), no_issues (审查通过，没有问题). Defaults to review.'),
+                message: z.string().describe('The message to send to the main session'),
+                type: z.enum(['review', 'suggestion', 'info']).optional().describe('Message type: review (code review feedback), suggestion (improvement suggestion), info (general info or instructions). Defaults to review.'),
             })
 
             mcp.registerTool<any, any>('brain_send_message', {
-                description: 'Send a message from Brain to the main AI session. Use this to deliver code review results, suggestions, or other feedback. When review finds no issues, call with type="no_issues" to signal completion.',
+                description: 'Send a message from Brain to the main AI session. Use this to deliver code review results, suggestions, instructions, or other feedback.',
                 title: 'Brain Send Message',
                 inputSchema: brainSendMessageInputSchema,
-            }, async (args: { message: string; type?: 'review' | 'suggestion' | 'info' | 'no_issues' }) => {
+            }, async (args: { message: string; type?: 'review' | 'suggestion' | 'info' }) => {
                 logger.debug(`[hapiMCP] brain_send_message called, type=${args.type}, mainSessionId=${mainSessionId}`)
 
                 try {
                     const msgType = args.type ?? 'review'
-
-                    // no_issues: 审查通过，不发消息给主 session，直接通知服务端完成
-                    if (msgType === 'no_issues') {
-                        logger.debug(`[hapiMCP] brain_send_message: no issues, notifying server`)
-                        await api.brainNoIssues(mainSessionId)
-                        logger.debug(`[hapiMCP] brain_send_message: no_issues done`)
-                        return {
-                            content: [{ type: 'text' as const, text: '已通知：审查通过，无问题' }],
-                            isError: false,
-                        }
-                    }
+                    const typeLabel = msgType === 'review' ? '代码审查' : msgType === 'suggestion' ? '改进建议' : '消息'
+                    client.sendSessionEvent({ type: 'message', message: `正在发送${typeLabel}到主 session...` })
 
                     const prefix = msgType === 'review'
                         ? '[发送者: Brain 代码审查]'
@@ -305,6 +307,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                 logger.debug(`[hapiMCP] brain_user_intent called, mainSessionId=${mainSessionId}`)
 
                 try {
+                    client.sendSessionEvent({ type: 'message', message: '正在获取待处理的用户消息...' })
                     const result = await api.getPendingUserMessage(mainSessionId)
                     logger.debug(`[hapiMCP] brain_user_intent: result.text=${result.text ? `"${result.text.slice(0, 100)}..."` : 'null'}, timestamp=${result.timestamp}`)
 

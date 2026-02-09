@@ -66,6 +66,7 @@
         "pg": "^8.16.3",
         "socket.io": "^4.8.3",
         "web-push": "^3.6.7",
+        "xstate": "^5.26.0",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -1886,6 +1887,8 @@
     "ws": ["ws@7.5.10", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": "^5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-+dbF1tHwZpXcbOJdVOkzLDxZP1ailvSxM6ZweXTegylPny803bFhA+vqBYw4s31NSAk4S2Qz+AKXK9a4wkdjcQ=="],
 
     "xmlhttprequest-ssl": ["xmlhttprequest-ssl@2.1.2", "", {}, "sha512-TEU+nJVUUnA4CYJFLvK5X9AOeH4KvDvhIfm0vV1GaQRtchnG0hgK5p8hw/xjv8cunWYCsiPCSDzObPyhEwq3KQ=="],
+
+    "xstate": ["xstate@5.26.0", "", {}, "sha512-Fvi9VBoqHgsGYLU2NTag8xDTWtKqUC0+ue7EAhBNBb06wf620QEy05upBaEI1VLMzIn63zugLV8nHb69ZUWYAA=="],
 
     "xtend": ["xtend@4.0.2", "", {}, "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ=="],
 

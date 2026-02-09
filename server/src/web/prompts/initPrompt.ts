@@ -35,7 +35,7 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
         lines.push('3) MCP 工具')
         lines.push('- `brain_user_intent`：获取用户原始消息')
         lines.push('- `brain_summarize`：获取主 session 对话汇总')
-        lines.push('- `brain_send_message`：发消息给主 session（type: review/info/no_issues）')
+        lines.push('- `brain_send_message`：发消息给主 session（type: review/suggestion/info）')
         lines.push('')
         lines.push('4) 两种触发场景')
         lines.push('- 收到「用户消息转发」或「对话汇总同步」时，按消息中的步骤执行')

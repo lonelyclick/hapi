@@ -11,6 +11,8 @@ import type { SSEManager } from '../sse/sseManager'
 import type { BrainStore } from './store'
 import type { StoredBrainSession } from './types'
 import { refiningSessions } from '../web/routes/messages'
+import { sendSignal, needsImmediateAction } from './stateMachine'
+import { buildStateReviewPrompt, parseSignalFromResponse } from './statePrompts'
 
 /**
  * 从消息内容中提取用户文本
@@ -261,6 +263,20 @@ export class AutoBrainService {
                 this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
             }
 
+            // 状态机：主 session AI 回复结束 → 发送 ai_reply_done 信号
+            // idle → reviewing, developing → reviewing（主 session 完成了一轮工作）
+            // linting/testing/committing/deploying 不自动转换，等 Brain 判断结果
+            if (brainSession.currentState === 'idle' || brainSession.currentState === 'developing') {
+                const result = sendSignal(brainSession.currentState, brainSession.stateContext, 'ai_reply_done')
+                if (result.changed) {
+                    console.log('[BrainSync] State auto-transition:', brainSession.currentState, '→', result.newState)
+                    await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
+                    // 刷新 brainSession 以使用新状态
+                    brainSession.currentState = result.newState
+                    brainSession.stateContext = result.newContext
+                }
+            }
+
             // wasThinking 信号在 CLI 收到 result 时立即发出，但此时 messageQueue 中
             // 可能还有未发送到服务器的消息。轮询 message count 直到稳定，确保所有消息已入库。
             await this.waitForMessagesStable(mainSessionId)
@@ -310,11 +326,9 @@ export class AutoBrainService {
             }
 
             // 检查是否正在 refine（用户消息拦截）
-            // 注意：正常情况下 refine 的 done 已由 clearPendingUserMessage 路由广播，
-            // 这里作为兜底，防止 clearPendingUserMessage 未被调用的情况
             const wasRefining = refiningSessions.has(mainSessionId)
             if (wasRefining) {
-                console.log('[BrainSync] handleBrainAIResponse: refine fallback - refiningSessions still has', mainSessionId, ', broadcasting done')
+                console.log('[BrainSync] handleBrainAIResponse: refine response detected for', mainSessionId)
                 refiningSessions.delete(mainSessionId)
                 if (this.sseManager) {
                     const mainSession = this.engine.getSession(mainSessionId)
@@ -329,13 +343,42 @@ export class AutoBrainService {
                         }
                     } as unknown as SyncEvent)
                 }
+
+                // refine 回复也需要解析 signal 驱动状态机（如 skip、ai_reply_done）
+                await this.waitForMessagesStable(brainSessionId)
+                const refineText = await this.extractBrainAIText(brainSessionId)
+                if (refineText) {
+                    const refineSignal = parseSignalFromResponse(refineText)
+                    console.log('[BrainSync] Refine signal:', refineSignal, 'currentState:', brainSession.currentState)
+                    if (refineSignal) {
+                        const result = sendSignal(brainSession.currentState, brainSession.stateContext, refineSignal)
+                        if (result.changed) {
+                            console.log('[BrainSync] Refine state transition:', brainSession.currentState, '→', result.newState)
+                            await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
+
+                            // skip 后如果新状态需要立即行动，主动触发
+                            if (needsImmediateAction(result.newState)) {
+                                const refreshed = await this.brainStore.getActiveBrainSession(mainSessionId)
+                                if (refreshed) {
+                                    const mainSessionObj = this.engine.getSession(mainSessionId)
+                                    const projectPath = mainSessionObj?.metadata?.path
+                                    if (projectPath) {
+                                        await new Promise(r => setTimeout(r, 500))
+                                        await this.triggerSdkReview(refreshed, [{ round: 0, summary: '', userInput: '' }], projectPath)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return
             }
 
-            // 只处理有 running execution 的回复（即 review 回复），忽略 init prompt 和 refine 等其他回复
+            // 只处理有 running execution 的回复（即 review 回复），忽略 init prompt 等其他回复
             const latestExecution = await this.brainStore.getLatestExecutionWithProgress(brainSession.id)
             console.log('[BrainSync] handleBrainAIResponse: latestExecution status=', latestExecution?.status ?? 'none')
             if (!latestExecution || latestExecution.status !== 'running') {
-                console.log('[BrainSync] No running execution found, skipping (likely init prompt, refine, or no_issues already completed)')
+                console.log('[BrainSync] No running execution found, skipping (likely init prompt or already completed)')
                 return
             }
 
@@ -363,36 +406,86 @@ export class AutoBrainService {
             }
             console.log('[BrainSync] Got brain text, length:', brainText.length)
 
-            // Brain 通过 MCP tool (brain_send_message) 主动发消息给主 session
-            // 这里只做状态记录，不再重复发消息
-            const noIssues = brainText.includes('[NO_MESSAGE]')
-            if (noIssues) {
-                console.log('[BrainSync] Brain review: no issues found')
-                await this.brainStore.completeBrainSession(brainSession.id, '[NO_MESSAGE]')
-            } else {
-                console.log('[BrainSync] Brain review completed with findings (message sent via MCP tool)')
-                await this.brainStore.updateBrainResult(brainSession.id, brainText)
-            }
+            // 从 Brain 回复中解析 signal，驱动状态机转换
+            const signal = parseSignalFromResponse(brainText)
+            console.log('[BrainSync] Parsed signal from brain response:', signal, 'currentState:', brainSession.currentState)
 
-            // SSE 广播 done 事件
-            console.log('[BrainSync] handleBrainAIResponse: broadcasting done, noMessage=', noIssues)
-            if (this.sseManager) {
-                const mainSession = this.engine.getSession(mainSessionId)
-                const noMessage = noIssues
-                this.sseManager.broadcast({
-                    type: 'brain-sdk-progress',
-                    namespace: mainSession?.namespace,
-                    sessionId: mainSessionId,
-                    data: {
-                        brainSessionId: brainSession.id,
-                        progressType: 'done',
-                        data: { status: 'completed', noMessage }
+            if (signal) {
+                const result = sendSignal(brainSession.currentState, brainSession.stateContext, signal)
+                console.log('[BrainSync] State transition:', brainSession.currentState, '→', result.newState, 'changed:', result.changed)
+
+                // 持久化新状态
+                await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
+
+                // 如果到达 done 状态，完成 brain session
+                if (result.newState === 'done') {
+                    await this.brainStore.completeBrainSession(brainSession.id, brainText.slice(0, 500))
+                } else {
+                    await this.brainStore.updateBrainResult(brainSession.id, brainText.slice(0, 500))
+                }
+
+                // 完成当前 execution
+                await this.brainStore.completeBrainExecution(latestExecution.id, brainText.slice(0, 500))
+
+                // SSE 广播 done 事件
+                const noIssues = signal === 'no_issue' || signal === 'lint_pass' || signal === 'test_pass' || signal === 'commit_ok' || signal === 'deploy_ok'
+                if (this.sseManager) {
+                    const mainSession = this.engine.getSession(mainSessionId)
+                    this.sseManager.broadcast({
+                        type: 'brain-sdk-progress',
+                        namespace: mainSession?.namespace,
+                        sessionId: mainSessionId,
+                        data: {
+                            brainSessionId: brainSession.id,
+                            progressType: 'done',
+                            data: { status: 'completed', noMessage: noIssues, currentState: result.newState }
+                        }
+                    } as unknown as SyncEvent)
+                }
+
+                // 如果新状态需要立即行动（linting/testing/committing/deploying），
+                // 主动再触发一轮，用新状态的 prompt push 主 session
+                if (result.changed && needsImmediateAction(result.newState)) {
+                    console.log('[BrainSync] New state needs immediate action, triggering another review cycle for:', result.newState)
+                    // 刷新 brainSession 数据
+                    const refreshed = await this.brainStore.getActiveBrainSession(mainSessionId)
+                    if (refreshed) {
+                        const mainSessionObj = this.engine.getSession(mainSessionId)
+                        const projectPath = mainSessionObj?.metadata?.path
+                        if (projectPath) {
+                            // 短暂延迟，让前端 UI 有时间更新
+                            await new Promise(r => setTimeout(r, 500))
+                            await this.triggerSdkReview(refreshed, [{ round: 0, summary: '', userInput: '' }], projectPath)
+                        }
                     }
-                } as unknown as SyncEvent)
-            }
+                }
+            } else {
+                // 没有解析到 signal，降级为旧逻辑
+                console.log('[BrainSync] No signal parsed, falling back to legacy behavior')
+                const noIssues = brainText.includes('[NO_MESSAGE]')
+                if (noIssues) {
+                    await this.brainStore.completeBrainSession(brainSession.id, '[NO_MESSAGE]')
+                } else {
+                    await this.brainStore.updateBrainResult(brainSession.id, brainText)
+                }
 
-            // 完成 execution 记录（标记 reviewed rounds 为已 brain）
-            await this.brainStore.completeBrainExecution(latestExecution.id, brainText.slice(0, 500))
+                // SSE 广播 done 事件
+                if (this.sseManager) {
+                    const mainSession = this.engine.getSession(mainSessionId)
+                    this.sseManager.broadcast({
+                        type: 'brain-sdk-progress',
+                        namespace: mainSession?.namespace,
+                        sessionId: mainSessionId,
+                        data: {
+                            brainSessionId: brainSession.id,
+                            progressType: 'done',
+                            data: { status: 'completed', noMessage: noIssues }
+                        }
+                    } as unknown as SyncEvent)
+                }
+
+                await this.brainStore.completeBrainExecution(latestExecution.id, brainText.slice(0, 500))
+            }
         } catch (err) {
             console.error('[BrainSync] handleBrainAIResponse error:', err)
             // 异常时也广播 done，防止前端卡住
@@ -667,23 +760,16 @@ export class AutoBrainService {
         const mainSessionId = brainSession.mainSessionId
         const brainDisplaySessionId = brainSession.brainSessionId
 
-        console.log('[BrainSync] Triggering review for', summaries.length, 'rounds (persistent brain session)')
+        console.log('[BrainSync] Triggering review for', summaries.length, 'rounds (persistent brain session), state:', brainSession.currentState)
 
-        // 只发轮次标识，不发完整内容（节省 token）
-        // Brain Claude 收到后调用 brain_summarize MCP tool 自行获取对话内容
-        const roundNumbers = summaries.map(s => s.round).join(', ')
-        const reviewPrompt = `对话汇总同步：第 ${roundNumbers} 轮对话已完成。请执行：
-1) 调用 brain_summarize 获取对话内容，判断当前处于哪个阶段：开发中 → 代码审查 → 测试验证 → 部署上线
-2) push 主 session 进行多轮 review（至少 2 遍，最多 10 遍，你自己判断轮次）：
-   - 每遍用 brain_send_message(type=info) 给出不同的审查角度（功能正确性、边界情况、类型安全、代码风格、性能、安全性等）
-   - 高风险改动（核心逻辑、数据库、认证）多审几遍，简单改动少审几遍
-   - 主 session 连续确认没问题时结束 review
-3) review 完成后推进到下一步：
-   - 开发完成 → 让它运行 lint 和测试
-   - 测试通过 → 让它提交代码
-   - AI 在问问题/给选项 → 替用户决策，选最合理的
-   - 推进用 brain_send_message(type=info)
-4) 没问题也不需要推进 → brain_send_message(type=no_issues)`
+        const roundNumbers = summaries.map(s => s.round)
+
+        // 状态机驱动：根据当前状态生成对应的 prompt
+        const reviewPrompt = buildStateReviewPrompt(
+            brainSession.currentState,
+            brainSession.stateContext,
+            roundNumbers
+        )
 
         // 创建执行记录（status=running）
         await this.brainStore.createBrainExecution({

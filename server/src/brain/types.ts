@@ -31,6 +31,10 @@ export type StoredBrainSession = {
     // Brain 结果（brain 的输出）
     brainResult?: string
 
+    // 状态机
+    currentState: BrainMachineState
+    stateContext: BrainStateContext
+
     createdAt: number
     updatedAt: number
     completedAt?: number
@@ -41,6 +45,63 @@ export type CreateBrainSessionParams = {
     mainSessionId: string
     brainModel: string
     brainModelVariant?: string
+}
+
+// ============ 状态机相关类型 ============
+
+/** Brain 状态机 - 状态定义 */
+export type BrainMachineState =
+    | 'idle'
+    | 'developing'
+    | 'reviewing'
+    | 'linting'
+    | 'testing'
+    | 'committing'
+    | 'deploying'
+    | 'done'
+
+/** Brain 状态机 - 信号（LLM 返回的判断结果） */
+export type BrainSignal =
+    | 'ai_reply_done'
+    | 'has_issue'
+    | 'no_issue'
+    | 'ai_question'
+    | 'lint_pass'
+    | 'lint_fail'
+    | 'test_pass'
+    | 'test_fail'
+    | 'commit_ok'
+    | 'commit_fail'
+    | 'deploy_ok'
+    | 'deploy_fail'
+    | 'waiting'
+    | 'user_message'
+    | 'skip'
+
+/** 状态机上下文（持久化到 DB） */
+export type BrainStateContext = {
+    retries: {
+        reviewing: number
+        linting: number
+        testing: number
+        committing: number
+        deploying: number
+    }
+    lastSignal?: BrainSignal
+    lastSignalDetail?: string
+    /** 用户请求跳过时的目标状态 */
+    skipTarget?: BrainMachineState
+}
+
+/** 默认状态上下文 */
+export const DEFAULT_STATE_CONTEXT: BrainStateContext = {
+    retries: {
+        reviewing: 0,
+        linting: 0,
+        testing: 0,
+        committing: 0,
+        deploying: 0,
+    }
 }
 
 // Brain Session Store 接口

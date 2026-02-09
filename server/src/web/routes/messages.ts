@@ -4,6 +4,7 @@ import type { SyncEngine } from '../../sync/syncEngine'
 import type { IStore } from '../../store'
 import type { BrainStore } from '../../brain/store'
 import type { SSEManager } from '../../sse/sseManager'
+import { buildRefinePrompt } from '../../brain/statePrompts'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParamWithShareCheck, requireSyncEngine } from './guards'
 
@@ -81,10 +82,11 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
             pendingUserMessages.set(sessionId, { text: parsed.data.text, timestamp: Date.now() })
             refiningSessions.add(sessionId)
 
-            // 发通知给 Brain session
+            // 发通知给 Brain session（使用状态驱动的 refine prompt）
             try {
+                const refinePrompt = buildRefinePrompt(activeBrain.currentState)
                 await engine.sendMessage(activeBrain.brainSessionId, {
-                    text: '用户消息转发：用户发送了新消息。请执行：1) 调用 brain_user_intent 获取用户原始消息 2) 分析用户意图的合理性，如果有明显错误或遗漏则纠正补充 3) 整合为清晰准确的指令，用用户口吻重写 4) 调用 brain_send_message(type: info) 发给主 session',
+                    text: refinePrompt,
                     sentFrom: 'webapp'
                 })
                 console.log(`[Messages] Brain intercept: notification sent to brain session ${activeBrain.brainSessionId}`)

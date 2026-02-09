@@ -263,6 +263,21 @@ export class ApiClient {
         )
     }
 
+    async getActiveBrainSession(mainSessionId: string): Promise<{ currentState?: string } | null> {
+        try {
+            const response = await axios.get(
+                `${configuration.serverUrl}/brain/sessions/active/${encodeURIComponent(mainSessionId)}`,
+                {
+                    headers: { Authorization: `Bearer ${this.token}` },
+                    timeout: 10_000
+                }
+            )
+            return response.data
+        } catch {
+            return null
+        }
+    }
+
     /**
      * 获取当前活跃的 Claude 账号
      * 如果没有配置多账号，返回 null

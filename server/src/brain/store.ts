@@ -6,7 +6,8 @@
 
 import { Pool } from 'pg'
 import { randomUUID } from 'node:crypto'
-import type { IBrainStore, StoredBrainSession, BrainSessionStatus } from './types'
+import type { IBrainStore, StoredBrainSession, BrainSessionStatus, BrainMachineState, BrainStateContext } from './types'
+import { DEFAULT_STATE_CONTEXT } from './types'
 
 export class BrainStore implements IBrainStore {
     private pool: Pool
@@ -92,6 +93,13 @@ export class BrainStore implements IBrainStore {
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_executions' AND column_name = 'progress_log') THEN
                     ALTER TABLE brain_executions ADD COLUMN progress_log JSONB DEFAULT '[]';
                 END IF;
+                -- 添加状态机字段到 brain_sessions
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_sessions' AND column_name = 'current_state') THEN
+                    ALTER TABLE brain_sessions ADD COLUMN current_state TEXT DEFAULT 'idle';
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'brain_sessions' AND column_name = 'state_context') THEN
+                    ALTER TABLE brain_sessions ADD COLUMN state_context JSONB DEFAULT '{}';
+                END IF;
             END $$;
         `)
     }
@@ -123,6 +131,8 @@ export class BrainStore implements IBrainStore {
             brainModelVariant: data.brainModelVariant,
             status: 'pending',
             contextSummary: data.contextSummary,
+            currentState: 'idle' as const,
+            stateContext: { ...DEFAULT_STATE_CONTEXT },
             createdAt: now,
             updatedAt: now
         }
@@ -460,7 +470,36 @@ export class BrainStore implements IBrainStore {
         return result.rowCount ?? 0
     }
 
+    // ============ 状态机相关方法 ============
+
+    async updateBrainState(id: string, state: BrainMachineState, stateContext: BrainStateContext): Promise<boolean> {
+        const now = Date.now()
+        const result = await this.pool.query(
+            `UPDATE brain_sessions SET current_state = $1, state_context = $2, updated_at = $3 WHERE id = $4`,
+            [state, JSON.stringify(stateContext), now, id]
+        )
+        return (result.rowCount ?? 0) > 0
+    }
+
     private rowToBrainSession(row: Record<string, unknown>): StoredBrainSession {
+        // 解析 state_context，兼容旧数据
+        let stateContext: BrainStateContext = { ...DEFAULT_STATE_CONTEXT }
+        if (row.state_context && typeof row.state_context === 'object') {
+            const raw = row.state_context as Partial<BrainStateContext>
+            stateContext = {
+                retries: {
+                    reviewing: raw.retries?.reviewing ?? 0,
+                    linting: raw.retries?.linting ?? 0,
+                    testing: raw.retries?.testing ?? 0,
+                    committing: raw.retries?.committing ?? 0,
+                    deploying: raw.retries?.deploying ?? 0,
+                },
+                lastSignal: raw.lastSignal,
+                lastSignalDetail: raw.lastSignalDetail,
+                skipTarget: raw.skipTarget,
+            }
+        }
+
         return {
             id: row.id as string,
             namespace: row.namespace as string,
@@ -471,6 +510,8 @@ export class BrainStore implements IBrainStore {
             status: row.status as BrainSessionStatus,
             contextSummary: row.context_summary as string,
             brainResult: row.review_result as string | undefined,
+            currentState: (row.current_state as BrainMachineState) ?? 'idle',
+            stateContext,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at),
             completedAt: row.completed_at ? Number(row.completed_at) : undefined
