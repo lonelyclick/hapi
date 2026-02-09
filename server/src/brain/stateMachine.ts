@@ -154,7 +154,7 @@ export const brainMachine = setup({
         committing: {
             on: {
                 commit_ok: {
-                    target: 'done',
+                    target: 'deploying',
                     actions: 'recordSignal',
                 },
                 commit_fail: [
@@ -168,17 +168,12 @@ export const brainMachine = setup({
                         actions: 'recordSignal',
                     },
                 ],
-                // 需要部署时可跳到 deploying
-                deploy_ok: {
-                    target: 'deploying',
-                    actions: 'recordSignal',
-                },
                 waiting: {
                     target: 'committing',
                     actions: 'recordSignal',
                 },
                 skip: {
-                    target: 'done',
+                    target: 'deploying',
                     actions: 'recordSignal',
                 },
             },
@@ -436,6 +431,6 @@ export function getGraphData(): GraphData {
     return {
         nodes,
         edges,
-        mainFlow: ['idle', 'developing', 'reviewing', 'linting', 'testing', 'committing', 'done'],
+        mainFlow: ['idle', 'developing', 'reviewing', 'linting', 'testing', 'committing', 'deploying', 'done'],
     }
 }
