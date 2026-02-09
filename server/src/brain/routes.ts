@@ -11,6 +11,7 @@ import type { WebAppEnv } from '../web/middleware/auth'
 import type { BrainStore } from './store'
 import type { AutoBrainService } from './autoBrain'
 import { refiningSessions } from '../web/routes/messages'
+import { getGraphData } from './stateMachine'
 
 export function createBrainRoutes(
     brainStore: BrainStore,
@@ -19,6 +20,11 @@ export function createBrainRoutes(
     autoBrainService?: AutoBrainService
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
+
+    // 获取状态机图结构数据（供前端可视化）
+    app.get('/brain/state-machine-graph', (c) => {
+        return c.json(getGraphData())
+    })
 
     // 获取主 Session 的 Brain Sessions 列表
     app.get('/brain/sessions', async (c) => {

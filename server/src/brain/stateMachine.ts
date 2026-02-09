@@ -296,3 +296,115 @@ export function needsImmediateAction(state: BrainMachineState): boolean {
     // linting/testing/committing/deploying 需要 Brain 主动 push 指令
     return ['linting', 'testing', 'committing', 'deploying'].includes(state)
 }
+
+// ============ 图数据导出（供前端可视化） ============
+
+/** 节点中文标签 */
+const STATE_LABELS: Record<BrainMachineState, string> = {
+    idle: '空闲',
+    developing: '开发中',
+    reviewing: '代码审查',
+    linting: '代码检查',
+    testing: '测试',
+    committing: '提交',
+    deploying: '部署',
+    done: '完成',
+}
+
+/** 蛇形布局坐标（两行排列） */
+const NODE_POSITIONS: Record<BrainMachineState, { x: number; y: number }> = {
+    idle:       { x: 80,  y: 60 },
+    developing: { x: 230, y: 60 },
+    reviewing:  { x: 380, y: 60 },
+    linting:    { x: 530, y: 60 },
+    testing:    { x: 530, y: 170 },
+    committing: { x: 380, y: 170 },
+    deploying:  { x: 230, y: 170 },
+    done:       { x: 80,  y: 170 },
+}
+
+export interface GraphNode {
+    id: BrainMachineState
+    label: string
+    x: number
+    y: number
+    isFinal?: boolean
+}
+
+export interface GraphEdge {
+    from: BrainMachineState
+    to: BrainMachineState
+    signal: string
+    /** 回退边（到 developing 的重试） */
+    isRetry?: boolean
+    /** 自环（waiting 信号） */
+    isSelfLoop?: boolean
+}
+
+export interface GraphData {
+    nodes: GraphNode[]
+    edges: GraphEdge[]
+    /** 主流程顺序（用于判断 passed/future） */
+    mainFlow: BrainMachineState[]
+}
+
+/**
+ * 从 XState machine 定义中提取图结构数据
+ * 这确保前端可视化与状态机定义始终同步
+ */
+export function getGraphData(): GraphData {
+    const config = brainMachine.config
+    const stateKeys = Object.keys(config.states ?? {}) as BrainMachineState[]
+
+    const nodes: GraphNode[] = stateKeys.map(stateId => ({
+        id: stateId,
+        label: STATE_LABELS[stateId] ?? stateId,
+        x: NODE_POSITIONS[stateId]?.x ?? 0,
+        y: NODE_POSITIONS[stateId]?.y ?? 0,
+        isFinal: (config.states as Record<string, { type?: string }>)[stateId]?.type === 'final',
+    }))
+
+    const edges: GraphEdge[] = []
+    const states = config.states as Record<string, { on?: Record<string, unknown> }>
+
+    for (const stateId of stateKeys) {
+        const stateConfig = states[stateId]
+        if (!stateConfig?.on) continue
+
+        for (const [signal, transition] of Object.entries(stateConfig.on)) {
+            const transitions = Array.isArray(transition) ? transition : [transition]
+
+            // 去重：同一 signal 可能有多个 guard 分支但目标相同
+            const seenTargets = new Set<string>()
+
+            for (const t of transitions) {
+                const target = typeof t === 'string' ? t : (t as { target?: string })?.target
+                if (!target) continue
+
+                // 去掉 XState 的 '.' 前缀
+                const targetId = target.replace(/^\./, '') as BrainMachineState
+
+                const edgeKey = `${targetId}:${signal}`
+                if (seenTargets.has(edgeKey)) continue
+                seenTargets.add(edgeKey)
+
+                const isSelfLoop = targetId === stateId
+                const isRetry = targetId === 'developing' && stateId !== 'idle'
+
+                edges.push({
+                    from: stateId as BrainMachineState,
+                    to: targetId,
+                    signal,
+                    ...(isRetry ? { isRetry: true } : {}),
+                    ...(isSelfLoop ? { isSelfLoop: true } : {}),
+                })
+            }
+        }
+    }
+
+    return {
+        nodes,
+        edges,
+        mainFlow: ['idle', 'developing', 'reviewing', 'linting', 'testing', 'committing', 'done'],
+    }
+}

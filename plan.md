@@ -1,83 +1,49 @@
-# Brain Session MCP Tool 实现计划
+# Brain 状态机可视化
 
 ## 目标
-给 Brain CLI 持久进程（走 runClaude → loop 路径）添加一个 MCP tool `brain_analyze`，该 tool 内部调用 Claude Agent SDK 来：
-1. 汇总当前 AI 会话的对话内容
-2. 根据项目代码给出建议
+在 Brain session 聊天界面（`source=brain-sdk`）的右上角按钮区，加一个状态机按钮，点击弹出 Dialog 展示完整的状态有向图，实时高亮当前节点。
 
-Brain session 启动时，禁用所有内置 tools（Read/Write/Edit/Bash/Grep/Glob 等），只保留这个 MCP tool。
+## 技术方案
 
-## 架构
+前端硬编码节点和边，纯 SVG 渲染。理由：
+1. 节点数量少且固定（8个），手动布局最可控
+2. 不需要在 web 端加 xstate 依赖
+3. 不需要新增 API 端点
+4. 状态结构以后变化时可以让 AI 自迭代这个组件
 
-```
-Brain CLI 进程 (runClaude → loop → claudeRemote)
-  ↓
-Claude 收到 review prompt
-  ↓
-Claude 调用 MCP tool: mcp__hapi__brain_analyze
-  ↓
-MCP tool handler 执行：
-  1. 通过 ApiClient 获取当前 session 消息历史
-  2. 调用 SDK query() spawn 临时 Claude 进程
-     - 给临时 Claude 传入：消息历史摘要 + system prompt
-     - 允许 Read/Grep/Glob tools（让它读代码）
-     - 临时 Claude 分析代码 → 返回结构化结果
-  3. 返回汇总 + 建议给外层 Claude
-  ↓
-外层 Claude 将结果展示给用户
-```
+## 修改文件
 
-## 改动文件
+### 1. `web/src/types/api.ts`
+- `BrainSession` 类型增加 `currentState?: string` 和 `stateContext?: object`
+- 服务端 API 已经返回这两个字段，前端类型补上即可
 
-### 1. `cli/src/claude/utils/startHappyServer.ts`
-- 修改 `startHappyServer` 函数签名，额外接收 `api: ApiClient` 和 `sessionSource: string`
-- 注册新的 MCP tool `brain_analyze`：
-  - inputSchema: `{ context?: string }` （可选的额外上下文）
-  - handler 逻辑：
-    1. 调用 `api.getSessionMessages(client.sessionId)` 获取消息历史
-    2. 提取用户消息和 AI 回复，组装成对话摘要
-    3. 调用 `cli/src/claude/sdk/query.ts` 的 `query()` 启动临时 Claude 进程
-       - prompt: 对话摘要 + "请分析项目代码并给出建议"
-       - allowedTools: ['Read', 'Grep', 'Glob']
-       - permissionMode: 'bypassPermissions'
-       - maxTurns: 15
-       - cwd: 当前工作目录
-    4. 收集 SDK 的 result 消息
-    5. 返回结构化结果 `{ summary, suggestions }`
-- `toolNames` 数组加入 `'brain_analyze'`
-- 只在 `sessionSource === 'brain-sdk'` 时注册这个 tool
+### 2. `web/src/hooks/useSSE.ts`
+- `brain-sdk-progress` 的 `done` 事件中，读取 `data.currentState`
+- 更新 `brain-active-session` query cache 中的 `currentState` 字段
 
-### 2. `cli/src/claude/runClaude.ts`
-- 修改 `startHappyServer(session)` 调用，传入 `api` 和 `sessionSource`：
-  ```typescript
-  const happyServer = await startHappyServer(session, api, sessionSource);
-  ```
+### 3. `web/src/components/BrainStateMachineGraph.tsx`（新建）
+核心 SVG 可视化组件：
+- 手动布局 8 个节点：idle, developing, reviewing, linting, testing, committing, deploying, done
+- 布局为左上到右下的流程图（两行排列或蛇形排列）
+- 箭头连线表示转换，标注 signal 名
+- 3 种节点状态视觉：
+  - 当前状态：高亮色 + 脉冲动画
+  - 已经过的状态：淡色标记
+  - 未到达的状态：灰色
+- 节点显示中文名
+- 支持暗色主题（用现有 CSS 变量）
+- Props: `{ currentState: string; stateContext?: object }`
 
-### 3. `server/src/web/routes/machines.ts`
-- Brain session spawn 时，在消息 meta 中传 `disallowedTools` 来禁用内置 tools：
-  ```typescript
-  await engine.sendMessage(brainSessionId, {
-      text: brainInitPrompt,
-      sentFrom: 'webapp',
-      meta: {
-          disallowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob', 'Task', 'WebFetch', 'WebSearch', 'TodoWrite', 'NotebookEdit']
-      }
-  })
-  ```
-  这样 brain session 的 Claude 只能用 `mcp__hapi__brain_analyze` 和 `mcp__hapi__change_title`
+### 4. `web/src/components/SessionHeader.tsx`
+- 对 Brain SDK session（`isBrainSdkSession = true`）：
+  - 在右上角按钮区增加一个状态机图标按钮
+  - 新增一个 state `showStateMachine` + Dialog
+  - 从 brain session API 获取 `currentState`（需要用 `mainSessionId` 查询 `getActiveBrainSession`）
+  - Dialog 内渲染 `BrainStateMachineGraph`
 
-### 4. 前端展示（可选，后续优化）
-- 当前 MCP tool 默认用 GenericResultView 展示，返回 Markdown 格式的结果即可
-- 后续可以在 `knownTools.tsx` 和 `_results.tsx` 中为 `mcp__hapi__brain_analyze` 注册自定义展示
+## 交互
 
-## 不改动的文件
-- `sdkAdapter.ts` — brain worker 独立路径，不受影响
-- `brain-review-worker.ts` — 同上
-- `claudeRemote.ts` — 已支持 disallowedTools 从消息 meta 传入
-- `syncEngine.ts` — 已支持 meta 传递
-
-## 关键注意点
-1. SDK `query()` 是同步阻塞的（等临时 Claude 跑完），MCP tool handler 可以 async 等待
-2. 临时 Claude 进程需要正确的环境变量（ANTHROPIC_API_KEY 等），从 `process.env` 继承即可
-3. 消息历史可能很长，需要做截断/摘要处理
-4. `pathToClaudeCodeExecutable` 要用 `'claude'` 让系统 PATH 找到
+- 按钮图标：小流程图 icon
+- Dialog 标题：「Brain 状态机」
+- Dialog 宽度：max-w-3xl，给图足够空间
+- 节点中文名：空闲、开发中、代码审查、代码检查、测试、提交、部署、完成

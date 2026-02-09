@@ -226,6 +226,28 @@ export type DeleteSessionResponse = { ok: true }
 
 export type BrainSessionStatus = 'pending' | 'active' | 'completed' | 'cancelled'
 
+export type BrainGraphNode = {
+    id: string
+    label: string
+    x: number
+    y: number
+    isFinal?: boolean
+}
+
+export type BrainGraphEdge = {
+    from: string
+    to: string
+    signal: string
+    isRetry?: boolean
+    isSelfLoop?: boolean
+}
+
+export type BrainGraphData = {
+    nodes: BrainGraphNode[]
+    edges: BrainGraphEdge[]
+    mainFlow: string[]
+}
+
 export type BrainSession = {
     id: string
     namespace: string
@@ -237,6 +259,12 @@ export type BrainSession = {
     contextSummary: string
     brainResult?: string
     isRefining?: boolean
+    currentState?: string
+    stateContext?: {
+        retries: Record<string, number>
+        lastSignal?: string
+        lastSignalDetail?: string
+    }
     createdAt: number
     updatedAt: number
     completedAt?: number

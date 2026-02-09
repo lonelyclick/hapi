@@ -45,6 +45,7 @@ import type {
     RemoveSessionShareResponse,
     SessionResponse,
     SessionsResponse,
+    BrainGraphData,
     BrainSession,
     UpdateGroupResponse,
     UpdateInputPresetResponse,
@@ -265,6 +266,10 @@ export class ApiClient {
         executionId?: string
     }> {
         return await this.request(`/api/brain/sessions/${encodeURIComponent(brainSessionId)}/progress-log`)
+    }
+
+    async getBrainStateMachineGraph(): Promise<BrainGraphData> {
+        return await this.request<BrainGraphData>('/api/brain/state-machine-graph')
     }
 
     async deleteSession(sessionId: string): Promise<DeleteSessionResponse> {

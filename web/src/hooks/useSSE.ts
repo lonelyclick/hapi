@@ -266,6 +266,15 @@ export function useSSE(options: {
                             entries,
                             isActive: false
                         })
+                        // 状态机状态更新：将 currentState 写入 brain-active-session cache
+                        const doneData = progressData.data as Record<string, unknown> | undefined
+                        if (doneData?.currentState) {
+                            const brainKey = ['brain-active-session', event.sessionId]
+                            const prevBrain = queryClient.getQueryData<Record<string, unknown>>(brainKey)
+                            if (prevBrain) {
+                                queryClient.setQueryData(brainKey, { ...prevBrain, currentState: doneData.currentState })
+                            }
+                        }
                     }
 
                     // Brain 初始化完成，刷新 brain session 查询并清除 brainInitializing 状态

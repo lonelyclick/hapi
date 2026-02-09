@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Project, Session, SessionViewer, ModelMode, ModelReasoningEffort } from '@/types/api'
+import type { BrainGraphData, Project, Session, SessionViewer, ModelMode, ModelReasoningEffort } from '@/types/api'
 import { isTelegramApp, getTelegramWebApp } from '@/hooks/useTelegram'
 import { getClientId } from '@/lib/client-identity'
 import { ViewersBadge } from './ViewersBadge'
@@ -9,6 +9,8 @@ import { ShareDialog } from './ShareDialog'
 import { useAppContext } from '@/lib/app-context'
 import { queryKeys } from '@/lib/query-keys'
 import { useActiveBrainSession } from '@/hooks/queries/useActiveBrainSession'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { BrainStateMachineGraph } from '@/components/BrainStateMachineGraph'
 
 function getSessionPath(session: Session): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -242,6 +244,41 @@ function UnlockIcon(props: { className?: string }) {
     )
 }
 
+function StateMachineIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <rect x="2" y="4" width="6" height="5" rx="1" />
+            <rect x="16" y="4" width="6" height="5" rx="1" />
+            <rect x="9" y="15" width="6" height="5" rx="1" />
+            <path d="M8 6.5h8" />
+            <path d="M5 9v3.5a2 2 0 0 0 2 2h2" />
+            <path d="M19 9v3.5a2 2 0 0 1-2 2h-2" />
+        </svg>
+    )
+}
+
+const STATE_LABEL_MAP: Record<string, string> = {
+    idle: '空闲',
+    developing: '开发中',
+    reviewing: '审查',
+    linting: '检查',
+    testing: '测试',
+    committing: '提交',
+    deploying: '部署',
+    done: '完成',
+}
+
 function getAgentLabel(session: Session): string {
     const flavor = session.metadata?.flavor?.trim()
     if (flavor === 'claude') return 'Claude'
@@ -347,6 +384,18 @@ export function SessionHeader(props: {
 
     const isBrainSdkSession = props.session.metadata?.source === 'brain-sdk'
     const brainMainSessionId = isBrainSdkSession ? (props.session.metadata?.mainSessionId as string | undefined) : undefined
+
+    // Brain SDK session: 查询自己对应的 brain session 以获取状态机 currentState
+    const { brainSession: selfBrainSession } = useActiveBrainSession(api, brainMainSessionId)
+    const [showStateMachineDialog, setShowStateMachineDialog] = useState(false)
+
+    // 从 API 获取状态机图结构数据
+    const { data: graphData } = useQuery<BrainGraphData>({
+        queryKey: ['brain-state-machine-graph'],
+        queryFn: () => api.getBrainStateMachineGraph(),
+        enabled: isBrainSdkSession,
+        staleTime: 5 * 60 * 1000,
+    })
 
     const claudeAccountName = props.session.metadata?.claudeAccountName || null
     const claudeAccountDisplay = useMemo(() => {
@@ -564,6 +613,20 @@ export function SessionHeader(props: {
                                 }</span>
                             </button>
                         ) : null}
+                        {/* 状态机按钮 - Brain SDK session 显示 */}
+                        {isBrainSdkSession && (
+                            <button
+                                type="button"
+                                onClick={() => setShowStateMachineDialog(true)}
+                                className="flex items-center gap-1.5 h-7 px-2 rounded-md text-xs font-medium bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors hover:bg-indigo-500/10 hover:text-indigo-600"
+                                title="State Machine"
+                            >
+                                <StateMachineIcon />
+                                <span>{selfBrainSession?.currentState
+                                    ? (graphData?.nodes.find(n => n.id === selfBrainSession.currentState)?.label ?? STATE_LABEL_MAP[selfBrainSession.currentState] ?? selfBrainSession.currentState)
+                                    : '状态机'}</span>
+                            </button>
+                        )}
                         {/* Delete button - 只有创建者可见 */}
                         {isCreator && props.onDelete ? (
                             <button
@@ -670,6 +733,20 @@ export function SessionHeader(props: {
                                         }</span>
                                     </button>
                                 ) : null}
+                                {/* 状态机 - Brain SDK session */}
+                                {isBrainSdkSession && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false)
+                                            setShowStateMachineDialog(true)
+                                        }}
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
+                                    >
+                                        <StateMachineIcon className="shrink-0" />
+                                        <span className="whitespace-nowrap">State Machine</span>
+                                    </button>
+                                )}
                                 {/* 删除会话 - 只有创建者可见 */}
                                 {isCreator && props.onDelete ? (
                                     <button
@@ -697,6 +774,21 @@ export function SessionHeader(props: {
                     onClose={() => setShowShareDialog(false)}
                 />
             )}
+            {/* State Machine Dialog */}
+            <Dialog open={showStateMachineDialog} onOpenChange={setShowStateMachineDialog}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Brain 状态机</DialogTitle>
+                    </DialogHeader>
+                    <div className="mt-2">
+                        {graphData ? (
+                            <BrainStateMachineGraph currentState={selfBrainSession?.currentState} graphData={graphData} />
+                        ) : (
+                            <div className="text-sm text-[var(--app-hint)] text-center py-4">加载中...</div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
