@@ -433,6 +433,18 @@ export class AutoBrainService {
                         await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
 
                         if (result.changed) {
+                            // 到达 done 时通知主 session
+                            if (result.newState === 'done') {
+                                console.log('[BrainSync] Refine: reached done state, notifying main session')
+                                try {
+                                    await this.engine.sendMessage(mainSessionId, {
+                                        text: '[发送者: Brain 流程管理]\n\n流程已完成，任务结束。',
+                                        sentFrom: 'brain-sdk-info'
+                                    })
+                                } catch (err) {
+                                    console.error('[BrainSync] Refine: failed to send done notification:', err)
+                                }
+                            }
                             // skip 后如果新状态需要立即行动，主动触发
                             if (needsImmediateAction(result.newState)) {
                                 console.log('[BrainSync] Refine: new state needs immediate action:', result.newState)
@@ -536,6 +548,30 @@ export class AutoBrainService {
                             data: { status: 'completed', noMessage: noIssues, currentState: result.newState }
                         }
                     } as unknown as SyncEvent)
+                }
+
+                // 如果新状态是 done，给主 session 发完成通知（防止主 session 卡在等待）
+                if (result.changed && result.newState === 'done') {
+                    console.log('[BrainSync] Reached done state, notifying main session. signal:', signal)
+                    try {
+                        const brainDisplaySessionId = brainSession.brainSessionId
+                        if (brainDisplaySessionId) {
+                            const doneMessage = signal === 'deploy_ok'
+                                ? '[发送者: Brain 流程管理]\n\n全部流程已完成（开发 → 审查 → 检查 → 测试 → 提交 → 部署），任务结束。'
+                                : signal === 'deploy_fail'
+                                    ? '[发送者: Brain 流程管理]\n\n部署失败，已达到重试上限，流程结束。请手动检查部署问题。'
+                                    : signal === 'test_fail'
+                                        ? '[发送者: Brain 流程管理]\n\n测试失败，已达到重试上限，流程结束。请手动检查测试问题。'
+                                        : '[发送者: Brain 流程管理]\n\n流程已完成，任务结束。'
+                            await this.engine.sendMessage(mainSessionId!, {
+                                text: doneMessage,
+                                sentFrom: 'brain-sdk-info'
+                            })
+                            console.log('[BrainSync] Sent done notification to main session')
+                        }
+                    } catch (err) {
+                        console.error('[BrainSync] Failed to send done notification:', err)
+                    }
                 }
 
                 // 如果新状态需要立即行动（linting/testing/committing/deploying），
