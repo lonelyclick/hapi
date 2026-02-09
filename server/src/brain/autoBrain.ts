@@ -11,7 +11,7 @@ import type { SSEManager } from '../sse/sseManager'
 import type { BrainStore } from './store'
 import type { StoredBrainSession } from './types'
 import { refiningSessions } from '../web/routes/messages'
-import { sendSignal, needsImmediateAction } from './stateMachine'
+import { sendSignal, needsImmediateAction, acceptsAiReplyDone, shouldReviewBrainTriggeredRounds, isFinalState } from './stateMachine'
 import { buildStateReviewPrompt, parseSignalFromResponse } from './statePrompts'
 
 /**
@@ -264,9 +264,7 @@ export class AutoBrainService {
             }
 
             // 状态机：主 session AI 回复结束 → 发送 ai_reply_done 信号
-            // idle → reviewing, developing → reviewing（主 session 完成了一轮工作）
-            // linting/testing/committing/deploying 不自动转换，等 Brain 判断结果
-            if (brainSession.currentState === 'idle' || brainSession.currentState === 'developing') {
+            if (acceptsAiReplyDone(brainSession.currentState)) {
                 const result = sendSignal(brainSession.currentState, brainSession.stateContext, 'ai_reply_done')
                 if (result.changed) {
                     console.log('[BrainSync] State auto-transition:', brainSession.currentState, '→', result.newState)
@@ -430,8 +428,8 @@ export class AutoBrainService {
                 // 持久化新状态
                 await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
 
-                // 如果到达 done 状态，完成 brain session
-                if (result.newState === 'done') {
+                // 如果到达终态，完成 brain session
+                if (isFinalState(result.newState)) {
                     await this.brainStore.completeBrainSession(brainSession.id, brainText.slice(0, 500))
                 } else {
                     await this.brainStore.updateBrainResult(brainSession.id, brainText.slice(0, 500))
@@ -603,9 +601,8 @@ export class AutoBrainService {
             }
 
             // 先过滤掉 brain-review 触发的 round，确认是否有真正需要审查的 round
-            // 但如果当前状态是 reviewing（说明 brain 之前发了 has_issue，AI 修改完了），
-            // 则 brain-review round 也需要被 review（检查修改结果）
-            const shouldReviewBrainRounds = brainSession.currentState === 'reviewing'
+            // 但如果当前状态需要审查 brain 触发的 round（如 reviewing 状态），则不过滤
+            const shouldReviewBrainRounds = shouldReviewBrainTriggeredRounds(brainSession.currentState)
             const reviewableRounds = shouldReviewBrainRounds
                 ? pendingRounds
                 : pendingRounds.filter(r => !brainReviewRoundNumbers.has(r.roundNumber))

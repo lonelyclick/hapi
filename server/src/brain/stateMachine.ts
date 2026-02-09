@@ -298,6 +298,36 @@ export function needsImmediateAction(state: BrainMachineState): boolean {
     return ['linting', 'testing', 'committing', 'deploying'].includes(state)
 }
 
+/**
+ * 判断当前状态是否接受 ai_reply_done 信号
+ * （主 session AI 回复结束时，是否应触发状态转换）
+ */
+export function acceptsAiReplyDone(state: BrainMachineState): boolean {
+    return getAllowedSignals(state).includes('ai_reply_done')
+}
+
+/**
+ * 判断当前状态下，brain-review 触发的 round 是否也需要被审查
+ * （例如 brain 发了 has_issue → AI 修改完 → 需要再次 review 修改结果）
+ */
+export function shouldReviewBrainTriggeredRounds(state: BrainMachineState): boolean {
+    // reviewing 状态说明 AI 刚完成修改，需要检查修改结果，即使是 brain-review 触发的 round
+    const config = brainMachine.config
+    const stateConfig = (config.states as Record<string, { on?: Record<string, unknown> }>)?.[state]
+    if (!stateConfig?.on) return false
+    // 如果该状态接受 has_issue 信号（能回退到 developing），说明是审查状态
+    return 'has_issue' in stateConfig.on
+}
+
+/**
+ * 判断某个状态是否为终态
+ */
+export function isFinalState(state: BrainMachineState): boolean {
+    const config = brainMachine.config
+    const stateConfig = (config.states as Record<string, { type?: string }>)?.[state]
+    return stateConfig?.type === 'final'
+}
+
 // ============ 图数据导出（供前端可视化） ============
 
 /** 节点中文标签 */
