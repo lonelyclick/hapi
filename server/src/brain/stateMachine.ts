@@ -229,7 +229,12 @@ export const brainMachine = setup({
             },
         },
         done: {
-            type: 'final',
+            on: {
+                ai_reply_done: {
+                    target: 'developing',
+                    actions: 'recordSignal',
+                },
+            },
         },
     },
 })
@@ -262,7 +267,7 @@ export function sendSignal(
         snapshot: {
             value: currentState,
             context: { ...stateContext },
-            status: currentState === 'done' ? 'done' : 'active',
+            status: 'active',
             output: undefined,
             error: undefined,
             children: {},
@@ -302,7 +307,7 @@ export function getAllowedSignals(state: BrainMachineState): BrainSignal[] {
         testing: ['test_pass', 'test_fail', 'waiting', 'skip'],
         committing: ['commit_ok', 'commit_fail', 'waiting', 'skip'],
         deploying: ['deploy_ok', 'deploy_fail', 'waiting', 'skip'],
-        done: [],
+        done: ['ai_reply_done'],
     }
     return signalMap[state] ?? []
 }
