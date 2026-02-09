@@ -301,12 +301,21 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     const isSidechain = assistantMsg.parent_tool_use_id !== undefined;
 
                     if (!isSidechain) {
-                        // Top-level tool call - queue with delay
-                        messageQueue.enqueue(logMessage, {
-                            delay: 250,
-                            toolCallIds
+                        // Check if all tool calls are pre-allowed (e.g. hapi MCP tools)
+                        // Pre-allowed tools don't need permission delay since they execute immediately
+                        const allPreAllowed = assistantMsg.message.content.every((block) => {
+                            if (block.type !== 'tool_use') return true;
+                            return session.allowedTools?.includes(block.name as string);
                         });
-                        return; // Don't queue again below
+
+                        if (!allPreAllowed) {
+                            // Top-level tool call needing permission - queue with delay
+                            messageQueue.enqueue(logMessage, {
+                                delay: 250,
+                                toolCallIds
+                            });
+                            return; // Don't queue again below
+                        }
                     }
                 }
             }
