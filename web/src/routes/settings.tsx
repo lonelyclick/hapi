@@ -1015,9 +1015,13 @@ export default function SettingsPage() {
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-sm font-medium truncate">{account.name}</span>
-                                                    {account.planType === 'max' && (
+                                                    {account.planType === 'max' ? (
                                                         <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/20 text-purple-600">
                                                             Max 5x
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-500/20 text-blue-600">
+                                                            Pro
                                                         </span>
                                                     )}
                                                     {account.isActive && (

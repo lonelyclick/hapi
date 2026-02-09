@@ -233,8 +233,10 @@ export default function UsagePage() {
                                                 <div key={account.accountId} className={`p-2 rounded ${account.isActive ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-[var(--app-bg)]'}`}>
                                                     <div className="flex items-center gap-2 mb-2">
                                                         <span className="text-xs font-medium truncate">{account.accountName}</span>
-                                                        {account.planType === 'max' && (
+                                                        {account.planType === 'max' ? (
                                                             <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-purple-500/20 text-purple-600">Max 5x</span>
+                                                        ) : (
+                                                            <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-blue-500/20 text-blue-600">Pro</span>
                                                         )}
                                                         {account.isActive && (
                                                             <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-emerald-500/20 text-emerald-600">Active</span>
