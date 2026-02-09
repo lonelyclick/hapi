@@ -440,6 +440,7 @@ export default function SettingsPage() {
     const [showAddAccount, setShowAddAccount] = useState(false)
     const [newAccountName, setNewAccountName] = useState('')
     const [newAccountConfigDir, setNewAccountConfigDir] = useState('')
+    const [newAccountPlanType, setNewAccountPlanType] = useState<'pro' | 'max'>('pro')
     const [showSetupGuide, setShowSetupGuide] = useState(false)
 
     const { data: accountsData, isLoading: accountsLoading, refetch: refetchAccounts } = useQuery({
@@ -461,7 +462,7 @@ export default function SettingsPage() {
     })
 
     const addAccountMutation = useMutation({
-        mutationFn: async (data: { name: string; configDir?: string }) => {
+        mutationFn: async (data: { name: string; configDir?: string; planType?: 'pro' | 'max' }) => {
             if (!api) throw new Error('API unavailable')
             return await api.addClaudeAccount(data)
         },
@@ -471,6 +472,7 @@ export default function SettingsPage() {
             setShowSetupGuide(false)
             setNewAccountName('')
             setNewAccountConfigDir('')
+            setNewAccountPlanType('pro')
             setAccountError(null)
         },
         onError: (err) => {
@@ -538,9 +540,10 @@ export default function SettingsPage() {
         if (!trimmedName) return
         addAccountMutation.mutate({
             name: trimmedName,
-            configDir: newAccountConfigDir.trim() || undefined
+            configDir: newAccountConfigDir.trim() || undefined,
+            planType: newAccountPlanType,
         })
-    }, [newAccountName, newAccountConfigDir, addAccountMutation])
+    }, [newAccountName, newAccountConfigDir, newAccountPlanType, addAccountMutation])
 
     const handleActivateAccount = useCallback((id: string) => {
         activateAccountMutation.mutate(id)
@@ -913,6 +916,15 @@ export default function SettingsPage() {
                                         className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)] font-mono text-xs"
                                         disabled={addAccountMutation.isPending}
                                     />
+                                    <select
+                                        value={newAccountPlanType}
+                                        onChange={(e) => setNewAccountPlanType(e.target.value as 'pro' | 'max')}
+                                        className="w-full px-2 py-1.5 text-sm rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                                        disabled={addAccountMutation.isPending}
+                                    >
+                                        <option value="pro">Pro (1x)</option>
+                                        <option value="max">Max (5x)</option>
+                                    </select>
                                     <div className="flex justify-end gap-2 pt-1">
                                         <button
                                             type="button"
@@ -1003,6 +1015,11 @@ export default function SettingsPage() {
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-sm font-medium truncate">{account.name}</span>
+                                                    {account.planType === 'max' && (
+                                                        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/20 text-purple-600">
+                                                            Max 5x
+                                                        </span>
+                                                    )}
                                                     {account.isActive && (
                                                         <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-emerald-500/20 text-emerald-600">
                                                             Active

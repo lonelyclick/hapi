@@ -30,12 +30,14 @@ const addAccountSchema = z.object({
     configDir: z.string().optional(),
     autoRotate: z.boolean().optional(),
     usageThreshold: z.number().min(0).max(100).optional(),
+    planType: z.enum(['pro', 'max']).optional(),
 })
 
 const updateAccountSchema = z.object({
     name: z.string().min(1).max(100).optional(),
     autoRotate: z.boolean().optional(),
     usageThreshold: z.number().min(0).max(100).optional(),
+    planType: z.enum(['pro', 'max']).optional(),
 })
 
 const updateUsageSchema = z.object({
@@ -305,6 +307,7 @@ export function createClaudeAccountsRoutes(): Hono<WebAppEnv> {
                     accountName: account.name,
                     configDir: account.configDir,
                     isActive: account.isActive,
+                    planType: account.planType,
                     fiveHour: usage.fiveHour,
                     sevenDay: usage.sevenDay,
                     error: usage.error,

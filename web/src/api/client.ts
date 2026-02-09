@@ -1012,6 +1012,7 @@ export class ApiClient {
         configDir?: string
         autoRotate?: boolean
         usageThreshold?: number
+        planType?: 'pro' | 'max'
     }): Promise<{ ok: boolean; account: ClaudeAccount; config: ClaudeAccountsConfig }> {
         return await this.request('/api/claude-accounts', {
             method: 'POST',
@@ -1021,7 +1022,7 @@ export class ApiClient {
 
     async updateClaudeAccount(
         id: string,
-        data: { name?: string; autoRotate?: boolean; usageThreshold?: number }
+        data: { name?: string; autoRotate?: boolean; usageThreshold?: number; planType?: 'pro' | 'max' }
     ): Promise<{ ok: boolean; account: ClaudeAccount; config: ClaudeAccountsConfig }> {
         return await this.request(`/api/claude-accounts/${encodeURIComponent(id)}`, {
             method: 'PUT',
@@ -1077,6 +1078,7 @@ export class ApiClient {
             accountName: string
             configDir: string
             isActive: boolean
+            planType?: 'pro' | 'max'
             fiveHour: { utilization: number; resetsAt: string } | null
             sevenDay: { utilization: number; resetsAt: string } | null
             error?: string
@@ -1135,6 +1137,7 @@ export interface ClaudeAccount {
     isActive: boolean
     autoRotate: boolean
     usageThreshold: number
+    planType?: 'pro' | 'max'
     lastUsage?: ClaudeAccountUsage
     createdAt: number
     lastActiveAt?: number

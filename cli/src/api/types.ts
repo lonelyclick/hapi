@@ -359,6 +359,7 @@ export interface ClaudeAccount {
     isActive: boolean
     autoRotate: boolean
     usageThreshold: number
+    planType?: 'pro' | 'max'
     lastUsage?: ClaudeAccountUsage
     createdAt: number
     lastActiveAt?: number
@@ -378,6 +379,7 @@ export const ClaudeAccountSchema = z.object({
     isActive: z.boolean(),
     autoRotate: z.boolean(),
     usageThreshold: z.number(),
+    planType: z.enum(['pro', 'max']).optional(),
     lastUsage: z.object({
         usedTokens: z.number(),
         totalTokens: z.number(),

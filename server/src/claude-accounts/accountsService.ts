@@ -35,8 +35,12 @@ let dataDir: string = join(homedir(), '.hapi')
 const usageCache = new Map<string, AnthropicUsageData>()
 /** 缓存 TTL: 5 分钟 */
 const USAGE_CACHE_TTL_MS = 5 * 60_000
-/** 5 小时利用率"相近"的阈值: 5% */
-const FIVE_HOUR_SIMILARITY_THRESHOLD = 0.05
+/** Max 账号权重 (5x 额度) */
+const MAX_ACCOUNT_WEIGHT = 5
+/** Pro 账号权重 (1x 额度) */
+const PRO_ACCOUNT_WEIGHT = 1
+/** 加权剩余容量"相近"的阈值: 0.25 (约等于 Max 5% 或 Pro 25%) */
+const WEIGHTED_CAPACITY_SIMILARITY_THRESHOLD = 0.25
 
 /**
  * 初始化账号服务
@@ -164,6 +168,7 @@ export async function addAccount(input: AddAccountInput): Promise<ClaudeAccount>
         isActive: config.accounts.length === 0, // 第一个账号默认活跃
         autoRotate: input.autoRotate ?? true,
         usageThreshold: input.usageThreshold ?? config.defaultThreshold,
+        planType: input.planType,
         createdAt: Date.now(),
     }
 
@@ -197,6 +202,9 @@ export async function updateAccount(id: string, input: UpdateAccountInput): Prom
     }
     if (input.usageThreshold !== undefined) {
         account.usageThreshold = input.usageThreshold
+    }
+    if (input.planType !== undefined) {
+        account.planType = input.planType
     }
 
     await writeAccountsConfig(config)
@@ -340,13 +348,23 @@ export function invalidateUsageCache(accountId?: string): void {
     }
 }
 
+/** 获取账号权重 (Max=5x, Pro=1x) */
+function getAccountWeight(account: ClaudeAccount): number {
+    return account.planType === 'max' ? MAX_ACCOUNT_WEIGHT : PRO_ACCOUNT_WEIGHT
+}
+
+/** 计算加权剩余容量: (1 - utilization) × weight */
+function getWeightedRemaining(utilization: number, weight: number): number {
+    return (1 - utilization) * weight
+}
+
 /**
- * 智能选择最优账号（负载平衡）
+ * 智能选择最优账号（负载平衡 + 权重）
  *
  * 排序逻辑：
  * 1. 只从 autoRotate: true 的账号中选择
- * 2. 优先按 fiveHour.utilization 升序
- * 3. 如果两个账号 fiveHour 差值 < 5%，按 sevenDay.utilization 排序
+ * 2. 按加权剩余容量 (1 - utilization) × weight 降序排列
+ * 3. 加权剩余容量差 < 0.25 时，用 sevenDay 的加权剩余容量决胜
  * 4. 排除已超过阈值的账号（如果所有都超限，选最低的）
  * 5. 无 usage 数据的账号 utilization 视为 0.5
  */
@@ -389,27 +407,40 @@ export async function selectBestAccount(): Promise<AccountSelectionResult | null
     // 如果所有账号都超限，使用全部候选
     const pool = thresholdFiltered.length > 0 ? thresholdFiltered : usageEntries
 
-    // 综合排序：fiveHour 优先，相近时看 sevenDay
+    // 按加权剩余容量降序排列（剩余容量大的排前面）
     pool.sort((a, b) => {
+        const aWeight = getAccountWeight(a.account)
+        const bWeight = getAccountWeight(b.account)
         const aFive = getFiveHour(a.usage)
         const bFive = getFiveHour(b.usage)
-        const fiveDiff = Math.abs(aFive - bFive)
+        const aRemaining = getWeightedRemaining(aFive, aWeight)
+        const bRemaining = getWeightedRemaining(bFive, bWeight)
+        const capacityDiff = Math.abs(aRemaining - bRemaining)
 
-        if (fiveDiff < FIVE_HOUR_SIMILARITY_THRESHOLD) {
-            return getSevenDay(a.usage) - getSevenDay(b.usage)
+        if (capacityDiff < WEIGHTED_CAPACITY_SIMILARITY_THRESHOLD) {
+            const aSevenRemaining = getWeightedRemaining(getSevenDay(a.usage), aWeight)
+            const bSevenRemaining = getWeightedRemaining(getSevenDay(b.usage), bWeight)
+            return bSevenRemaining - aSevenRemaining
         }
-        return aFive - bFive
+        return bRemaining - aRemaining
     })
 
     const best = pool[0]
+    const bestWeight = getAccountWeight(best.account)
     const bestFive = getFiveHour(best.usage)
-    const secondFive = pool.length > 1 ? getFiveHour(pool[1].usage) : -1
-    const reason = (Math.abs(bestFive - secondFive) < FIVE_HOUR_SIMILARITY_THRESHOLD)
+    const bestRemaining = getWeightedRemaining(bestFive, bestWeight)
+    const secondRemaining = pool.length > 1
+        ? getWeightedRemaining(getFiveHour(pool[1].usage), getAccountWeight(pool[1].account))
+        : -1
+    const reason = (Math.abs(bestRemaining - secondRemaining) < WEIGHTED_CAPACITY_SIMILARITY_THRESHOLD)
         ? 'lowest_seven_day_tiebreak'
         : 'lowest_five_hour'
 
     console.log(
-        `[ClaudeAccounts] Selected account: ${best.account.name} (5h: ${(bestFive * 100).toFixed(1)}%, 7d: ${(getSevenDay(best.usage) * 100).toFixed(1)}%), reason: ${reason}`
+        `[ClaudeAccounts] Selected account: ${best.account.name} ` +
+        `(${best.account.planType || 'pro'} ${bestWeight}x, ` +
+        `5h: ${(bestFive * 100).toFixed(1)}%, remaining: ${bestRemaining.toFixed(2)}, ` +
+        `7d: ${(getSevenDay(best.usage) * 100).toFixed(1)}%), reason: ${reason}`
     )
 
     return { account: best.account, usage: best.usage, reason }

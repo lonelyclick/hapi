@@ -22,6 +22,8 @@ export interface ClaudeAccount {
   autoRotate: boolean;
   /** 使用量阈值 (0-100)，超过此值触发轮换 */
   usageThreshold: number;
+  /** 订阅类型: pro (1x) 或 max (5x 额度) */
+  planType?: 'pro' | 'max';
   /** 最近的使用量信息 */
   lastUsage?: ClaudeAccountUsage;
   /** 创建时间 */
@@ -46,12 +48,14 @@ export interface AddAccountInput {
   configDir: string;
   autoRotate?: boolean;
   usageThreshold?: number;
+  planType?: 'pro' | 'max';
 }
 
 export interface UpdateAccountInput {
   name?: string;
   autoRotate?: boolean;
   usageThreshold?: number;
+  planType?: 'pro' | 'max';
 }
 
 /** 账号切换事件 */
