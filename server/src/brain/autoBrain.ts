@@ -567,29 +567,38 @@ export class AutoBrainService {
             }
         } catch (err) {
             console.error('[BrainSync] handleBrainAIResponse error:', err)
-            // 异常时也广播 done，防止前端卡住
-            if (this.sseManager && mainSessionId) {
-                const mainSession = this.engine.getSession(mainSessionId)
+            // 异常时清理 running execution 并广播 done，防止前端和状态卡住
+            if (mainSessionId) {
                 const brainSession = await this.brainStore.getActiveBrainSession(mainSessionId).catch(() => null)
                 if (brainSession) {
-                    console.log('[BrainSync] handleBrainAIResponse: error fallback, broadcasting done')
-                    this.sseManager.broadcast({
-                        type: 'brain-sdk-progress',
-                        namespace: mainSession?.namespace,
-                        sessionId: mainSessionId,
-                        data: {
-                            brainSessionId: brainSession.id,
-                            progressType: 'done',
-                            data: { status: 'completed', noMessage: true }
-                        }
-                    } as unknown as SyncEvent)
+                    // 清理 running execution
+                    const runningExec = await this.brainStore.getLatestExecutionWithProgress(brainSession.id).catch(() => null)
+                    if (runningExec?.status === 'running') {
+                        console.log('[BrainSync] handleBrainAIResponse: error cleanup, completing stale execution:', runningExec.id)
+                        await this.brainStore.completeBrainExecution(runningExec.id, `[ERROR] ${err}`).catch(() => {})
+                    }
+                    // 广播 done
+                    if (this.sseManager) {
+                        console.log('[BrainSync] handleBrainAIResponse: error fallback, broadcasting done')
+                        const mainSession = this.engine.getSession(mainSessionId)
+                        this.sseManager.broadcast({
+                            type: 'brain-sdk-progress',
+                            namespace: mainSession?.namespace,
+                            sessionId: mainSessionId,
+                            data: {
+                                brainSessionId: brainSession.id,
+                                progressType: 'done',
+                                data: { status: 'completed', noMessage: true }
+                            }
+                        } as unknown as SyncEvent)
+                    }
                 }
             }
         }
     }
 
     private async extractBrainAIText(brainSessionId: string): Promise<string | null> {
-        const messagesResult = await this.engine.getMessagesPage(brainSessionId, { limit: 10, beforeSeq: null })
+        const messagesResult = await this.engine.getMessagesPage(brainSessionId, { limit: 20, beforeSeq: null })
 
         for (let i = messagesResult.messages.length - 1; i >= 0; i--) {
             const m = messagesResult.messages[i]
