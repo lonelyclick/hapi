@@ -53,6 +53,8 @@ interface DialogueRound {
     endedAt: number
     /** 该 round 的用户输入是否来自 brain-review（不需要再触发 SDK review） */
     fromBrainReview?: boolean
+    /** 该 round 中 AI 是否使用了代码修改工具（Edit/Write/Bash 等） */
+    hasCodeChanges?: boolean
 }
 
 function extractAIText(content: unknown): string | null {
@@ -102,6 +104,38 @@ function extractAIText(content: unknown): string | null {
     }
 
     return null
+}
+
+/** 代码修改类工具名称 */
+const CODE_CHANGE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit', 'Bash'])
+
+/** 检查 agent 消息是否包含代码修改工具调用 */
+function hasCodeChangeToolUse(content: unknown): boolean {
+    if (!content || typeof content !== 'object') return false
+    const record = content as Record<string, unknown>
+    if (record.role !== 'agent') return false
+
+    let payload: Record<string, unknown> | null = null
+    const rawContent = record.content
+    if (typeof rawContent === 'string') {
+        try { payload = JSON.parse(rawContent) } catch { return false }
+    } else if (typeof rawContent === 'object' && rawContent) {
+        payload = rawContent as Record<string, unknown>
+    }
+    if (!payload) return false
+
+    const data = payload.data as Record<string, unknown>
+    if (!data || data.type !== 'assistant') return false
+
+    const message = data.message as Record<string, unknown>
+    if (!message?.content || !Array.isArray(message.content)) return false
+
+    for (const block of message.content) {
+        if (block && typeof block === 'object' && block.type === 'tool_use' && CODE_CHANGE_TOOLS.has(block.name)) {
+            return true
+        }
+    }
+    return false
 }
 
 function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown; createdAt: number }>): DialogueRound[] {
@@ -162,6 +196,11 @@ function groupMessagesIntoRounds(messages: Array<{ id: string; content: unknown;
             currentRound.aiMessages.push(aiText)
             currentRound.messageIds.push(message.id)
             currentRound.endedAt = message.createdAt
+        }
+
+        // 检测代码修改工具调用
+        if (currentRound && !currentRound.hasCodeChanges && hasCodeChangeToolUse(message.content)) {
+            currentRound.hasCodeChanges = true
         }
     }
 
@@ -263,21 +302,26 @@ export class AutoBrainService {
                 this.brainToMainMap.set(brainSession.brainSessionId, mainSessionId)
             }
 
+            // 先等消息稳定，再做判断
+            await this.waitForMessagesStable(mainSessionId)
+
             // 状态机：主 session AI 回复结束 → 发送 ai_reply_done 信号
+            // 但仅当最新 round 有代码修改时才触发（纯问答不进 developing）
             if (acceptsAiReplyDone(brainSession.currentState)) {
-                const result = sendSignal(brainSession.currentState, brainSession.stateContext, 'ai_reply_done')
-                if (result.changed) {
-                    console.log('[BrainSync] State auto-transition:', brainSession.currentState, '→', result.newState)
-                    await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
-                    // 刷新 brainSession 以使用新状态
-                    brainSession.currentState = result.newState
-                    brainSession.stateContext = result.newContext
+                const latestHasCode = await this.latestRoundHasCodeChanges(mainSessionId)
+                if (latestHasCode) {
+                    const result = sendSignal(brainSession.currentState, brainSession.stateContext, 'ai_reply_done')
+                    if (result.changed) {
+                        console.log('[BrainSync] State auto-transition:', brainSession.currentState, '→', result.newState)
+                        await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
+                        brainSession.currentState = result.newState
+                        brainSession.stateContext = result.newContext
+                    }
+                } else {
+                    console.log('[BrainSync] No code changes in latest round, skipping ai_reply_done (state stays:', brainSession.currentState, ')')
+                    return
                 }
             }
-
-            // wasThinking 信号在 CLI 收到 result 时立即发出，但此时 messageQueue 中
-            // 可能还有未发送到服务器的消息。轮询 message count 直到稳定，确保所有消息已入库。
-            await this.waitForMessagesStable(mainSessionId)
 
             await this.syncRounds(brainSession)
         } catch (err) {
@@ -305,6 +349,17 @@ export class AutoBrainService {
             }
         }
         console.log(`[BrainSync] waitForMessagesStable timeout after ${maxWaitMs}ms, proceeding with count=${lastCount}`)
+    }
+
+    /**
+     * 检查最新一轮对话中 AI 是否有代码修改工具调用
+     */
+    private async latestRoundHasCodeChanges(mainSessionId: string): Promise<boolean> {
+        const allMessages = await this.engine.getAllMessages(mainSessionId)
+        const rounds = groupMessagesIntoRounds(allMessages)
+        if (rounds.length === 0) return false
+        const latest = rounds[rounds.length - 1]
+        return !!latest.hasCodeChanges
     }
 
     private async handleBrainAIResponse(brainSessionId: string): Promise<void> {
