@@ -47,6 +47,9 @@ export const brainMachine = setup({
             context.lastSignal = event.type
             context.lastSignalDetail = event.detail
         },
+        resetRetries: ({ context }) => {
+            context.retries = { developing: 0, reviewing: 0, linting: 0, testing: 0, committing: 0, deploying: 0 }
+        },
     },
 }).createMachine({
     id: 'brain',
@@ -57,7 +60,7 @@ export const brainMachine = setup({
             on: {
                 ai_reply_done: {
                     target: 'developing',
-                    actions: 'recordSignal',
+                    actions: ['resetRetries', 'recordSignal'],
                 },
             },
         },
@@ -232,7 +235,7 @@ export const brainMachine = setup({
             on: {
                 ai_reply_done: {
                     target: 'developing',
-                    actions: 'recordSignal',
+                    actions: ['resetRetries', 'recordSignal'],
                 },
             },
         },
