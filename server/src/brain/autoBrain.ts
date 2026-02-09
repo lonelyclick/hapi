@@ -319,12 +319,20 @@ export class AutoBrainService {
                 const latest = rounds.length > 0 ? rounds[rounds.length - 1] : null
                 console.log('[BrainSync] handleMainSessionComplete: totalRounds=', rounds.length, 'latestRound=', latest?.roundNumber, 'hasCodeChanges=', latest?.hasCodeChanges, 'fromBrainReview=', latest?.fromBrainReview)
                 if (latest?.hasCodeChanges) {
+                    const prevState = brainSession.currentState
                     const result = sendSignal(brainSession.currentState, brainSession.stateContext, 'ai_reply_done')
                     if (result.changed) {
                         console.log('[BrainSync] State auto-transition:', brainSession.currentState, '→', result.newState)
                         await this.brainStore.updateBrainState(brainSession.id, result.newState, result.newContext)
                         brainSession.currentState = result.newState
                         brainSession.stateContext = result.newContext
+
+                        // idle → developing 是首次进入，主 session 还在工作中
+                        // 不要立即 syncRounds 打扰它，等下一次 AI 回复结束再审查
+                        if (prevState === 'idle' && result.newState === 'developing') {
+                            console.log('[BrainSync] Just entered developing from idle, skipping immediate syncRounds (wait for next AI reply)')
+                            return
+                        }
                     } else {
                         console.log('[BrainSync] ai_reply_done self-loop, state stays:', result.newState)
                     }
