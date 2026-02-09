@@ -62,7 +62,7 @@ const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
 
     developing: `主 session 完成了一轮开发。调用 brain_summarize 获取最新对话内容。
 
-**核心原则：你看不到代码，所有检查必须 push 给主 session 执行。每次只 push 一个维度，等它做完再 push 下一个。不要一次性列一堆检查项。**
+**核心原则：你看不到代码，所有检查必须 push 给主 session 执行。每次只 push 一个方向，等它做完再 push 下一个。**
 
 ## 你的任务
 
@@ -72,25 +72,19 @@ const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
 
 2. **AI 还在写代码/调试** → 不要打断，返回 waiting
 
-3. **AI 刚完成代码修改** → 开始分轮 push 自查。每次只 push 一个角度，用 brain_send_message(type=info) 发送，然后返回 has_issue 等主 session 执行完。角度包括但不限于（根据改动灵活选择，用你自己的话说，不要照搬模板）：
-   - 需求对照：让主 session 回顾用户原始需求，逐条列出是否实现
-   - 前后端适配：如果改了接口，让主 session 检查前后端是否对齐
-   - 边界情况：让主 session 检查空值、异常路径等
-   - 半成品搜索：让主 session 用 Grep 搜索 TODO、placeholder、硬编码
-   - 依赖检查：让主 session 用 Grep 搜索被修改函数的调用方
-   - 错误处理：让主 session 检查新增的异步操作是否有异常处理
+3. **AI 刚完成代码修改** → 开始分轮 push 自查。每次只 push 一个方向性的检查要求，用 brain_send_message(type=info) 发送，然后返回 has_issue。**只说方向，不要列具体步骤**。例如"检查一下需求是否都实现了"，而不是"逐条对照需求列表，检查第1点xxx是否实现，第2点xxx是否实现..."。
 
 4. **主 session 刚完成了你上一轮 push 的检查** → 看它的报告：
    - 如果发现了问题但还没修 → 让它修，返回 has_issue
-   - 如果发现了问题并已修 → 继续 push 下一个检查角度，返回 has_issue
-   - 如果这个角度没问题 → 继续 push 下一个检查角度，返回 has_issue
-   - 如果所有角度都已检查完毕（至少 3 个角度） → 返回 dev_complete
+   - 如果发现了问题并已修 → push 下一个方向，返回 has_issue
+   - 如果这个角度没问题 → push 下一个方向，返回 has_issue
+   - 如果所有方向都已检查完毕（至少 3 个方向） → 返回 dev_complete
 
-**关键：每次返回 has_issue 推一个新角度，而不是一次性全推。这样能确保每个角度都被认真对待。用你自己的语言组织指令，根据具体改动内容灵活调整检查重点。**`,
+**关键：给方向性指引，不要具体化。让主 session 自己决定怎么检查。**`,
 
     reviewing: `代码审查阶段。调用 brain_summarize 获取最新对话内容。
 
-**核心原则：你看不到代码，所有审查必须 push 给主 session 执行。每次只 push 一个审查角度，等它做完再 push 下一个。只要上一轮审查还发现了问题，就继续推下一轮，不要停。最多 10 轮。**
+**核心原则：你看不到代码，所有审查必须 push 给主 session 执行。每次只 push 一个方向，等它做完再 push 下一个。**
 
 ## 你的任务
 
@@ -98,21 +92,13 @@ const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
 
 1. **AI 在等用户回答问题** → 替用户做决策，用 brain_send_message(type=info) 发送决策，返回 ai_question
 
-2. **主 session 还没有开始审查，或者刚完成上一轮且上一轮有问题** → 用 brain_send_message(type=info) push 下一个审查角度。角度包括但不限于（根据改动灵活选择，用你自己的话说）：
-   - 功能正确性：让主 session 逐个检查实现逻辑是否和需求一致
-   - 边界情况：让主 session 检查空值、异常路径、并发
-   - 类型安全：让主 session 检查 TypeScript 类型是否正确
-   - 安全性：让主 session 检查注入、XSS、敏感信息泄露
-   - 性能：让主 session 检查不必要的循环、N+1 查询、内存泄漏
-   - 可读性：让主 session 检查命名、结构是否清晰
-   - 回归风险：让主 session 检查改动是否可能破坏已有功能
-   然后返回 has_issue
+2. **主 session 还没有开始审查，或者刚完成上一轮且上一轮有问题** → 用 brain_send_message(type=info) push 下一个审查方向。**只说方向，不要列具体检查项**。例如"审查一下代码的安全性"，而不是"检查是否有XSS漏洞、检查是否有SQL注入、检查是否有敏感信息泄露..."。然后返回 has_issue
 
-3. **主 session 完成了审查且本轮没有发现新问题** → 判断是否已审查了足够多的角度（至少 3 个角度）：
-   - 还不够 → 继续 push 下一个角度，返回 has_issue
+3. **主 session 完成了审查且本轮没有发现新问题** → 判断是否已审查了足够多的方向（至少 3 个方向）：
+   - 还不够 → 继续 push 下一个方向，返回 has_issue
    - 够了 → 返回 no_issue
 
-**关键：每次只推一个角度。只要还有问题就继续。用你自己的语言描述，根据这个项目的具体改动灵活调整审查重点，不要生搬硬套。**`,
+**关键：给方向性指引，不要具体化。让主 session 自己决定怎么审查。**`,
 
     linting: `代码检查（lint）阶段。调用 brain_summarize 获取最新对话内容。
 
@@ -130,23 +116,17 @@ const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
 
     testing: `测试阶段。调用 brain_summarize 获取最新对话内容。
 
-**核心原则：你看不到代码，所有操作 push 给主 session 执行。测试要多轮推进，确保覆盖充分。**
+**核心原则：你看不到代码，所有操作 push 给主 session 执行。**
 
 ## 你的任务
 
 调用 brain_summarize 后，根据对话内容判断当前状态：
 
-1. **主 session 还没有执行测试** → 用 brain_send_message(type=info) 让主 session 运行项目的测试命令并报告完整结果。返回 waiting
+1. **主 session 还没有执行测试** → 用 brain_send_message(type=info) 让主 session 运行测试。返回 waiting
 
-2. **主 session 报告测试通过，但还没有做过额外验证** → 继续 push 下一轮验证，比如（根据改动灵活选择，用你自己的话说）：
-   - 让主 session 手动验证关键功能路径（用 curl 或类似方式测试 API）
-   - 让主 session 检查是否有未覆盖的边界场景需要补测试
-   - 让主 session 检查改动是否影响了其他模块的测试
-   返回 test_fail（推回 developing 让它做额外验证）
+2. **主 session 报告测试通过** → 返回 test_pass
 
-3. **主 session 已经完成多轮验证（至少跑过测试 + 做过一次额外验证）** → 返回 test_pass
-
-4. **主 session 报告测试失败** → 用 brain_send_message(type=info) 让主 session 修复失败的测试并重新运行。返回 test_fail`,
+3. **主 session 报告测试失败** → 用 brain_send_message(type=info) 让主 session 修复并重新运行测试。返回 test_fail`,
 
     committing: `当前阶段是提交代码。调用 brain_summarize 获取最新对话内容。
 
