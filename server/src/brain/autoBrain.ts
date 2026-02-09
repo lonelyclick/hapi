@@ -308,8 +308,10 @@ export class AutoBrainService {
             // 状态机：主 session AI 回复结束 → 发送 ai_reply_done 信号
             // 但仅当最新 round 有代码修改时才触发（纯问答不进 developing）
             if (acceptsAiReplyDone(brainSession.currentState)) {
-                const latestHasCode = await this.latestRoundHasCodeChanges(mainSessionId)
-                if (latestHasCode) {
+                const allMessages = await this.engine.getAllMessages(mainSessionId)
+                const rounds = groupMessagesIntoRounds(allMessages)
+                const latest = rounds.length > 0 ? rounds[rounds.length - 1] : null
+                if (latest?.hasCodeChanges) {
                     const result = sendSignal(brainSession.currentState, brainSession.stateContext, 'ai_reply_done')
                     if (result.changed) {
                         console.log('[BrainSync] State auto-transition:', brainSession.currentState, '→', result.newState)
@@ -349,17 +351,6 @@ export class AutoBrainService {
             }
         }
         console.log(`[BrainSync] waitForMessagesStable timeout after ${maxWaitMs}ms, proceeding with count=${lastCount}`)
-    }
-
-    /**
-     * 检查最新一轮对话中 AI 是否有代码修改工具调用
-     */
-    private async latestRoundHasCodeChanges(mainSessionId: string): Promise<boolean> {
-        const allMessages = await this.engine.getAllMessages(mainSessionId)
-        const rounds = groupMessagesIntoRounds(allMessages)
-        if (rounds.length === 0) return false
-        const latest = rounds[rounds.length - 1]
-        return !!latest.hasCodeChanges
     }
 
     private async handleBrainAIResponse(brainSessionId: string): Promise<void> {
@@ -529,11 +520,7 @@ export class AutoBrainService {
                 // 没有解析到 signal，降级为旧逻辑
                 console.log('[BrainSync] No signal parsed, falling back to legacy behavior')
                 const noIssues = brainText.includes('[NO_MESSAGE]')
-                if (noIssues) {
-                    await this.brainStore.completeBrainSession(brainSession.id, '[NO_MESSAGE]')
-                } else {
-                    await this.brainStore.updateBrainResult(brainSession.id, brainText)
-                }
+                await this.brainStore.updateBrainResult(brainSession.id, noIssues ? '[NO_MESSAGE]' : brainText)
 
                 // SSE 广播 done 事件
                 if (this.sseManager) {

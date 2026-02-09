@@ -192,7 +192,7 @@ export function buildRefinePrompt(currentState: BrainMachineState): string {
 2) 分析用户意图的合理性，结合当前处于「${STATE_LABELS[currentState]}」阶段
 3) 如果用户想跳过当前阶段（如"别测了""直接提交""先不部署"），在回复末尾写 SIGNAL:skip
 4) 如果用户在补充需求或修改方向，整合为清晰指令，用 brain_send_message(type=info) 发给主 session，然后写 SIGNAL:ai_reply_done
-5) 其他情况正常改写转发，用 brain_send_message(type=info) 发送
+5) 其他情况正常改写转发，用 brain_send_message(type=info) 发送，然后写 SIGNAL:waiting
 
 ## 格式要求
 完成上述操作后，在回复的**最后一行**写：
