@@ -310,15 +310,28 @@ export class AutoBrainService {
     }
 
     private async handleBrainAIResponse(brainSessionId: string): Promise<void> {
-        const mainSessionId = this.brainToMainMap.get(brainSessionId)
+        let mainSessionId = this.brainToMainMap.get(brainSessionId)
         console.log('[BrainSync] handleBrainAIResponse:', brainSessionId, 'mainSessionId:', mainSessionId)
+
+        // 内存映射丢失时（如服务器重启），从 DB 查找
+        let brainSession: StoredBrainSession | null = null
         if (!mainSessionId) {
-            console.log('[BrainSync] No main session mapping found')
-            return
+            console.log('[BrainSync] No memory mapping, querying DB by review_session_id')
+            brainSession = await this.brainStore.getActiveBrainSessionByReviewSessionId(brainSessionId)
+            if (brainSession) {
+                mainSessionId = brainSession.mainSessionId
+                this.brainToMainMap.set(brainSessionId, mainSessionId)
+                console.log('[BrainSync] Recovered mapping from DB:', brainSessionId, '→', mainSessionId)
+            } else {
+                console.log('[BrainSync] No brain session found in DB either')
+                return
+            }
         }
 
         try {
-            const brainSession = await this.brainStore.getActiveBrainSession(mainSessionId)
+            if (!brainSession) {
+                brainSession = await this.brainStore.getActiveBrainSession(mainSessionId)
+            }
             console.log('[BrainSync] Active brain session:', brainSession?.id)
             if (!brainSession || brainSession.brainSessionId !== brainSessionId) {
                 console.log('[BrainSync] Brain session mismatch or not found')

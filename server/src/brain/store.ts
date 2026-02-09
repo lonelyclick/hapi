@@ -185,6 +185,17 @@ export class BrainStore implements IBrainStore {
         return result.rows.map(row => this.rowToBrainSession(row))
     }
 
+    async getActiveBrainSessionByReviewSessionId(reviewSessionId: string): Promise<StoredBrainSession | null> {
+        const result = await this.pool.query(
+            `SELECT * FROM brain_sessions
+             WHERE review_session_id = $1 AND status IN ('pending', 'active')
+             ORDER BY created_at DESC LIMIT 1`,
+            [reviewSessionId]
+        )
+        if (result.rows.length === 0) return null
+        return this.rowToBrainSession(result.rows[0])
+    }
+
     async getRecentCompletedBrainSessions(sinceMs: number = 24 * 60 * 60 * 1000): Promise<StoredBrainSession[]> {
         const cutoff = Date.now() - sinceMs
         const result = await this.pool.query(

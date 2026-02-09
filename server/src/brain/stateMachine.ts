@@ -247,6 +247,7 @@ export function sendSignal(
             status: currentState === 'done' ? 'done' : 'active',
             output: undefined,
             error: undefined,
+            children: {},
         } as unknown as Snapshot<unknown>,
     })
 
