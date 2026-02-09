@@ -399,6 +399,13 @@ export class AutoBrainService {
             // （避免 review 和 refine 同时进行时误判）
             const latestExecForCheck = wasRefining ? await this.brainStore.getLatestExecutionWithProgress(brainSession.id) : null
             const isActuallyReview = wasRefining && latestExecForCheck?.status === 'running'
+            console.log('[BrainSync] handleBrainAIResponse: decision context:', {
+                wasRefining,
+                latestExecStatus: latestExecForCheck?.status ?? 'N/A',
+                isActuallyReview,
+                currentState: brainSession.currentState,
+                brainId: brainSession.id,
+            })
             if (isActuallyReview) {
                 console.log('[BrainSync] handleBrainAIResponse: refiningSessions is set BUT latestExecution is running — this is a review response, not refine. Keeping refiningSessions for next response.')
             }
@@ -428,10 +435,12 @@ export class AutoBrainService {
                         if (result.changed) {
                             // skip 后如果新状态需要立即行动，主动触发
                             if (needsImmediateAction(result.newState)) {
+                                console.log('[BrainSync] Refine: new state needs immediate action:', result.newState)
                                 const refreshed = await this.brainStore.getActiveBrainSession(mainSessionId)
                                 if (refreshed) {
                                     const mainSessionObj = this.engine.getSession(mainSessionId)
                                     const projectPath = mainSessionObj?.metadata?.path
+                                    console.log('[BrainSync] Refine immediate action: projectPath=', projectPath ? 'present' : 'MISSING')
                                     if (projectPath) {
                                         await new Promise(r => setTimeout(r, 500))
                                         await this.triggerSdkReview(refreshed, [{ round: 0, summary: '', userInput: '' }], projectPath)
@@ -443,6 +452,7 @@ export class AutoBrainService {
                 }
 
                 // 广播 done（在解析完 signal 后，用正确的 noMessage 和 currentState）
+                console.log('[BrainSync] Refine done broadcast: noMessage=', refineNoMessage, 'currentState=', refineNewState, 'brainId=', brainSession.id)
                 if (this.sseManager) {
                     const mainSession = this.engine.getSession(mainSessionId)
                     this.sseManager.broadcast({
@@ -513,7 +523,7 @@ export class AutoBrainService {
 
                 // SSE 广播 done 事件
                 const noIssues = signal === 'no_issue' || signal === 'dev_complete' || signal === 'lint_pass' || signal === 'test_pass' || signal === 'commit_ok' || signal === 'deploy_ok' || signal === 'waiting' || signal === 'skip'
-                console.log('[BrainSync] noIssues=', noIssues, 'signal=', signal)
+                console.log('[BrainSync] Review done broadcast: signal=', signal, 'noMessage=', noIssues, 'newState=', result.newState, 'changed=', result.changed, 'brainId=', brainSession.id)
                 if (this.sseManager) {
                     const mainSession = this.engine.getSession(mainSessionId)
                     this.sseManager.broadcast({
@@ -531,12 +541,13 @@ export class AutoBrainService {
                 // 如果新状态需要立即行动（linting/testing/committing/deploying），
                 // 主动再触发一轮，用新状态的 prompt push 主 session
                 if (result.changed && needsImmediateAction(result.newState)) {
-                    console.log('[BrainSync] New state needs immediate action, triggering another review cycle for:', result.newState)
+                    console.log('[BrainSync] New state needs immediate action, triggering another review cycle for:', result.newState, 'from signal:', signal)
                     // 刷新 brainSession 数据
                     const refreshed = await this.brainStore.getActiveBrainSession(mainSessionId)
                     if (refreshed) {
                         const mainSessionObj = this.engine.getSession(mainSessionId)
                         const projectPath = mainSessionObj?.metadata?.path
+                        console.log('[BrainSync] Immediate action: refreshed brainId=', refreshed.id, 'state=', refreshed.currentState, 'projectPath=', projectPath ? 'present' : 'MISSING')
                         if (projectPath) {
                             // 短暂延迟，让前端 UI 有时间更新
                             await new Promise(r => setTimeout(r, 500))
@@ -678,7 +689,7 @@ export class AutoBrainService {
                 r.aiMessages.length > 0 &&
                 !initPromptRoundNumbers.has(r.roundNumber)
             )
-            console.log('[BrainSync] Pending rounds:', pendingRounds.length)
+            console.log('[BrainSync] Pending rounds:', pendingRounds.length, pendingRounds.map(r => `R${r.roundNumber}(brainReview=${!!r.fromBrainReview},codeChange=${!!r.hasCodeChanges},userLen=${r.userInput.length})`).join(', '))
 
             if (pendingRounds.length === 0) {
                 console.log('[BrainSync] No pending rounds, nothing to do')
@@ -937,6 +948,7 @@ export class AutoBrainService {
 
             // 确保 brain → main 映射存在（用于回复时识别）
             this.brainToMainMap.set(brainDisplaySessionId, mainSessionId)
+            console.log('[BrainSync] Sending review prompt to brain session:', brainDisplaySessionId, 'promptLen:', reviewPrompt.length, 'brainToMainMapSize:', this.brainToMainMap.size)
 
             await this.engine.sendMessage(brainDisplaySessionId, {
                 text: reviewPrompt,

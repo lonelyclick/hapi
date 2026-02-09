@@ -265,7 +265,9 @@ export function sendSignal(
     signal: BrainSignal,
     detail?: string
 ): TransitionResult {
-    console.log('[StateMachine] sendSignal:', signal, 'in state:', currentState, 'retries:', JSON.stringify(stateContext.retries))
+    const allowed = getAllowedSignals(currentState)
+    const isAllowed = allowed.includes(signal)
+    console.log('[StateMachine] sendSignal:', signal, 'in state:', currentState, 'allowed:', isAllowed, 'allowedSignals:', allowed.join(','), 'retries:', JSON.stringify(stateContext.retries), 'lastSignal:', stateContext.lastSignal ?? 'none', detail ? `detail: ${detail}` : '')
 
     // 从持久化数据重建 actor（深拷贝 context 避免污染调用方数据）
     const actor = createActor(brainMachine, {
@@ -296,7 +298,7 @@ export function sendSignal(
     actor.stop()
 
     const changed = newState !== stateBefore
-    console.log('[StateMachine] Result:', stateBefore, '→', newState, changed ? '(CHANGED)' : '(same)', 'retries:', JSON.stringify(newContext.retries))
+    console.log('[StateMachine] Result:', stateBefore, '→', newState, changed ? '(CHANGED)' : '(same)', 'retries:', JSON.stringify(newContext.retries), 'lastSignal:', newContext.lastSignal ?? 'none')
 
     return {
         newState,
@@ -353,9 +355,14 @@ export function shouldReviewBrainTriggeredRounds(state: BrainMachineState): bool
     // reviewing 状态说明 AI 刚完成修改，需要检查修改结果，即使是 brain-review 触发的 round
     const config = brainMachine.config
     const stateConfig = (config.states as Record<string, { on?: Record<string, unknown> }>)?.[state]
-    if (!stateConfig?.on) return false
+    if (!stateConfig?.on) {
+        console.log('[StateMachine] shouldReviewBrainTriggeredRounds:', state, '→ false (no on config)')
+        return false
+    }
     // 如果该状态接受 has_issue 信号（能回退到 developing），说明是审查状态
-    return 'has_issue' in stateConfig.on
+    const result = 'has_issue' in stateConfig.on
+    console.log('[StateMachine] shouldReviewBrainTriggeredRounds:', state, '→', result)
+    return result
 }
 
 /**

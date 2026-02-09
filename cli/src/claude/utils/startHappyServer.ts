@@ -245,7 +245,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                 title: 'Brain Send Message',
                 inputSchema: brainSendMessageInputSchema,
             }, async (args: { message: string; type?: 'review' | 'suggestion' | 'info' }) => {
-                logger.debug(`[hapiMCP] brain_send_message called, type=${args.type}, mainSessionId=${mainSessionId}`)
+                logger.debug(`[hapiMCP] brain_send_message called, type=${args.type}, mainSessionId=${mainSessionId}, msgLen=${args.message.length}, msgPreview=${args.message.slice(0, 150)}`)
 
                 try {
                     const msgType = args.type ?? 'review'
@@ -267,8 +267,9 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                     // Use different sentFrom for info (user forwarding) vs review/suggestion
                     // so that autoBrain's syncRounds doesn't filter out user-forwarded rounds
                     const sentFromValue = msgType === 'info' ? 'brain-sdk-info' : 'brain-sdk-review'
+                    logger.debug(`[hapiMCP] brain_send_message: sending to main session, sentFrom=${sentFromValue}, fullMsgLen=${fullMessage.length}`)
                     await api.sendMessageToSession(mainSessionId, fullMessage, sentFromValue)
-                    logger.debug(`[hapiMCP] brain_send_message: sent to main session`)
+                    logger.debug(`[hapiMCP] brain_send_message: sent to main session successfully`)
 
                     // 只在用户消息转发（info）时清除 pending 消息
                     if (msgType === 'info') {
@@ -312,14 +313,14 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                     logger.debug(`[hapiMCP] brain_user_intent: result.text=${result.text ? `"${result.text.slice(0, 100)}..."` : 'null'}, timestamp=${result.timestamp}`)
 
                     if (!result.text) {
-                        logger.debug(`[hapiMCP] brain_user_intent: no pending message`)
+                        logger.debug(`[hapiMCP] brain_user_intent: no pending message found for ${mainSessionId}`)
                         return {
                             content: [{ type: 'text' as const, text: '当前没有待处理的用户消息。' }],
                             isError: false,
                         }
                     }
 
-                    logger.debug(`[hapiMCP] brain_user_intent: returning pending message, len=${result.text.length}`)
+                    logger.debug(`[hapiMCP] brain_user_intent: returning pending message, len=${result.text.length}, preview=${result.text.slice(0, 100)}, timestamp=${result.timestamp}`)
                     return {
                         content: [{ type: 'text' as const, text: result.text }],
                         isError: false,

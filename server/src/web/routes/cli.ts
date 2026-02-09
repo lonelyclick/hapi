@@ -186,6 +186,7 @@ export function createCliRoutes(
         const sessionId = c.req.param('id')
 
         const pending = pendingUserMessages.get(sessionId)
+        console.log('[CLI] getPendingUserMessage:', sessionId, pending ? `found (len=${pending.text.length}, age=${Date.now() - pending.timestamp}ms)` : 'not found')
         if (!pending) {
             return c.json({ text: null })
         }
@@ -216,12 +217,14 @@ export function createCliRoutes(
             return c.json({ error: 'Brain store not available' }, 503)
         }
         const mainSessionId = c.req.param('id')
+        console.log('[CLI] brain-no-issues: called for', mainSessionId)
 
         const brainSession = await brainStore.getActiveBrainSession(mainSessionId)
         if (!brainSession) {
             console.log('[CLI] brain-no-issues: no active brain session for', mainSessionId)
             return c.json({ error: 'No active brain session' }, 404)
         }
+        console.log('[CLI] brain-no-issues: brainId=', brainSession.id, 'state=', brainSession.currentState)
 
         // 完成 execution（标记 reviewed rounds）
         const latestExecution = await brainStore.getLatestExecutionWithProgress(brainSession.id)

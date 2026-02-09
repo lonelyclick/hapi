@@ -74,7 +74,9 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
 
         // 大脑模式：拦截用户消息，暂存后通知 Brain session 分析意图
         // 跳过来自 brain 的消息，避免循环拦截
-        const activeBrain = (sentFrom !== 'brain-sdk-review' && sentFrom !== 'brain-sdk-info') && brainStore ? await brainStore.getActiveBrainSession(sessionId) : null
+        const isBrainSentFrom = sentFrom === 'brain-sdk-review' || sentFrom === 'brain-sdk-info'
+        const activeBrain = (!isBrainSentFrom && brainStore) ? await brainStore.getActiveBrainSession(sessionId) : null
+        console.log(`[Messages] sendMessage: sessionId=${sessionId} sentFrom=${sentFrom} isBrainSentFrom=${isBrainSentFrom} activeBrain=${activeBrain?.id ?? 'none'} brainDisplayId=${activeBrain?.brainSessionId ?? 'none'} refining=${refiningSessions.has(sessionId)} pendingMsg=${pendingUserMessages.has(sessionId)}`)
         if (activeBrain && activeBrain.brainSessionId) {
             console.log(`[Messages] Brain intercept: sessionId=${sessionId} brainId=${activeBrain.id} state=${activeBrain.currentState} brainDisplayId=${activeBrain.brainSessionId} msgLen=${parsed.data.text.length} msgPreview=${parsed.data.text.slice(0, 100)}`)
 
@@ -92,7 +94,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 })
                 console.log(`[Messages] Brain intercept: notification sent to brain session ${activeBrain.brainSessionId}`)
             } catch (err) {
-                console.error(`[Messages] Brain intercept: failed to notify brain session, falling back to direct send`, err)
+                console.error(`[Messages] Brain intercept: failed to notify brain session ${activeBrain.brainSessionId}, falling back to direct send. Error:`, err)
                 pendingUserMessages.delete(sessionId)
                 refiningSessions.delete(sessionId)
                 // fallback: 直接发给主 session

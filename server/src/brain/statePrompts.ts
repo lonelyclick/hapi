@@ -169,6 +169,13 @@ export function buildStateReviewPrompt(
         .join('\n')
 
     const retryInfo = buildRetryInfo(currentState, stateContext)
+    console.log('[StatePrompts] buildStateReviewPrompt:', {
+        state: currentState,
+        allowedSignals: allowed.join(','),
+        rounds: roundNumbers.join(','),
+        retries: JSON.stringify(stateContext.retries),
+        lastSignal: stateContext.lastSignal ?? 'none',
+    })
 
     return `## 当前任务阶段: ${STATE_LABELS[currentState]}
 
@@ -193,6 +200,7 @@ SIGNAL:<你选择的信号>
  * 构建 refine prompt（供 messages.ts 的消息拦截使用）
  */
 export function buildRefinePrompt(currentState: BrainMachineState): string {
+    console.log('[StatePrompts] buildRefinePrompt: state=', currentState, 'label=', STATE_LABELS[currentState])
     return `用户消息转发：用户发送了新消息。当前阶段: ${STATE_LABELS[currentState]}
 
 请执行：
