@@ -90,7 +90,9 @@ const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
 
 判断主 session 是否已经提交了代码：
 - 如果还没有提交 → 用 brain_send_message(type=info) 发送指令：「请提交代码。commit message 要清晰描述改动内容。」然后返回 waiting
-- 如果已经提交成功 → 返回 commit_ok
+- 如果已经提交成功，再判断项目是否需要部署（看项目中是否有 deploy 脚本、CI/CD 配置、或之前对话提到过部署流程）：
+  - 需要部署 → 返回 deploy_ok（进入部署阶段）
+  - 不需要部署 → 返回 commit_ok（直接完成）
 - 如果提交失败（pre-commit hook 失败、冲突等）→ 分析原因并给出修复建议，然后返回 commit_fail`,
 
     deploying: `当前阶段是部署。先调用 brain_summarize 获取最新对话。
