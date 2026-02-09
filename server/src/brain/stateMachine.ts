@@ -296,7 +296,7 @@ export function sendSignal(
 export function getAllowedSignals(state: BrainMachineState): BrainSignal[] {
     const signalMap: Record<BrainMachineState, BrainSignal[]> = {
         idle: ['ai_reply_done'],
-        developing: ['ai_reply_done', 'dev_complete', 'has_issue', 'waiting'],
+        developing: ['dev_complete', 'has_issue', 'waiting'],
         reviewing: ['has_issue', 'no_issue', 'ai_question', 'skip'],
         linting: ['lint_pass', 'lint_fail', 'waiting', 'skip'],
         testing: ['test_pass', 'test_fail', 'waiting', 'skip'],
@@ -312,8 +312,8 @@ export function getAllowedSignals(state: BrainMachineState): BrainSignal[] {
  * 而不是等下一次主 session 回复
  */
 export function needsImmediateAction(state: BrainMachineState): boolean {
-    // linting/testing/committing/deploying 需要 Brain 主动 push 指令
-    return ['linting', 'testing', 'committing', 'deploying'].includes(state)
+    // reviewing/linting/testing/committing/deploying 需要 Brain 主动 push 指令
+    return ['reviewing', 'linting', 'testing', 'committing', 'deploying'].includes(state)
 }
 
 /**
