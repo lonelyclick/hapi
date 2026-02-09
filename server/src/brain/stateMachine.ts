@@ -53,7 +53,7 @@ export const brainMachine = setup({
         idle: {
             on: {
                 ai_reply_done: {
-                    target: 'reviewing',
+                    target: 'developing',
                     actions: 'recordSignal',
                 },
             },
