@@ -100,24 +100,27 @@ const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
 - 输出显示通过：返回 lint_pass
 - 输出显示失败：用 brain_send_message(type=info) 请它修复后重新运行并回报结果，然后返回 lint_fail`,
 
-    committing: `你处于「提交」阶段。
+    committing: `你处于「提交」阶段。代码已通过开发审查和代码检查，可以直接提交。
 
-先调用 brain_summarize，确认用户是否明确希望现在提交/推送（提交通常会影响他人可见的历史）。
+先调用 brain_summarize，确认主 session 当前状态。
 
 然后只做一个决定（只选一个 signal）：
-- 若还未明确获得“可以提交”的确认：用 brain_send_message(type=info) 请主 session 先向用户确认是否现在提交（或给出更稳妥替代与取舍），然后返回 waiting
-- 若已确认可以提交但尚未提交：用 brain_send_message(type=info) 请它完成提交（commit message 清晰描述改动）并回报结果，然后返回 waiting
+- 主 session 尚未提交：用 brain_send_message(type=info) 请它完成 git commit（commit message 清晰描述改动）并回报结果，然后返回 waiting
+- 提交正在执行中/等待结果：返回 waiting
 - 提交成功：返回 commit_ok
 - 提交失败：用 brain_send_message(type=info) 请它贴出失败原因、修复后重试并回报结果，然后返回 commit_fail`,
 
-    deploying: `你处于「部署」阶段（通常是不可逆/对外可见操作）。
+    deploying: `你处于「部署」阶段（本地部署，不可逆操作）。
 
-先调用 brain_summarize，确认用户是否明确希望现在部署，以及是否有窗口/环境约束。
+先调用 brain_summarize，确认主 session 当前状态。
+
+部署方式：主 session 应读取项目根目录的 .yoho-project.yaml 文件中的 deployment 部分，按其中的 command 和 steps 执行本地部署。
+通常是在项目根目录执行部署脚本（如 bash deploy.sh），具体以 .yoho-project.yaml 为准。
 
 然后只做一个决定（只选一个 signal）：
-- 若还未明确获得“可以部署”的确认：用 brain_send_message(type=info) 请主 session 先向用户确认是否现在部署（并说明风险与取舍），然后返回 waiting
-- 若已确认可以部署但尚未部署：用 brain_send_message(type=info) 请它按项目约定执行部署并回报完整结果，然后返回 waiting
-- 部署成功：返回 deploy_ok
+- 主 session 尚未开始部署：用 brain_send_message(type=info) 请它读取 .yoho-project.yaml 的 deployment 配置并执行本地部署，然后返回 waiting
+- 部署正在执行中/等待结果：返回 waiting
+- 部署成功（输出中有明确的成功标志）：返回 deploy_ok
 - 部署失败：用 brain_send_message(type=info) 请它贴出失败原因、做最小修复后再试并回报结果，然后返回 deploy_fail`,
 
     done: '任务已完成，不需要进一步操作。',
