@@ -435,7 +435,19 @@ export class AutoBrainService {
                     if (refineSignal) {
                         // waiting 信号不需要显示消息
                         refineNoMessage = refineSignal === 'waiting'
-                        const result = sendSignal(brainSession.currentState, brainSession.stateContext, refineSignal)
+
+                        // 如果 refine 返回 ai_reply_done 但当前状态不接受 → 先重置到 idle 再转换
+                        // 典型场景：用户在 deploying/committing 等中间状态发了新任务
+                        let currentState = brainSession.currentState
+                        let currentContext = brainSession.stateContext
+                        if (refineSignal === 'ai_reply_done' && !acceptsAiReplyDone(currentState)) {
+                            console.log('[BrainSync] Refine: ai_reply_done not accepted in', currentState, '→ resetting to idle first')
+                            currentState = 'idle'
+                            currentContext = { ...currentContext, retries: { developing: 0, reviewing: 0, linting: 0, committing: 0, deploying: 0 } }
+                            await this.brainStore.updateBrainState(brainSession.id, 'idle', currentContext)
+                        }
+
+                        const result = sendSignal(currentState, currentContext, refineSignal)
                         console.log('[BrainSync] Refine state transition:', brainSession.currentState, '→', result.newState, 'changed:', result.changed)
                         refineNewState = result.newState
                         // 始终持久化 context（即使 self-loop 也会更新 lastSignal 等）
