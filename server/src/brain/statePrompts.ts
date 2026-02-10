@@ -64,8 +64,10 @@ const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
 然后只做一个决定（只选一个 signal）：
 - 主 session 仍在输出/工具未结束/没有明确结论：返回 waiting
 - 主 session 在等用户决策：用 brain_send_message(type=info) 给出决策或一个关键确认问题，然后返回 waiting
-- 主 session 已停下且声称“已完成”：挑 1 个最高风险点（边界条件、错误处理、类型契约、安全/权限、可维护性等），用 brain_send_message(type=review) 推动它自检并回报结论，然后返回 has_issue
-- 你认为当前结果已足够稳健、无需再推动：返回 dev_complete`,
+- 主 session 已停下且声称"已完成"：挑 1 个最高风险点（边界条件、错误处理、类型契约、安全/权限、可维护性等），用 brain_send_message(type=review) 推动它自检并回报结论，然后返回 has_issue
+- 你已经从至少 3 个不同维度推动过自检且结论都满意：返回 dev_complete
+
+重要：每次 has_issue 只聚焦 1 个维度，且每次选择不同的维度（不要重复之前已审查过的方向）。维度示例：边界条件、错误处理、类型契约、安全/权限、可维护性、性能、并发安全、向后兼容等。`,
 
     reviewing: `你处于「代码审查」阶段：你不直接看代码，你的作用是推动主 session 自己做审查并回报结论。
 
@@ -118,7 +120,11 @@ export function buildStateReviewPrompt(
     stateContext: BrainStateContext,
     roundNumbers: number[]
 ): string {
-    const allowed = getAllowedSignals(currentState)
+    let allowed = getAllowedSignals(currentState)
+    // developing 阶段：至少审查 3 个维度（has_issue 计数 < 3 时不允许 dev_complete）
+    if (currentState === 'developing' && stateContext.retries.developing < 3) {
+        allowed = allowed.filter(s => s !== 'dev_complete')
+    }
     const signalList = allowed
         .map(s => `${s}: ${SIGNAL_DESCRIPTIONS[s] || s}`)
         .join('\n')
@@ -207,10 +213,21 @@ export function parseSignalFromResponse(text: string): BrainSignal | null {
 function buildRetryInfo(state: BrainMachineState, ctx: BrainStateContext): string {
     const retryKey = state as keyof typeof ctx.retries
     const count = ctx.retries[retryKey]
+
+    // developing 阶段：显示审查维度进度
+    if (state === 'developing') {
+        const reviewed = count ?? 0
+        const minRequired = 3
+        if (reviewed < minRequired) {
+            return `\n<review_progress>已审查 ${reviewed}/${minRequired} 个维度，还需审查 ${minRequired - reviewed} 个不同维度才能进入代码审查阶段。</review_progress>\n`
+        }
+        return `\n<review_progress>已审查 ${reviewed} 个维度（已满足最低 ${minRequired} 个要求），可以返回 dev_complete 进入下一阶段。</review_progress>\n`
+    }
+
     if (!count || count === 0) return ''
 
     const maxRetries: Record<string, number> = {
-        developing: 8, reviewing: 10, linting: 3, committing: 2, deploying: 2,
+        reviewing: 10, linting: 3, committing: 2, deploying: 2,
     }
     const max = maxRetries[retryKey]
     if (!max) return ''
