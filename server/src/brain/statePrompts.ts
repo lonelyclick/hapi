@@ -64,20 +64,30 @@ const STATE_INSTRUCTIONS: Record<BrainMachineState, string> = {
 然后只做一个决定（只选一个 signal）：
 - 主 session 仍在输出/工具未结束/没有明确结论：返回 waiting
 - 主 session 在等用户决策：用 brain_send_message(type=info) 给出决策或一个关键确认问题，然后返回 waiting
-- 主 session 已停下且声称"已完成"：挑 1 个最高风险点（边界条件、错误处理、类型契约、安全/权限、可维护性等），用 brain_send_message(type=review) 推动它自检并回报结论，然后返回 has_issue
+- 主 session 已停下且声称"已完成"：挑 1 个最高风险点，用 brain_send_message(type=review) 推动它自检并回报结论，然后返回 has_issue
 - 你已经从至少 3 个不同维度推动过自检且结论都满意：返回 dev_complete
 
-重要：每次 has_issue 只聚焦 1 个维度，且每次选择不同的维度（不要重复之前已审查过的方向）。维度示例：边界条件、错误处理、类型契约、安全/权限、可维护性、性能、并发安全、向后兼容等。`,
+重要：每次 has_issue 只聚焦 1 个维度，且每次选择不同的维度（不要重复之前已审查过的方向）。
+维度示例：边界条件、错误处理、类型契约、安全/权限、可维护性、性能、并发安全、向后兼容等。
+如果改动涉及 CSS/样式/UI，必须包含「移动端适配」和「PC端兼容」这两个维度。`,
 
     reviewing: `你处于「代码审查」阶段：你不直接看代码，你的作用是推动主 session 自己做审查并回报结论。
 
 先调用 brain_summarize，确认主 session 是否已停下，以及它是否已经给出审查结论。
 
-然后只做一个决定（只选一个 signal）：
+你需要在这个阶段完成 3 轮推动（顺序执行，每轮只做 1 件事）：
+1. 第 1 轮：给出 1 个审查方向（只给方向名称，不要细化具体检查项），用 brain_send_message(type=review) 推动主 session 自查并回报结论，然后返回 waiting
+2. 第 2 轮：确认第 1 轮结论后，给出另 1 个不同的审查方向，同样只给方向不细化，推动自查，返回 waiting
+3. 第 3 轮：确认前 2 轮结论后，用 brain_send_message(type=review) 推动主 session 做一次完善度自检："检查当前改动是否有遗漏、是否有潜在 bug、是否有未处理的边界情况"，然后返回 waiting
+
+3 轮全部完成且结论都满意后，返回 no_issue。
+
+每轮只做一个决定（只选一个 signal）：
 - 主 session 仍在输出/工具未结束/没有明确停下：返回 waiting
-- 主 session 在等用户回答问题：用 brain_send_message(type=info) 给出回答/取舍（必要时只问 1 个关键确认问题），然后返回 ai_question
-- 它还没做有效审查或结论不充分：选择 1 个最高风险审查方向，用 brain_send_message(type=review) 推动它补齐并回报结论，然后返回 has_issue
-- 它回报“已检查无问题”且你也认为风险已收敛：返回 no_issue`,
+- 主 session 在等用户回答问题：用 brain_send_message(type=info) 给出回答/取舍，然后返回 ai_question
+- 你已推动但主 session 还没回报结论：返回 waiting
+- 3 轮推动全部完成且结论满意：返回 no_issue
+- 发现严重问题需要修改代码：返回 has_issue`,
 
     linting: `你处于「代码检查」阶段（lint/typecheck 等）。
 
