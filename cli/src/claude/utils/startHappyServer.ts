@@ -208,17 +208,23 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                 const summary = parts.join('\n\n')
                 logger.debug(`[hapiMCP] brain_summarize: returning summary, len=${summary.length}`)
 
+                // 附带主 session 的 thinking 状态（确定性信号，帮助 brain 判断主 session 是否已停下）
+                const isThinking = !!(sessionInfo as Record<string, unknown>).thinking
+                const thinkingStatus = isThinking
+                    ? '\n\n---\n🟢 主 session 状态: 仍在执行中 (thinking=true)，尚未停下'
+                    : '\n\n---\n🔴 主 session 状态: 已停下 (thinking=false)，等待新输入'
+
                 // 附带当前状态机信息（从 session metadata 或 brain session 获取）
                 let stateInfo = ''
                 try {
                     const brainSession = await api.getActiveBrainSession(mainSessionId)
                     if (brainSession?.currentState) {
-                        stateInfo = `\n\n---\n📊 当前状态机阶段: ${brainSession.currentState}`
+                        stateInfo = `\n📊 当前状态机阶段: ${brainSession.currentState}`
                     }
                 } catch { /* ignore */ }
 
                 return {
-                    content: [{ type: 'text' as const, text: summary + stateInfo }],
+                    content: [{ type: 'text' as const, text: summary + thinkingStatus + stateInfo }],
                     isError: false,
                 }
             } catch (error) {

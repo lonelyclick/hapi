@@ -220,6 +220,7 @@ export class AutoBrainService {
     private sseManager: SSEManager | null = null
     private syncingBrainIds: Set<string> = new Set()
     private brainToMainMap: Map<string, string> = new Map()
+    private waitingRejectCount: Map<string, number> = new Map() // brainSessionId → 连续 waiting 拒绝次数
     private unsubscribe: (() => void) | null = null
     constructor(engine: SyncEngine, brainStore: BrainStore) {
         this.engine = engine
@@ -528,7 +529,51 @@ export class AutoBrainService {
             const signal = parseSignalFromResponse(brainText)
             console.log('[BrainSync] Parsed signal from brain response:', signal, 'currentState:', brainSession.currentState)
 
+            // 兜底：brain 返回 waiting 但主 session 已经停下 (thinking=false) → 重新触发 review
+            // 防止 waiting 死锁：brain 误判主 session "还在继续"，但实际已停下且无人再唤醒
+            if (signal === 'waiting') {
+                const mainSessionObj = this.engine.getSession(mainSessionId)
+                const mainThinking = mainSessionObj?.thinking ?? false
+                const rejectCount = this.waitingRejectCount.get(brainSession.id) ?? 0
+                console.log('[BrainSync] Waiting signal check: mainSession thinking=', mainThinking, 'rejectCount=', rejectCount)
+                if (!mainThinking && rejectCount < 3) {
+                    this.waitingRejectCount.set(brainSession.id, rejectCount + 1)
+                    console.log('[BrainSync] Waiting rejected (#' + (rejectCount + 1) + '): main session is idle (thinking=false), re-triggering syncRounds')
+                    // 完成当前 execution，避免卡住
+                    await this.brainStore.completeBrainExecution(latestExecution.id, '[WAITING_REJECTED] Main session idle, re-triggering')
+                    // 广播 done（当前轮次结束）
+                    if (this.sseManager) {
+                        const mainSession = this.engine.getSession(mainSessionId)
+                        this.sseManager.broadcast({
+                            type: 'brain-sdk-progress',
+                            namespace: mainSession?.namespace,
+                            sessionId: mainSessionId,
+                            data: {
+                                brainSessionId: brainSession.id,
+                                progressType: 'done',
+                                flow: 'review',
+                                data: { status: 'completed', noMessage: true, currentState: brainSession.currentState }
+                            }
+                        } as unknown as SyncEvent)
+                    }
+                    // 重新触发 syncRounds，让 brain 再审一次（这次 brain_summarize 会看到 thinking=false）
+                    const refreshed = await this.brainStore.getActiveBrainSession(mainSessionId)
+                    if (refreshed) {
+                        await this.syncRounds(refreshed)
+                    }
+                    return
+                }
+                // 超过 3 次或 thinking=true → 放行 waiting，走正常状态机流程
+                if (rejectCount >= 3) {
+                    console.log('[BrainSync] Waiting reject limit reached (3), accepting waiting signal')
+                }
+            }
+
             if (signal) {
+                // 非 waiting 信号 → 重置连续 waiting 拒绝计数
+                if (signal !== 'waiting') {
+                    this.waitingRejectCount.delete(brainSession.id)
+                }
                 const result = sendSignal(brainSession.currentState, brainSession.stateContext, signal)
                 console.log('[BrainSync] State transition:', brainSession.currentState, '→', result.newState, 'changed:', result.changed)
 
