@@ -245,6 +245,7 @@ export function createCliRoutes(
                 data: {
                     brainSessionId: brainSession.id,
                     progressType: 'done',
+                    flow: 'review',
                     data: { status: 'completed', noMessage: true }
                 }
             } as unknown as SyncEvent)

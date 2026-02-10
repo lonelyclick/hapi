@@ -273,7 +273,6 @@ const STATE_LABEL_MAP: Record<string, string> = {
     developing: '开发中',
     reviewing: '审查',
     linting: '检查',
-    testing: '测试',
     committing: '提交',
     deploying: '部署',
     done: '完成',
@@ -393,9 +392,15 @@ export function SessionHeader(props: {
     const { data: graphData } = useQuery<BrainGraphData>({
         queryKey: ['brain-state-machine-graph'],
         queryFn: () => api.getBrainStateMachineGraph(),
-        enabled: isBrainSdkSession,
+        enabled: Boolean(isBrainSdkSession || brainSession || showStateMachineDialog),
         staleTime: 5 * 60 * 1000,
     })
+
+    const shouldShowStateMachine = Boolean(isBrainSdkSession || brainSession)
+    const currentBrainState = isBrainSdkSession ? selfBrainSession?.currentState : brainSession?.currentState
+    const currentBrainStateLabel = currentBrainState
+        ? (graphData?.nodes.find(n => n.id === currentBrainState)?.label ?? STATE_LABEL_MAP[currentBrainState] ?? currentBrainState)
+        : '状态机'
 
     const claudeAccountName = props.session.metadata?.claudeAccountName || null
     const claudeAccountDisplay = useMemo(() => {
@@ -613,8 +618,8 @@ export function SessionHeader(props: {
                                 }</span>
                             </button>
                         ) : null}
-                        {/* 状态机按钮 - Brain SDK session 显示 */}
-                        {isBrainSdkSession && (
+                        {/* 状态机按钮 - 主 session / Brain SDK session 都显示 */}
+                        {shouldShowStateMachine && (
                             <button
                                 type="button"
                                 onClick={() => setShowStateMachineDialog(true)}
@@ -622,9 +627,7 @@ export function SessionHeader(props: {
                                 title="State Machine"
                             >
                                 <StateMachineIcon />
-                                <span>{selfBrainSession?.currentState
-                                    ? (graphData?.nodes.find(n => n.id === selfBrainSession.currentState)?.label ?? STATE_LABEL_MAP[selfBrainSession.currentState] ?? selfBrainSession.currentState)
-                                    : '状态机'}</span>
+                                <span>{currentBrainStateLabel}</span>
                             </button>
                         )}
                         {/* Delete button - 只有创建者可见 */}
@@ -734,7 +737,7 @@ export function SessionHeader(props: {
                                     </button>
                                 ) : null}
                                 {/* 状态机 - Brain SDK session */}
-                                {isBrainSdkSession && (
+                                {shouldShowStateMachine && (
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -782,7 +785,7 @@ export function SessionHeader(props: {
                     </DialogHeader>
                     <div className="mt-2">
                         {graphData ? (
-                            <BrainStateMachineGraph currentState={selfBrainSession?.currentState} graphData={graphData} />
+                            <BrainStateMachineGraph currentState={currentBrainState} graphData={graphData} />
                         ) : (
                             <div className="text-sm text-[var(--app-hint)] text-center py-4">加载中...</div>
                         )}

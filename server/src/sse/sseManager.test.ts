@@ -28,6 +28,10 @@ describe('SSEManager namespace filtering', () => {
             sendHeartbeat: () => {}
         })
 
+        // subscribe() 会立即发送 online-users-changed；清空以只断言后续 broadcast 行为
+        receivedAlpha.length = 0
+        receivedBeta.length = 0
+
         manager.broadcast({ type: 'session-updated', sessionId: 's1', namespace: 'alpha' })
 
         expect(receivedAlpha).toHaveLength(1)
@@ -57,6 +61,9 @@ describe('SSEManager namespace filtering', () => {
             },
             sendHeartbeat: () => {}
         })
+
+        // subscribe() 会立即发送 online-users-changed；清空以只断言后续 broadcast 行为
+        received.length = 0
 
         manager.broadcast({ type: 'connection-changed', data: { status: 'connected' } })
 

@@ -688,8 +688,15 @@ export class SyncEngine {
 
         session.active = true
         session.activeAt = Math.max(session.activeAt, t)
-        session.thinking = Boolean(payload.thinking)
-        session.thinkingAt = t
+        // payload.thinking 是可选字段：未提供时不要覆盖已有 thinking 状态。
+        // 否则会把 session 误判为 thinking=false，导致 wasThinking 误触发（Brain/主 session 提前触发或不触发）。
+        if (payload.thinking !== undefined) {
+            session.thinking = payload.thinking
+            session.thinkingAt = t
+        } else {
+            // 仍然更新 thinkingAt 以反映最近一次心跳时间（但不改变 thinking 状态）
+            session.thinkingAt = t
+        }
         // Only update mode values from CLI heartbeat if server doesn't have authoritative values
         // This prevents CLI heartbeats with stale values from overwriting server-set values
         // (e.g., when Web UI just set a new mode via applySessionConfig but CLI hasn't synced yet)

@@ -432,8 +432,8 @@ export class AutoBrainService {
                     const refineSignal = parseSignalFromResponse(refineText)
                     console.log('[BrainSync] Refine signal:', refineSignal, 'currentState:', brainSession.currentState)
                     if (refineSignal) {
-                        // skip/waiting 等信号不需要显示消息
-                        refineNoMessage = refineSignal === 'skip' || refineSignal === 'waiting'
+                        // waiting 信号不需要显示消息
+                        refineNoMessage = refineSignal === 'waiting'
                         const result = sendSignal(brainSession.currentState, brainSession.stateContext, refineSignal)
                         console.log('[BrainSync] Refine state transition:', brainSession.currentState, '→', result.newState, 'changed:', result.changed)
                         refineNewState = result.newState
@@ -453,7 +453,7 @@ export class AutoBrainService {
                                     console.error('[BrainSync] Refine: failed to send done notification:', err)
                                 }
                             }
-                            // skip 后如果新状态需要立即行动，主动触发
+                            // 如果新状态需要立即行动，主动触发
                             if (needsImmediateAction(result.newState)) {
                                 console.log('[BrainSync] Refine: new state needs immediate action:', result.newState)
                                 const refreshed = await this.brainStore.getActiveBrainSession(mainSessionId)
@@ -482,6 +482,7 @@ export class AutoBrainService {
                         data: {
                             brainSessionId: brainSession.id,
                             progressType: 'done',
+                            flow: 'refine',
                             data: { status: 'completed', noMessage: refineNoMessage, currentState: refineNewState }
                         }
                     } as unknown as SyncEvent)
@@ -514,6 +515,7 @@ export class AutoBrainService {
                         data: {
                             brainSessionId: brainSession.id,
                             progressType: 'done',
+                            flow: 'review',
                             data: { status: 'completed', noMessage: true }
                         }
                     } as unknown as SyncEvent)
@@ -542,7 +544,7 @@ export class AutoBrainService {
                 console.log('[BrainSync] Execution completed:', latestExecution.id)
 
                 // SSE 广播 done 事件
-                const noIssues = signal === 'no_issue' || signal === 'dev_complete' || signal === 'lint_pass' || signal === 'test_pass' || signal === 'commit_ok' || signal === 'deploy_ok'
+                const noIssues = signal === 'no_issue' || signal === 'dev_complete' || signal === 'lint_pass' || signal === 'commit_ok' || signal === 'deploy_ok'
                 console.log('[BrainSync] Review done broadcast: signal=', signal, 'noMessage=', noIssues, 'newState=', result.newState, 'changed=', result.changed, 'brainId=', brainSession.id)
                 if (this.sseManager) {
                     const mainSession = this.engine.getSession(mainSessionId)
@@ -553,6 +555,7 @@ export class AutoBrainService {
                         data: {
                             brainSessionId: brainSession.id,
                             progressType: 'done',
+                            flow: 'review',
                             data: { status: 'completed', noMessage: noIssues, currentState: result.newState }
                         }
                     } as unknown as SyncEvent)
@@ -564,13 +567,12 @@ export class AutoBrainService {
                     try {
                         const brainDisplaySessionId = brainSession.brainSessionId
                         if (brainDisplaySessionId) {
-                            const doneMessage = signal === 'deploy_ok'
-                                ? '[发送者: Brain 流程管理]\n\n全部流程已完成（开发 → 审查 → 检查 → 测试 → 提交 → 部署），任务结束。'
-                                : signal === 'deploy_fail'
-                                    ? '[发送者: Brain 流程管理]\n\n部署失败，已达到重试上限，流程结束。请手动检查部署问题。'
-                                    : signal === 'test_fail'
-                                        ? '[发送者: Brain 流程管理]\n\n测试失败，已达到重试上限，流程结束。请手动检查测试问题。'
-                                        : '[发送者: Brain 流程管理]\n\n流程已完成，任务结束。'
+                            let doneMessage = '[发送者: Brain 流程管理]\n\n流程已完成，任务结束。'
+                            if (signal === 'deploy_ok') {
+                                doneMessage = '[发送者: Brain 流程管理]\n\n全部流程已完成（开发 → 审查 → 检查 → 提交 → 部署），任务结束。'
+                            } else if (signal === 'deploy_fail') {
+                                doneMessage = '[发送者: Brain 流程管理]\n\n部署失败，已达到重试上限，流程结束。请手动检查部署问题。'
+                            }
                             await this.engine.sendMessage(mainSessionId!, {
                                 text: doneMessage,
                                 sentFrom: 'brain-sdk-info'
@@ -582,7 +584,7 @@ export class AutoBrainService {
                     }
                 }
 
-                // 如果新状态需要立即行动（linting/testing/committing/deploying），
+                // 如果新状态需要立即行动（linting/committing/deploying），
                 // 主动再触发一轮，用新状态的 prompt push 主 session
                 if (result.changed && needsImmediateAction(result.newState)) {
                     console.log('[BrainSync] New state needs immediate action, triggering another review cycle for:', result.newState, 'from signal:', signal)
@@ -615,6 +617,7 @@ export class AutoBrainService {
                         data: {
                             brainSessionId: brainSession.id,
                             progressType: 'done',
+                            flow: 'review',
                             data: { status: 'completed', noMessage: noIssues }
                         }
                     } as unknown as SyncEvent)
@@ -645,6 +648,7 @@ export class AutoBrainService {
                             data: {
                                 brainSessionId: brainSession.id,
                                 progressType: 'done',
+                                flow: 'review',
                                 data: { status: 'completed', noMessage: true }
                             }
                         } as unknown as SyncEvent)
@@ -815,6 +819,7 @@ export class AutoBrainService {
                             data: {
                                 brainSessionId: brainId,
                                 progressType: 'done',
+                                flow: 'review',
                                 data: { status: 'completed', noMessage: true }
                             }
                         } as unknown as SyncEvent)
@@ -838,6 +843,7 @@ export class AutoBrainService {
                     data: {
                         brainSessionId: brainId,
                         progressType: 'done',
+                        flow: 'review',
                         data: { status: 'completed', noMessage: true }
                     }
                 } as unknown as SyncEvent)
@@ -886,6 +892,7 @@ export class AutoBrainService {
             data: {
                 brainSessionId: brainId,
                 progressType: 'syncing',
+                flow: 'review',
                 data: {}
             }
         } as unknown as SyncEvent)
@@ -973,6 +980,7 @@ export class AutoBrainService {
                 data: {
                     brainSessionId: brainId,
                     progressType: 'started',
+                    flow: 'review',
                     data: {}
                 }
             } as unknown as SyncEvent)
@@ -1016,6 +1024,7 @@ export class AutoBrainService {
                     data: {
                         brainSessionId: brainId,
                         progressType: 'done',
+                        flow: 'review',
                         data: { status: 'completed', noMessage: true }
                     }
                 } as unknown as SyncEvent)

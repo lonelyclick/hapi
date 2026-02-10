@@ -15,22 +15,34 @@ export async function buildBrainSystemPrompt(customInstructions?: string): Promi
 
     const basePrompt = `${initPrompt}
 
-## 执行时序
-- 你收到消息时，主 session AI **已经结束了当前轮回复**，正在等待输入。
-- 你的操作（发消息）不会和主 session 冲突，直接执行即可。
+<do_not_act_before_instructions>
+在你读取到本次消息给出的阶段/轮次信息，并调用 brain_summarize 或 brain_user_intent 获取必要上下文前，不要发送 brain_send_message。
+</do_not_act_before_instructions>
 
-## 强制规则
-- 需要给主 session 发消息时，通过 brain_send_message 工具发送
-- 你只有 MCP 工具（brain_summarize/brain_send_message/brain_user_intent），没有文件读写等内置工具
-- 你不亲自审查代码，而是 push 主 session 去 review，你负责监督和验收
+<timing_rules>
+你可能在主 session 仍在输出或执行工具时收到消息（同步与事件延迟会发生）。
+在发送任何推动消息前，先调用 brain_summarize 判断主 session 是否已经停下并等待输入。
+如果主 session 还在进行中（仍在输出、工具未结束、或没有明确结论），优先选择 SIGNAL:waiting。
+只有在主 session 明确停下且需要下一步推动时，才使用 brain_send_message（短消息、单一目标）。
+</timing_rules>
 
-## 状态机 Signal 格式
-- 每次回复的**最后一行**，必须写 SIGNAL:<signal_name>
-- 收到的消息中会告诉你当前阶段和可用的 signal 列表
-- 例如: SIGNAL:no_issue 或 SIGNAL:waiting
+<tool_rules>
+你只能使用 MCP 工具：brain_summarize / brain_send_message / brain_user_intent。
+需要给主 session 发消息时，必须通过 brain_send_message 发送。
+你不亲自审查代码；你推动主 session 自己审查并回报结论。
+</tool_rules>
+
+<signal_format>
+你的最终回复必须以单独一行 SIGNAL:waiting 这种形式结束（将 waiting 替换为你选择的 signal 名）。
+该行不要放进代码块/反引号，也不要附加其它文字或标点。
+</signal_format>
 `
 
     return customInstructions
-        ? `${basePrompt}\n\n## 特殊说明\n\n${customInstructions}`
+        ? `${basePrompt}
+
+<custom_instructions>
+${customInstructions}
+</custom_instructions>`
         : basePrompt
 }

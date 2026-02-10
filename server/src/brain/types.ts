@@ -55,7 +55,6 @@ export type BrainMachineState =
     | 'developing'
     | 'reviewing'
     | 'linting'
-    | 'testing'
     | 'committing'
     | 'deploying'
     | 'done'
@@ -68,8 +67,6 @@ export type BrainSignal =
     | 'ai_question'
     | 'lint_pass'
     | 'lint_fail'
-    | 'test_pass'
-    | 'test_fail'
     | 'commit_ok'
     | 'commit_fail'
     | 'deploy_ok'
@@ -84,7 +81,6 @@ export type BrainStateContext = {
         developing: number
         reviewing: number
         linting: number
-        testing: number
         committing: number
         deploying: number
     }
@@ -98,7 +94,6 @@ export const DEFAULT_STATE_CONTEXT: BrainStateContext = {
         developing: 0,
         reviewing: 0,
         linting: 0,
-        testing: 0,
         committing: 0,
         deploying: 0,
     }

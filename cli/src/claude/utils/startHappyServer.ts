@@ -258,7 +258,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
                             ? '[发送者: Brain 改进建议]'
                             : '[发送者: 用户 via Brain]'
 
-                    const suffix = '\n\n---\n⚠️ 只执行上述指令，完成后立即停下。不要自行推进下一步（如运行测试、提交代码、部署等），等待后续指令。'
+                    const suffix = '\n\n---\n⚠️ 只执行上述指令，完成后立即停下。不要自行推进下一步（如提交代码、部署等），等待后续指令。'
 
                     const fullMessage = `${prefix}\n\n${args.message}${suffix}`
                     logger.debug(`[hapiMCP] brain_send_message: type=${msgType}, prefix=${prefix}, msgLen=${args.message.length}, mainSessionId=${mainSessionId}`)

@@ -502,13 +502,29 @@ export class BrainStore implements IBrainStore {
                     developing: raw.retries?.developing ?? 0,
                     reviewing: raw.retries?.reviewing ?? 0,
                     linting: raw.retries?.linting ?? 0,
-                    testing: raw.retries?.testing ?? 0,
                     committing: raw.retries?.committing ?? 0,
                     deploying: raw.retries?.deploying ?? 0,
                 },
                 lastSignal: raw.lastSignal,
                 lastSignalDetail: raw.lastSignalDetail,
-                skipTarget: raw.skipTarget,
+            }
+        }
+
+        const rawState = row.current_state
+        let currentState: BrainMachineState = 'idle'
+        if (typeof rawState === 'string') {
+            if (rawState === 'testing') {
+                currentState = 'committing'
+            } else if (
+                rawState === 'idle' ||
+                rawState === 'developing' ||
+                rawState === 'reviewing' ||
+                rawState === 'linting' ||
+                rawState === 'committing' ||
+                rawState === 'deploying' ||
+                rawState === 'done'
+            ) {
+                currentState = rawState
             }
         }
 
@@ -522,7 +538,7 @@ export class BrainStore implements IBrainStore {
             status: row.status as BrainSessionStatus,
             contextSummary: row.context_summary as string,
             brainResult: row.review_result as string | undefined,
-            currentState: (row.current_state as BrainMachineState) ?? 'idle',
+            currentState,
             stateContext,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at),

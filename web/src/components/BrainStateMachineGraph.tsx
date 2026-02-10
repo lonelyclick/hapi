@@ -34,10 +34,10 @@ function getEdgePoints(
     const s = Math.min(sx, sy)
 
     return {
-        x1: a.cx + Math.cos(angle) * Math.min(s, hw),
-        y1: a.cy + Math.sin(angle) * Math.min(s, hh),
-        x2: b.cx - Math.cos(angle) * Math.min(s, hw),
-        y2: b.cy - Math.sin(angle) * Math.min(s, hh),
+        x1: a.cx + Math.cos(angle) * s,
+        y1: a.cy + Math.sin(angle) * s,
+        x2: b.cx - Math.cos(angle) * s,
+        y2: b.cy - Math.sin(angle) * s,
     }
 }
 

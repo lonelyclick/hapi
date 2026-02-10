@@ -31,6 +31,14 @@ const MODEL_MODE_VALUES = new Set([
     'gpt-5.2'
 ])
 
+type BrainRefineFlow = 'refine' | 'review'
+
+type BrainRefineState = {
+    isRefining: boolean
+    noMessage: boolean
+    flow?: BrainRefineFlow
+}
+
 function coerceModelMode(value: string | null | undefined): ModelMode | undefined {
     if (!value) {
         return undefined
@@ -78,6 +86,7 @@ export function SessionChat(props: {
     const [brainBusy, setBrainBusy] = useState(false)
     const brainReviewEventsRef = useRef<AgentEventBlock[]>([])
     const [brainReviewEventsVersion, setBrainReviewEventsVersion] = useState(0)
+    const lastBrainRefineStateRef = useRef<BrainRefineState | null>(null)
     const pendingMessageRef = useRef<string | null>(null)
     const composerSetTextRef = useRef<((text: string) => void) | null>(null)
 
@@ -89,6 +98,7 @@ export function SessionChat(props: {
         setBrainBusy(false)
         brainReviewEventsRef.current = []
         setBrainReviewEventsVersion(0)
+        lastBrainRefineStateRef.current = null
         pendingMessageRef.current = null
     }, [props.session.id])
 
@@ -143,8 +153,12 @@ export function SessionChat(props: {
     useEffect(() => {
         const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
             if (event.type === 'updated' && event.query.queryKey[0] === 'brain-refine' && event.query.queryKey[1] === props.session.id) {
-                const data = queryClient.getQueryData<{ isRefining: boolean; noMessage: boolean }>(queryKeys.brainRefine(props.session.id))
-                if (data && !data.isRefining && data.noMessage) {
+                const data = queryClient.getQueryData<BrainRefineState>(queryKeys.brainRefine(props.session.id))
+                const previous = lastBrainRefineStateRef.current
+                lastBrainRefineStateRef.current = data ?? null
+                // 只在 noMessage 从 false/undefined → true 时插入一次“Brain: 一切正常”，避免重复显示。
+                // 同时仅对 review 流程生效：refine 流程（用户消息转发）即使 noMessage=true 也不应插入“一切正常”。
+                if (data && data.flow !== 'refine' && !data.isRefining && data.noMessage && previous?.noMessage !== true) {
                     const eventBlock: AgentEventBlock = {
                         kind: 'agent-event',
                         id: `brain-review-${Date.now()}`,

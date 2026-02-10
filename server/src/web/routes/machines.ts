@@ -285,6 +285,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                                     data: {
                                         brainSessionId,
                                         progressType: 'brain-ready',
+                                        flow: 'review',
                                         data: {}
                                     }
                                 } as unknown as import('../../sync/syncEngine.js').SyncEvent)

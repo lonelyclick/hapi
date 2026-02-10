@@ -2,7 +2,7 @@
  * Brain 决策状态机
  *
  * 使用 XState v5 定义 Brain 的工作流程：
- * idle → developing → reviewing → linting → testing → committing → deploying → done
+ * idle → developing → reviewing → linting → committing → deploying → done
  *
  * 每个状态内部由 LLM 判断并返回信号（signal），状态机根据信号驱动转换。
  * 状态机定义是全局通用的，每个 brain session 只持久化 currentState + stateContext。
@@ -17,7 +17,6 @@ const MAX_RETRIES = {
     developing: 8,
     reviewing: 10,
     linting: 3,
-    testing: 5,
     committing: 2,
     deploying: 2,
 } as const
@@ -32,7 +31,6 @@ export const brainMachine = setup({
         canRetryDeveloping: ({ context }) => context.retries.developing < MAX_RETRIES.developing,
         canRetryReviewing: ({ context }) => context.retries.reviewing < MAX_RETRIES.reviewing,
         canRetryLinting: ({ context }) => context.retries.linting < MAX_RETRIES.linting,
-        canRetryTesting: ({ context }) => context.retries.testing < MAX_RETRIES.testing,
         canRetryCommitting: ({ context }) => context.retries.committing < MAX_RETRIES.committing,
         canRetryDeploying: ({ context }) => context.retries.deploying < MAX_RETRIES.deploying,
     },
@@ -40,7 +38,6 @@ export const brainMachine = setup({
         incrementDevRetry: ({ context }) => { context.retries.developing++ },
         incrementReviewRetry: ({ context }) => { context.retries.reviewing++ },
         incrementLintRetry: ({ context }) => { context.retries.linting++ },
-        incrementTestRetry: ({ context }) => { context.retries.testing++ },
         incrementCommitRetry: ({ context }) => { context.retries.committing++ },
         incrementDeployRetry: ({ context }) => { context.retries.deploying++ },
         recordSignal: ({ context, event }) => {
@@ -48,7 +45,7 @@ export const brainMachine = setup({
             context.lastSignalDetail = event.detail
         },
         resetRetries: ({ context }) => {
-            context.retries = { developing: 0, reviewing: 0, linting: 0, testing: 0, committing: 0, deploying: 0 }
+            context.retries = { developing: 0, reviewing: 0, linting: 0, committing: 0, deploying: 0 }
         },
     },
 }).createMachine({
@@ -114,12 +111,16 @@ export const brainMachine = setup({
                     target: 'developing',
                     actions: ['incrementReviewRetry', 'recordSignal'],
                 },
+                waiting: {
+                    target: 'reviewing',
+                    actions: 'recordSignal',
+                },
             },
         },
         linting: {
             on: {
                 lint_pass: {
-                    target: 'testing',
+                    target: 'committing',
                     actions: 'recordSignal',
                 },
                 lint_fail: [
@@ -129,38 +130,14 @@ export const brainMachine = setup({
                         actions: ['incrementLintRetry', 'recordSignal'],
                     },
                     {
-                        // 超过重试上限，跳过 lint 进入 testing
-                        target: 'testing',
+                        // 超过重试上限，跳过 lint 进入 committing
+                        target: 'committing',
                         actions: 'recordSignal',
                     },
                 ],
                 // waiting: 已发 lint 指令，等主 session 跑完
                 waiting: {
                     target: 'linting',
-                    actions: 'recordSignal',
-                },
-            },
-        },
-        testing: {
-            on: {
-                test_pass: {
-                    target: 'committing',
-                    actions: 'recordSignal',
-                },
-                test_fail: [
-                    {
-                        guard: 'canRetryTesting',
-                        target: 'developing',
-                        actions: ['incrementTestRetry', 'recordSignal'],
-                    },
-                    {
-                        // 超过重试上限，标记 done（附带测试失败警告）
-                        target: 'done',
-                        actions: 'recordSignal',
-                    },
-                ],
-                waiting: {
-                    target: 'testing',
                     actions: 'recordSignal',
                 },
             },
@@ -295,9 +272,8 @@ export function getAllowedSignals(state: BrainMachineState): BrainSignal[] {
     const signalMap: Record<BrainMachineState, BrainSignal[]> = {
         idle: ['ai_reply_done'],
         developing: ['dev_complete', 'has_issue', 'waiting'],
-        reviewing: ['has_issue', 'no_issue', 'ai_question'],
+        reviewing: ['has_issue', 'no_issue', 'ai_question', 'waiting'],
         linting: ['lint_pass', 'lint_fail', 'waiting'],
-        testing: ['test_pass', 'test_fail', 'waiting'],
         committing: ['commit_ok', 'commit_fail', 'waiting'],
         deploying: ['deploy_ok', 'deploy_fail', 'waiting'],
         done: ['ai_reply_done'],
@@ -310,8 +286,8 @@ export function getAllowedSignals(state: BrainMachineState): BrainSignal[] {
  * 而不是等下一次主 session 回复
  */
 export function needsImmediateAction(state: BrainMachineState): boolean {
-    // reviewing/linting/testing/committing/deploying 需要 Brain 主动 push 指令
-    const result = ['reviewing', 'linting', 'testing', 'committing', 'deploying'].includes(state)
+    // reviewing/linting/committing/deploying 需要 Brain 主动 push 指令
+    const result = ['reviewing', 'linting', 'committing', 'deploying'].includes(state)
     console.log('[StateMachine] needsImmediateAction:', state, '→', result)
     return result
 }
@@ -362,7 +338,6 @@ const STATE_LABELS: Record<BrainMachineState, string> = {
     developing: '开发中',
     reviewing: '代码审查',
     linting: '代码检查',
-    testing: '测试',
     committing: '提交',
     deploying: '部署',
     done: '完成',
@@ -374,9 +349,8 @@ const NODE_POSITIONS: Record<BrainMachineState, { x: number; y: number }> = {
     developing: { x: 230, y: 60 },
     reviewing:  { x: 380, y: 60 },
     linting:    { x: 530, y: 60 },
-    testing:    { x: 530, y: 170 },
-    committing: { x: 380, y: 170 },
-    deploying:  { x: 230, y: 170 },
+    committing: { x: 530, y: 170 },
+    deploying:  { x: 305, y: 170 },
     done:       { x: 80,  y: 170 },
 }
 
@@ -462,6 +436,6 @@ export function getGraphData(): GraphData {
     return {
         nodes,
         edges,
-        mainFlow: ['idle', 'developing', 'reviewing', 'linting', 'testing', 'committing', 'deploying', 'done'],
+        mainFlow: ['idle', 'developing', 'reviewing', 'linting', 'committing', 'deploying', 'done'],
     }
 }

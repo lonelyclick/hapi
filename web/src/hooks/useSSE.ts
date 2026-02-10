@@ -9,6 +9,15 @@ function isObject(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object'
 }
 
+type BrainRefineFlow = 'refine' | 'review'
+
+type BrainRefineState = {
+    isRefining: boolean
+    noMessage: boolean
+    brainInitializing?: boolean
+    flow?: BrainRefineFlow
+}
+
 type SSESubscription = {
     all?: boolean
     sessionId?: string
@@ -256,10 +265,28 @@ export function useSSE(options: {
                     const prev = queryClient.getQueryData<{ entries: ProgressEntry[]; isActive: boolean }>(key)
                     const entries = prev?.entries ?? []
 
+                    const refineKey = queryKeys.brainRefine(event.sessionId)
+                    const prevRefine = queryClient.getQueryData<BrainRefineState>(refineKey)
+
+                    const inferredFlow: BrainRefineFlow | undefined = (() => {
+                        if (progressData.progressType === 'refine-started') return 'refine'
+                        const hint = (progressData as { flow?: unknown }).flow
+                        if (hint === 'refine') return 'refine'
+                        if (hint === 'review') return 'review'
+                        return undefined
+                    })()
+
                     if (progressData.progressType === 'started') {
                         queryClient.setQueryData(key, {
                             entries,
                             isActive: true
+                        })
+                        // started 也表示 Brain 正在处理（例如 reviewing/linting 等阶段的即时 action）
+                        queryClient.setQueryData(refineKey, {
+                            ...(prevRefine ?? { isRefining: false, noMessage: false }),
+                            isRefining: true,
+                            noMessage: false,
+                            flow: inferredFlow ?? 'review'
                         })
                     } else if (progressData.progressType === 'done') {
                         queryClient.setQueryData(key, {
@@ -280,15 +307,25 @@ export function useSSE(options: {
                     // Brain 初始化完成，刷新 brain session 查询并清除 brainInitializing 状态
                     if (progressData.progressType === 'brain-ready') {
                         void queryClient.invalidateQueries({ queryKey: ['brain-active-session', event.sessionId] })
-                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: false, noMessage: false, brainInitializing: false })
+                        queryClient.setQueryData(refineKey, { isRefining: false, noMessage: false, brainInitializing: false, flow: inferredFlow })
                     }
 
                     // Brain refine/syncing loading 状态（主 session 侧）
                     if (progressData.progressType === 'refine-started' || progressData.progressType === 'syncing') {
-                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: true, noMessage: false })
+                        queryClient.setQueryData(refineKey, {
+                            ...(prevRefine ?? { isRefining: false, noMessage: false }),
+                            isRefining: true,
+                            noMessage: false,
+                            flow: inferredFlow ?? (progressData.progressType === 'refine-started' ? 'refine' : 'review')
+                        })
                     } else if (progressData.progressType === 'done') {
                         const noMessage = !!(progressData.data as Record<string, unknown> | undefined)?.noMessage
-                        queryClient.setQueryData(queryKeys.brainRefine(event.sessionId), { isRefining: false, noMessage })
+                        queryClient.setQueryData(refineKey, {
+                            ...(prevRefine ?? { isRefining: false, noMessage: false }),
+                            isRefining: false,
+                            noMessage,
+                            flow: inferredFlow ?? prevRefine?.flow
+                        })
                     }
                 }
             }

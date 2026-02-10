@@ -113,6 +113,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null, sto
                     data: {
                         brainSessionId: activeBrain.id,
                         progressType: 'refine-started',
+                        flow: 'refine',
                         data: {}
                     }
                 } as unknown as import('../../sync/syncEngine.js').SyncEvent)
