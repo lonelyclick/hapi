@@ -532,6 +532,11 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
                 args: ['run', '/home/guang/happy/yoho-memory/src/mcp/stdio.ts'],
                 cwd: '/home/guang/happy/yoho-memory',
             },
+            'yoho-credentials': {
+                command: 'bun',
+                args: ['run', '/home/guang/happy/yoho-task-v2/mcp/credentials-server/index.ts'],
+                cwd: '/home/guang/happy/yoho-task-v2/mcp/credentials-server',
+            },
         },
         session,
         claudeEnvVars: options.claudeEnvVars,

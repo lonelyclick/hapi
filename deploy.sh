@@ -30,17 +30,17 @@ if [[ "$MACMINO_ONLY" == "true" ]]; then
     echo "=== Syncing source files to macmini..."
     sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 'mkdir -p ~/softwares/hapi'
 
-    # 同步修改后的源文件
+    # 同步源文件到 macmini
     rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
         --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
-        --exclude='.git' --exclude='cli/test-fixtures' --exclude='.cache' \
-        cli/src/daemon/run.ts cli/src/persistence.ts \
+        --exclude='.git' --exclude='test-fixtures' --exclude='.cache' \
+        cli/src/ \
         guang@192.168.0.236:~/softwares/hapi/cli/src/ 2>/dev/null || true
 
     rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
         --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
-        --exclude='.git' --exclude='cli/test-fixtures' --exclude='.cache' \
-        server/src/store/ \
+        --exclude='.git' --exclude='.cache' \
+        server/src/ \
         guang@192.168.0.236:~/softwares/hapi/server/src/ 2>/dev/null || true
 
     # 在 macmini 上重新构建 daemon
@@ -133,17 +133,17 @@ if [[ "$BUILD_DAEMON" == "true" ]]; then
     echo "=== Deploying daemon to macmini..."
     sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 'mkdir -p ~/softwares/hapi'
 
-    # 同步修改后的源文件
+    # 同步源文件到 macmini
     rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
         --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
-        --exclude='.git' --exclude='cli/test-fixtures' --exclude='.cache' \
-        cli/src/daemon/run.ts cli/src/persistence.ts \
+        --exclude='.git' --exclude='test-fixtures' --exclude='.cache' \
+        cli/src/ \
         guang@192.168.0.236:~/softwares/hapi/cli/src/ 2>/dev/null || true
 
     rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
         --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
-        --exclude='.git' --exclude='cli/test-fixtures' --exclude='.cache' \
-        server/src/store/ \
+        --exclude='.git' --exclude='.cache' \
+        server/src/ \
         guang@192.168.0.236:~/softwares/hapi/server/src/ 2>/dev/null || true
 
     # 在 macmini 上重新构建 daemon
