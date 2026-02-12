@@ -66,10 +66,9 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
     } else {
         // 普通 session（无 brain）
         lines.push('2) 项目上下文')
-        lines.push('- 开始工作前，先从当前工作目录往下级目录递归查找 .yoho-project.yaml 文件')
-        lines.push('- 找到后读取其内容，基于其中的项目信息（名称、技术栈、目录结构、模块说明等）理解项目全貌')
-        lines.push('- 后续工作应基于该文件提供的上下文进行')
-        lines.push('- 如果在工作过程中发现 .yoho-project.yaml 的信息有误或过时，应直接修正该文件')
+        lines.push('- 开始工作前，先调用 recall 工具查询当前项目的信息（技术栈、目录结构、部署方式等）')
+        lines.push('- 工作过程中遇到不确定的公司/项目/业务知识时，随时调用 recall 查询')
+        lines.push('- 当对话中产生了新的有价值的技术知识或决策时，主动调用 remember 保存')
         lines.push('')
     }
 

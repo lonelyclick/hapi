@@ -11,12 +11,12 @@ import { systemPrompt } from "./utils/systemPrompt";
 import { PermissionResult } from "./sdk/types";
 import { buildMessageContent } from "./utils/imageMessage";
 
-// Timeout for waiting on Claude API response (3 minutes)
-const THINKING_TIMEOUT_MS = 3 * 60 * 1000;
+// Timeout for waiting on Claude API response (10 minutes)
+const THINKING_TIMEOUT_MS = 10 * 60 * 1000;
 
 export class ThinkingTimeoutError extends Error {
     constructor() {
-        super('Claude API response timed out after 3 minutes of no activity');
+        super('Claude API response timed out after 10 minutes of no activity');
         this.name = 'ThinkingTimeoutError';
     }
 }

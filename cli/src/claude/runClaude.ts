@@ -526,7 +526,11 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             'hapi': {
                 type: 'http' as const,
                 url: happyServer.url,
-            }
+            },
+            'yoho-memory': {
+                command: 'bun',
+                args: ['run', '/home/guang/happy/yoho-memory/src/mcp/stdio.ts'],
+            },
         },
         session,
         claudeEnvVars: options.claudeEnvVars,
