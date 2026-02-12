@@ -530,6 +530,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             'yoho-memory': {
                 command: 'bun',
                 args: ['run', '/home/guang/happy/yoho-memory/src/mcp/stdio.ts'],
+                cwd: '/home/guang/happy/yoho-memory',
             },
         },
         session,
