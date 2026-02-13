@@ -1,6 +1,7 @@
 import { ComposerPrimitive, useAssistantApi, useAssistantState } from '@assistant-ui/react'
 import {
     type ChangeEvent as ReactChangeEvent,
+    type ClipboardEvent as ReactClipboardEvent,
     type CSSProperties as ReactCSSProperties,
     type KeyboardEvent as ReactKeyboardEvent,
     type PointerEvent as ReactPointerEvent,
@@ -1011,13 +1012,7 @@ export function HappyComposer(props: {
         fileInputRef.current?.click()
     }, [])
 
-    const handleImageChange = useCallback(async (e: ReactChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
-
-        // Reset input for next selection
-        e.target.value = ''
-
+    const uploadImageFile = useCallback(async (file: File) => {
         // Check max images limit
         if (uploadedImages.length >= MAX_IMAGES) {
             haptic('error')
@@ -1057,9 +1052,10 @@ export function HappyComposer(props: {
             // Extract base64 content (remove data URL prefix)
             const base64Content = dataUrl.split(',')[1]
             const mimeType = file.type || 'application/octet-stream'
+            const filename = file.name || 'pasted-image.png'
 
             // Upload to server
-            const result = await apiClient.uploadImage(sessionId, file.name, base64Content, mimeType)
+            const result = await apiClient.uploadImage(sessionId, filename, base64Content, mimeType)
 
             if (result.success && result.path) {
                 haptic('success')
@@ -1076,6 +1072,32 @@ export function HappyComposer(props: {
             setIsUploadingImage(false)
         }
     }, [apiClient, sessionId, uploadedImages.length, haptic, MAX_IMAGE_BYTES])
+
+    const handleImageChange = useCallback(async (e: ReactChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        // Reset input for next selection
+        e.target.value = ''
+
+        await uploadImageFile(file)
+    }, [uploadImageFile])
+
+    const handlePaste = useCallback((e: ReactClipboardEvent<HTMLTextAreaElement>) => {
+        const items = e.clipboardData?.items
+        if (!items) return
+
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault()
+                const file = item.getAsFile()
+                if (file) {
+                    uploadImageFile(file)
+                }
+                return
+            }
+        }
+    }, [uploadImageFile])
 
     const handleFileChange = useCallback(async (e: ReactChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -1805,6 +1827,7 @@ export function HappyComposer(props: {
                                 onChange={handleChange}
                                 onSelect={handleSelect}
                                 onKeyDown={handleKeyDown}
+                                onPaste={handlePaste}
                                 onSubmit={handleSubmit}
                                 className="flex-1 resize-none bg-transparent text-sm leading-snug text-[var(--app-fg)] placeholder-[var(--app-hint)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                             />
