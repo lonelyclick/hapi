@@ -615,6 +615,8 @@ export function createSessionsRoutes(
         // Keycloak users (namespace='default') see only their own sessions (created_by matches their email)
         // CLI users (with custom namespace) see only sessions in their namespace
         const isKeycloakUser = namespace === 'default'
+        // Service accounts (e.g. OpenClaw plugin) can see all sessions
+        const isServiceAccount = email?.startsWith('service-account-') ?? false
 
         // Get sessions from database
         let storedSessions: StoredSession[]
@@ -630,7 +632,7 @@ export function createSessionsRoutes(
         // 用于标记 session 来自哪个用户（如果来自开启了 shareAllSessions 的其他用户）
         const sessionOwnerMap = new Map<string, string>()
 
-        if (isKeycloakUser && email) {
+        if (isKeycloakUser && email && !isServiceAccount) {
             // Keycloak用户看到：
             // 1) 自己创建的 session
             // 2) 被共享给自己的 session
