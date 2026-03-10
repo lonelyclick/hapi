@@ -25,7 +25,7 @@ export function createEventsRoutes(
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
-    app.get('/events', (c) => {
+    app.get('/events', async (c) => {
         const manager = getSseManager()
         if (!manager) {
             return c.json({ error: 'Not connected' }, 503)
@@ -48,7 +48,8 @@ export function createEventsRoutes(
                 return c.json({ error: 'Not connected' }, 503)
             }
             if (sessionId) {
-                const session = engine.getSession(sessionId)
+                // Try memory first, then fallback to database (handles sessions not yet loaded into memory)
+                const session = await engine.getOrRefreshSession(sessionId)
                 if (!session) {
                     return c.json({ error: 'Session not found' }, 404)
                 }

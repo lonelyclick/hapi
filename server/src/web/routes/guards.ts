@@ -50,7 +50,8 @@ export async function requireSessionWithShareCheck(
 ): Promise<Session | Response> {
     const namespace = c.get('namespace')
     const email = c.get('email')
-    const session = engine.getSession(sessionId)
+    // Try memory first, then fallback to database (handles sessions not yet loaded into memory)
+    const session = await engine.getOrRefreshSession(sessionId)
 
     if (!session) {
         return c.json({ error: 'Session not found' }, 404)

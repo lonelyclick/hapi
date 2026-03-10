@@ -448,6 +448,15 @@ export class SyncEngine {
         return this.sessions.get(sessionId)
     }
 
+    /**
+     * Get session from memory, falling back to database if not found.
+     * This ensures sessions that exist in DB but haven't been loaded into memory
+     * (e.g. after server restart) are still accessible via API.
+     */
+    async getOrRefreshSession(sessionId: string): Promise<Session | undefined> {
+        return this.sessions.get(sessionId) ?? await this.refreshSession(sessionId) ?? undefined
+    }
+
     getSessionByNamespace(sessionId: string, namespace: string): Session | undefined {
         const session = this.sessions.get(sessionId)
         if (!session || session.namespace !== namespace) {
