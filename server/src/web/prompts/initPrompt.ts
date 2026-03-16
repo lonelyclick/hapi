@@ -75,10 +75,10 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
         lines.push('- **[强制] 每轮对话结束前，你 MUST 回顾本轮是否产生了值得保存的知识（新决策、架构变更、bug 根因、配置变更、API 细节、部署流程等）。如有，必须立即调用 remember 保存，绝对不要等用户要求。忘记保存 = 知识永久丢失。这是不可违背的规则。**')
         lines.push('')
         lines.push('4) Playbook（经验沉淀与检查清单）— 不可违背')
-        lines.push('- [强制] 每轮对话完成用户请求后、回复用户之前，MUST 调用 `get_playbook` 获取本轮改动对应场景的检查清单。不调用 get_playbook 就结束 = 违规。')
+        lines.push('- [强制] 每轮对话收到用户消息后，第一步 MUST 调用 `learn_playbook`（异步，不等待结果），将用户反馈中暴露的检查盲区、纠正的方向、补充的需求等沉淀回 playbook。每轮都要调用，用户的每条消息都是 playbook 的学习素材。')
+        lines.push('- [强制] 完成本轮工作后、回复用户之前，MUST 调用 `get_playbook` 获取本轮改动对应场景的检查清单。不调用 get_playbook 就结束 = 违规。')
         lines.push('- [强制] 拿到检查清单后，MUST 逐项用工具实际验证（读代码确认、运行命令测试、检查文件等）。发现未通过的项，立即修复代码，修复后重新验证直到通过。全部通过后才能继续下一步。')
         lines.push('- [强制] 严禁只在回复文本中"口头过一遍"清单就结束。每一项都必须有对应的工具调用（Read/Grep/Bash 等）作为验证证据。')
-        lines.push('- [强制] 每轮对话结束时，MUST 调用 `learn_playbook` 将本轮工作中的经验教训沉淀回 playbook（异步调用，不等待结果）。包括但不限于：踩到的坑、发现的边界条件、用户反馈暴露的检查盲区、值得复用的解决模式等。每轮都要调用，不是只在出问题时才调用。')
         lines.push('')
     }
 
