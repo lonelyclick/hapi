@@ -324,7 +324,7 @@ export const knownTools: Record<string, {
             }
             return question.length > 0 ? truncate(question, 120) : null
         },
-        minimal: true
+        minimal: false
     },
     ask_user_question: {
         icon: () => <QuestionIcon className={DEFAULT_ICON_CLASS} />,
@@ -354,7 +354,7 @@ export const knownTools: Record<string, {
             }
             return question.length > 0 ? truncate(question, 120) : null
         },
-        minimal: true
+        minimal: false
     }
 }
 
