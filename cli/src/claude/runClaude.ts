@@ -280,7 +280,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     let currentCustomSystemPrompt: string | undefined = undefined; // Track current custom system prompt
     let currentAppendSystemPrompt: string | undefined = undefined; // Track current append system prompt
     let currentAllowedTools: string[] | undefined = undefined; // Track current allowed tools
-    let currentDisallowedTools: string[] | undefined = undefined; // Track current disallowed tools
+    let currentDisallowedTools: string[] | undefined = sessionSource === 'openclaw' ? ['AskUserQuestion'] : undefined;
 
     const syncSessionModes = () => {
         const sessionInstance = currentSessionRef.current;
