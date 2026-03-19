@@ -141,6 +141,10 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     let ongoingToolCalls = new Map<string, { parentToolCallId: string | null }>();
     let titleInstructionPending = true;
 
+    // Throttle tool_progress messages to avoid flooding the server
+    const toolProgressLastSent = new Map<string, number>();
+    const TOOL_PROGRESS_THROTTLE_MS = 2000;
+
     const appendTitleInstructionIfNeeded = (messageText: string): string => {
         if (!titleInstructionPending) {
             return messageText;
@@ -157,6 +161,16 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     };
 
     function onMessage(message: SDKMessage) {
+
+        // Throttle tool_progress to max 1 per 2s per tool_use_id
+        if (message.type === 'tool_progress') {
+            const toolUseId = (message as any).tool_use_id as string | undefined
+            if (toolUseId) {
+                const last = toolProgressLastSent.get(toolUseId) ?? 0
+                if (Date.now() - last < TOOL_PROGRESS_THROTTLE_MS) return
+                toolProgressLastSent.set(toolUseId, Date.now())
+            }
+        }
 
         // Write to message log
         formatClaudeMessageForInk(message, messageBuffer);

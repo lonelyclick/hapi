@@ -253,20 +253,165 @@ function normalizeAgentRecord(
         if (data.type === 'user') {
             return normalizeUserOutput(messageId, localId, createdAt, data, meta)
         }
-        if (data.type === 'system' && data.subtype === 'turn_duration') {
-            return {
-                id: messageId,
-                localId,
-                createdAt,
-                role: 'event',
-                content: {
-                    type: 'turn-duration',
-                    durationMs: asNumber(data.durationMs) ?? 0
-                },
-                isSidechain: false,
-                meta
+        if (data.type === 'system') {
+            const subtype = asString(data.subtype)
+
+            if (subtype === 'turn_duration') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'turn-duration',
+                        durationMs: asNumber(data.durationMs) ?? 0
+                    },
+                    isSidechain: false,
+                    meta
+                }
             }
+
+            if (subtype === 'task_notification') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'task-notification',
+                        taskId: asString(data.task_id) ?? '',
+                        status: asString(data.status) ?? '',
+                        summary: asString(data.summary) ?? asString(data.description) ?? ''
+                    } as AgentEvent,
+                    isSidechain: false,
+                    meta
+                }
+            }
+
+            if (subtype === 'task_started') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'task-started',
+                        taskId: asString(data.task_id) ?? '',
+                        description: asString(data.description) ?? ''
+                    } as AgentEvent,
+                    isSidechain: false,
+                    meta
+                }
+            }
+
+            if (subtype === 'task_progress') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'task-progress',
+                        taskId: asString(data.task_id) ?? '',
+                        description: asString(data.description) ?? '',
+                        lastToolName: asString(data.last_tool_name) ?? undefined
+                    } as AgentEvent,
+                    isSidechain: false,
+                    meta
+                }
+            }
+
+            if (subtype === 'compact_boundary') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: { type: 'compact-boundary' } as AgentEvent,
+                    isSidechain: false,
+                    meta
+                }
+            }
+
+            if (subtype === 'status') {
+                const status = asString(data.status)
+                if (status === 'compacting') {
+                    return {
+                        id: messageId,
+                        localId,
+                        createdAt,
+                        role: 'event',
+                        content: { type: 'status', status: 'compacting' } as AgentEvent,
+                        isSidechain: false,
+                        meta
+                    }
+                }
+                return null
+            }
+
+            if (subtype === 'hook_started' || subtype === 'hook_progress' || subtype === 'hook_response') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'hook-event',
+                        subtype: subtype,
+                        hookName: asString(data.hook_name) ?? '',
+                        hookEvent: asString(data.hook_event) ?? '',
+                        output: asString(data.output) ?? undefined
+                    } as AgentEvent,
+                    isSidechain: false,
+                    meta
+                }
+            }
+
+            if (subtype === 'api_retry') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'api-retry',
+                        attempt: asNumber(data.attempt) ?? 1,
+                        maxRetries: asNumber(data.max_retries) ?? undefined,
+                        retryDelayMs: asNumber(data.retry_delay_ms) ?? undefined,
+                        error: asString(data.error) ?? undefined
+                    } as AgentEvent,
+                    isSidechain: false,
+                    meta
+                }
+            }
+
+            if (subtype === 'api_error') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'api-retry',
+                        attempt: asNumber(data.retryAttempt) ?? 1,
+                        maxRetries: asNumber(data.maxRetries) ?? undefined,
+                        retryDelayMs: asNumber(data.retryInMs) ?? undefined,
+                        error: asString(data.level) ?? undefined
+                    } as AgentEvent,
+                    isSidechain: false,
+                    meta
+                }
+            }
+
+            // Silently ignore: files_persisted, init (shouldn't arrive but just in case)
+            if (subtype === 'files_persisted' || subtype === 'init') {
+                return null
+            }
+
+            // Unknown system subtype — skip
+            return null
         }
+
         if (data.type === 'summary' && typeof data.summary === 'string') {
             return {
                 id: messageId,
@@ -278,6 +423,200 @@ function normalizeAgentRecord(
                 meta
             }
         }
+
+        // --- New SDK message types (non-system) ---
+
+        if (data.type === 'result') {
+            const cost = asNumber(data.total_cost_usd)
+            const duration = asNumber(data.duration_ms)
+            const turns = asNumber(data.num_turns)
+            if (cost === null && duration === null && turns === null) return null
+            return {
+                id: messageId,
+                localId,
+                createdAt,
+                role: 'event',
+                content: {
+                    type: 'session-result',
+                    cost,
+                    durationMs: duration,
+                    numTurns: turns,
+                    isError: Boolean(data.is_error)
+                } as AgentEvent,
+                isSidechain: false,
+                meta
+            }
+        }
+
+        if (data.type === 'rate_limit_event') {
+            const info = isObject(data.rate_limit_info) ? data.rate_limit_info : null
+            return {
+                id: messageId,
+                localId,
+                createdAt,
+                role: 'event',
+                content: {
+                    type: 'rate-limit',
+                    status: asString(info?.status) ?? 'unknown',
+                    resetsAt: asNumber(info?.resetsAt) ?? undefined
+                } as AgentEvent,
+                isSidechain: false,
+                meta
+            }
+        }
+
+        if (data.type === 'tool_progress') {
+            return {
+                id: messageId,
+                localId,
+                createdAt,
+                role: 'event',
+                content: {
+                    type: 'tool-progress',
+                    toolUseId: asString(data.tool_use_id) ?? '',
+                    toolName: asString(data.tool_name) ?? '',
+                    elapsedSeconds: asNumber(data.elapsed_time_seconds) ?? undefined
+                } as AgentEvent,
+                isSidechain: false,
+                meta
+            }
+        }
+
+        if (data.type === 'tool_use_summary') {
+            return {
+                id: messageId,
+                localId,
+                createdAt,
+                role: 'event',
+                content: {
+                    type: 'message',
+                    message: asString(data.summary) ?? ''
+                },
+                isSidechain: false,
+                meta
+            }
+        }
+
+        // Silently ignore: auth_status, prompt_suggestion, queue-operation
+        if (data.type === 'auth_status' || data.type === 'prompt_suggestion' || data.type === 'queue-operation') {
+            return null
+        }
+
+        if (data.type === 'progress') {
+            const progressData = isObject(data.data) ? data.data : null
+            if (!progressData) return null
+            const progressType = asString(progressData.type)
+
+            if (progressType === 'hook_progress') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'hook-event',
+                        subtype: 'hook_progress',
+                        hookName: asString(progressData.hookName) ?? '',
+                        hookEvent: asString(progressData.hookEvent) ?? '',
+                    } as AgentEvent,
+                    isSidechain: Boolean(data.isSidechain),
+                    meta
+                }
+            }
+
+            if (progressType === 'bash_progress') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'tool-progress',
+                        toolUseId: asString(data.toolUseID) ?? '',
+                        toolName: 'Bash',
+                        elapsedSeconds: asNumber(progressData.elapsedTimeSeconds) ?? undefined
+                    } as AgentEvent,
+                    isSidechain: Boolean(data.isSidechain),
+                    meta
+                }
+            }
+
+            if (progressType === 'mcp_progress') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'tool-progress',
+                        toolUseId: asString(data.toolUseID) ?? '',
+                        toolName: asString(progressData.toolName) ?? asString(progressData.serverName) ?? 'MCP',
+                        elapsedSeconds: undefined
+                    } as AgentEvent,
+                    isSidechain: Boolean(data.isSidechain),
+                    meta
+                }
+            }
+
+            if (progressType === 'agent_progress') {
+                // agent_progress contains nested messages — silently ignore
+                // (the actual sub-agent messages arrive separately)
+                return null
+            }
+
+            if (progressType === 'query_update') {
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'message',
+                        message: `Searching: ${asString(progressData.query) ?? ''}`
+                    },
+                    isSidechain: Boolean(data.isSidechain),
+                    meta
+                }
+            }
+
+            if (progressType === 'search_results_received') {
+                const count = asNumber(progressData.resultCount)
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'message',
+                        message: `Found ${count ?? 0} results for "${asString(progressData.query) ?? ''}"`
+                    },
+                    isSidechain: Boolean(data.isSidechain),
+                    meta
+                }
+            }
+
+            if (progressType === 'waiting_for_task') {
+                const desc = asString(progressData.taskDescription) ?? ''
+                return {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: {
+                        type: 'task-progress',
+                        taskId: asString(data.toolUseID) ?? '',
+                        description: desc || 'Waiting for task...',
+                        lastToolName: asString(progressData.taskType) ?? undefined
+                    } as AgentEvent,
+                    isSidechain: Boolean(data.isSidechain),
+                    meta
+                }
+            }
+
+            // Unknown progress subtype — skip
+            return null
+        }
+
         return null
     }
 

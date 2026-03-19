@@ -121,7 +121,12 @@ export class OutgoingMessageQueue {
             
             // Send if not already sent
             if (!item.sent) {
-                if (item.logMessage.type !== 'system') {
+                // Block only system/init (large init payload, no display value).
+                // All other system subtypes (turn_duration, task_*, compact_boundary,
+                // hook_*, status, api_retry, files_persisted, etc.) are forwarded.
+                const isBlockedSystem = item.logMessage.type === 'system'
+                    && item.logMessage.subtype === 'init'
+                if (!isBlockedSystem) {
                     this.sendFunction(item.logMessage);
                 }
                 item.sent = true;

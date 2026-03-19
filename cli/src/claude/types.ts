@@ -54,4 +54,7 @@ export const RawJSONLinesSchema = z.discriminatedUnion("type", [
   }).passthrough()
 ]);
 
+// Inferred type covers the 4 known schema variants (user, assistant, summary, system).
+// New SDK message types (result, rate_limit_event, tool_progress, etc.) pass through
+// via `as any` in sdkToLogConverter.convert() — no catch-all needed here.
 export type RawJSONLines = z.infer<typeof RawJSONLinesSchema>

@@ -158,7 +158,7 @@ describe('SDKToLogConverter', () => {
     })
 
     describe('Result messages', () => {
-        it('should not convert result messages', () => {
+        it('should forward result messages with stats', () => {
             const sdkMessage: SDKResultMessage = {
                 type: 'result',
                 subtype: 'success',
@@ -177,10 +177,13 @@ describe('SDKToLogConverter', () => {
 
             const logMessage = converter.convert(sdkMessage)
 
-            expect(logMessage).toBeNull()
+            expect(logMessage).toBeTruthy()
+            expect(logMessage?.type).toBe('result')
+            expect((logMessage as any).total_cost_usd).toBe(0.05)
+            expect((logMessage as any).num_turns).toBe(5)
         })
 
-        it('should not convert error results', () => {
+        it('should forward error results', () => {
             const sdkMessage: SDKResultMessage = {
                 type: 'result',
                 subtype: 'error_max_turns',
@@ -194,8 +197,9 @@ describe('SDKToLogConverter', () => {
 
             const logMessage = converter.convert(sdkMessage)
 
-            // Error results are not converted to summaries
-            expect(logMessage).toBeFalsy()
+            expect(logMessage).toBeTruthy()
+            expect(logMessage?.type).toBe('result')
+            expect((logMessage as any).is_error).toBe(true)
         })
     })
 

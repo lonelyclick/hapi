@@ -45,6 +45,92 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
         const ms = typeof event.durationMs === 'number' ? event.durationMs : 0
         return { icon: '⏱️', text: `Turn: ${formatDuration(ms)}` }
     }
+
+    // --- New SDK event types ---
+
+    if (event.type === 'rate-limit') {
+        const status = (event as Record<string, unknown>).status
+        const resetsAt = (event as Record<string, unknown>).resetsAt
+        if (status === 'rejected' && typeof resetsAt === 'number') {
+            return { icon: '⏳', text: `Rate limited until ${formatUnixTimestamp(resetsAt)}` }
+        }
+        if (status === 'allowed_warning') {
+            return { icon: '⚠️', text: 'Approaching rate limit' }
+        }
+        return { icon: '⏳', text: 'Rate limited' }
+    }
+
+    if (event.type === 'tool-progress') {
+        const toolName = (event as Record<string, unknown>).toolName
+        const elapsed = (event as Record<string, unknown>).elapsedSeconds
+        const name = typeof toolName === 'string' && toolName ? toolName : 'Tool'
+        const time = typeof elapsed === 'number' ? ` (${formatDuration(elapsed * 1000)})` : ''
+        return { icon: '⏳', text: `${name} running${time}` }
+    }
+
+    if (event.type === 'task-notification') {
+        const summary = (event as Record<string, unknown>).summary
+        const status = (event as Record<string, unknown>).status
+        const text = typeof summary === 'string' && summary ? summary : `Task ${status ?? 'completed'}`
+        return { icon: '📋', text }
+    }
+
+    if (event.type === 'task-started') {
+        const desc = (event as Record<string, unknown>).description
+        const text = typeof desc === 'string' && desc ? desc : 'Background task started'
+        return { icon: '🚀', text }
+    }
+
+    if (event.type === 'task-progress') {
+        const desc = (event as Record<string, unknown>).description
+        const lastTool = (event as Record<string, unknown>).lastToolName
+        let text = typeof desc === 'string' && desc ? desc : 'Task running'
+        if (typeof lastTool === 'string' && lastTool) text += ` (${lastTool})`
+        return { icon: '⏳', text }
+    }
+
+    if (event.type === 'compact-boundary') {
+        return { icon: '📦', text: 'Context compacted' }
+    }
+
+    if (event.type === 'status') {
+        const status = (event as Record<string, unknown>).status
+        if (status === 'compacting') return { icon: '📦', text: 'Compacting context...' }
+        return { icon: null, text: typeof status === 'string' ? status : 'Processing...' }
+    }
+
+    if (event.type === 'hook-event') {
+        const hookName = (event as Record<string, unknown>).hookName
+        const subtype = (event as Record<string, unknown>).subtype
+        const name = typeof hookName === 'string' && hookName ? hookName : 'Hook'
+        if (subtype === 'hook_started') return { icon: '🔗', text: `${name} started` }
+        if (subtype === 'hook_response') return { icon: '🔗', text: `${name} completed` }
+        return { icon: '🔗', text: `${name} running` }
+    }
+
+    if (event.type === 'api-retry') {
+        const attempt = (event as Record<string, unknown>).attempt
+        const maxRetries = (event as Record<string, unknown>).maxRetries
+        const error = (event as Record<string, unknown>).error
+        let text = 'API retry'
+        if (typeof attempt === 'number') {
+            text += typeof maxRetries === 'number' ? ` (${attempt}/${maxRetries})` : ` (attempt ${attempt})`
+        }
+        if (typeof error === 'string' && error) text += `: ${error}`
+        return { icon: '🔄', text }
+    }
+
+    if (event.type === 'session-result') {
+        const cost = (event as Record<string, unknown>).cost
+        const durationMs = (event as Record<string, unknown>).durationMs
+        const numTurns = (event as Record<string, unknown>).numTurns
+        const parts: string[] = []
+        if (typeof cost === 'number') parts.push(`$${cost.toFixed(4)}`)
+        if (typeof durationMs === 'number') parts.push(formatDuration(durationMs))
+        if (typeof numTurns === 'number') parts.push(`${numTurns} turns`)
+        return { icon: '📊', text: parts.length > 0 ? `Session: ${parts.join(' · ')}` : 'Session completed' }
+    }
+
     try {
         return { icon: null, text: JSON.stringify(event) }
     } catch {
