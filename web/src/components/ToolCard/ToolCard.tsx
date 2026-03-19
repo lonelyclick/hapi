@@ -436,7 +436,7 @@ function ToolCardInner(props: ToolCardProps) {
                         </div>
                     ) : null}
 
-                    {showInline ? (
+                    {showInline && !(isAskUserQuestion && permission?.status === 'pending') ? (
                         CompactToolView ? (
                             <div className="mt-3">
                                 <CompactToolView block={props.block} metadata={props.metadata} />
