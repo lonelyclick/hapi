@@ -126,7 +126,6 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
         const numTurns = (event as Record<string, unknown>).numTurns
         const parts: string[] = []
         if (typeof cost === 'number') parts.push(`$${cost.toFixed(4)}`)
-        if (typeof durationMs === 'number') parts.push(formatDuration(durationMs))
         if (typeof numTurns === 'number') parts.push(`${numTurns} turns`)
         return { icon: '📊', text: parts.length > 0 ? `Session: ${parts.join(' · ')}` : 'Session completed' }
     }
