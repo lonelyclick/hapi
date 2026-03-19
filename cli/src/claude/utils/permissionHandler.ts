@@ -34,6 +34,15 @@ function isAskUserQuestionToolName(toolName: string): boolean {
     return toolName === 'AskUserQuestion' || toolName === 'ask_user_question';
 }
 
+function isExitPlanModeToolName(toolName: string): boolean {
+    return toolName === 'ExitPlanMode' || toolName === 'exit_plan_mode';
+}
+
+/** Tools that must always go through user approval, regardless of permission mode */
+function requiresUserApproval(toolName: string): boolean {
+    return isAskUserQuestionToolName(toolName) || isExitPlanModeToolName(toolName);
+}
+
 function formatAskUserQuestionAnswers(answers: Record<string, string[]>, input: unknown): string {
     const questions = (() => {
         if (!isObject(input)) return null;
@@ -199,7 +208,8 @@ export class PermissionHandler {
         const isAskUserQuestion = isAskUserQuestionToolName(toolName);
 
         // Check if tool is explicitly allowed
-        if (!isAskUserQuestion && toolName === 'Bash') {
+        // Tools that require user approval (AskUserQuestion, ExitPlanMode) are never auto-allowed
+        if (!requiresUserApproval(toolName) && toolName === 'Bash') {
             const inputObj = input as { command?: string };
             if (inputObj?.command) {
                 // Check literal matches
@@ -213,7 +223,7 @@ export class PermissionHandler {
                     }
                 }
             }
-        } else if (!isAskUserQuestion && this.allowedTools.has(toolName)) {
+        } else if (!requiresUserApproval(toolName) && this.allowedTools.has(toolName)) {
             return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
         }
 
@@ -224,11 +234,11 @@ export class PermissionHandler {
         // Handle special cases
         //
 
-        if (!isAskUserQuestion && this.permissionMode === 'bypassPermissions') {
+        if (!requiresUserApproval(toolName) && this.permissionMode === 'bypassPermissions') {
             return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
         }
 
-        if (!isAskUserQuestion && this.permissionMode === 'acceptEdits' && descriptor.edit) {
+        if (!requiresUserApproval(toolName) && this.permissionMode === 'acceptEdits' && descriptor.edit) {
             return { behavior: 'allow', updatedInput: input as Record<string, unknown> };
         }
 
