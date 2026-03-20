@@ -96,6 +96,33 @@ function SettingsIcon(props: { className?: string }) {
     )
 }
 
+function BrainIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+            <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+            <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
+            <path d="M17.599 6.5a3 3 0 0 0 .399-1.375" />
+            <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5" />
+            <path d="M3.477 10.896a4 4 0 0 1 .585-.396" />
+            <path d="M19.938 10.5a4 4 0 0 1 .585.396" />
+            <path d="M6 18a4 4 0 0 1-1.967-.516" />
+            <path d="M19.967 17.484A4 4 0 0 1 18 18" />
+        </svg>
+    )
+}
+
 function UsageIcon(props: { className?: string }) {
     return (
         <svg
@@ -120,9 +147,11 @@ function UsageIcon(props: { className?: string }) {
 function SessionsPage() {
     const { api, userEmail } = useAppContext()
     const navigate = useNavigate()
+    const queryClient = useQueryClient()
     const { sessions, isLoading, error, refetch } = useSessions(api)
     const { users: onlineUsers } = useOnlineUsers(api)
     const [isRefreshing, setIsRefreshing] = useState(false)
+    const [isCreatingBrain, setIsCreatingBrain] = useState(false)
 
     const { data: projectsData } = useQuery({
         queryKey: ['projects'],
@@ -167,6 +196,25 @@ function SessionsPage() {
             window.location.reload()
         }
     }, [isRefreshing])
+
+    const handleCreateBrainSession = useCallback(async () => {
+        if (isCreatingBrain) return
+        setIsCreatingBrain(true)
+        try {
+            const result = await api.createBrainSession()
+            if (result.type === 'success' && result.sessionId) {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+                navigate({
+                    to: '/sessions/$sessionId',
+                    params: { sessionId: result.sessionId },
+                })
+            }
+        } catch (err) {
+            console.error('Failed to create brain session:', err)
+        } finally {
+            setIsCreatingBrain(false)
+        }
+    }, [api, isCreatingBrain, navigate, queryClient])
 
     const projectCount = new Set(sessions.map(s => s.metadata?.path ?? 'Other')).size
     const gitCommitHash = typeof __GIT_COMMIT_HASH__ !== 'undefined' ? __GIT_COMMIT_HASH__ : 'dev'
@@ -229,6 +277,15 @@ function SessionsPage() {
                             title="Settings"
                         >
                             <SettingsIcon />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleCreateBrainSession}
+                            disabled={isCreatingBrain}
+                            className="flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-sm hover:shadow-md transition-all hover:scale-105 disabled:opacity-50"
+                            title="New Brain Session"
+                        >
+                            <BrainIcon className="h-4 w-4" />
                         </button>
                         <button
                             type="button"

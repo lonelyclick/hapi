@@ -6,6 +6,7 @@ import { configuration, getConfiguration } from '../../configuration'
 import { safeCompareStrings } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
 import type { Machine, Session, SyncEngine } from '../../sync/syncEngine'
+import type { SSEManager } from '../../sse/sseManager'
 import {
     getActiveAccount,
     selectBestAccount,
@@ -34,6 +35,14 @@ const cliSendMessageSchema = z.object({
 const getMessagesQuerySchema = z.object({
     afterSeq: z.coerce.number().int().min(0).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional()
+})
+
+const brainSpawnSchema = z.object({
+    machineId: z.string().min(1),
+    directory: z.string().min(1),
+    agent: z.enum(['claude', 'codex', 'opencode']).default('claude'),
+    source: z.string().default('brain-child'),
+    mainSessionId: z.string().optional(),
 })
 
 type CliEnv = {
@@ -254,6 +263,84 @@ export function createCliRoutes(
             console.error('[cli/server-uploads] read error:', error)
             return c.json({ error: 'Failed to read file' }, 500)
         }
+    })
+
+    // Brain: spawn a child session
+    app.post('/brain/spawn', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not ready' }, 503)
+        }
+        const body = await c.req.json().catch(() => null)
+        const parsed = brainSpawnSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid body', details: parsed.error.issues }, 400)
+        }
+
+        const namespace = c.get('namespace')
+        const machineResolved = resolveMachineForNamespace(engine, parsed.data.machineId, namespace)
+        if (!machineResolved.ok) {
+            return c.json({ error: machineResolved.error }, machineResolved.status)
+        }
+        if (!machineResolved.machine.active) {
+            return c.json({ error: 'Machine is offline' }, 503)
+        }
+
+        const result = await engine.spawnSession(
+            parsed.data.machineId,
+            parsed.data.directory,
+            parsed.data.agent as any,
+            true,     // yolo
+            'simple',
+            undefined,
+            {
+                source: parsed.data.source,
+                mainSessionId: parsed.data.mainSessionId,
+                permissionMode: 'bypassPermissions',
+            }
+        )
+
+        return c.json(result)
+    })
+
+    // Brain: list all sessions in namespace
+    app.get('/sessions', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not ready' }, 503)
+        }
+        const namespace = c.get('namespace')
+        const sessions = engine.getSessionsByNamespace(namespace)
+        const summaries = sessions.map(s => ({
+            id: s.id,
+            active: s.active,
+            activeAt: s.activeAt,
+            thinking: s.thinking ?? false,
+            metadata: s.metadata ? {
+                path: s.metadata.path,
+                source: s.metadata.source,
+                machineId: s.metadata.machineId,
+                flavor: s.metadata.flavor,
+                summary: s.metadata.summary,
+            } : null,
+        }))
+        return c.json({ sessions: summaries })
+    })
+
+    // Brain: delete a session
+    app.delete('/sessions/:id', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not ready' }, 503)
+        }
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        if (!resolved.ok) {
+            return c.json({ error: resolved.error }, resolved.status)
+        }
+        const deleted = await engine.deleteSession(sessionId, { terminateSession: true, force: true })
+        return c.json({ ok: deleted })
     })
 
     // Claude 多账号：获取当前活跃账号

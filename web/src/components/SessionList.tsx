@@ -136,6 +136,12 @@ function getSourceTag(session: SessionSummary): { label: string; color: string }
     if (source.startsWith('hapi_repair')) {
         return { label: '🤖 Auto Repair', color: 'bg-purple-500/15 text-purple-600' }
     }
+    if (source === 'brain') {
+        return { label: '🧠 Brain', color: 'bg-amber-500/15 text-amber-600' }
+    }
+    if (source === 'brain-child') {
+        return { label: '🧠 子任务', color: 'bg-amber-500/15 text-amber-500' }
+    }
     if (source === 'openclaw') {
         return { label: '🦀 OpenClaw', color: 'bg-teal-500/15 text-teal-600' }
     }

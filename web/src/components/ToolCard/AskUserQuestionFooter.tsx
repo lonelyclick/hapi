@@ -107,8 +107,11 @@ export function AskUserQuestionFooter(props: {
     if (!permission || permission.status !== 'pending') return null
     if (!isAskUserQuestionToolName(props.tool.name)) return null
 
+    // AskUserQuestion should always be interactive when permission is pending,
+    // even if the session is momentarily marked inactive (e.g. heartbeat gap after deploy).
+    // Only the local `loading` state should disable controls.
+
     const run = async (action: () => Promise<void>, hapticType: 'success' | 'error') => {
-        if (props.disabled) return
         setError(null)
         try {
             await action()
@@ -284,7 +287,7 @@ export function AskUserQuestionFooter(props: {
                     <textarea
                         value={fallbackText}
                         onChange={(e) => setFallbackText(e.target.value)}
-                        disabled={props.disabled || loading}
+                        disabled={loading}
                         placeholder="Type your answer…"
                         className="mt-2 w-full min-h-[88px] resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-2 focus:ring-[var(--app-button)] focus:border-transparent disabled:opacity-50"
                     />
@@ -319,7 +322,7 @@ export function AskUserQuestionFooter(props: {
                                     key={optIdx}
                                     checked={selected}
                                     mode={mode}
-                                    disabled={props.disabled || loading}
+                                    disabled={loading}
                                     title={opt.label}
                                     description={opt.description}
                                     onClick={() => toggleOption(clampedStep, optIdx)}
@@ -330,7 +333,7 @@ export function AskUserQuestionFooter(props: {
                         <OptionRow
                             checked={otherSelectedByQuestion[clampedStep] ?? false}
                             mode={mode}
-                            disabled={props.disabled || loading}
+                            disabled={loading}
                             title="Other"
                             description="Type your own answer"
                             onClick={() => toggleOther(clampedStep)}
@@ -340,7 +343,7 @@ export function AskUserQuestionFooter(props: {
                             <textarea
                                 value={otherTextByQuestion[clampedStep] ?? ''}
                                 onChange={(e) => updateOtherText(clampedStep, e.target.value)}
-                                disabled={props.disabled || loading}
+                                disabled={loading}
                                 placeholder="Or type your own answer…"
                                 className="mt-2 w-full min-h-[88px] resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm text-[var(--app-fg)] placeholder:text-[var(--app-hint)] focus:outline-none focus:ring-2 focus:ring-[var(--app-button)] focus:border-transparent disabled:opacity-50"
                             />
@@ -356,7 +359,7 @@ export function AskUserQuestionFooter(props: {
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={props.disabled || loading || clampedStep === 0}
+                            disabled={loading || clampedStep === 0}
                             onClick={prev}
                         >
                             ← Prev
@@ -370,7 +373,7 @@ export function AskUserQuestionFooter(props: {
                             type="button"
                             variant="default"
                             size="sm"
-                            disabled={props.disabled || loading}
+                            disabled={loading}
                             onClick={next}
                         >
                             Next →
@@ -380,7 +383,7 @@ export function AskUserQuestionFooter(props: {
                             type="button"
                             variant="default"
                             size="sm"
-                            disabled={props.disabled || loading}
+                            disabled={loading}
                             onClick={submit}
                             aria-busy={loading}
                             className="gap-2"

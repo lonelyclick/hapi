@@ -62,7 +62,9 @@ export class ApiClient {
             metadata,
             metadataVersion: raw.metadataVersion,
             agentState,
-            agentStateVersion: raw.agentStateVersion
+            agentStateVersion: raw.agentStateVersion,
+            thinking: (raw as any).thinking ?? undefined,
+            thinkingAt: (raw as any).thinkingAt ?? undefined,
         }
     }
 
@@ -229,6 +231,77 @@ export class ApiClient {
                 timeout: 15_000
             }
         )
+    }
+
+    // ===== Brain tools API methods =====
+
+    async brainSpawnSession(opts: {
+        machineId: string
+        directory: string
+        agent?: string
+        source?: string
+        mainSessionId?: string
+    }): Promise<{ type: 'success'; sessionId: string; logs?: unknown[] } | { type: 'error'; message: string; logs?: unknown[] }> {
+        const response = await axios.post(
+            `${configuration.serverUrl}/cli/brain/spawn`,
+            {
+                machineId: opts.machineId,
+                directory: opts.directory,
+                agent: opts.agent ?? 'claude',
+                source: opts.source ?? 'brain-child',
+                mainSessionId: opts.mainSessionId,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 120_000  // Spawn can take a while
+            }
+        )
+        return response.data
+    }
+
+    async listSessions(): Promise<{
+        sessions: Array<{
+            id: string
+            active: boolean
+            activeAt: number
+            thinking: boolean
+            metadata: {
+                path?: string
+                source?: string
+                machineId?: string
+                flavor?: string
+                summary?: { text: string }
+            } | null
+        }>
+    }> {
+        const response = await axios.get(
+            `${configuration.serverUrl}/cli/sessions`,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15_000
+            }
+        )
+        return response.data
+    }
+
+    async deleteSession(sessionId: string): Promise<{ ok: boolean }> {
+        const response = await axios.delete(
+            `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(sessionId)}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30_000
+            }
+        )
+        return response.data
     }
 
     /**

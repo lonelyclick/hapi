@@ -10,10 +10,14 @@ import { AddressInfo } from "node:net";
 import { z } from "zod";
 import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
+import type { ApiClient } from "@/api/api";
 import { randomUUID } from "node:crypto";
 
 interface StartHappyServerOptions {
     sessionSource?: string
+    apiClient?: ApiClient
+    machineId?: string
+    hapiSessionId?: string
 }
 
 export async function startHappyServer(client: ApiSessionClient, options?: StartHappyServerOptions) {
@@ -81,6 +85,17 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
     });
 
     const toolNames = ['change_title']
+
+    // Register Brain tools when source is 'brain'
+    if (options?.sessionSource === 'brain' && options.apiClient && options.machineId && options.hapiSessionId) {
+        const { registerBrainTools } = await import('./brainTools');
+        registerBrainTools(mcp, toolNames, {
+            apiClient: options.apiClient,
+            machineId: options.machineId,
+            brainSessionId: options.hapiSessionId,
+        });
+        logger.debug('[hapiMCP] Brain tools registered');
+    }
 
     const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined

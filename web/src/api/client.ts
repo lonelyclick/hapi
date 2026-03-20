@@ -558,6 +558,13 @@ export class ApiClient {
         })
     }
 
+    async createBrainSession(): Promise<SpawnResponse> {
+        return await this.request<SpawnResponse>('/api/brain/sessions', {
+            method: 'POST',
+            body: JSON.stringify({})
+        })
+    }
+
     async getSlashCommands(sessionId: string): Promise<SlashCommandsResponse> {
         return await this.request<SlashCommandsResponse>(
             `/api/sessions/${encodeURIComponent(sessionId)}/slash-commands`
