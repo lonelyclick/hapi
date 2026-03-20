@@ -174,7 +174,7 @@ export async function buildFeishuBrainInitPrompt(_role: UserRole, options?: Feis
     lines.push('原则：')
     lines.push('- 只记录对话中明确展现的特征，不凭单次交互下结论')
     lines.push('- 多次交互后形成的印象更有价值')
-    lines.push('- 画像文件存储在 team/feishu-users/ 目录下')
+    lines.push('- 画像文件存储在 team/members/ 目录下')
 
     return basePrompt + lines.join('\n')
 }

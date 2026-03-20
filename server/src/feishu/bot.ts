@@ -340,6 +340,25 @@ export class FeishuBot {
                     return texts.join('') || null
                 }
             }
+            if (messageType === 'interactive') {
+                // Extract text from card elements
+                const texts: string[] = []
+                if (content.header?.title?.content) {
+                    texts.push(content.header.title.content)
+                }
+                if (Array.isArray(content.elements)) {
+                    for (const el of content.elements) {
+                        if (el.tag === 'markdown' && el.content) {
+                            texts.push(el.content)
+                        } else if (el.tag === 'div' && el.text?.content) {
+                            texts.push(el.text.content)
+                        } else if (el.tag === 'plain_text' && el.content) {
+                            texts.push(el.content)
+                        }
+                    }
+                }
+                return texts.length > 0 ? texts.join('\n') : '[用户发送了一条卡片消息]'
+            }
         } catch {
             // If content is not JSON, treat as plain text
             return contentStr
