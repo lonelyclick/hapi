@@ -55,8 +55,8 @@ export class FeishuBot {
     // Per-chat state for message buffering
     private chatStates: Map<string, ChatState> = new Map()
 
-    // Debounce: buffer agent messages per chatId before sending to Feishu
-    private pendingMessages: Map<string, { texts: string[]; timer: ReturnType<typeof setTimeout> }> = new Map()
+    // Accumulate agent messages per chatId, send summary when task completes
+    private agentMessages: Map<string, string[]> = new Map()
 
     // Rebuild rate limiting: chatId -> last rebuild timestamp
     private lastRebuildAt: Map<string, number> = new Map()
@@ -142,11 +142,7 @@ export class FeishuBot {
             this.unsubscribeSyncEvents = null
         }
 
-        // Clear all pending debounce timers
-        for (const pending of this.pendingMessages.values()) {
-            clearTimeout(pending.timer)
-        }
-        this.pendingMessages.clear()
+        this.agentMessages.clear()
 
         // Clear all chat state timers
         for (const state of this.chatStates.values()) {
@@ -552,6 +548,7 @@ export class FeishuBot {
     // ========== SyncEngine event handling (Brain -> Feishu) ==========
 
     private handleSyncEvent(event: SyncEvent): void {
+        // Accumulate agent messages (don't send to Feishu yet)
         if (event.type === 'message-received' && event.sessionId && event.message) {
             const chatId = this.sessionToChatId.get(event.sessionId)
             if (!chatId) return
@@ -560,8 +557,9 @@ export class FeishuBot {
             if (!text) return
             if (isInternalBrainMessage(text)) return
 
-            // Debounce: buffer messages for 500ms before sending
-            this.bufferFeishuMessage(chatId, text)
+            const msgs = this.agentMessages.get(chatId) || []
+            msgs.push(text)
+            this.agentMessages.set(chatId, msgs)
         }
 
         // Detect "task complete": wasThinking=true + thinking=false
@@ -574,10 +572,13 @@ export class FeishuBot {
                 const state = this.chatStates.get(chatId)
                 if (!state) return
 
-                // Brain finished this round
-                state.busy = false
+                // Brain finished this round — extract <feishu-reply> and send
+                this.sendFeishuSummary(chatId).catch(err => {
+                    console.error(`[FeishuBot] sendFeishuSummary error for ${chatId.slice(0, 12)}:`, err)
+                })
 
-                // If there are pending messages, flush them immediately (no debounce)
+                // Mark not busy and flush pending user messages
+                state.busy = false
                 if (state.incoming.length > 0) {
                     console.log(`[FeishuBot] Brain done for ${chatId.slice(0, 12)}, flushing ${state.incoming.length} pending message(s)`)
                     this.flushIncomingMessages(chatId).catch(err => {
@@ -588,27 +589,32 @@ export class FeishuBot {
         }
     }
 
-    private bufferFeishuMessage(chatId: string, text: string): void {
-        const existing = this.pendingMessages.get(chatId)
-        if (existing) {
-            existing.texts.push(text)
-            clearTimeout(existing.timer)
-            existing.timer = setTimeout(() => this.flushFeishuMessage(chatId), 500)
+    /**
+     * Extract <feishu-reply> from accumulated agent messages and send to Feishu.
+     * Falls back to the last agent message if no tag found.
+     */
+    private async sendFeishuSummary(chatId: string): Promise<void> {
+        const msgs = this.agentMessages.get(chatId)
+        if (!msgs || msgs.length === 0) return
+        this.agentMessages.delete(chatId)
+
+        // Search all messages (reverse) for <feishu-reply>
+        const allText = msgs.join('\n')
+        const match = allText.match(/<feishu-reply>([\s\S]*?)<\/feishu-reply>/g)
+
+        let reply: string
+        if (match) {
+            // Take the last <feishu-reply> block
+            const lastMatch = match[match.length - 1]
+            reply = lastMatch.replace(/<\/?feishu-reply>/g, '').trim()
         } else {
-            this.pendingMessages.set(chatId, {
-                texts: [text],
-                timer: setTimeout(() => this.flushFeishuMessage(chatId), 500)
-            })
+            // Fallback: use the last agent message (truncated)
+            reply = msgs[msgs.length - 1].slice(0, 2000)
         }
-    }
 
-    private async flushFeishuMessage(chatId: string): Promise<void> {
-        const pending = this.pendingMessages.get(chatId)
-        if (!pending || pending.texts.length === 0) return
-        this.pendingMessages.delete(chatId)
-
-        const combined = pending.texts.join('\n\n')
-        await this.sendFeishuPost(chatId, combined)
+        if (!reply) return
+        console.log(`[FeishuBot] Sending summary to ${chatId.slice(0, 12)} (${reply.length} chars, from ${msgs.length} messages)`)
+        await this.sendFeishuPost(chatId, reply)
     }
 
     // ========== Feishu API helpers ==========
