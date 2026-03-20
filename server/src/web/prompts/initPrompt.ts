@@ -137,10 +137,10 @@ export async function buildFeishuBrainInitPrompt(_role: UserRole, options?: Feis
     lines.push('```')
     lines.push('')
     lines.push('要求：')
-    lines.push('- 只包含用户需要知道的最终结果：步骤摘要、查询到的数据、关键细节、结论')
+    lines.push('- 信息量必须完整——你正文中给出的所有关键信息、数据、结论都要保留，不要精简或缩略')
     lines.push('- 不要包含内部思考过程、工具调用细节、中间调试信息')
-    lines.push('- 简洁，适合聊天窗口阅读，代码用 ``` 包裹')
-    lines.push('- 如果任务涉及多个步骤，用编号列表总结')
+    lines.push('- 根据用户画像调整措辞风格（对技术人员可以更直接，对非技术人员更易懂）')
+    lines.push('- 代码用 ``` 包裹，多步骤用编号列表')
 
     if (options?.feishuChatType === 'group') {
         lines.push('- 这是一个群聊，消息格式为 `[姓名 | openId]: 内容`')
