@@ -900,7 +900,6 @@ export class FeishuBot {
                     }),
                 })
             }
-            })
         } catch (err) {
             console.error(`[FeishuBot] sendFeishuPost failed for chat ${chatId.slice(0, 12)}:`, err)
         }
