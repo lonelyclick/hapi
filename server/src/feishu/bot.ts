@@ -1,0 +1,547 @@
+/**
+ * Feishu Bot for HAPI
+ *
+ * Integrates Feishu (Lark) messaging with HAPI Brain sessions.
+ * Each Feishu chat (DM or group) maps to a Brain session.
+ * Brain replies are automatically pushed back to Feishu.
+ */
+
+import * as lark from '@larksuiteoapi/node-sdk'
+import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
+import type { IStore } from '../store/interface'
+import { FeishuMessageQueue } from './messageQueue'
+import { extractAgentText, isInternalBrainMessage, buildFeishuMessage } from './formatter'
+import { buildFeishuBrainInitPrompt } from '../web/prompts/initPrompt'
+
+export interface FeishuBotConfig {
+    syncEngine: SyncEngine
+    store: IStore
+    appId: string
+    appSecret: string
+}
+
+export class FeishuBot {
+    private syncEngine: SyncEngine
+    private store: IStore
+    private larkClient: lark.Client
+    private wsClient: lark.WSClient | null = null
+    private unsubscribeSyncEvents: (() => void) | null = null
+    private messageQueue = new FeishuMessageQueue()
+    private isRunning = false
+
+    // Bidirectional mapping cache (loaded from DB at startup)
+    private sessionToChatId: Map<string, string> = new Map()
+    private chatIdToSessionId: Map<string, string> = new Map()
+    private chatIdToChatType: Map<string, string> = new Map()
+
+    // Debounce: buffer agent messages per chatId before sending to Feishu
+    private pendingMessages: Map<string, { texts: string[]; timer: ReturnType<typeof setTimeout> }> = new Map()
+
+    // Rebuild rate limiting: chatId -> last rebuild timestamp
+    private lastRebuildAt: Map<string, number> = new Map()
+    private readonly REBUILD_COOLDOWN_MS = 30_000
+
+    // Bot's own open_id (resolved at start)
+    private botOpenId: string | null = null
+
+    // Independent token cache (separate from global STT token)
+    private tokenCache: { value: string; expiresAt: number } | null = null
+
+    private readonly appId: string
+    private readonly appSecret: string
+
+    constructor(config: FeishuBotConfig) {
+        this.syncEngine = config.syncEngine
+        this.store = config.store
+        this.appId = config.appId
+        this.appSecret = config.appSecret
+
+        this.larkClient = new lark.Client({
+            appId: config.appId,
+            appSecret: config.appSecret,
+            domain: lark.Domain.Feishu,
+        })
+    }
+
+    async start(): Promise<void> {
+        if (this.isRunning) return
+        this.isRunning = true
+
+        // 1. Resolve bot's own open_id
+        try {
+            const token = await this.getToken()
+            const resp = await fetch('https://open.feishu.cn/open-apis/bot/v3/info', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            const data = await resp.json() as { bot?: { open_id?: string } }
+            this.botOpenId = data.bot?.open_id ?? null
+            console.log(`[FeishuBot] Bot open_id: ${this.botOpenId}`)
+        } catch (err) {
+            console.error('[FeishuBot] Failed to get bot info:', err)
+        }
+
+        // 2. Load existing mappings from DB
+        await this.loadMappings()
+
+        // 3. Set up Feishu event dispatcher
+        const eventDispatcher = new lark.EventDispatcher({}).register({
+            'im.message.receive_v1': (data: any) => {
+                this.handleMessageEvent(data).catch(err => {
+                    console.error('[FeishuBot] handleMessageEvent error:', err)
+                })
+                // Return empty object to acknowledge the event
+                return {}
+            }
+        })
+
+        // 4. Start WebSocket client
+        this.wsClient = new lark.WSClient({
+            appId: this.appId,
+            appSecret: this.appSecret,
+            loggerLevel: lark.LoggerLevel.warn,
+        })
+        await this.wsClient.start({ eventDispatcher })
+        console.log('[FeishuBot] WebSocket client started')
+
+        // 5. Subscribe to syncEngine events
+        this.unsubscribeSyncEvents = this.syncEngine.subscribe((event) => {
+            this.handleSyncEvent(event)
+        })
+
+        console.log(`[FeishuBot] Started with ${this.sessionToChatId.size} active mapping(s)`)
+    }
+
+    async stop(): Promise<void> {
+        if (!this.isRunning) return
+        this.isRunning = false
+
+        if (this.unsubscribeSyncEvents) {
+            this.unsubscribeSyncEvents()
+            this.unsubscribeSyncEvents = null
+        }
+
+        // Clear all pending debounce timers
+        for (const pending of this.pendingMessages.values()) {
+            clearTimeout(pending.timer)
+        }
+        this.pendingMessages.clear()
+
+        this.messageQueue.clear()
+        console.log('[FeishuBot] Stopped')
+    }
+
+    // ========== Mapping management ==========
+
+    private async loadMappings(): Promise<void> {
+        const mappings = await this.store.getActiveFeishuChatSessions()
+        this.sessionToChatId.clear()
+        this.chatIdToSessionId.clear()
+        this.chatIdToChatType.clear()
+
+        for (const m of mappings) {
+            this.sessionToChatId.set(m.sessionId, m.feishuChatId)
+            this.chatIdToSessionId.set(m.feishuChatId, m.sessionId)
+            this.chatIdToChatType.set(m.feishuChatId, m.feishuChatType)
+        }
+    }
+
+    // ========== Feishu message handling ==========
+
+    private async handleMessageEvent(data: any): Promise<void> {
+        const message = data?.message
+        const sender = data?.sender
+        if (!message || !sender) return
+
+        const chatId = message.chat_id as string
+        const chatType = message.chat_type as string // 'p2p' or 'group'
+        const senderOpenId = sender.sender_id?.open_id as string
+        const messageType = message.message_type as string
+
+        // Ignore bot's own messages
+        if (senderOpenId === this.botOpenId) return
+
+        // Group chat: only respond to @bot messages
+        if (chatType === 'group') {
+            const mentions = message.mentions as Array<{ id: { open_id: string }; key: string }> | undefined
+            const botMentioned = mentions?.some((m: any) => m.id?.open_id === this.botOpenId)
+            if (!botMentioned) return
+        }
+
+        // Extract text content
+        let text = this.extractMessageText(messageType, message.content)
+        if (!text || !text.trim()) return
+
+        // Group chat: strip @bot mention placeholder from text
+        if (chatType === 'group' && message.mentions) {
+            for (const mention of message.mentions as Array<{ key: string; id: { open_id: string } }>) {
+                if (mention.id?.open_id === this.botOpenId) {
+                    text = text.replace(mention.key, '').trim()
+                }
+            }
+        }
+
+        // Resolve sender name
+        const senderName = await this.resolveSenderName(senderOpenId)
+
+        // Format message with sender info for group chats
+        const formattedText = chatType === 'group'
+            ? `[${senderName}]: ${text}`
+            : text
+
+        console.log(`[FeishuBot] Message from ${senderName} in ${chatType} ${chatId.slice(0, 12)}...: ${text.slice(0, 100)}`)
+
+        // Enqueue to serial queue for this chatId
+        this.messageQueue.enqueue(chatId, async () => {
+            const sessionId = await this.ensureSession(chatId, chatType)
+            if (!sessionId) {
+                await this.sendFeishuText(chatId, '抱歉，无法创建会话。请检查是否有在线机器。')
+                return
+            }
+
+            // Touch last message time
+            await this.store.touchFeishuChatSession(chatId).catch(() => {})
+
+            // Send to Brain session
+            await this.syncEngine.sendMessage(sessionId, {
+                text: formattedText,
+                sentFrom: 'feishu',
+                meta: {
+                    feishuChatId: chatId,
+                    feishuChatType: chatType,
+                    senderName,
+                    senderOpenId,
+                }
+            })
+        })
+    }
+
+    private extractMessageText(messageType: string, contentStr: string): string | null {
+        try {
+            const content = JSON.parse(contentStr)
+            if (messageType === 'text') {
+                return content.text as string || null
+            }
+            if (messageType === 'post') {
+                // Extract text from post (rich text) message
+                const zhContent = content.zh_cn?.content || content.en_us?.content || content.content
+                if (Array.isArray(zhContent)) {
+                    const texts: string[] = []
+                    for (const paragraph of zhContent) {
+                        if (Array.isArray(paragraph)) {
+                            for (const element of paragraph) {
+                                if (element.tag === 'text' && element.text) {
+                                    texts.push(element.text)
+                                } else if (element.tag === 'a' && element.text) {
+                                    texts.push(element.text)
+                                }
+                            }
+                        }
+                    }
+                    return texts.join('') || null
+                }
+            }
+        } catch {
+            // If content is not JSON, treat as plain text
+            return contentStr
+        }
+        return null
+    }
+
+    private async resolveSenderName(openId: string): Promise<string> {
+        try {
+            const token = await this.getToken()
+            const resp = await fetch(`https://open.feishu.cn/open-apis/contact/v3/users/${openId}?user_id_type=open_id`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            const data = await resp.json() as { data?: { user?: { name?: string } } }
+            return data.data?.user?.name || openId.slice(0, 8)
+        } catch {
+            return openId.slice(0, 8)
+        }
+    }
+
+    // ========== Session management ==========
+
+    private async ensureSession(chatId: string, chatType: string): Promise<string | null> {
+        // Check existing mapping
+        const existingSessionId = this.chatIdToSessionId.get(chatId)
+        if (existingSessionId) {
+            const session = this.syncEngine.getSession(existingSessionId)
+            if (session?.active) {
+                return existingSessionId
+            }
+
+            // Session is dead or missing, check offline duration
+            const activeAt = session?.activeAt || 0
+            const offlineDuration = Date.now() - activeAt
+
+            if (session && offlineDuration < 120_000) {
+                // Recently went offline, might be restarting - wait briefly
+                console.log(`[FeishuBot] Session ${existingSessionId.slice(0, 8)} recently offline (${Math.round(offlineDuration / 1000)}s), waiting...`)
+                await new Promise(resolve => setTimeout(resolve, 10_000))
+                const retrySession = this.syncEngine.getSession(existingSessionId)
+                if (retrySession?.active) {
+                    return existingSessionId
+                }
+            }
+
+            // Session is dead, rebuild
+            return await this.rebuildSession(chatId, chatType)
+        }
+
+        // No mapping exists, create new session
+        return await this.createBrainSession(chatId, chatType)
+    }
+
+    private async createBrainSession(chatId: string, chatType: string, chatName?: string): Promise<string | null> {
+        try {
+            const namespace = 'default'
+            const machines = this.syncEngine.getOnlineMachinesByNamespace(namespace)
+            if (machines.length === 0) {
+                console.error('[FeishuBot] No online machines available')
+                return null
+            }
+
+            const machine = machines[0]
+            const homeDir = (machine.metadata as Record<string, unknown>)?.homeDir as string || '/tmp'
+            const brainDirectory = `${homeDir}/.hapi/brain-workspace`
+
+            const result = await this.syncEngine.spawnSession(
+                machine.id,
+                brainDirectory,
+                'claude',
+                true,  // yolo
+                'simple',
+                undefined,
+                {
+                    source: 'feishu-brain',
+                    permissionMode: 'bypassPermissions',
+                }
+            )
+
+            if (result.type !== 'success') {
+                console.error(`[FeishuBot] Failed to create session: ${result.message}`)
+                return null
+            }
+
+            const sessionId = result.sessionId
+            console.log(`[FeishuBot] Created Brain session ${sessionId.slice(0, 8)} for chat ${chatId.slice(0, 12)}`)
+
+            // Save mapping
+            await this.store.createFeishuChatSession({
+                feishuChatId: chatId,
+                feishuChatType: chatType,
+                sessionId,
+                namespace,
+                feishuChatName: chatName,
+            })
+
+            // Update in-memory cache
+            this.sessionToChatId.set(sessionId, chatId)
+            this.chatIdToSessionId.set(chatId, sessionId)
+            this.chatIdToChatType.set(chatId, chatType)
+
+            // Async: wait for session online and send initPrompt
+            void this.initializeSession(sessionId, chatId, chatType, chatName)
+
+            return sessionId
+        } catch (error) {
+            console.error('[FeishuBot] createBrainSession failed:', error)
+            return null
+        }
+    }
+
+    private async initializeSession(sessionId: string, chatId: string, chatType: string, chatName?: string): Promise<void> {
+        try {
+            // Wait for session to come online (up to 60s)
+            const isOnline = await this.waitForSessionOnline(sessionId, 60_000)
+            if (!isOnline) {
+                console.warn(`[FeishuBot] Session ${sessionId.slice(0, 8)} did not come online within 60s`)
+                return
+            }
+
+            // Wait a bit for socket to join room
+            await this.syncEngine.waitForSocketInRoom(sessionId, 5000)
+
+            // Send feishu-specific Brain initPrompt
+            const prompt = await buildFeishuBrainInitPrompt('developer', {
+                feishuChatType: chatType as 'p2p' | 'group',
+                feishuChatName: chatName,
+            })
+
+            await this.syncEngine.sendMessage(sessionId, {
+                text: prompt,
+                sentFrom: 'feishu',
+            })
+            console.log(`[FeishuBot] Sent initPrompt to session ${sessionId.slice(0, 8)}`)
+        } catch (err) {
+            console.error(`[FeishuBot] initializeSession failed for ${sessionId.slice(0, 8)}:`, err)
+        }
+    }
+
+    private async waitForSessionOnline(sessionId: string, timeoutMs: number): Promise<boolean> {
+        const existing = this.syncEngine.getSession(sessionId)
+        if (existing?.active) return true
+
+        return new Promise((resolve) => {
+            let resolved = false
+            let unsubscribe = () => {}
+
+            const finalize = (result: boolean) => {
+                if (resolved) return
+                resolved = true
+                clearTimeout(timer)
+                unsubscribe()
+                resolve(result)
+            }
+
+            const timer = setTimeout(() => finalize(false), timeoutMs)
+
+            unsubscribe = this.syncEngine.subscribe((event) => {
+                if (event.sessionId !== sessionId) return
+                if (event.type !== 'session-added' && event.type !== 'session-updated') return
+                const session = this.syncEngine.getSession(sessionId)
+                if (session?.active) finalize(true)
+            })
+
+            // Re-check after subscribing
+            const current = this.syncEngine.getSession(sessionId)
+            if (current?.active) finalize(true)
+        })
+    }
+
+    private async rebuildSession(chatId: string, chatType: string): Promise<string | null> {
+        // Rate limiting
+        const lastRebuild = this.lastRebuildAt.get(chatId) || 0
+        if (Date.now() - lastRebuild < this.REBUILD_COOLDOWN_MS) {
+            console.warn(`[FeishuBot] Rebuild cooldown for chat ${chatId.slice(0, 12)}, skipping`)
+            return null
+        }
+        this.lastRebuildAt.set(chatId, Date.now())
+
+        console.log(`[FeishuBot] Rebuilding session for chat ${chatId.slice(0, 12)}`)
+        await this.store.updateFeishuChatSessionStatus(chatId, 'rebuilding')
+
+        // Remove old mapping from memory
+        const oldSessionId = this.chatIdToSessionId.get(chatId)
+        if (oldSessionId) {
+            this.sessionToChatId.delete(oldSessionId)
+        }
+
+        const newSessionId = await this.createBrainSession(chatId, chatType)
+        if (newSessionId) {
+            await this.sendFeishuText(chatId, '会话已重置，请继续。')
+        } else {
+            await this.store.updateFeishuChatSessionStatus(chatId, 'dead')
+        }
+
+        return newSessionId
+    }
+
+    // ========== SyncEngine event handling (Brain -> Feishu) ==========
+
+    private handleSyncEvent(event: SyncEvent): void {
+        if (event.type === 'message-received' && event.sessionId && event.message) {
+            const chatId = this.sessionToChatId.get(event.sessionId)
+            if (!chatId) return
+
+            const text = extractAgentText(event.message.content)
+            if (!text) return
+            if (isInternalBrainMessage(text)) return
+
+            // Debounce: buffer messages for 500ms before sending
+            this.bufferFeishuMessage(chatId, text)
+        }
+    }
+
+    private bufferFeishuMessage(chatId: string, text: string): void {
+        const existing = this.pendingMessages.get(chatId)
+        if (existing) {
+            existing.texts.push(text)
+            clearTimeout(existing.timer)
+            existing.timer = setTimeout(() => this.flushFeishuMessage(chatId), 500)
+        } else {
+            this.pendingMessages.set(chatId, {
+                texts: [text],
+                timer: setTimeout(() => this.flushFeishuMessage(chatId), 500)
+            })
+        }
+    }
+
+    private async flushFeishuMessage(chatId: string): Promise<void> {
+        const pending = this.pendingMessages.get(chatId)
+        if (!pending || pending.texts.length === 0) return
+        this.pendingMessages.delete(chatId)
+
+        const combined = pending.texts.join('\n\n')
+        await this.sendFeishuPost(chatId, combined)
+    }
+
+    // ========== Feishu API helpers ==========
+
+    private async sendFeishuText(chatId: string, text: string): Promise<void> {
+        try {
+            const token = await this.getToken()
+            await fetch('https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    receive_id: chatId,
+                    msg_type: 'text',
+                    content: JSON.stringify({ text }),
+                }),
+            })
+        } catch (err) {
+            console.error(`[FeishuBot] sendFeishuText failed for chat ${chatId.slice(0, 12)}:`, err)
+        }
+    }
+
+    private async sendFeishuPost(chatId: string, text: string): Promise<void> {
+        try {
+            const { msgType, content } = buildFeishuMessage(text)
+            const token = await this.getToken()
+            await fetch('https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    receive_id: chatId,
+                    msg_type: msgType,
+                    content,
+                }),
+            })
+        } catch (err) {
+            console.error(`[FeishuBot] sendFeishuPost failed for chat ${chatId.slice(0, 12)}:`, err)
+        }
+    }
+
+    // ========== Token management ==========
+
+    private async getToken(): Promise<string> {
+        if (this.tokenCache && Date.now() < this.tokenCache.expiresAt) {
+            return this.tokenCache.value
+        }
+
+        const resp = await fetch('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ app_id: this.appId, app_secret: this.appSecret }),
+        })
+        const data = await resp.json() as { code?: number; tenant_access_token?: string; expire?: number }
+        if (data.code !== 0 || !data.tenant_access_token) {
+            throw new Error(`Feishu auth failed: code=${data.code}`)
+        }
+
+        const expireSeconds = typeof data.expire === 'number' ? data.expire : 0
+        this.tokenCache = {
+            value: data.tenant_access_token,
+            expiresAt: Date.now() + Math.max(0, expireSeconds - 60) * 1000,
+        }
+        return data.tenant_access_token
+    }
+}

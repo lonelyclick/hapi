@@ -274,6 +274,8 @@ export class ApiClient {
                 machineId?: string
                 flavor?: string
                 summary?: { text: string }
+                mainSessionId?: string
+                brainSummary?: string
             } | null
         }>
     }> {
@@ -300,6 +302,40 @@ export class ApiClient {
                     'Content-Type': 'application/json'
                 },
                 timeout: 30_000
+            }
+        )
+        return response.data
+    }
+
+    async patchSessionMetadata(sessionId: string, patch: Record<string, unknown>): Promise<void> {
+        await axios.patch(
+            `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(sessionId)}/metadata`,
+            patch,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15_000
+            }
+        )
+    }
+
+    async getSessionStatus(sessionId: string): Promise<{
+        active: boolean
+        thinking: boolean
+        messageCount: number
+        lastUsage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | null
+        metadata: { path?: string; summary?: { text: string }; brainSummary?: string } | null
+    }> {
+        const response = await axios.get(
+            `${configuration.serverUrl}/cli/sessions/${encodeURIComponent(sessionId)}/status`,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15_000
             }
         )
         return response.data

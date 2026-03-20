@@ -629,6 +629,72 @@ export class SyncEngine {
         return result
     }
 
+    async patchSessionMetadata(sessionId: string, patch: Record<string, unknown>): Promise<{ ok: true } | { ok: false; error: string }> {
+        const session = this.sessions.get(sessionId)
+        if (!session) {
+            return { ok: false, error: 'Session not found' }
+        }
+
+        const success = await this.store.patchSessionMetadata(sessionId, patch, session.namespace)
+        if (!success) {
+            return { ok: false, error: 'Database update failed' }
+        }
+
+        // Refresh in-memory session from DB
+        await this.refreshSession(sessionId)
+        return { ok: true }
+    }
+
+    async getLastUsageForSession(sessionId: string): Promise<{
+        input_tokens: number
+        output_tokens: number
+        cache_read_input_tokens?: number
+        cache_creation_input_tokens?: number
+        contextSize: number
+    } | null> {
+        const messages = await this.store.getMessages(sessionId, 30)
+
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const content = messages[i].content as any
+            if (!content || content.role !== 'agent') continue
+
+            const data = content.content?.data
+
+            // assistant message: usage is on data.message.usage (same as frontend)
+            if (data?.type === 'assistant') {
+                const usage = data.message?.usage
+                if (usage && typeof usage.input_tokens === 'number') {
+                    const inputTokens = usage.input_tokens ?? 0
+                    const cacheRead = usage.cache_read_input_tokens ?? 0
+                    const cacheCreation = usage.cache_creation_input_tokens ?? 0
+                    return {
+                        input_tokens: inputTokens,
+                        output_tokens: usage.output_tokens ?? 0,
+                        cache_read_input_tokens: cacheRead || undefined,
+                        cache_creation_input_tokens: cacheCreation || undefined,
+                        contextSize: cacheCreation + cacheRead + inputTokens,
+                    }
+                }
+            }
+
+            // fallback: result message usage
+            if (data?.type === 'result' && data.usage) {
+                const inputTokens = data.usage.input_tokens ?? 0
+                const cacheRead = data.usage.cache_read_input_tokens ?? 0
+                const cacheCreation = data.usage.cache_creation_input_tokens ?? 0
+                return {
+                    input_tokens: inputTokens,
+                    output_tokens: data.usage.output_tokens ?? 0,
+                    cache_read_input_tokens: cacheRead || undefined,
+                    cache_creation_input_tokens: cacheCreation || undefined,
+                    contextSize: cacheCreation + cacheRead + inputTokens,
+                }
+            }
+        }
+
+        return null
+    }
+
     async handleRealtimeEvent(event: SyncEvent): Promise<void> {
         if (event.type === 'session-updated' && event.sessionId) {
             await this.refreshSession(event.sessionId)
@@ -843,15 +909,46 @@ export class SyncEngine {
                 return
             }
 
-            // Get the last few messages from child session to extract result
-            const messages = await this.store.getMessages(session.id, 20)
+            // Get the last few messages from child session to extract result + usage
+            const messages = await this.store.getMessages(session.id, 30)
             let resultText: string | null = null
+            let lastUsage: { input_tokens: number; output_tokens: number; contextSize: number } | null = null
             for (let i = messages.length - 1; i >= 0; i--) {
                 const content = messages[i].content as any
                 if (!content) continue
-                // agent message format: { role: 'agent', content: { data: { type: 'assistant', message: { content: [...] } } } }
-                if (content.role === 'agent') {
-                    const data = content.content?.data
+                if (content.role !== 'agent') continue
+
+                const data = content.content?.data
+
+                // Extract usage from assistant messages first (matches frontend formula)
+                if (!lastUsage && data?.type === 'assistant') {
+                    const usage = data.message?.usage
+                    if (usage && typeof usage.input_tokens === 'number') {
+                        const inputTokens = usage.input_tokens ?? 0
+                        const cacheRead = usage.cache_read_input_tokens ?? 0
+                        const cacheCreation = usage.cache_creation_input_tokens ?? 0
+                        lastUsage = {
+                            input_tokens: inputTokens,
+                            output_tokens: usage.output_tokens ?? 0,
+                            contextSize: cacheCreation + cacheRead + inputTokens,
+                        }
+                    }
+                }
+
+                // Fallback: extract usage from result messages
+                if (!lastUsage && data?.type === 'result' && data.usage) {
+                    const inputTokens = data.usage.input_tokens ?? 0
+                    const cacheRead = data.usage.cache_read_input_tokens ?? 0
+                    const cacheCreation = data.usage.cache_creation_input_tokens ?? 0
+                    lastUsage = {
+                        input_tokens: inputTokens,
+                        output_tokens: data.usage.output_tokens ?? 0,
+                        contextSize: cacheCreation + cacheRead + inputTokens,
+                    }
+                }
+
+                // Extract result text from assistant messages
+                if (!resultText) {
                     if (data?.type === 'assistant' && data.message?.content) {
                         const blocks = data.message.content
                         if (Array.isArray(blocks)) {
@@ -861,40 +958,50 @@ export class SyncEngine {
                                 .filter(Boolean)
                             if (texts.length > 0) {
                                 resultText = texts.join('\n')
-                                break
                             }
                         }
                     }
                     // simpler agent format
                     if (typeof data?.message === 'string') {
                         resultText = data.message
-                        break
-                    }
-                    if (typeof data === 'string') {
+                    } else if (typeof data === 'string') {
                         resultText = data
-                        break
                     }
                 }
+
+                if (resultText && lastUsage) break
             }
 
             const sessionTitle = session.metadata?.summary?.text || session.metadata?.path || session.id
+            const brainSummary = (session.metadata as any)?.brainSummary
             const truncatedResult = resultText
                 ? resultText.length > 4000 ? resultText.slice(0, 4000) + '\n...(truncated)' : resultText
                 : '（无文本输出）'
+
+            // Build token stats line (contextSize formula matches frontend: cache_creation + cache_read + input_tokens)
+            const messageCount = await this.store.getMessageCount(session.id)
+            const CONTEXT_BUDGET = 990_000  // 1M - 10K headroom
+            let statsLine = `消息数: ${messageCount}`
+            if (lastUsage) {
+                const remainingPercent = Math.max(0, Math.round((1 - lastUsage.contextSize / CONTEXT_BUDGET) * 100))
+                statsLine = `Context 剩余: ~${remainingPercent}% (${lastUsage.contextSize.toLocaleString()} / ${CONTEXT_BUDGET.toLocaleString()} tokens) | ${statsLine}`
+            }
 
             const callbackMessage = [
                 `[子 session 任务完成]`,
                 `Session: ${session.id}`,
                 `标题: ${sessionTitle}`,
+                brainSummary ? `上次总结: ${brainSummary}` : null,
+                statsLine,
                 ``,
                 truncatedResult
-            ].join('\n')
+            ].filter(Boolean).join('\n')
 
             console.log(`[brain-callback] Pushing result from child ${shortId(session.id)} to brain ${shortId(mainSessionId)} (${truncatedResult.length} chars)`)
 
             await this.sendMessage(mainSessionId, {
                 text: callbackMessage,
-                sentFrom: 'brain-callback' as any,
+                sentFrom: 'brain-callback',
             })
         } catch (error) {
             console.error(`[brain-callback] Failed to send callback for session ${session.id}:`, error)
@@ -1239,7 +1346,7 @@ export class SyncEngine {
         return false
     }
 
-    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp'; meta?: Record<string, unknown> }): Promise<void> {
+    async sendMessage(sessionId: string, payload: { text: string; localId?: string | null; sentFrom?: 'telegram-bot' | 'webapp' | 'feishu' | 'brain-callback'; meta?: Record<string, unknown> }): Promise<void> {
         const sentFrom = payload.sentFrom ?? 'webapp'
 
         const content = {

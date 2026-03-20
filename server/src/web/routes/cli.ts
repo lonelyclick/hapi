@@ -324,6 +324,8 @@ export function createCliRoutes(
                 machineId: s.metadata.machineId,
                 flavor: s.metadata.flavor,
                 summary: s.metadata.summary,
+                mainSessionId: (s.metadata as any).mainSessionId,
+                brainSummary: (s.metadata as any).brainSummary,
             } : null,
         }))
         return c.json({ sessions: summaries })
@@ -343,6 +345,67 @@ export function createCliRoutes(
         }
         const deleted = await engine.deleteSession(sessionId, { terminateSession: true, force: true })
         return c.json({ ok: deleted })
+    })
+
+    // Brain: patch metadata on a child session
+    const patchMetadataSchema = z.object({
+        brainSummary: z.string().max(2000).optional(),
+    })
+
+    app.patch('/sessions/:id/metadata', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not ready' }, 503)
+        }
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        if (!resolved.ok) {
+            return c.json({ error: resolved.error }, resolved.status)
+        }
+
+        const body = await c.req.json().catch(() => null)
+        const parsed = patchMetadataSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid body' }, 400)
+        }
+
+        const result = await engine.patchSessionMetadata(sessionId, parsed.data)
+        if (!result.ok) {
+            return c.json({ error: result.error }, 500)
+        }
+
+        return c.json({ ok: true })
+    })
+
+    // Brain: get session status with token stats
+    app.get('/sessions/:id/status', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not ready' }, 503)
+        }
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        if (!resolved.ok) {
+            return c.json({ error: resolved.error }, resolved.status)
+        }
+
+        const session = resolved.session
+        const messageCount = await engine.getMessageCount(sessionId)
+        const lastUsage = await engine.getLastUsageForSession(sessionId)
+
+        return c.json({
+            active: session.active,
+            thinking: session.thinking ?? false,
+            messageCount,
+            lastUsage,
+            metadata: session.metadata ? {
+                path: session.metadata.path,
+                summary: session.metadata.summary,
+                brainSummary: (session.metadata as any).brainSummary,
+            } : null,
+        })
     })
 
     // Claude 多账号：获取当前活跃账号

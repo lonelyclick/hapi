@@ -75,6 +75,7 @@ export interface IStore {
     getSessions(): Promise<StoredSession[]>
     getSessionsByNamespace(namespace: string): Promise<StoredSession[]>
     deleteSession(id: string): Promise<boolean>
+    patchSessionMetadata(id: string, patch: Record<string, unknown>, namespace: string): Promise<boolean>
 
     // === Machine 操作 ===
     getOrCreateMachine(id: string, metadata: unknown, daemonState: unknown, namespace: string): Promise<StoredMachine>
@@ -424,6 +425,20 @@ export interface IStore {
         team: StoredAITeam
         members: Array<StoredAITeamMember & { profile: StoredAIProfile | null }>
     } | null>
+
+    // === Feishu Chat Session 映射 ===
+    createFeishuChatSession(data: {
+        feishuChatId: string
+        feishuChatType: string
+        sessionId: string
+        namespace: string
+        feishuChatName?: string | null
+    }): Promise<{ feishuChatId: string; sessionId: string }>
+    getFeishuChatSession(feishuChatId: string): Promise<{ feishuChatId: string; feishuChatType: string; sessionId: string; namespace: string; status: string; feishuChatName: string | null; createdAt: number; updatedAt: number; lastMessageAt: number | null } | null>
+    getActiveFeishuChatSessions(): Promise<Array<{ feishuChatId: string; feishuChatType: string; sessionId: string; namespace: string; feishuChatName: string | null }>>
+    updateFeishuChatSession(feishuChatId: string, sessionId: string, status: string): Promise<boolean>
+    updateFeishuChatSessionStatus(feishuChatId: string, status: string): Promise<boolean>
+    touchFeishuChatSession(feishuChatId: string): Promise<boolean>
 
     // === 关闭连接 ===
     close(): Promise<void>

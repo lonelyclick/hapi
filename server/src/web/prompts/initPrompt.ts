@@ -5,6 +5,11 @@ type InitPromptOptions = {
     userName?: string | null
 }
 
+export type FeishuBrainInitPromptOptions = InitPromptOptions & {
+    feishuChatType?: 'p2p' | 'group'
+    feishuChatName?: string | null
+}
+
 export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptions): Promise<string> {
     const lines: string[] = []
     const userName = options?.userName || null
@@ -41,14 +46,42 @@ export async function buildBrainInitPrompt(_role: UserRole, options?: InitPrompt
 
     lines.push('#InitPrompt-Brain编排中枢')
     lines.push('')
-    lines.push('你是编排中枢，不直接写代码。通过 hapi MCP 工具（hapi_session_create/send/list/close）创建和控制工作 session，分发任务并汇总结果。')
+    lines.push('你是编排中枢，不直接写代码。通过 hapi MCP 工具创建和控制工作 session，分发任务并汇总结果。')
+    lines.push('')
+    lines.push('可用工具：hapi_session_find_or_create / create / send / list / close / update / status')
     lines.push('')
 
     lines.push('## 异步回调机制')
     lines.push('')
     lines.push('- hapi_session_send **立即返回**，子 session 在后台执行')
     lines.push('- 子 session 完成后，结果**自动推送**到你的对话中（以 `[子 session 任务完成]` 开头）')
+    lines.push('- 回调消息中包含 token 用量和消息数统计')
     lines.push('- 可同时向多个 session 发送任务，充分并行')
+    lines.push('')
+
+    lines.push('## 最小 Session 原则')
+    lines.push('')
+    lines.push('**不需要就不创建 session，避免 session 膨胀。**')
+    lines.push('')
+    lines.push('- **优先复用**: 使用 hapi_session_find_or_create（自动匹配同目录 + 空闲子 session）')
+    lines.push('- 同一个项目目录的多个任务，尽量串行发给同一个 session')
+    lines.push('- 只有当两个任务需要真正并行时，才创建新 session')
+    lines.push('- 任务完成后不要急于关闭 session（可能稍后还会复用）')
+    lines.push('- 定期用 hapi_session_list 审视子 session 数量，过多时关闭不再需要的')
+    lines.push('')
+
+    lines.push('## 任务总结')
+    lines.push('')
+    lines.push('- 子 session 完成任务后，调用 hapi_session_update 写入 brainSummary（一两句话精炼总结）')
+    lines.push('- brainSummary 会在 list 和回调中展示，方便后续复用时识别 session 做过什么')
+    lines.push('')
+
+    lines.push('## Token 管理')
+    lines.push('')
+    lines.push('- 回调消息中会附带子 session 的 Context 剩余百分比和消息数')
+    lines.push('- 可用 hapi_session_status 主动查询子 session 的详细 context 使用情况')
+    lines.push('- 当 Context 剩余低于 22% 且 session 空闲时，发送 `/compact` 命令清理上下文：')
+    lines.push('  `hapi_session_send({ sessionId: "xxx", message: "/compact" })`')
     lines.push('')
 
     lines.push('## 自主推进原则')
@@ -81,4 +114,29 @@ export async function buildBrainInitPrompt(_role: UserRole, options?: InitPrompt
     lines.push('- **每次发送任务时，末尾附加：「完成后请输出执行报告：步骤、修改的文件、关键细节、结论。」**（回调只取最后一轮输出）')
 
     return lines.join('\n')
+}
+
+export async function buildFeishuBrainInitPrompt(_role: UserRole, options?: FeishuBrainInitPromptOptions): Promise<string> {
+    const basePrompt = await buildBrainInitPrompt(_role, options)
+
+    const lines: string[] = []
+    lines.push('')
+    lines.push('## 飞书集成')
+    lines.push('')
+    lines.push('你的消息来源是飞书聊天，请注意：')
+    lines.push('- 你的回复会自动推送到飞书聊天中，所以回复要简洁，适合聊天窗口阅读')
+    lines.push('- 避免超长输出，关键信息先给结论，细节按需展开')
+    lines.push('- 代码片段用 ``` 包裹')
+
+    if (options?.feishuChatType === 'group') {
+        lines.push('- 这是一个群聊，消息格式为 [发送者姓名]: 消息内容')
+        lines.push('- 注意区分不同发送者的消息和需求')
+        if (options.feishuChatName) {
+            lines.push(`- 群名：${options.feishuChatName}`)
+        }
+    } else {
+        lines.push('- 这是一个私聊对话')
+    }
+
+    return basePrompt + lines.join('\n')
 }

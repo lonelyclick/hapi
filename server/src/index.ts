@@ -13,6 +13,7 @@ import { PostgresStore } from './store/postgres'
 import type { IStore } from './store/interface'
 import { SyncEngine, type SyncEvent } from './sync/syncEngine'
 import { HappyBot } from './telegram/bot'
+import { FeishuBot } from './feishu/bot'
 import { startWebServer } from './web/server'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
@@ -37,6 +38,7 @@ function formatSource(source: ConfigSource | 'generated'): string {
 
 let syncEngine: SyncEngine | null = null
 let happyBot: HappyBot | null = null
+let feishuBot: FeishuBot | null = null
 let webServer: BunServer<WebSocketData> | null = null
 let sseManager: SSEManager | null = null
 
@@ -134,6 +136,21 @@ async function main() {
         })
     }
 
+    // Initialize Feishu bot (optional - separate credentials from STT)
+    const feishuBotAppId = process.env.FEISHU_BOT_APP_ID || null
+    const feishuBotAppSecret = process.env.FEISHU_BOT_APP_SECRET || null
+    if (feishuBotAppId && feishuBotAppSecret) {
+        feishuBot = new FeishuBot({
+            syncEngine,
+            store,
+            appId: feishuBotAppId,
+            appSecret: feishuBotAppSecret,
+        })
+        console.log('[Server] Feishu Bot: enabled')
+    } else {
+        console.log('[Server] Feishu Bot: disabled (missing FEISHU_BOT_APP_ID/FEISHU_BOT_APP_SECRET)')
+    }
+
     // Start HTTP server
     webServer = await startWebServer({
         getSyncEngine: () => syncEngine,
@@ -150,12 +167,18 @@ async function main() {
         await happyBot.start()
     }
 
+    // Start Feishu bot if configured
+    if (feishuBot) {
+        await feishuBot.start()
+    }
+
     console.log('\nHAPI Server is ready!')
 
     // Handle shutdown
     const shutdown = async () => {
         console.log('\nShutting down...')
         stopTokenRefreshTimer()
+        await feishuBot?.stop()
         await happyBot?.stop()
         syncEngine?.stop()
         sseManager?.stop()

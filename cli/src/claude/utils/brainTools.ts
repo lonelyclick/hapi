@@ -26,6 +26,18 @@ export function registerBrainTools(
 ): void {
     const { apiClient: api, machineId, brainSessionId } = options
 
+    // ===== Helper: wait for session to come online =====
+    async function waitForSessionOnline(sessionId: string, timeoutSec = 30): Promise<boolean> {
+        for (let i = 0; i < timeoutSec; i++) {
+            try {
+                const session = await api.getSession(sessionId)
+                if (session.active) return true
+            } catch { /* not ready yet */ }
+            await new Promise(r => setTimeout(r, 1000))
+        }
+        return false
+    }
+
     // ===== 1. hapi_session_create =====
     const createSchema: z.ZodTypeAny = z.object({
         directory: z.string().describe('工作目录的绝对路径，如 /home/guang/softwares/hapi'),
@@ -35,7 +47,7 @@ export function registerBrainTools(
 
     mcp.registerTool<any, any>('hapi_session_create', {
         title: 'Create Session',
-        description: '在指定机器上创建新的工作 session。返回 sessionId 用于后续操作。',
+        description: '强制创建新的工作 session。如果只想发任务到已有目录，优先使用 hapi_session_find_or_create 来复用空闲 session。',
         inputSchema: createSchema,
     }, async (args: { directory: string; machineId?: string; agent?: string }) => {
         try {
@@ -51,19 +63,7 @@ export function registerBrainTools(
             })
 
             if (result.type === 'success') {
-                // Wait for session to come online (up to 30s)
-                let ready = false
-                for (let i = 0; i < 30; i++) {
-                    try {
-                        const session = await api.getSession(result.sessionId)
-                        if (session.active) {
-                            ready = true
-                            break
-                        }
-                    } catch { /* not ready yet */ }
-                    await new Promise(r => setTimeout(r, 1000))
-                }
-
+                const ready = await waitForSessionOnline(result.sessionId)
                 return {
                     content: [{
                         type: 'text' as const,
@@ -90,7 +90,88 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 2. hapi_session_send (async, non-blocking) =====
+    // ===== 2. hapi_session_find_or_create =====
+    const findOrCreateSchema: z.ZodTypeAny = z.object({
+        directory: z.string().describe('工作目录的绝对路径'),
+        machineId: z.string().optional().describe('目标机器 ID。不填则使用当前机器。'),
+        agent: z.enum(['claude', 'codex', 'opencode']).optional().describe('Agent 类型，默认 claude'),
+    })
+
+    mcp.registerTool<any, any>('hapi_session_find_or_create', {
+        title: 'Find or Create Session',
+        description: '查找可复用的空闲子 session（匹配 directory + 属于当前 Brain），找到则直接返回；否则创建新 session。推荐优先使用此工具。',
+        inputSchema: findOrCreateSchema,
+    }, async (args: { directory: string; machineId?: string; agent?: string }) => {
+        try {
+            const targetMachineId = args.machineId || machineId
+
+            // Step 1: List online sessions
+            const data = await api.listSessions({ includeOffline: false })
+
+            // Step 2: Find reusable child session
+            const candidates = data.sessions.filter(s => {
+                if (!s.metadata) return false
+                if (s.metadata.source !== 'brain-child') return false
+                if (s.metadata.mainSessionId !== brainSessionId) return false
+                if (s.metadata.path !== args.directory) return false
+                if (s.metadata.machineId !== targetMachineId) return false
+                if (!s.active) return false
+                if (s.thinking) return false
+                return true
+            })
+
+            // Pick the most recently active one
+            if (candidates.length > 0) {
+                const best = candidates.sort((a, b) => b.activeAt - a.activeAt)[0]
+                const title = best.metadata?.summary?.text || best.metadata?.brainSummary || '未命名'
+                return {
+                    content: [{
+                        type: 'text' as const,
+                        text: `复用已有 Session。\n\nsessionId: ${best.id}\n标题: ${title}\n状态: ✅ 空闲`,
+                    }],
+                }
+            }
+
+            // Step 3: No reusable session, create new one
+            logger.debug(`[brain] No reusable session for dir=${args.directory}, creating new one`)
+
+            const result = await api.brainSpawnSession({
+                machineId: targetMachineId,
+                directory: args.directory,
+                agent: args.agent,
+                source: 'brain-child',
+                mainSessionId: brainSessionId,
+            })
+
+            if (result.type === 'success') {
+                const ready = await waitForSessionOnline(result.sessionId)
+                return {
+                    content: [{
+                        type: 'text' as const,
+                        text: `无可复用 session，已创建新 session。\n\nsessionId: ${result.sessionId}\n状态: ${ready ? '已上线' : '启动中（可能需要等待几秒）'}`,
+                    }],
+                }
+            }
+
+            return {
+                content: [{
+                    type: 'text' as const,
+                    text: `创建失败: ${result.message}`,
+                }],
+                isError: true,
+            }
+        } catch (err: any) {
+            return {
+                content: [{
+                    type: 'text' as const,
+                    text: `查找/创建失败: ${err.message || String(err)}`,
+                }],
+                isError: true,
+            }
+        }
+    })
+
+    // ===== 3. hapi_session_send (async, non-blocking) =====
     const sendSchema: z.ZodTypeAny = z.object({
         sessionId: z.string().describe('目标 session ID'),
         message: z.string().describe('要发送的消息/任务指令'),
@@ -156,7 +237,7 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 3. hapi_session_list =====
+    // ===== 4. hapi_session_list =====
     const listSchema: z.ZodTypeAny = z.object({
         includeOffline: z.boolean().optional().describe('是否包含离线 session，默认 false（只返回在线的）'),
     })
@@ -185,7 +266,9 @@ export function registerBrainTools(
                         : '✅ 空闲'
                 const name = s.metadata?.summary?.text || s.metadata?.path || '未命名'
                 const source = s.metadata?.source ? ` [${s.metadata.source}]` : ''
-                return `- ${s.id.slice(0, 8)} [${status}] ${name}${source}`
+                const isMine = s.metadata?.mainSessionId === brainSessionId ? ' 📌' : ''
+                const summary = s.metadata?.brainSummary ? `\n  总结: ${s.metadata.brainSummary}` : ''
+                return `- ${s.id.slice(0, 8)} [${status}] ${name}${source}${isMine}${summary}`
             })
 
             return {
@@ -205,7 +288,7 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 4. hapi_session_close =====
+    // ===== 5. hapi_session_close =====
     const closeSchema: z.ZodTypeAny = z.object({
         sessionId: z.string().describe('要关闭的 session ID'),
     })
@@ -243,12 +326,98 @@ export function registerBrainTools(
         }
     })
 
+    // ===== 6. hapi_session_update =====
+    const updateSchema: z.ZodTypeAny = z.object({
+        sessionId: z.string().describe('目标 session ID'),
+        brainSummary: z.string().describe('Brain 写入的任务总结（持久化到 session metadata）'),
+    })
+
+    mcp.registerTool<any, any>('hapi_session_update', {
+        title: 'Update Session',
+        description: '更新子 session 的元信息。用于写入 brainSummary（任务总结），方便后续复用时识别 session 做过什么。',
+        inputSchema: updateSchema,
+    }, async (args: { sessionId: string; brainSummary: string }) => {
+        try {
+            await api.patchSessionMetadata(args.sessionId, {
+                brainSummary: args.brainSummary,
+            })
+            return {
+                content: [{
+                    type: 'text' as const,
+                    text: `已更新 Session ${args.sessionId} 的总结。`,
+                }],
+            }
+        } catch (err: any) {
+            return {
+                content: [{
+                    type: 'text' as const,
+                    text: `更新失败: ${err.message || String(err)}`,
+                }],
+                isError: true,
+            }
+        }
+    })
+
+    // ===== 7. hapi_session_status =====
+    const statusSchema: z.ZodTypeAny = z.object({
+        sessionId: z.string().describe('要查询的 session ID'),
+    })
+
+    mcp.registerTool<any, any>('hapi_session_status', {
+        title: 'Session Status',
+        description: '查询 session 的详细状态：在线/执行中/消息数/token 用量/context 使用率。用于判断是否需要 compact。',
+        inputSchema: statusSchema,
+    }, async (args: { sessionId: string }) => {
+        try {
+            const status = await api.getSessionStatus(args.sessionId)
+
+            const lines = [
+                `Session: ${args.sessionId}`,
+                `状态: ${!status.active ? '离线' : status.thinking ? '执行中' : '空闲'}`,
+                `消息数: ${status.messageCount}`,
+            ]
+
+            if (status.metadata?.brainSummary) {
+                lines.push(`总结: ${status.metadata.brainSummary}`)
+            }
+
+            if (status.lastUsage) {
+                const contextBudget = 990_000  // 1M - 10K headroom
+                const contextSize = status.lastUsage.contextSize ?? status.lastUsage.input_tokens
+                const remainingPercent = Math.max(0, Math.round((1 - contextSize / contextBudget) * 100))
+                lines.push(`Context 剩余: ~${remainingPercent}% (${contextSize.toLocaleString()} / ${contextBudget.toLocaleString()} tokens)`)
+
+                if (remainingPercent <= 20) {
+                    lines.push(`⚠️ Context 剩余不足，建议发送 /compact 命令`)
+                }
+            }
+
+            return {
+                content: [{
+                    type: 'text' as const,
+                    text: lines.join('\n'),
+                }],
+            }
+        } catch (err: any) {
+            return {
+                content: [{
+                    type: 'text' as const,
+                    text: `查询失败: ${err.message || String(err)}`,
+                }],
+                isError: true,
+            }
+        }
+    })
+
     toolNames.push(
         'hapi_session_create',
+        'hapi_session_find_or_create',
         'hapi_session_send',
         'hapi_session_list',
         'hapi_session_close',
+        'hapi_session_update',
+        'hapi_session_status',
     )
 
-    logger.debug(`[brain] Registered 4 brain tools (async mode) for session ${brainSessionId}`)
+    logger.debug(`[brain] Registered 7 brain tools (async mode) for session ${brainSessionId}`)
 }

@@ -488,6 +488,22 @@ export class PostgresStore implements IStore {
             DROP TABLE IF EXISTS brain_executions CASCADE;
             DROP TABLE IF EXISTS brain_rounds CASCADE;
             DROP TABLE IF EXISTS brain_sessions CASCADE;
+
+            -- Feishu Chat Sessions 映射表
+            CREATE TABLE IF NOT EXISTS feishu_chat_sessions (
+                id SERIAL PRIMARY KEY,
+                feishu_chat_id TEXT NOT NULL UNIQUE,
+                feishu_chat_type TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                namespace TEXT NOT NULL DEFAULT 'default',
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at BIGINT NOT NULL DEFAULT FLOOR(EXTRACT(EPOCH FROM NOW()) * 1000),
+                updated_at BIGINT NOT NULL DEFAULT FLOOR(EXTRACT(EPOCH FROM NOW()) * 1000),
+                last_message_at BIGINT,
+                feishu_chat_name TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_feishu_chat_sessions_session ON feishu_chat_sessions(session_id);
+            CREATE INDEX IF NOT EXISTS idx_feishu_chat_sessions_status ON feishu_chat_sessions(status);
         `)
     }
 
@@ -703,6 +719,18 @@ export class PostgresStore implements IStore {
 
     async deleteSession(id: string): Promise<boolean> {
         const result = await this.pool.query('DELETE FROM sessions WHERE id = $1', [id])
+        return (result.rowCount ?? 0) > 0
+    }
+
+    async patchSessionMetadata(id: string, patch: Record<string, unknown>, namespace: string): Promise<boolean> {
+        const result = await this.pool.query(`
+            UPDATE sessions
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
+                metadata_version = metadata_version + 1,
+                updated_at = $2,
+                seq = seq + 1
+            WHERE id = $3 AND namespace = $4
+        `, [JSON.stringify(patch), Date.now(), id, namespace])
         return (result.rowCount ?? 0) > 0
     }
 
@@ -3197,5 +3225,84 @@ export class PostgresStore implements IStore {
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }
+    }
+
+    // ========== Feishu Chat Session 操作 ==========
+
+    async createFeishuChatSession(data: {
+        feishuChatId: string
+        feishuChatType: string
+        sessionId: string
+        namespace: string
+        feishuChatName?: string | null
+    }): Promise<{ feishuChatId: string; sessionId: string }> {
+        const now = Date.now()
+        await this.pool.query(`
+            INSERT INTO feishu_chat_sessions (feishu_chat_id, feishu_chat_type, session_id, namespace, status, created_at, updated_at, feishu_chat_name)
+            VALUES ($1, $2, $3, $4, 'active', $5, $5, $6)
+            ON CONFLICT (feishu_chat_id) DO UPDATE SET
+                session_id = EXCLUDED.session_id,
+                status = 'active',
+                updated_at = EXCLUDED.updated_at,
+                feishu_chat_name = COALESCE(EXCLUDED.feishu_chat_name, feishu_chat_sessions.feishu_chat_name)
+        `, [data.feishuChatId, data.feishuChatType, data.sessionId, data.namespace, now, data.feishuChatName ?? null])
+        return { feishuChatId: data.feishuChatId, sessionId: data.sessionId }
+    }
+
+    async getFeishuChatSession(feishuChatId: string): Promise<{ feishuChatId: string; feishuChatType: string; sessionId: string; namespace: string; status: string; feishuChatName: string | null; createdAt: number; updatedAt: number; lastMessageAt: number | null } | null> {
+        const result = await this.pool.query(
+            'SELECT * FROM feishu_chat_sessions WHERE feishu_chat_id = $1',
+            [feishuChatId]
+        )
+        if (result.rows.length === 0) return null
+        const row = result.rows[0]
+        return {
+            feishuChatId: row.feishu_chat_id,
+            feishuChatType: row.feishu_chat_type,
+            sessionId: row.session_id,
+            namespace: row.namespace,
+            status: row.status,
+            feishuChatName: row.feishu_chat_name,
+            createdAt: Number(row.created_at),
+            updatedAt: Number(row.updated_at),
+            lastMessageAt: row.last_message_at ? Number(row.last_message_at) : null,
+        }
+    }
+
+    async getActiveFeishuChatSessions(): Promise<Array<{ feishuChatId: string; feishuChatType: string; sessionId: string; namespace: string; feishuChatName: string | null }>> {
+        const result = await this.pool.query(
+            "SELECT feishu_chat_id, feishu_chat_type, session_id, namespace, feishu_chat_name FROM feishu_chat_sessions WHERE status = 'active'"
+        )
+        return result.rows.map((row: any) => ({
+            feishuChatId: row.feishu_chat_id,
+            feishuChatType: row.feishu_chat_type,
+            sessionId: row.session_id,
+            namespace: row.namespace,
+            feishuChatName: row.feishu_chat_name,
+        }))
+    }
+
+    async updateFeishuChatSession(feishuChatId: string, sessionId: string, status: string): Promise<boolean> {
+        const result = await this.pool.query(
+            'UPDATE feishu_chat_sessions SET session_id = $1, status = $2, updated_at = $3 WHERE feishu_chat_id = $4',
+            [sessionId, status, Date.now(), feishuChatId]
+        )
+        return (result.rowCount ?? 0) > 0
+    }
+
+    async updateFeishuChatSessionStatus(feishuChatId: string, status: string): Promise<boolean> {
+        const result = await this.pool.query(
+            'UPDATE feishu_chat_sessions SET status = $1, updated_at = $2 WHERE feishu_chat_id = $3',
+            [status, Date.now(), feishuChatId]
+        )
+        return (result.rowCount ?? 0) > 0
+    }
+
+    async touchFeishuChatSession(feishuChatId: string): Promise<boolean> {
+        const result = await this.pool.query(
+            'UPDATE feishu_chat_sessions SET last_message_at = $1, updated_at = $1 WHERE feishu_chat_id = $2',
+            [Date.now(), feishuChatId]
+        )
+        return (result.rowCount ?? 0) > 0
     }
 }
