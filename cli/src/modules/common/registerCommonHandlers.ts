@@ -161,6 +161,7 @@ export interface SpawnSessionOptions {
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
     source?: string;
     mainSessionId?: string;
+    caller?: string;
 }
 
 export interface SpawnLogEntry {

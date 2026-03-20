@@ -1584,6 +1584,7 @@ export class SyncEngine {
             modelReasoningEffort?: Session['modelReasoningEffort']
             source?: string
             mainSessionId?: string
+            caller?: string
         }
     ): Promise<{ type: 'success'; sessionId: string; logs?: unknown[] } | { type: 'error'; message: string; logs?: unknown[] }> {
         try {
@@ -1609,7 +1610,8 @@ export class SyncEngine {
                     modelMode: options?.modelMode,
                     modelReasoningEffort: options?.modelReasoningEffort,
                     source: options?.source,
-                    mainSessionId: options?.mainSessionId
+                    mainSessionId: options?.mainSessionId,
+                    caller: options?.caller,
                 }
             )
             if (result && typeof result === 'object') {

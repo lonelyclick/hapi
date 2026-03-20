@@ -395,6 +395,9 @@ export async function startDaemon(): Promise<void> {
         if (options.mainSessionId) {
           extraEnv = { ...extraEnv, HAPI_MAIN_SESSION_ID: options.mainSessionId };
         }
+        if (options.caller) {
+          extraEnv = { ...extraEnv, HAPI_CALLER: options.caller };
+        }
         // Pass Claude settings type (litellm or claude)
         if (options.claudeSettingsType) {
           extraEnv = { ...extraEnv, HAPI_CLAUDE_SETTINGS_TYPE: options.claudeSettingsType };

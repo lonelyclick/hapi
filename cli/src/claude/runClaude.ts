@@ -71,7 +71,8 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     const runtimeAgent = extractClaudeAgent(options.claudeArgs);
     const sessionSource = process.env.HAPI_SESSION_SOURCE?.trim();
     const mainSessionId = process.env.HAPI_MAIN_SESSION_ID?.trim();
-    logger.debug(`[START] sessionSource=${sessionSource}, mainSessionId=${mainSessionId}`);
+    const sessionCaller = process.env.HAPI_CALLER?.trim();
+    logger.debug(`[START] sessionSource=${sessionSource}, mainSessionId=${mainSessionId}, caller=${sessionCaller}`);
 
     // Log environment info at startup
     logger.debugLargeJson('[START] HAPI process started', getEnvironmentInfo());
@@ -519,8 +520,10 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         allowedTools: sessionSource === 'brain'
             ? [
                 // Brain mode: whitelist only MCP tools, no built-in tools (Read, Write, Bash, etc.)
-                // Exclude change_title — Brain session titles are set by the server
-                ...happyServer.toolNames.filter(t => t !== 'change_title').map(toolName => `mcp__hapi__${toolName}`),
+                // Feishu sessions: exclude change_title (title is set server-side)
+                ...happyServer.toolNames
+                    .filter(t => sessionCaller === 'feishu' ? t !== 'change_title' : true)
+                    .map(toolName => `mcp__hapi__${toolName}`),
                 'mcp__yoho-memory__recall',
                 'mcp__yoho-memory__remember',
                 'mcp__yoho-memory__get_playbook',

@@ -243,6 +243,9 @@ export class FeishuBot {
         const state = this.chatStates.get(chatId)
         if (!state || state.incoming.length === 0) return
 
+        // Guard: if session is being created, don't flush yet (messages stay in buffer)
+        if (state.creating) return
+
         // Take all buffered messages and clear
         const messages = state.incoming.splice(0)
         if (state.debounceTimer) {
@@ -251,9 +254,6 @@ export class FeishuBot {
         }
 
         const chatType = messages[0].chatType
-
-        // Ensure session exists
-        if (state.creating) return // guard: another flush is already creating
         const senderName = messages[0].senderName
         const sessionId = await this.ensureSession(chatId, chatType, senderName)
         if (!sessionId) {
@@ -424,6 +424,7 @@ export class FeishuBot {
                     source: 'brain',
                     permissionMode: 'bypassPermissions',
                     token: claudeToken,
+                    caller: 'feishu',
                 }
             )
 
