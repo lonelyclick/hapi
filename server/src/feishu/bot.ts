@@ -9,7 +9,6 @@
 import * as lark from '@larksuiteoapi/node-sdk'
 import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { IStore } from '../store/interface'
-import { FeishuMessageQueue } from './messageQueue'
 import { extractAgentText, isInternalBrainMessage, buildFeishuMessage } from './formatter'
 import { buildFeishuBrainInitPrompt } from '../web/prompts/initPrompt'
 
@@ -20,13 +19,30 @@ export interface FeishuBotConfig {
     appSecret: string
 }
 
+interface IncomingMessage {
+    text: string
+    senderName: string
+    senderOpenId: string
+    chatType: string
+}
+
+interface ChatState {
+    // Buffered incoming messages not yet sent to Brain
+    incoming: IncomingMessage[]
+    // Debounce timer for initial 10s wait
+    debounceTimer: ReturnType<typeof setTimeout> | null
+    // Whether Brain is currently processing (thinking)
+    busy: boolean
+    // Whether session creation is in progress
+    creating: boolean
+}
+
 export class FeishuBot {
     private syncEngine: SyncEngine
     private store: IStore
     private larkClient: lark.Client
     private wsClient: lark.WSClient | null = null
     private unsubscribeSyncEvents: (() => void) | null = null
-    private messageQueue = new FeishuMessageQueue()
     private isRunning = false
 
     // Bidirectional mapping cache (loaded from DB at startup)
@@ -34,12 +50,16 @@ export class FeishuBot {
     private chatIdToSessionId: Map<string, string> = new Map()
     private chatIdToChatType: Map<string, string> = new Map()
 
+    // Per-chat state for message buffering
+    private chatStates: Map<string, ChatState> = new Map()
+
     // Debounce: buffer agent messages per chatId before sending to Feishu
     private pendingMessages: Map<string, { texts: string[]; timer: ReturnType<typeof setTimeout> }> = new Map()
 
     // Rebuild rate limiting: chatId -> last rebuild timestamp
     private lastRebuildAt: Map<string, number> = new Map()
     private readonly REBUILD_COOLDOWN_MS = 30_000
+    private readonly INPUT_DEBOUNCE_MS = 10_000
 
     // Bot's own open_id (resolved at start)
     private botOpenId: string | null = null
@@ -126,7 +146,12 @@ export class FeishuBot {
         }
         this.pendingMessages.clear()
 
-        this.messageQueue.clear()
+        // Clear all chat state timers
+        for (const state of this.chatStates.values()) {
+            if (state.debounceTimer) clearTimeout(state.debounceTimer)
+        }
+        this.chatStates.clear()
+
         console.log('[FeishuBot] Stopped')
     }
 
@@ -183,35 +208,81 @@ export class FeishuBot {
         // Resolve sender name
         const senderName = await this.resolveSenderName(senderOpenId)
 
-        // Format message with sender info for group chats
-        const formattedText = chatType === 'group'
-            ? `[${senderName}]: ${text}`
-            : text
-
         console.log(`[FeishuBot] Message from ${senderName} in ${chatType} ${chatId.slice(0, 12)}...: ${text.slice(0, 100)}`)
 
-        // Enqueue to serial queue for this chatId
-        this.messageQueue.enqueue(chatId, async () => {
-            const sessionId = await this.ensureSession(chatId, chatType)
-            if (!sessionId) {
-                await this.sendFeishuText(chatId, '抱歉，无法创建会话。请检查是否有在线机器。')
-                return
-            }
+        // Get or create chat state
+        let state = this.chatStates.get(chatId)
+        if (!state) {
+            state = { incoming: [], debounceTimer: null, busy: false, creating: false }
+            this.chatStates.set(chatId, state)
+        }
 
-            // Touch last message time
-            await this.store.touchFeishuChatSession(chatId).catch(() => {})
+        // Add message to buffer
+        state.incoming.push({ text, senderName, senderOpenId, chatType })
 
-            // Send to Brain session
-            await this.syncEngine.sendMessage(sessionId, {
-                text: formattedText,
-                sentFrom: 'feishu',
-                meta: {
-                    feishuChatId: chatId,
-                    feishuChatType: chatType,
-                    senderName,
-                    senderOpenId,
-                }
+        if (state.busy || state.creating) {
+            // Brain is working or session is being created — just buffer, will flush when done
+            console.log(`[FeishuBot] Chat ${chatId.slice(0, 12)} busy, buffered (${state.incoming.length} pending)`)
+            return
+        }
+
+        // Reset debounce timer (10s)
+        if (state.debounceTimer) clearTimeout(state.debounceTimer)
+        state.debounceTimer = setTimeout(() => {
+            this.flushIncomingMessages(chatId).catch(err => {
+                console.error(`[FeishuBot] flushIncomingMessages error for ${chatId.slice(0, 12)}:`, err)
             })
+        }, this.INPUT_DEBOUNCE_MS)
+    }
+
+    /**
+     * Merge all buffered incoming messages and send to Brain as one message.
+     */
+    private async flushIncomingMessages(chatId: string): Promise<void> {
+        const state = this.chatStates.get(chatId)
+        if (!state || state.incoming.length === 0) return
+
+        // Take all buffered messages and clear
+        const messages = state.incoming.splice(0)
+        if (state.debounceTimer) {
+            clearTimeout(state.debounceTimer)
+            state.debounceTimer = null
+        }
+
+        const chatType = messages[0].chatType
+
+        // Ensure session exists
+        if (state.creating) return // guard: another flush is already creating
+        const sessionId = await this.ensureSession(chatId, chatType)
+        if (!sessionId) {
+            await this.sendFeishuText(chatId, '抱歉，无法创建会话。请检查是否有在线机器。')
+            return
+        }
+
+        // Touch last message time
+        await this.store.touchFeishuChatSession(chatId).catch(() => {})
+
+        // Format: merge all messages into one text block
+        const formattedParts = messages.map(m => {
+            return chatType === 'group' ? `[${m.senderName}]: ${m.text}` : m.text
+        })
+        const combined = formattedParts.join('\n')
+
+        console.log(`[FeishuBot] Sending ${messages.length} merged message(s) to session ${sessionId.slice(0, 8)}`)
+
+        // Mark busy before sending
+        state.busy = true
+
+        // Send to Brain session
+        await this.syncEngine.sendMessage(sessionId, {
+            text: combined,
+            sentFrom: 'feishu',
+            meta: {
+                feishuChatId: chatId,
+                feishuChatType: chatType,
+                senderName: messages[messages.length - 1].senderName,
+                senderOpenId: messages[messages.length - 1].senderOpenId,
+            }
         })
     }
 
@@ -263,34 +334,41 @@ export class FeishuBot {
     // ========== Session management ==========
 
     private async ensureSession(chatId: string, chatType: string): Promise<string | null> {
-        // Check existing mapping
-        const existingSessionId = this.chatIdToSessionId.get(chatId)
-        if (existingSessionId) {
-            const session = this.syncEngine.getSession(existingSessionId)
-            if (session?.active) {
-                return existingSessionId
-            }
+        const state = this.chatStates.get(chatId)
+        if (state) state.creating = true
 
-            // Session is dead or missing, check offline duration
-            const activeAt = session?.activeAt || 0
-            const offlineDuration = Date.now() - activeAt
-
-            if (session && offlineDuration < 120_000) {
-                // Recently went offline, might be restarting - wait briefly
-                console.log(`[FeishuBot] Session ${existingSessionId.slice(0, 8)} recently offline (${Math.round(offlineDuration / 1000)}s), waiting...`)
-                await new Promise(resolve => setTimeout(resolve, 10_000))
-                const retrySession = this.syncEngine.getSession(existingSessionId)
-                if (retrySession?.active) {
+        try {
+            // Check existing mapping
+            const existingSessionId = this.chatIdToSessionId.get(chatId)
+            if (existingSessionId) {
+                const session = this.syncEngine.getSession(existingSessionId)
+                if (session?.active) {
                     return existingSessionId
                 }
+
+                // Session is dead or missing, check offline duration
+                const activeAt = session?.activeAt || 0
+                const offlineDuration = Date.now() - activeAt
+
+                if (session && offlineDuration < 120_000) {
+                    // Recently went offline, might be restarting - wait briefly
+                    console.log(`[FeishuBot] Session ${existingSessionId.slice(0, 8)} recently offline (${Math.round(offlineDuration / 1000)}s), waiting...`)
+                    await new Promise(resolve => setTimeout(resolve, 10_000))
+                    const retrySession = this.syncEngine.getSession(existingSessionId)
+                    if (retrySession?.active) {
+                        return existingSessionId
+                    }
+                }
+
+                // Session is dead, rebuild
+                return await this.rebuildSession(chatId, chatType)
             }
 
-            // Session is dead, rebuild
-            return await this.rebuildSession(chatId, chatType)
+            // No mapping exists, create new session
+            return await this.createBrainSession(chatId, chatType)
+        } finally {
+            if (state) state.creating = false
         }
-
-        // No mapping exists, create new session
-        return await this.createBrainSession(chatId, chatType)
     }
 
     private async createBrainSession(chatId: string, chatType: string, chatName?: string): Promise<string | null> {
@@ -451,6 +529,29 @@ export class FeishuBot {
 
             // Debounce: buffer messages for 500ms before sending
             this.bufferFeishuMessage(chatId, text)
+        }
+
+        // Detect "task complete": wasThinking=true + thinking=false
+        if (event.type === 'session-updated' && event.sessionId && event.data) {
+            const data = event.data as Record<string, unknown>
+            if (data.wasThinking === true && data.thinking === false) {
+                const chatId = this.sessionToChatId.get(event.sessionId)
+                if (!chatId) return
+
+                const state = this.chatStates.get(chatId)
+                if (!state) return
+
+                // Brain finished this round
+                state.busy = false
+
+                // If there are pending messages, flush them immediately (no debounce)
+                if (state.incoming.length > 0) {
+                    console.log(`[FeishuBot] Brain done for ${chatId.slice(0, 12)}, flushing ${state.incoming.length} pending message(s)`)
+                    this.flushIncomingMessages(chatId).catch(err => {
+                        console.error(`[FeishuBot] flushIncomingMessages error for ${chatId.slice(0, 12)}:`, err)
+                    })
+                }
+            }
         }
     }
 

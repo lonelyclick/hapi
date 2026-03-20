@@ -80,7 +80,7 @@ export async function buildBrainInitPrompt(_role: UserRole, options?: InitPrompt
     lines.push('')
     lines.push('- 回调消息中会附带子 session 的 Context 剩余百分比和消息数')
     lines.push('- 可用 hapi_session_status 主动查询子 session 的详细 context 使用情况')
-    lines.push('- 当 Context 剩余低于 22% 且 session 空闲时，发送 `/compact` 命令清理上下文：')
+    lines.push('- 当 Context 剩余低于 20% 且 session 空闲时，发送 `/compact` 命令清理上下文：')
     lines.push('  `hapi_session_send({ sessionId: "xxx", message: "/compact" })`')
     lines.push('')
 
