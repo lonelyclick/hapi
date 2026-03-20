@@ -64,6 +64,7 @@ export async function buildBrainInitPrompt(_role: UserRole, options?: InitPrompt
     lines.push('**不需要就不创建 session，避免 session 膨胀。**')
     lines.push('')
     lines.push('- **优先复用**: 使用 hapi_session_find_or_create（自动匹配同目录 + 空闲子 session）')
+    lines.push('- **上下文复用**: 调用 find_or_create 时，传入 `hint` 参数描述任务意图关键词（如 "订单API 优惠券"），工具会自动匹配 brainSummary 相关的 session，复用已有上下文省去重新读代码的成本')
     lines.push('- 同一个项目目录的多个任务，尽量串行发给同一个 session')
     lines.push('- 只有当两个任务需要真正并行时，才创建新 session')
     lines.push('- 任务完成后不要急于关闭 session（可能稍后还会复用）')

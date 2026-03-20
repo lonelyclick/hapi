@@ -11,6 +11,8 @@ import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { IStore } from '../store/interface'
 import { extractAgentText, isInternalBrainMessage, buildFeishuMessage } from './formatter'
 import { buildFeishuBrainInitPrompt } from '../web/prompts/initPrompt'
+import { selectBestAccount } from '../claude-accounts/accountsService'
+import { getClaudeAccessToken } from '../web/routes/usage'
 
 export interface FeishuBotConfig {
     syncEngine: SyncEngine
@@ -384,6 +386,26 @@ export class FeishuBot {
             const homeDir = (machine.metadata as Record<string, unknown>)?.homeDir as string || '/tmp'
             const brainDirectory = `${homeDir}/.hapi/brain-workspace`
 
+            // Get Claude OAuth token from best available account
+            let claudeToken: string | undefined
+            try {
+                const selection = await selectBestAccount()
+                if (selection?.account?.configDir) {
+                    const token = await getClaudeAccessToken(selection.account.configDir)
+                    if (token) {
+                        claudeToken = token
+                        console.log(`[FeishuBot] Using Claude account: ${selection.account.name}`)
+                    }
+                }
+            } catch (err) {
+                console.error('[FeishuBot] Failed to get Claude token:', err)
+            }
+
+            if (!claudeToken) {
+                console.error('[FeishuBot] No valid Claude token available')
+                return null
+            }
+
             const result = await this.syncEngine.spawnSession(
                 machine.id,
                 brainDirectory,
@@ -394,6 +416,7 @@ export class FeishuBot {
                 {
                     source: 'feishu-brain',
                     permissionMode: 'bypassPermissions',
+                    token: claudeToken,
                 }
             )
 

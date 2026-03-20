@@ -93,15 +93,16 @@ export function registerBrainTools(
     // ===== 2. hapi_session_find_or_create =====
     const findOrCreateSchema: z.ZodTypeAny = z.object({
         directory: z.string().describe('工作目录的绝对路径'),
+        hint: z.string().optional().describe('任务意图关键词（如 "订单API 优惠券"），用于匹配已有上下文的 session，优先复用做过相关工作的 session，省去重新理解代码的成本'),
         machineId: z.string().optional().describe('目标机器 ID。不填则使用当前机器。'),
         agent: z.enum(['claude', 'codex', 'opencode']).optional().describe('Agent 类型，默认 claude'),
     })
 
     mcp.registerTool<any, any>('hapi_session_find_or_create', {
         title: 'Find or Create Session',
-        description: '查找可复用的空闲子 session（匹配 directory + 属于当前 Brain），找到则直接返回；否则创建新 session。推荐优先使用此工具。',
+        description: '智能查找可复用的空闲子 session。匹配 directory + 属于当前 Brain，并通过 hint 优先选择上下文相关的 session（基于 brainSummary 匹配）。找不到则创建新 session。推荐优先使用此工具。',
         inputSchema: findOrCreateSchema,
-    }, async (args: { directory: string; machineId?: string; agent?: string }) => {
+    }, async (args: { directory: string; hint?: string; machineId?: string; agent?: string }) => {
         try {
             const targetMachineId = args.machineId || machineId
 
@@ -120,14 +121,39 @@ export function registerBrainTools(
                 return true
             })
 
-            // Pick the most recently active one
+            // Pick the best candidate: prefer context-relevant (hint matches brainSummary), then most recently active
             if (candidates.length > 0) {
-                const best = candidates.sort((a, b) => b.activeAt - a.activeAt)[0]
+                let best = candidates.sort((a, b) => b.activeAt - a.activeAt)[0]
+                let matchReason = '最近活跃'
+
+                if (args.hint && candidates.length > 1) {
+                    // Tokenize hint into keywords, match against brainSummary + session title
+                    const hintKeywords = args.hint.toLowerCase().split(/[\s,，/]+/).filter(k => k.length > 0)
+                    if (hintKeywords.length > 0) {
+                        const scored = candidates.map(s => {
+                            const text = [
+                                s.metadata?.brainSummary || '',
+                                s.metadata?.summary?.text || '',
+                            ].join(' ').toLowerCase()
+                            const hits = hintKeywords.filter(k => text.includes(k)).length
+                            return { session: s, hits }
+                        })
+                        const topMatch = scored.sort((a, b) =>
+                            b.hits - a.hits || b.session.activeAt - a.session.activeAt
+                        )[0]
+                        if (topMatch.hits > 0) {
+                            best = topMatch.session
+                            matchReason = `上下文匹配 (${topMatch.hits}/${hintKeywords.length} 关键词命中)`
+                        }
+                    }
+                }
+
                 const title = best.metadata?.summary?.text || best.metadata?.brainSummary || '未命名'
+                const summary = best.metadata?.brainSummary ? `\n上次总结: ${best.metadata.brainSummary}` : ''
                 return {
                     content: [{
                         type: 'text' as const,
-                        text: `复用已有 Session。\n\nsessionId: ${best.id}\n标题: ${title}\n状态: ✅ 空闲`,
+                        text: `复用已有 Session。\n\nsessionId: ${best.id}\n标题: ${title}\n匹配: ${matchReason}${summary}\n状态: ✅ 空闲`,
                     }],
                 }
             }
