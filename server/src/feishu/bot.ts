@@ -184,6 +184,7 @@ export class FeishuBot {
 
         const chatId = message.chat_id as string
         const chatType = message.chat_type as string // 'p2p' or 'group'
+        const messageId = message.message_id as string
         const senderOpenId = sender.sender_id?.open_id as string
         const messageType = message.message_type as string
 
@@ -214,6 +215,11 @@ export class FeishuBot {
         const senderName = await this.resolveSenderName(senderOpenId)
 
         console.log(`[FeishuBot] Message from ${senderName} in ${chatType} ${chatId.slice(0, 12)}...: ${text.slice(0, 100)}`)
+
+        // React with emoji to acknowledge receipt
+        if (messageId) {
+            this.addReaction(messageId, 'OnIt').catch(() => {})
+        }
 
         // Get or create chat state
         let state = this.chatStates.get(chatId)
@@ -666,6 +672,24 @@ export class FeishuBot {
     }
 
     // ========== Feishu API helpers ==========
+
+    private async addReaction(messageId: string, emojiType: string): Promise<void> {
+        try {
+            const token = await this.getToken()
+            await fetch(`https://open.feishu.cn/open-apis/im/v1/messages/${messageId}/reactions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    reaction_type: { emoji_type: emojiType },
+                }),
+            })
+        } catch (err) {
+            console.error(`[FeishuBot] addReaction failed for ${messageId.slice(0, 12)}:`, err)
+        }
+    }
 
     private async sendFeishuText(chatId: string, text: string): Promise<void> {
         try {
