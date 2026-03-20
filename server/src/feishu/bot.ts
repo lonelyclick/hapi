@@ -353,78 +353,42 @@ export class FeishuBot {
 
     /**
      * Extract readable text from an interactive card message.
-     * Walks through header and elements to collect all text content.
+     *
+     * NOTE: The received card structure differs from the send-side JSON.
+     * Received format:
+     *   { title: "...", elements: [[{tag:"text",text:"..."}, ...], ...] }
+     * Elements is a 2D array (like post/rich-text), with {tag:"text",text} and {tag:"button",text} items.
      */
     private extractCardText(card: any): string | null {
         const texts: string[] = []
 
-        // Header title
-        if (card.header?.title?.content) {
-            texts.push(card.header.title.content)
+        // Title (top-level, not nested under header)
+        if (card.title) {
+            texts.push(card.title)
         }
 
-        // Elements
-        this.extractCardElementTexts(card.elements, texts)
-
-        // i18n_elements fallback
-        if (texts.length === 0 && card.i18n_elements) {
-            const lang = card.i18n_elements.zh_cn || card.i18n_elements.en_us || Object.values(card.i18n_elements)[0]
-            if (Array.isArray(lang)) {
-                this.extractCardElementTexts(lang, texts)
+        // Elements: 2D array (rows of elements)
+        if (Array.isArray(card.elements)) {
+            for (const row of card.elements) {
+                if (Array.isArray(row)) {
+                    const rowTexts: string[] = []
+                    for (const el of row) {
+                        // Skip buttons — they are actions, not content
+                        if (el.tag === 'button') continue
+                        if (el.tag === 'text' && el.text) {
+                            rowTexts.push(el.text)
+                        } else if (el.tag === 'a' && el.text) {
+                            rowTexts.push(el.text)
+                        }
+                    }
+                    if (rowTexts.length > 0) {
+                        texts.push(rowTexts.join(''))
+                    }
+                }
             }
         }
 
         return texts.length > 0 ? texts.join('\n') : '[用户发送了一条卡片消息]'
-    }
-
-    private extractCardElementTexts(elements: any[] | undefined, texts: string[]): void {
-        if (!Array.isArray(elements)) return
-        for (const el of elements) {
-            if (!el || !el.tag) continue
-            switch (el.tag) {
-                case 'markdown':
-                case 'plain_text':
-                    if (el.content) texts.push(el.content)
-                    break
-                case 'lark_md':
-                    if (el.content) texts.push(el.content)
-                    break
-                case 'div':
-                    // div.text can be plain_text or lark_md
-                    if (el.text?.content) texts.push(el.text.content)
-                    // div.fields
-                    if (Array.isArray(el.fields)) {
-                        for (const field of el.fields) {
-                            if (field.text?.content) texts.push(field.text.content)
-                        }
-                    }
-                    break
-                case 'note':
-                    // note.elements contains text/image items
-                    if (Array.isArray(el.elements)) {
-                        for (const noteEl of el.elements) {
-                            if (noteEl.content) texts.push(noteEl.content)
-                        }
-                    }
-                    break
-                case 'column_set':
-                    // column_set contains columns, each with elements
-                    if (Array.isArray(el.columns)) {
-                        for (const col of el.columns) {
-                            this.extractCardElementTexts(col.elements, texts)
-                        }
-                    }
-                    break
-                case 'action':
-                    // action contains buttons/selects with text
-                    if (Array.isArray(el.actions)) {
-                        for (const action of el.actions) {
-                            if (action.text?.content) texts.push(action.text.content)
-                        }
-                    }
-                    break
-            }
-        }
     }
 
     private async resolveSenderInfo(openId: string): Promise<{ name: string; email: string | null }> {
