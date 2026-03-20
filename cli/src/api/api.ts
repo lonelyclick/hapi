@@ -262,7 +262,7 @@ export class ApiClient {
         return response.data
     }
 
-    async listSessions(): Promise<{
+    async listSessions(opts?: { includeOffline?: boolean }): Promise<{
         sessions: Array<{
             id: string
             active: boolean
@@ -277,8 +277,9 @@ export class ApiClient {
             } | null
         }>
     }> {
+        const params = opts?.includeOffline ? '?includeOffline=true' : ''
         const response = await axios.get(
-            `${configuration.serverUrl}/cli/sessions`,
+            `${configuration.serverUrl}/cli/sessions${params}`,
             {
                 headers: {
                     Authorization: `Bearer ${this.token}`,

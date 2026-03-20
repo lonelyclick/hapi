@@ -157,15 +157,17 @@ export function registerBrainTools(
     })
 
     // ===== 3. hapi_session_list =====
-    const listSchema: z.ZodTypeAny = z.object({})
+    const listSchema: z.ZodTypeAny = z.object({
+        includeOffline: z.boolean().optional().describe('是否包含离线 session，默认 false（只返回在线的）'),
+    })
 
     mcp.registerTool<any, any>('hapi_session_list', {
         title: 'List Sessions',
-        description: '列出所有可用的 session 及其状态。',
+        description: '列出 session 及其状态。默认只返回在线 session，传 includeOffline=true 可包含离线 session。',
         inputSchema: listSchema,
-    }, async () => {
+    }, async (args: { includeOffline?: boolean }) => {
         try {
-            const data = await api.listSessions()
+            const data = await api.listSessions({ includeOffline: args.includeOffline })
             if (!data.sessions || data.sessions.length === 0) {
                 return {
                     content: [{

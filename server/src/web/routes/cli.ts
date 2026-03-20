@@ -310,7 +310,9 @@ export function createCliRoutes(
             return c.json({ error: 'Not ready' }, 503)
         }
         const namespace = c.get('namespace')
-        const sessions = engine.getSessionsByNamespace(namespace)
+        const includeOffline = c.req.query('includeOffline') === 'true'
+        const allSessions = engine.getSessionsByNamespace(namespace)
+        const sessions = includeOffline ? allSessions : allSessions.filter(s => s.active)
         const summaries = sessions.map(s => ({
             id: s.id,
             active: s.active,
