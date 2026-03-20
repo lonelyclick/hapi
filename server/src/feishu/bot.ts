@@ -76,6 +76,7 @@ export class FeishuBot {
 
     private readonly appId: string
     private readonly appSecret: string
+    private readonly YOHO_MEMORY_URL = 'http://localhost:3100/api'
 
     constructor(config: FeishuBotConfig) {
         this.syncEngine = config.syncEngine
@@ -282,12 +283,18 @@ export class FeishuBot {
         await this.store.touchFeishuChatSession(chatId).catch(() => {})
 
         // Format: merge all messages into one text block
+        // Group chat: include openId for user identity tracking
         const formattedParts = messages.map(m => {
-            return chatType === 'group' ? `[${m.senderName}]: ${m.text}` : m.text
+            return chatType === 'group'
+                ? `[${m.senderName} | ${m.senderOpenId}]: ${m.text}`
+                : m.text
         })
         const combined = formattedParts.join('\n')
 
-        console.log(`[FeishuBot] Sending ${messages.length} merged message(s) to session ${sessionId.slice(0, 8)}`)
+        // Fetch user profiles from yoho-memory for appendSystemPrompt
+        const appendSystemPrompt = await this.buildUserProfilePrompt(messages, chatType)
+
+        console.log(`[FeishuBot] Sending ${messages.length} merged message(s) to session ${sessionId.slice(0, 8)}${appendSystemPrompt ? ' (with user profiles)' : ''}`)
 
         // Mark busy before sending
         state.busy = true
@@ -301,6 +308,7 @@ export class FeishuBot {
                 feishuChatType: chatType,
                 senderName: messages[messages.length - 1].senderName,
                 senderOpenId: messages[messages.length - 1].senderOpenId,
+                ...(appendSystemPrompt ? { appendSystemPrompt } : {}),
             }
         })
     }
@@ -729,6 +737,53 @@ export class FeishuBot {
             })
         } catch (err) {
             console.error(`[FeishuBot] sendFeishuPost failed for chat ${chatId.slice(0, 12)}:`, err)
+        }
+    }
+
+    // ========== User profile (yoho-memory) ==========
+
+    /**
+     * Build appendSystemPrompt with user profiles for all unique senders.
+     */
+    private async buildUserProfilePrompt(messages: IncomingMessage[], chatType: string): Promise<string | undefined> {
+        // Deduplicate senders
+        const senders = new Map<string, IncomingMessage>()
+        for (const m of messages) {
+            senders.set(m.senderOpenId, m)
+        }
+
+        const profiles: string[] = []
+        for (const [openId, msg] of senders) {
+            const profile = await this.fetchUserProfile(msg.senderName, openId)
+            if (profile) {
+                profiles.push(`<user-profile sender="${msg.senderName}" openId="${openId}">\n${profile}\n</user-profile>`)
+            }
+        }
+
+        return profiles.length > 0 ? profiles.join('\n\n') : undefined
+    }
+
+    /**
+     * Fetch user profile from yoho-memory via HTTP recall API (~150ms, no AI token cost).
+     * Returns null silently if yoho-memory is unavailable.
+     */
+    private async fetchUserProfile(senderName: string, senderOpenId: string): Promise<string | null> {
+        try {
+            const resp = await fetch(`${this.YOHO_MEMORY_URL}/recall`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    input: `飞书用户 ${senderName} ${senderOpenId}`,
+                    keywords: [senderName, senderOpenId],
+                    maxFiles: 2,
+                }),
+            })
+            if (!resp.ok) return null
+            const result = await resp.json() as { answer?: string; filesSearched?: number }
+            if (!result.answer || !result.filesSearched) return null
+            return result.answer
+        } catch {
+            return null
         }
     }
 

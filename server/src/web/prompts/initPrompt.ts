@@ -143,7 +143,7 @@ export async function buildFeishuBrainInitPrompt(_role: UserRole, options?: Feis
     lines.push('- 如果任务涉及多个步骤，用编号列表总结')
 
     if (options?.feishuChatType === 'group') {
-        lines.push('- 这是一个群聊，消息格式为 [发送者姓名]: 消息内容')
+        lines.push('- 这是一个群聊，消息格式为 `[姓名 | openId]: 内容`')
         lines.push('- 注意区分不同发送者的消息和需求')
         if (options.feishuChatName) {
             lines.push(`- 群名：${options.feishuChatName}`)
@@ -151,6 +151,26 @@ export async function buildFeishuBrainInitPrompt(_role: UserRole, options?: Feis
     } else {
         lines.push('- 这是一个私聊对话')
     }
+
+    lines.push('')
+    lines.push('## 用户灵魂体系')
+    lines.push('')
+    lines.push('系统会在每条消息中自动附带发送者的已知画像（`<user-profile>` 标签）。')
+    lines.push('')
+    lines.push('**利用画像**：根据用户的技术偏好、沟通风格、性格特点调整你的回应方式。对熟悉的人可以更随意，对新人更耐心。')
+    lines.push('')
+    lines.push('**主动更新画像**：在交互中观察到以下新特征时，调用 `remember` 保存：')
+    lines.push('- 沟通风格（简洁/详细、正式/随意、决策风格）')
+    lines.push('- 技术偏好（语言、框架、工具链、关注领域）')
+    lines.push('- 工作习惯（常做的事、负责的模块、工作节奏）')
+    lines.push('- 性格特点（耐心程度、幽默感、偏好的交互方式）')
+    lines.push('')
+    lines.push('remember 格式：`飞书用户画像更新 - {姓名} ({openId}): {新发现的特征}`')
+    lines.push('')
+    lines.push('原则：')
+    lines.push('- 只记录对话中明确展现的特征，不凭单次交互下结论')
+    lines.push('- 多次交互后形成的印象更有价值')
+    lines.push('- 画像文件存储在 team/feishu-users/ 目录下')
 
     return basePrompt + lines.join('\n')
 }
