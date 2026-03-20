@@ -413,7 +413,12 @@ export class FeishuBot {
                 return null
             }
 
-            const machine = machines[0]
+            // Brain sessions must run on ncu — it has yoho-memory, yoho-credentials MCP deps
+            const NCU_MACHINE_ID = 'e16b3653-ad9f-46a7-89fd-48a3d576cccb'
+            const machine = machines.find(m => m.id === NCU_MACHINE_ID) || machines[0]
+            if (machine.id !== NCU_MACHINE_ID) {
+                console.warn(`[FeishuBot] ncu not online, falling back to ${machine.id}`)
+            }
             const homeDir = (machine.metadata as Record<string, unknown>)?.homeDir as string || '/tmp'
             const brainDirectory = `${homeDir}/.hapi/brain-workspace`
 
