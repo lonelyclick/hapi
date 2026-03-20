@@ -414,7 +414,7 @@ export class FeishuBot {
                 'simple',
                 undefined,
                 {
-                    source: 'feishu-brain',
+                    source: 'brain',
                     permissionMode: 'bypassPermissions',
                     token: claudeToken,
                 }
