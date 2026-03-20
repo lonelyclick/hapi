@@ -58,13 +58,15 @@ export class FeishuBot {
     // Accumulate agent messages per chatId, send summary when task completes
     private agentMessages: Map<string, string[]> = new Map()
 
-    // Promise that resolves when session init (initPrompt) is complete
+    // Promise that resolves when session init (initPrompt) is fully processed (AI replied)
     private initReady: Map<string, Promise<void>> = new Map()
+    // Resolvers for initReady — called when AI finishes processing initPrompt
+    private initReadyResolvers: Map<string, () => void> = new Map()
 
     // Rebuild rate limiting: chatId -> last rebuild timestamp
     private lastRebuildAt: Map<string, number> = new Map()
     private readonly REBUILD_COOLDOWN_MS = 30_000
-    private readonly INPUT_DEBOUNCE_MS = 10_000
+    private readonly INPUT_DEBOUNCE_MS = 3_000
 
     // Bot's own open_id (resolved at start)
     private botOpenId: string | null = null
@@ -146,6 +148,8 @@ export class FeishuBot {
         }
 
         this.agentMessages.clear()
+        this.initReady.clear()
+        this.initReadyResolvers.clear()
 
         // Clear all chat state timers
         for (const state of this.chatStates.values()) {
@@ -450,9 +454,30 @@ export class FeishuBot {
             this.chatIdToSessionId.set(chatId, sessionId)
             this.chatIdToChatType.set(chatId, chatType)
 
-            // Wait for session online and send initPrompt (tracked by initReady)
-            const initPromise = this.initializeSession(sessionId, chatId, chatType, chatName, senderName)
+            // Create initReady promise — resolved when AI finishes processing initPrompt
+            const initPromise = new Promise<void>((resolve) => {
+                this.initReadyResolvers.set(chatId, resolve)
+                // Safety timeout: resolve after 120s to avoid stuck user messages
+                setTimeout(() => {
+                    if (this.initReadyResolvers.has(chatId)) {
+                        console.warn(`[FeishuBot] initReady timeout for chat ${chatId.slice(0, 12)}, force resolving`)
+                        this.initReadyResolvers.get(chatId)?.()
+                        this.initReadyResolvers.delete(chatId)
+                    }
+                }, 120_000)
+            })
             this.initReady.set(chatId, initPromise)
+
+            // Send initPrompt (fire-and-forget, initReady resolved by handleSyncEvent)
+            this.initializeSession(sessionId, chatId, chatType, chatName, senderName).catch(err => {
+                console.error(`[FeishuBot] initializeSession failed for ${sessionId.slice(0, 8)}:`, err)
+                // Resolve anyway so user messages aren't stuck
+                const resolver = this.initReadyResolvers.get(chatId)
+                if (resolver) {
+                    resolver()
+                    this.initReadyResolvers.delete(chatId)
+                }
+            })
 
             return sessionId
         } catch (error) {
@@ -580,6 +605,17 @@ export class FeishuBot {
             if (data.wasThinking === true && data.thinking === false) {
                 const chatId = this.sessionToChatId.get(event.sessionId)
                 if (!chatId) return
+
+                // If initPrompt just finished processing, resolve initReady
+                const initResolver = this.initReadyResolvers.get(chatId)
+                if (initResolver) {
+                    console.log(`[FeishuBot] initPrompt processed for chat ${chatId.slice(0, 12)}, resolving initReady`)
+                    initResolver()
+                    this.initReadyResolvers.delete(chatId)
+                    // Clear any agent messages from initPrompt processing (don't send to Feishu)
+                    this.agentMessages.delete(chatId)
+                    return
+                }
 
                 const state = this.chatStates.get(chatId)
                 if (!state) return
