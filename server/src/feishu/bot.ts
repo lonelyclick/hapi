@@ -255,7 +255,8 @@ export class FeishuBot {
 
         // Ensure session exists
         if (state.creating) return // guard: another flush is already creating
-        const sessionId = await this.ensureSession(chatId, chatType)
+        const senderName = messages[0].senderName
+        const sessionId = await this.ensureSession(chatId, chatType, senderName)
         if (!sessionId) {
             await this.sendFeishuText(chatId, '抱歉，无法创建会话。请检查是否有在线机器。')
             return
@@ -335,7 +336,7 @@ export class FeishuBot {
 
     // ========== Session management ==========
 
-    private async ensureSession(chatId: string, chatType: string): Promise<string | null> {
+    private async ensureSession(chatId: string, chatType: string, senderName?: string): Promise<string | null> {
         const state = this.chatStates.get(chatId)
         if (state) state.creating = true
 
@@ -363,17 +364,17 @@ export class FeishuBot {
                 }
 
                 // Session is dead, rebuild
-                return await this.rebuildSession(chatId, chatType)
+                return await this.rebuildSession(chatId, chatType, senderName)
             }
 
             // No mapping exists, create new session
-            return await this.createBrainSession(chatId, chatType)
+            return await this.createBrainSession(chatId, chatType, undefined, senderName)
         } finally {
             if (state) state.creating = false
         }
     }
 
-    private async createBrainSession(chatId: string, chatType: string, chatName?: string): Promise<string | null> {
+    private async createBrainSession(chatId: string, chatType: string, chatName?: string, senderName?: string): Promise<string | null> {
         try {
             const namespace = 'default'
             const machines = this.syncEngine.getOnlineMachinesByNamespace(namespace)
@@ -443,7 +444,7 @@ export class FeishuBot {
             this.chatIdToChatType.set(chatId, chatType)
 
             // Async: wait for session online and send initPrompt
-            void this.initializeSession(sessionId, chatId, chatType, chatName)
+            void this.initializeSession(sessionId, chatId, chatType, chatName, senderName)
 
             return sessionId
         } catch (error) {
@@ -452,7 +453,7 @@ export class FeishuBot {
         }
     }
 
-    private async initializeSession(sessionId: string, chatId: string, chatType: string, chatName?: string): Promise<void> {
+    private async initializeSession(sessionId: string, chatId: string, chatType: string, chatName?: string, senderName?: string): Promise<void> {
         try {
             // Wait for session to come online (up to 60s)
             const isOnline = await this.waitForSessionOnline(sessionId, 60_000)
@@ -460,6 +461,15 @@ export class FeishuBot {
                 console.warn(`[FeishuBot] Session ${sessionId.slice(0, 8)} did not come online within 60s`)
                 return
             }
+
+            // Set session title: "飞书: 与xxx的对话 · 03/20 18:55"
+            const now = new Date()
+            const timeStr = now.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' })
+            const who = senderName || chatName || '未知'
+            const title = `飞书: 与${who}的对话 · ${timeStr}`
+            await this.syncEngine.patchSessionMetadata(sessionId, {
+                summary: { text: title, updatedAt: Date.now() }
+            })
 
             // Wait a bit for socket to join room
             await this.syncEngine.waitForSocketInRoom(sessionId, 5000)
@@ -511,7 +521,7 @@ export class FeishuBot {
         })
     }
 
-    private async rebuildSession(chatId: string, chatType: string): Promise<string | null> {
+    private async rebuildSession(chatId: string, chatType: string, senderName?: string): Promise<string | null> {
         // Rate limiting
         const lastRebuild = this.lastRebuildAt.get(chatId) || 0
         if (Date.now() - lastRebuild < this.REBUILD_COOLDOWN_MS) {
@@ -529,7 +539,7 @@ export class FeishuBot {
             this.sessionToChatId.delete(oldSessionId)
         }
 
-        const newSessionId = await this.createBrainSession(chatId, chatType)
+        const newSessionId = await this.createBrainSession(chatId, chatType, undefined, senderName)
         if (newSessionId) {
             await this.sendFeishuText(chatId, '会话已重置，请继续。')
         } else {
