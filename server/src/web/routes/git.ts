@@ -820,15 +820,17 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
         const sessionId = c.req.param('sessionId')
         const filename = c.req.param('filename')
 
-        // 验证 session 存在
-        const engine = requireSyncEngine(c, getSyncEngine)
-        if (engine instanceof Response) {
-            return engine
-        }
+        // Skip session validation for shared directories (e.g. feishu-images)
+        if (!sessionId.startsWith('feishu-')) {
+            const engine = requireSyncEngine(c, getSyncEngine)
+            if (engine instanceof Response) {
+                return engine
+            }
 
-        const session = requireSession(c, engine, sessionId)
-        if (session instanceof Response) {
-            return session
+            const session = requireSession(c, engine, sessionId)
+            if (session instanceof Response) {
+                return session
+            }
         }
 
         try {
