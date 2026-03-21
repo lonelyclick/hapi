@@ -846,6 +846,7 @@ export class FeishuBot {
      */
     private extractMergeForwardText(data: any): string | null {
         try {
+            console.log(`[FeishuBot] merge_forward raw data: ${JSON.stringify(data, null, 2)}`)
             const body = data?.message?.body
             const messages = body?.messages as Array<{
                 message_type?: string
