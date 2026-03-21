@@ -354,11 +354,15 @@ export class FeishuBot {
             return
         }
 
-        // Group chat: strip @bot mention placeholder from text
+        // Group chat: resolve mention placeholders to real names
         if (chatType === 'group' && message.mentions) {
-            for (const mention of message.mentions as Array<{ key: string; id: { open_id: string } }>) {
+            for (const mention of message.mentions as Array<{ key: string; name?: string; id: { open_id: string } }>) {
                 if (mention.id?.open_id === this.botOpenId) {
+                    // Strip @bot placeholder
                     text = text.replace(mention.key, '').trim()
+                } else if (mention.name) {
+                    // Replace @_user_N placeholder with @RealName
+                    text = text.replace(mention.key, `@${mention.name}`)
                 }
             }
         }
