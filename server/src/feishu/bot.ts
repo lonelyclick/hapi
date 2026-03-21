@@ -1105,9 +1105,11 @@ export class FeishuBot {
             await this.syncEngine.waitForSocketInRoom(sessionId, 5000)
 
             // Send feishu-specific Brain initPrompt
+            // Only set userName for p2p chats (group chats have multiple users)
             const prompt = await buildFeishuBrainInitPrompt('developer', {
                 feishuChatType: chatType as 'p2p' | 'group',
                 feishuChatName: chatName,
+                ...(chatType === 'p2p' && senderName ? { userName: senderName } : {}),
             })
 
             await this.syncEngine.sendMessage(sessionId, {
