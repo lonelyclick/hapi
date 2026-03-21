@@ -275,10 +275,14 @@ export class FeishuBot {
 
     private async handleMessageEvent(data: any): Promise<void> {
         console.log('[FeishuBot] handleMessageEvent called, data keys:', data ? Object.keys(data) : 'null')
+        console.log('[FeishuBot] handleMessageEvent data.message?', !!data?.message, 'data.sender?', !!data?.sender, 'data.event?', !!data?.event)
+        if (data?.event) {
+            console.log('[FeishuBot] data.event keys:', Object.keys(data.event), 'message_type:', data.event?.message?.message_type)
+        }
         const message = data?.message
         const sender = data?.sender
         if (!message || !sender) {
-            console.log('[FeishuBot] handleMessageEvent: missing message or sender, returning')
+            console.log('[FeishuBot] handleMessageEvent: missing message or sender, returning. message_type from event:', data?.event?.message?.message_type)
             return
         }
 
