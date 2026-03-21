@@ -943,31 +943,22 @@ export class FeishuBot {
         if (!msgs || msgs.length === 0) return
         this.agentMessages.delete(chatId)
 
-        // Search all messages (reverse) for <feishu-reply>
+        // Use all agent messages as the reply (raw output)
         const allText = msgs.join('\n')
-        const match = allText.match(/<feishu-reply>([\s\S]*?)<\/feishu-reply>/g)
 
-        let reply: string
-        if (match) {
-            // Take the last <feishu-reply> block
-            const lastMatch = match[match.length - 1]
-            reply = lastMatch.replace(/<\/?feishu-reply>/g, '').trim()
-        } else {
-            // Fallback: use the last agent message (truncated)
-            reply = msgs[msgs.length - 1].slice(0, 2000)
-        }
-
-        if (!reply) return
-
-        // Extract [feishu-file: path] references
+        // Extract [feishu-file: path] references from anywhere in the text
         const mediaRefs: string[] = []
         const FEISHU_FILE_RE = /\[feishu-file:\s*(.+?)\]/g
         let fm: RegExpExecArray | null
-        while ((fm = FEISHU_FILE_RE.exec(reply)) !== null) {
+        while ((fm = FEISHU_FILE_RE.exec(allText)) !== null) {
             mediaRefs.push(fm[1].trim())
         }
-        // Strip file references from text
-        const textReply = reply.replace(/\[feishu-file:\s*.+?\]/g, '').trim()
+
+        // Strip file references and <feishu-reply> tags from text
+        const textReply = allText
+            .replace(/\[feishu-file:\s*.+?\]/g, '')
+            .replace(/<\/?feishu-reply>/g, '')
+            .trim()
 
         // Reply to the last user message in this round (if available)
         const replyToMessageId = this.lastUserMessageId.get(chatId)
