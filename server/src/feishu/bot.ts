@@ -309,7 +309,7 @@ export class FeishuBot {
                 ? await this.handleMediaMessage(messageId, message.content, chatId)
                 : '[视频]'
         } else if (messageType === 'merge_forward') {
-            text = this.extractMergeForwardText(data)
+            text = await this.handleMergeForwardMessage(messageId)
         } else {
             text = this.extractMessageText(messageType, message.content)
         }
@@ -841,35 +841,58 @@ export class FeishuBot {
     }
 
     /**
-     * Handle merge_forward: extract sub-message texts from the forward body.
-     * Feishu delivers merge_forward with message.body.messages array.
+     * Handle merge_forward: fetch sub-messages via Feishu GET message API.
+     * The WebSocket event only has "Merged and Forwarded Message" as content;
+     * the real sub-messages must be fetched via GET /im/v1/messages/{message_id}.
      */
-    private extractMergeForwardText(data: any): string | null {
+    private async handleMergeForwardMessage(messageId: string): Promise<string | null> {
         try {
-            console.log(`[FeishuBot] merge_forward raw data: ${JSON.stringify(data, null, 2)}`)
-            const body = data?.message?.body
-            const messages = body?.messages as Array<{
-                message_type?: string
-                content?: string
-                sender_id?: string
-            }> | undefined
-
-            if (!messages || messages.length === 0) {
+            const token = await this.getToken()
+            const resp = await fetch(`https://open.feishu.cn/open-apis/im/v1/messages/${messageId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            if (!resp.ok) {
+                console.error(`[FeishuBot] Failed to fetch merge_forward: ${resp.status}`)
                 return '[合并转发]'
             }
 
-            const parts: string[] = ['[合并转发]:']
-            for (const msg of messages.slice(0, 20)) { // Cap at 20 to avoid huge payloads
-                const type = msg.message_type || 'text'
-                const text = this.extractMessageText(type, msg.content || '{}')
+            const result = await resp.json() as {
+                data?: {
+                    items?: Array<{
+                        msg_type?: string
+                        body?: { content?: string }
+                        sender_id?: string
+                        upper_message_id?: string
+                    }>
+                }
+            }
+
+            const items = result.data?.items
+            if (!items || items.length === 0) {
+                return '[合并转发]'
+            }
+
+            // Filter to only sub-messages (those with upper_message_id)
+            const subMessages = items.filter(item => item.upper_message_id)
+            if (subMessages.length === 0) {
+                return '[合并转发]'
+            }
+
+            const parts: string[] = [`[合并转发 ${subMessages.length}条]:`]
+            for (const msg of subMessages.slice(0, 20)) {
+                const type = msg.msg_type || 'text'
+                const contentStr = msg.body?.content || '{}'
+                const text = this.extractMessageText(type, contentStr)
                 if (text) parts.push(`  - ${text}`)
             }
-            if (messages.length > 20) {
-                parts.push(`  ... 共 ${messages.length} 条消息`)
+            if (subMessages.length > 20) {
+                parts.push(`  ... 共 ${subMessages.length} 条消息`)
             }
+
+            console.log(`[FeishuBot] merge_forward: ${subMessages.length} sub-messages extracted`)
             return parts.join('\n')
         } catch (err) {
-            console.error('[FeishuBot] extractMergeForwardText failed:', err)
+            console.error('[FeishuBot] handleMergeForwardMessage failed:', err)
             return '[合并转发]'
         }
     }
