@@ -1353,23 +1353,17 @@ export class FeishuBot {
         const senderOpenIds = this.lastSenderOpenIds.get(chatId)
         this.lastSenderOpenIds.delete(chatId)
 
-        // 1. Send text part
+        // 1. Send text part (with inline @mentions in post format)
         if (textReply) {
-            console.log(`[FeishuBot] Sending summary to ${chatId.slice(0, 12)} (${textReply.length} chars, from ${msgs.length} messages${replyToMessageId ? ', reply' : ''}${mediaRefs.length ? `, +${mediaRefs.length} media` : ''})`)
-            await this.sendFeishuPost(chatId, textReply, replyToMessageId)
-
-            // Group chat: send @ notification
+            // Group chat: compute @mention ids to embed in post message
             // Priority: K1's explicit [at: openId] > fallback to all senders
-            const atIds = explicitAtIds.length > 0
+            const atIds = (explicitAtIds.length > 0
                 ? explicitAtIds
                 : senderOpenIds ? [...senderOpenIds] : []
-            const atTags = atIds
-                .filter(id => id !== this.botOpenId)
-                .map(id => `<at user_id="${id}"></at>`)
-                .join(' ')
-            if (atTags) {
-                await this.sendFeishuText(chatId, atTags)
-            }
+            ).filter(id => id !== this.botOpenId)
+
+            console.log(`[FeishuBot] Sending summary to ${chatId.slice(0, 12)} (${textReply.length} chars, from ${msgs.length} messages${replyToMessageId ? ', reply' : ''}${atIds.length ? `, @${atIds.length}` : ''}${mediaRefs.length ? `, +${mediaRefs.length} media` : ''})`)
+            await this.sendFeishuPost(chatId, textReply, replyToMessageId, atIds.length > 0 ? atIds : undefined)
         }
 
         // 2. Send media attachments
@@ -1451,9 +1445,9 @@ export class FeishuBot {
         }
     }
 
-    private async sendFeishuPost(chatId: string, text: string, replyToMessageId?: string): Promise<void> {
+    private async sendFeishuPost(chatId: string, text: string, replyToMessageId?: string, atIds?: string[]): Promise<void> {
         try {
-            const { msgType, content } = buildFeishuMessage(text)
+            const { msgType, content } = buildFeishuMessage(text, atIds)
             const token = await this.getToken()
 
             if (replyToMessageId) {
