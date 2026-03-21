@@ -64,7 +64,9 @@ export function extractFeishuLinks(text: string): FeishuLink[] {
         let tableId: string | undefined
         if (type === 'bitable' && queryStr) {
             const tableMatch = queryStr.match(/[?&]table=([a-zA-Z0-9_]+)/)
-            if (tableMatch) tableId = tableMatch[1]
+            // Only use table param if it's a real table ID (tbl prefix).
+            // URLs often have table=blk... which is a block ID, not a table ID.
+            if (tableMatch && tableMatch[1].startsWith('tbl')) tableId = tableMatch[1]
         }
 
         links.push({ type, token, tableId, originalUrl })
