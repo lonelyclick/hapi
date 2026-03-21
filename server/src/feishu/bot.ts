@@ -1204,12 +1204,21 @@ export class FeishuBot {
             this.persistChatState(chatId)
         }
 
-        // Detect "task complete": wasThinking=true + thinking=false
+        // Detect "task complete" or "session aborted": thinking becomes false
         if (event.type === 'session-updated' && event.sessionId && event.data) {
             const data = event.data as Record<string, unknown>
-            if (data.wasThinking === true && data.thinking === false) {
-                const chatId = this.sessionToChatId.get(event.sessionId)
-                if (!chatId) return
+            const chatId = this.sessionToChatId.get(event.sessionId)
+            if (!chatId) return
+
+            const isTaskComplete = data.wasThinking === true && data.thinking === false
+            // Abort sends { thinking: false } without wasThinking — detect it when chat is busy
+            const state = this.chatStates.get(chatId)
+            const isAborted = !isTaskComplete && data.thinking === false && state?.busy === true
+
+            if (isTaskComplete || isAborted) {
+                if (isAborted) {
+                    console.log(`[FeishuBot] Session aborted for ${chatId.slice(0, 12)}, clearing busy state`)
+                }
 
                 // If initPrompt just finished processing, resolve initReady
                 const initResolver = this.initReadyResolvers.get(chatId)
@@ -1223,10 +1232,9 @@ export class FeishuBot {
                     return
                 }
 
-                const state = this.chatStates.get(chatId)
                 if (!state) return
 
-                // Brain finished this round — extract <feishu-reply> and send
+                // Brain finished or was aborted — send accumulated messages if any
                 this.sendFeishuSummary(chatId).catch(err => {
                     console.error(`[FeishuBot] sendFeishuSummary error for ${chatId.slice(0, 12)}:`, err)
                 })
