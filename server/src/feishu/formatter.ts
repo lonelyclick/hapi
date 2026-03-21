@@ -79,11 +79,19 @@ function hasMarkdownFormatting(text: string): boolean {
 /**
  * Build a Feishu message payload ready for the API.
  *
- * - Short plain text (<=200 chars, no markdown) → text message
- * - Otherwise → interactive card with markdown element
+ * - Short plain text (<=200 chars, no markdown) → text message (lighter, no card chrome)
+ * - Longer or markdown-rich text → interactive card with markdown element
  */
 export function buildFeishuMessage(text: string): { msgType: string; content: string } {
-    // Always use interactive card with markdown for consistent rendering
+    // Short plain text without markdown → simple text message
+    if (text.length <= SHORT_TEXT_THRESHOLD && !hasMarkdownFormatting(text)) {
+        return {
+            msgType: 'text',
+            content: JSON.stringify({ text }),
+        }
+    }
+
+    // Longer or markdown-rich → interactive card
     let cardText = text
     if (cardText.length > MAX_CARD_LENGTH) {
         cardText = cardText.slice(0, MAX_CARD_LENGTH) + '\n\n...(内容过长已截断)'
