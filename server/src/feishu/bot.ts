@@ -474,7 +474,7 @@ export class FeishuBot {
 
         // For pure passive messages (no @bot), add hint so K1 knows it can stay silent
         if (chatType === 'group' && hasPassive && !hasAddressed) {
-            combined = `[旁听模式] 以下是群聊中的新消息，你可以选择回复或输出 [silent] 保持沉默：\n${combined}`
+            combined = `[旁听模式] 群里有新消息，有价值就踊跃参与，没必要插话就输出 [silent]：\n${combined}`
         }
 
         // Fetch user profiles from yoho-memory for appendSystemPrompt
