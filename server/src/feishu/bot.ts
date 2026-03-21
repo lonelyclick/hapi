@@ -121,8 +121,11 @@ export class FeishuBot {
         await this.loadMappings()
 
         // 3. Set up Feishu event dispatcher
-        const eventDispatcher = new lark.EventDispatcher({}).register({
+        const eventDispatcher = new lark.EventDispatcher({})
+        console.log('[FeishuBot] EventDispatcher created, registering im.message.receive_v1...')
+        eventDispatcher.register({
             'im.message.receive_v1': (data: any) => {
+                console.log('[FeishuBot] >>> EVENT RECEIVED: im.message.receive_v1', JSON.stringify(data).slice(0, 200))
                 this.handleMessageEvent(data).catch(err => {
                     console.error('[FeishuBot] handleMessageEvent error:', err)
                 })
@@ -135,8 +138,9 @@ export class FeishuBot {
         this.wsClient = new lark.WSClient({
             appId: this.appId,
             appSecret: this.appSecret,
-            loggerLevel: lark.LoggerLevel.info,
+            loggerLevel: lark.LoggerLevel.debug,
         })
+        console.log('[FeishuBot] Starting WebSocket client...')
         await this.wsClient.start({ eventDispatcher })
         console.log('[FeishuBot] WebSocket client started')
 
@@ -270,9 +274,13 @@ export class FeishuBot {
     // ========== Feishu message handling ==========
 
     private async handleMessageEvent(data: any): Promise<void> {
+        console.log('[FeishuBot] handleMessageEvent called, data keys:', data ? Object.keys(data) : 'null')
         const message = data?.message
         const sender = data?.sender
-        if (!message || !sender) return
+        if (!message || !sender) {
+            console.log('[FeishuBot] handleMessageEvent: missing message or sender, returning')
+            return
+        }
 
         const chatId = message.chat_id as string
         const chatType = message.chat_type as string // 'p2p' or 'group'
