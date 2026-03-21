@@ -291,6 +291,7 @@ export class FeishuBot {
         const messageId = message.message_id as string
         const senderOpenId = sender.sender_id?.open_id as string
         const messageType = message.message_type as string
+        console.log(`[FeishuBot] messageType=${messageType}, chatType=${chatType}, senderOpenId=${senderOpenId?.slice(0, 12)}, content=${(message.content as string)?.slice(0, 100)}`)
 
         // Ignore bot's own messages
         if (senderOpenId === this.botOpenId) return
