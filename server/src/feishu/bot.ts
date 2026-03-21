@@ -125,7 +125,7 @@ export class FeishuBot {
         console.log('[FeishuBot] EventDispatcher created, registering im.message.receive_v1...')
         eventDispatcher.register({
             'im.message.receive_v1': (data: any) => {
-                console.log('[FeishuBot] >>> EVENT RECEIVED: im.message.receive_v1', JSON.stringify(data).slice(0, 200))
+                console.log('[FeishuBot] >>> RAW EVENT DATA:', JSON.stringify(data, null, 2))
                 this.handleMessageEvent(data).catch(err => {
                     console.error('[FeishuBot] handleMessageEvent error:', err)
                 })
