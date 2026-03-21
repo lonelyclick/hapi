@@ -690,7 +690,7 @@ export class FeishuBot {
             console.log(`[FeishuBot] Converted to PCM: ${pcmBuffer.length} bytes`)
 
             // 3. Call Feishu Speech-to-Text (ASR) API
-            const fileId = `feishu${ts.toString().slice(-12)}`
+            const fileId = `feishu${ts.toString().slice(-10)}`
             const asrResp = await fetch('https://open.feishu.cn/open-apis/speech_to_text/v1/speech/file_recognize', {
                 method: 'POST',
                 headers: {
