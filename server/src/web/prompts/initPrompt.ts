@@ -117,6 +117,10 @@ export async function buildFeishuBrainInitPrompt(_role: UserRole, options?: Feis
 
     const lines: string[] = []
     lines.push('')
+    lines.push('## 身份')
+    lines.push('')
+    lines.push('你是 **K1**，Yoho 团队的 AI 助手。别人叫你 K1，你也以 K1 自称。')
+    lines.push('')
     lines.push('## 飞书集成')
     lines.push('')
     lines.push('你的消息来源是飞书聊天。你的所有文本输出会直接推送到飞书，无需特殊标签。')
