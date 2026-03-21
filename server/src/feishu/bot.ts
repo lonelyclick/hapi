@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { IStore } from '../store/interface'
 import { extractAgentText, isInternalBrainMessage, buildFeishuMessage } from './formatter'
+import { enrichTextWithDocContent } from './docFetcher'
 import { buildFeishuBrainInitPrompt } from '../web/prompts/initPrompt'
 import { selectBestAccount } from '../claude-accounts/accountsService'
 import { getClaudeAccessToken } from '../web/routes/usage'
@@ -34,13 +35,17 @@ interface IncomingMessage {
     senderOpenId: string
     senderEmail: string | null
     chatType: string
+    /** Whether this message explicitly addresses the bot (@bot or p2p) */
+    addressed: boolean
 }
 
 interface ChatState {
     // Buffered incoming messages not yet sent to Brain
     incoming: IncomingMessage[]
-    // Debounce timer for initial 10s wait
+    // Debounce timer for addressed messages (@bot / p2p) — 3s
     debounceTimer: ReturnType<typeof setTimeout> | null
+    // Debounce timer for passive messages (group non-@bot) — 20s
+    passiveDebounceTimer: ReturnType<typeof setTimeout> | null
     // Whether Brain is currently processing (thinking)
     busy: boolean
     // Whether session creation is in progress
@@ -78,6 +83,7 @@ export class FeishuBot {
     private lastRebuildAt: Map<string, number> = new Map()
     private readonly REBUILD_COOLDOWN_MS = 30_000
     private readonly INPUT_DEBOUNCE_MS = 3_000
+    private readonly PASSIVE_DEBOUNCE_MS = 20_000
 
     // Bot's own open_id (resolved at start)
     private botOpenId: string | null = null
@@ -165,6 +171,7 @@ export class FeishuBot {
         // Clear all chat state timers
         for (const state of this.chatStates.values()) {
             if (state.debounceTimer) clearTimeout(state.debounceTimer)
+            if (state.passiveDebounceTimer) clearTimeout(state.passiveDebounceTimer)
         }
         this.chatStates.clear()
 
@@ -198,7 +205,7 @@ export class FeishuBot {
                 if (s.busy) {
                     // Create a chatState so handleSyncEvent can find it
                     this.chatStates.set(m.feishuChatId, {
-                        incoming: [], debounceTimer: null, busy: true, creating: false,
+                        incoming: [], debounceTimer: null, passiveDebounceTimer: null, busy: true, creating: false,
                     })
                     chatsToRecover.push(m.feishuChatId)
                 }
@@ -286,7 +293,7 @@ export class FeishuBot {
 
         // Check if bot is mentioned (for group chats)
         const mentions = message.mentions as Array<{ id: { open_id: string }; key: string }> | undefined
-        const botMentioned = chatType === 'group' && mentions?.some((m: any) => m.id?.open_id === this.botOpenId)
+        const botMentioned = chatType === 'group' && (mentions?.some((m: any) => m.id?.open_id === this.botOpenId) ?? false)
 
         // Extract message text (needed for both persistence and processing)
         let text: string | null = null
@@ -314,6 +321,15 @@ export class FeishuBot {
             text = this.extractMessageText(messageType, message.content)
         }
 
+        // For addressed messages, detect feishu doc links and enrich with content
+        if (text && addressed) {
+            try {
+                text = await enrichTextWithDocContent(text, () => this.getToken())
+            } catch (err) {
+                console.error('[FeishuBot] enrichTextWithDocContent failed:', err)
+            }
+        }
+
         // For non-text/audio types, append a guide so the AI proactively acts on the content
         const noGuideTypes = new Set(['text', 'audio'])
         if (text && !noGuideTypes.has(messageType)) {
@@ -338,9 +354,6 @@ export class FeishuBot {
             return
         }
 
-        // Group chat: only respond to @bot messages (but all messages already persisted above)
-        if (chatType === 'group' && !botMentioned) return
-
         // Group chat: strip @bot mention placeholder from text
         if (chatType === 'group' && message.mentions) {
             for (const mention of message.mentions as Array<{ key: string; id: { open_id: string } }>) {
@@ -350,22 +363,23 @@ export class FeishuBot {
             }
         }
 
-        console.log(`[FeishuBot] Message from ${senderName} in ${chatType} ${chatId.slice(0, 12)}...: ${text.slice(0, 100)}`)
+        const mode = addressed ? '指令' : '旁听'
+        console.log(`[FeishuBot] [${mode}] Message from ${senderName} in ${chatType} ${chatId.slice(0, 12)}...: ${text.slice(0, 100)}`)
 
-        // React with emoji to acknowledge receipt
-        if (messageId) {
+        // React with emoji only for addressed messages (don't pollute passive listening)
+        if (addressed && messageId) {
             this.addReaction(messageId, 'OnIt').catch(() => {})
         }
 
         // Get or create chat state
         let state = this.chatStates.get(chatId)
         if (!state) {
-            state = { incoming: [], debounceTimer: null, busy: false, creating: false }
+            state = { incoming: [], debounceTimer: null, passiveDebounceTimer: null, busy: false, creating: false }
             this.chatStates.set(chatId, state)
         }
 
         // Add message to buffer
-        state.incoming.push({ text, messageId, senderName, senderOpenId, senderEmail, chatType })
+        state.incoming.push({ text, messageId, senderName, senderOpenId, senderEmail, chatType, addressed })
 
         if (state.busy || state.creating) {
             // Brain is working or session is being created — just buffer, will flush when done
@@ -373,13 +387,29 @@ export class FeishuBot {
             return
         }
 
-        // Reset debounce timer (10s)
-        if (state.debounceTimer) clearTimeout(state.debounceTimer)
-        state.debounceTimer = setTimeout(() => {
-            this.flushIncomingMessages(chatId).catch(err => {
-                console.error(`[FeishuBot] flushIncomingMessages error for ${chatId.slice(0, 12)}:`, err)
-            })
-        }, this.INPUT_DEBOUNCE_MS)
+        if (addressed) {
+            // Addressed message (@bot or p2p): 3s debounce, also cancels any pending passive timer
+            if (state.passiveDebounceTimer) {
+                clearTimeout(state.passiveDebounceTimer)
+                state.passiveDebounceTimer = null
+            }
+            if (state.debounceTimer) clearTimeout(state.debounceTimer)
+            state.debounceTimer = setTimeout(() => {
+                this.flushIncomingMessages(chatId).catch(err => {
+                    console.error(`[FeishuBot] flushIncomingMessages error for ${chatId.slice(0, 12)}:`, err)
+                })
+            }, this.INPUT_DEBOUNCE_MS)
+        } else {
+            // Passive message (group non-@bot): 20s debounce
+            // Don't reset addressed timer if one is pending (addressed takes priority)
+            if (state.debounceTimer) return // addressed flush is coming, it will include this message
+            if (state.passiveDebounceTimer) clearTimeout(state.passiveDebounceTimer)
+            state.passiveDebounceTimer = setTimeout(() => {
+                this.flushIncomingMessages(chatId).catch(err => {
+                    console.error(`[FeishuBot] flushIncomingMessages (passive) error for ${chatId.slice(0, 12)}:`, err)
+                })
+            }, this.PASSIVE_DEBOUNCE_MS)
+        }
     }
 
     /**
@@ -397,6 +427,10 @@ export class FeishuBot {
         if (state.debounceTimer) {
             clearTimeout(state.debounceTimer)
             state.debounceTimer = null
+        }
+        if (state.passiveDebounceTimer) {
+            clearTimeout(state.passiveDebounceTimer)
+            state.passiveDebounceTimer = null
         }
 
         const chatType = messages[0].chatType
@@ -419,12 +453,22 @@ export class FeishuBot {
 
         // Format: merge all messages into one text block
         // Group chat: include openId for user identity tracking
+        const hasAddressed = messages.some(m => m.addressed)
+        const hasPassive = messages.some(m => !m.addressed)
         const formattedParts = messages.map(m => {
-            return chatType === 'group'
-                ? `${m.senderName} (${m.senderOpenId}): ${m.text}`
-                : m.text
+            if (chatType === 'group') {
+                const prefix = m.addressed ? '[指令] ' : ''
+                return `${prefix}${m.senderName} (${m.senderOpenId}): ${m.text}`
+            }
+            return m.text
         })
-        const combined = formattedParts.join('\n')
+
+        let combined = formattedParts.join('\n')
+
+        // For pure passive messages (no @bot), add hint so K1 knows it can stay silent
+        if (chatType === 'group' && hasPassive && !hasAddressed) {
+            combined = `[旁听模式] 以下是群聊中的新消息，你可以选择回复或输出 [silent] 保持沉默：\n${combined}`
+        }
 
         // Fetch user profiles from yoho-memory for appendSystemPrompt
         const appendSystemPrompt = await this.buildUserProfilePrompt(messages, chatType)
@@ -1251,6 +1295,18 @@ export class FeishuBot {
         // Use all agent messages as the reply (raw output)
         const allText = msgs.join('\n')
 
+        // Detect [silent] — K1 decided not to reply (passive listening mode)
+        if (allText.trim() === '[silent]' || allText.includes('[silent]')) {
+            const cleanText = allText.replace(/\[silent\]/g, '').trim()
+            if (!cleanText) {
+                console.log(`[FeishuBot] K1 chose [silent] for ${chatId.slice(0, 12)}, skipping reply`)
+                this.lastUserMessageId.delete(chatId)
+                this.clearPersistedState(chatId)
+                return
+            }
+            // If there's text alongside [silent], send the text part (K1 might have mixed output)
+        }
+
         // Extract [feishu-file: path] references from anywhere in the text
         const mediaRefs: string[] = []
         const FEISHU_FILE_RE = /\[feishu-file:\s*(.+?)\]/g
@@ -1259,10 +1315,11 @@ export class FeishuBot {
             mediaRefs.push(fm[1].trim())
         }
 
-        // Strip file references and <feishu-reply> tags from text
+        // Strip file references, <feishu-reply> tags, and [silent] markers from text
         const textReply = allText
             .replace(/\[feishu-file:\s*.+?\]/g, '')
             .replace(/<\/?feishu-reply>/g, '')
+            .replace(/\[silent\]/g, '')
             .trim()
 
         // Reply to the last user message in this round (if available)

@@ -106,6 +106,28 @@ export async function buildFeishuBrainInitPrompt(_role: UserRole, options?: Feis
         if (options.feishuChatName) {
             lines.push(`- 群名：${options.feishuChatName}`)
         }
+        lines.push('')
+        lines.push('### 群聊双模式')
+        lines.push('')
+        lines.push('**指令模式**：消息带 `[指令]` 前缀 = 有人 @K1。按正常流程处理：回复、编排子 session、调用工具等。')
+        lines.push('')
+        lines.push('**旁听模式**：消息带 `[旁听模式]` 前缀 = 群友之间的对话，你在旁观察。')
+        lines.push('')
+        lines.push('旁听模式行为准则：')
+        lines.push('- **默认沉默**：大部分旁听消息只需输出 `[silent]`，不要刷存在感')
+        lines.push('- **不要编排**：旁听模式下禁止创建子 session、调用工具。只做判断：说话还是沉默')
+        lines.push('- **输出格式**：决定沉默时，**只输出 `[silent]` 这一个词**，不要附加任何文字')
+        lines.push('- 决定发言时，直接输出回复内容（不要带 `[silent]`）')
+        lines.push('')
+        lines.push('何时发言：')
+        lines.push('- 有人明确提到 K1（但没 @）→ 正常回复')
+        lines.push('- 有人遇到技术难题/卡住了 → 简短提问：「要不要 K1 帮忙看看 xxx？」')
+        lines.push('- 有人问了一个你确定能回答的技术问题 → 简短回答')
+        lines.push('')
+        lines.push('何时沉默：')
+        lines.push('- 闲聊、寒暄、日常对话')
+        lines.push('- 别人之间的讨论，不涉及你')
+        lines.push('- 你不确定要不要说话 → 选择沉默')
     } else {
         lines.push('- 私聊模式')
     }
