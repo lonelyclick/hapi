@@ -10,6 +10,60 @@ const MAX_CARD_LENGTH = 4000
 const SHORT_TEXT_THRESHOLD = 200
 
 /**
+ * Convert markdown tables to plain-text aligned tables for Feishu card markdown
+ * (which doesn't support | table | syntax).
+ * Wraps converted tables in a code block so alignment is preserved.
+ */
+function convertMarkdownTables(text: string): string {
+    // Match consecutive lines that look like table rows (starting with |)
+    // Including the separator line (|---|---|)
+    const TABLE_RE = /(?:^|\n)((?:\|.+\|\s*\n)+)/g
+
+    return text.replace(TABLE_RE, (match, tableBlock: string) => {
+        const rows = tableBlock.trim().split('\n').map(r => r.trim())
+        // Filter out separator rows (|---|---|)
+        const dataRows = rows.filter(r => !/^\|[\s:-]+\|$/.test(r))
+        if (dataRows.length === 0) return match
+
+        // Parse cells
+        const parsed = dataRows.map(row =>
+            row.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim())
+        )
+
+        // Calculate max width per column
+        const colCount = Math.max(...parsed.map(r => r.length))
+        const colWidths: number[] = Array(colCount).fill(0)
+        for (const row of parsed) {
+            for (let i = 0; i < colCount; i++) {
+                const cell = row[i] || ''
+                // Approximate width: CJK chars count as 2, others as 1
+                const w = [...cell].reduce((sum, ch) => sum + (/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch) ? 2 : 1), 0)
+                if (w > colWidths[i]) colWidths[i] = w
+            }
+        }
+
+        // Build aligned rows
+        const lines: string[] = []
+        for (const [ri, row] of parsed.entries()) {
+            const cells = []
+            for (let i = 0; i < colCount; i++) {
+                const cell = row[i] || ''
+                const w = [...cell].reduce((sum, ch) => sum + (/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch) ? 2 : 1), 0)
+                cells.push(cell + ' '.repeat(Math.max(0, colWidths[i] - w)))
+            }
+            lines.push(cells.join('  '))
+            // Add separator after header row
+            if (ri === 0 && parsed.length > 1) {
+                lines.push(colWidths.map(w => '-'.repeat(w)).join('  '))
+            }
+        }
+
+        const prefix = match.startsWith('\n') ? '\n' : ''
+        return `${prefix}\`\`\`\n${lines.join('\n')}\n\`\`\`\n`
+    })
+}
+
+/**
  * Extract text from a SyncEngine message content object.
  * Only extracts agent/assistant role messages.
  */
@@ -92,7 +146,7 @@ export function buildFeishuMessage(text: string): { msgType: string; content: st
     }
 
     // Longer or markdown-rich → interactive card
-    let cardText = text
+    let cardText = convertMarkdownTables(text)
     if (cardText.length > MAX_CARD_LENGTH) {
         cardText = cardText.slice(0, MAX_CARD_LENGTH) + '\n\n...(内容过长已截断)'
     }
