@@ -135,7 +135,7 @@ export class FeishuBot {
         this.wsClient = new lark.WSClient({
             appId: this.appId,
             appSecret: this.appSecret,
-            loggerLevel: lark.LoggerLevel.warn,
+            loggerLevel: lark.LoggerLevel.info,
         })
         await this.wsClient.start({ eventDispatcher })
         console.log('[FeishuBot] WebSocket client started')
