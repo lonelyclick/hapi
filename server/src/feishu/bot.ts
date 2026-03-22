@@ -1392,9 +1392,10 @@ export class FeishuBot {
                 : senderOpenIds ? [...senderOpenIds] : []
             ).filter(id => id !== this.botOpenId)
 
-            // Short text without structural markdown (code blocks, tables, lists) → try voice message
-            // Simple inline formatting (bold, italic, links) is OK for TTS — it gets stripped
-            const isShortForVoice = textReply.length <= 200
+            // Short text without structural markdown → try voice message (p2p only, not group chats)
+            const chatType = this.chatIdToChatType.get(chatId)
+            const isShortForVoice = chatType === 'p2p'
+                && textReply.length <= 200
                 && !/```|^\s*[-*+]\s|^\s*\d+\.\s|^\|.+\|/m.test(textReply)
                 && mediaRefs.length === 0
 
