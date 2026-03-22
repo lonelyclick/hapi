@@ -277,8 +277,8 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     // Sync currentModel with modelMode: 'opus'/'sonnet' → pass as --model, 'default' → 'opus' (Claude Code defaults to Sonnet without --model)
     let currentModel = currentModelMode !== 'default' ? currentModelMode : (options.model ?? 'opus');
     let currentFallbackModel: string | undefined = undefined; // Track current fallback model
-    if (envPermissionMode || modeEnv.modelMode) {
-        logger.debug(`[loop] Using mode settings from environment: permissionMode=${envPermissionMode}, modelMode=${modeEnv.modelMode}, reasoningEffort=${modeEnv.modelReasoningEffort}`);
+    if (modeEnv.modelMode) {
+        logger.debug(`[loop] Using mode settings from environment: modelMode=${modeEnv.modelMode}, reasoningEffort=${modeEnv.modelReasoningEffort}`);
     }
     let currentFastMode = readHookSettingsFastMode(hookSettingsPath); // Restore from settings file (e.g. merged from source settings)
     let currentCustomSystemPrompt: string | undefined = undefined; // Track current custom system prompt
