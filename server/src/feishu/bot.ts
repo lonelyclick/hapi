@@ -168,15 +168,28 @@ export class FeishuBot {
             this.unsubscribeSyncEvents = null
         }
 
+        // Flush pending incoming messages before shutdown (persist to DB so they survive restart)
+        for (const [chatId, state] of this.chatStates.entries()) {
+            if (state.debounceTimer) clearTimeout(state.debounceTimer)
+            if (state.passiveDebounceTimer) clearTimeout(state.passiveDebounceTimer)
+            if (state.incoming.length > 0) {
+                console.log(`[FeishuBot] Shutdown: flushing ${state.incoming.length} pending message(s) for ${chatId.slice(0, 12)}`)
+                try {
+                    await this.flushIncomingMessages(chatId)
+                } catch (err) {
+                    console.error(`[FeishuBot] Shutdown flush failed for ${chatId.slice(0, 12)}:`, err)
+                }
+            }
+        }
+
+        // Persist any remaining agentMessages
+        for (const chatId of this.agentMessages.keys()) {
+            this.persistChatState(chatId)
+        }
+
         this.agentMessages.clear()
         this.initReady.clear()
         this.initReadyResolvers.clear()
-
-        // Clear all chat state timers
-        for (const state of this.chatStates.values()) {
-            if (state.debounceTimer) clearTimeout(state.debounceTimer)
-            if (state.passiveDebounceTimer) clearTimeout(state.passiveDebounceTimer)
-        }
         this.chatStates.clear()
 
         console.log('[FeishuBot] Stopped')

@@ -166,10 +166,6 @@ if ! grep -q "EnvironmentFile=" "$SERVICE_FILE" 2>/dev/null; then
     echo "guang" | sudo -S systemctl daemon-reload
 fi
 
-echo "=== Killing old processes..."
-fuser -k 3006/tcp 2>/dev/null || true
-fuser -k 3000/tcp 2>/dev/null || true
-
 echo "=== Restarting services..."
 if [[ "$BUILD_DAEMON" == "true" ]]; then
     echo "    (with daemon restart)"
