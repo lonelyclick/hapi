@@ -1334,8 +1334,19 @@ export class FeishuBot {
         // Deduplicate consecutive identical messages (Brain sometimes repeats across turns)
         const deduped = msgs.filter((m, i) => i === 0 || m !== msgs[i - 1])
 
+        // Drop short "process narration" fragments if a longer substantive reply follows.
+        // e.g. "好的，我来查一下" (30 chars) followed by the actual answer (200 chars).
+        const SHORT_NARRATION_LIMIT = 60
+        const substantive = deduped.filter((m, i) => {
+            if (m.trim().length > SHORT_NARRATION_LIMIT) return true          // keep long messages
+            if (i === deduped.length - 1) return true                         // always keep the last message
+            // If a longer message follows, drop this short one
+            const nextLong = deduped.slice(i + 1).some(n => n.trim().length > SHORT_NARRATION_LIMIT)
+            return !nextLong
+        })
+
         // Use all agent messages as the reply (raw output)
-        const allText = deduped.join('\n')
+        const allText = substantive.join('\n')
 
         // Detect [silent] — K1 decided not to reply (passive listening mode)
         if (allText.trim() === '[silent]' || allText.includes('[silent]')) {

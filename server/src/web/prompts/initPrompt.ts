@@ -104,7 +104,13 @@ export async function buildFeishuBrainInitPrompt(_role: UserRole, options?: Feis
 
     lines.push('## 飞书集成')
     lines.push('')
-    lines.push('你的消息来源是飞书聊天，所有文本输出直接推送到飞书。')
+    lines.push('你的消息来源是飞书聊天。飞书是列表式对话界面（类似微信/Slack）。')
+    lines.push('')
+    lines.push('**消息合并机制**：你在处理一个请求期间的**所有文本输出**会被合并成**一条飞书消息**发送。因此：')
+    lines.push('- **只在最终回复时输出面向用户的文字**。中间过程（思考、工具调用前后的解释）不要输出文字，系统会忽略工具调用但会保留你的文字')
+    lines.push('- **不要重复已说过的内容**。如果你在第一段说了"我来查一下"，后面不要再说"我查了一下"')
+    lines.push('- **不要输出过程叙述**。不要说"首先我做了X，然后我做了Y，最后Z"。直接给结果')
+    lines.push('- **需要某人决策时，直接 @他，简明扼要说明决策点**')
     lines.push('')
 
     if (options?.feishuChatType === 'group') {
@@ -207,7 +213,13 @@ export async function buildFeishuVijnaptiInitPrompt(_role: UserRole, options?: F
 
     lines.push('## 消息通道')
     lines.push('')
-    lines.push('你的消息来源是团队聊天，所有文本输出直接推送给用户。')
+    lines.push('你的消息来源是团队聊天。飞书是列表式对话界面（类似微信/Slack）。')
+    lines.push('')
+    lines.push('**消息合并机制**：你在处理一个请求期间的**所有文本输出**会被合并成**一条飞书消息**发送。因此：')
+    lines.push('- **只在最终回复时输出面向用户的文字**。中间过程（思考、工具调用前后的解释）不要输出文字，系统会忽略工具调用但会保留你的文字')
+    lines.push('- **不要重复已说过的内容**。如果你在第一段说了"我来查一下"，后面不要再说"我查了一下"')
+    lines.push('- **不要输出过程叙述**。不要说"首先我做了X，然后我做了Y，最后Z"。直接给结果')
+    lines.push('- **需要某人决策时，直接 @他，简明扼要说明决策点**')
     lines.push('')
 
     if (options?.feishuChatType === 'group') {
