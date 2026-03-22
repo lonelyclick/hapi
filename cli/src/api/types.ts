@@ -13,7 +13,7 @@ import type {
 
 export type Usage = z.infer<typeof UsageSchema>
 
-export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+export type ClaudePermissionMode = 'bypassPermissions'
 export type CodexPermissionMode = 'default' | 'read-only' | 'safe-yolo' | 'yolo'
 export type SessionPermissionMode = ClaudePermissionMode | CodexPermissionMode
 export type GrokModelMode = 'grok-4-1-fast-reasoning' | 'grok-4-1-fast-non-reasoning' | 'grok-code-fast-1' | 'grok-4-fast-reasoning' | 'grok-4-fast-non-reasoning' | 'grok-4-0709' | 'grok-3-mini' | 'grok-3'

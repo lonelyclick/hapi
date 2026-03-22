@@ -29,7 +29,7 @@ function isInitPromptMessage(message: string): boolean {
 interface PermissionsField {
     date: number;
     result: 'approved' | 'denied';
-    mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+    mode?: 'bypassPermissions';
     allowedTools?: string[];
 }
 

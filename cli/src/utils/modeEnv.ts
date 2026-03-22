@@ -4,7 +4,7 @@ import type { SessionModelMode, SessionModelReasoningEffort, SessionPermissionMo
  * Valid permission modes for resume
  */
 const PERMISSION_MODES = new Set<SessionPermissionMode>([
-    'default', 'acceptEdits', 'bypassPermissions', 'plan',
+    'bypassPermissions',
     'read-only', 'safe-yolo', 'yolo'
 ]);
 

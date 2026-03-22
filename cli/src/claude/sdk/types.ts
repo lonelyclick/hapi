@@ -164,7 +164,7 @@ export interface QueryOptions {
     maxTurns?: number
     mcpServers?: Record<string, unknown>
     pathToClaudeCodeExecutable?: string
-    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+    permissionMode?: 'bypassPermissions'
     continue?: boolean
     resume?: string
     model?: string

@@ -469,7 +469,7 @@ export class ApiClient {
         })
     }
 
-    async setPermissionMode(sessionId: string, mode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'): Promise<void> {
+    async setPermissionMode(sessionId: string, mode: 'bypassPermissions' | 'read-only' | 'safe-yolo' | 'yolo'): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/permission-mode`, {
             method: 'POST',
             body: JSON.stringify({ mode })
@@ -493,8 +493,8 @@ export class ApiClient {
     async approvePermission(
         sessionId: string,
         requestId: string,
-        modeOrOptions?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | {
-            mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+        modeOrOptions?: 'bypassPermissions' | {
+            mode?: 'bypassPermissions'
             allowTools?: string[]
             decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
             answers?: Record<string, string[]>

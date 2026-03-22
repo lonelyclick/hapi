@@ -3,9 +3,6 @@ import type { AgentState, ModelMode, PermissionMode, TypingUser } from '@/types/
 import { getContextBudgetTokens } from '@/chat/modelConfig'
 
 const PERMISSION_MODE_LABELS: Record<string, string> = {
-    default: 'Default',
-    acceptEdits: 'Accept Edits',
-    plan: 'Plan Mode',
     bypassPermissions: 'Yolo',
     'read-only': 'Read Only',
     'safe-yolo': 'Safe Yolo',
@@ -138,9 +135,13 @@ export function StatusBar(props: {
     )
 
     const permissionMode = props.permissionMode
+    // Only show permission mode for non-Claude non-gemini sessions (Codex modes)
     const shouldShowPermissionMode = props.agentFlavor !== 'gemini'
+        && props.agentFlavor !== 'claude'
+        && props.agentFlavor !== null
+        && props.agentFlavor !== undefined
         && permissionMode
-        && permissionMode !== 'default'
+        && permissionMode !== 'bypassPermissions'
 
     return (
         <div className="flex items-center justify-between px-2 pb-1">
@@ -167,9 +168,6 @@ export function StatusBar(props: {
 
             {shouldShowPermissionMode ? (
                 <span className={`text-xs ${
-                    permissionMode === 'acceptEdits' ? 'text-amber-500' :
-                    permissionMode === 'bypassPermissions' ? 'text-red-500' :
-                    permissionMode === 'plan' ? 'text-blue-500' :
                     permissionMode === 'read-only' ? 'text-amber-500' :
                     permissionMode === 'safe-yolo' ? 'text-amber-500' :
                     permissionMode === 'yolo' ? 'text-red-500' :

@@ -126,7 +126,7 @@ function storedSessionToSummary(stored: StoredSession): SessionSummary {
     }
 }
 
-const permissionModeValues = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'read-only', 'safe-yolo', 'yolo'] as const
+const permissionModeValues = ['bypassPermissions', 'read-only', 'safe-yolo', 'yolo'] as const
 const modelModeValues = ['default', 'sonnet', 'opus', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'] as const
 const reasoningEffortValues = ['low', 'medium', 'high', 'xhigh'] as const
 
@@ -1247,7 +1247,7 @@ export function createSessionsRoutes(
 
         const flavor = sessionResult.session.metadata?.flavor ?? 'claude'
         const mode = parsed.data.mode
-        const claudeModes = new Set(['default', 'acceptEdits', 'bypassPermissions', 'plan'])
+        const claudeModes = new Set(['bypassPermissions'])
         const codexModes = new Set(['default', 'read-only', 'safe-yolo', 'yolo'])
 
         if (flavor === 'gemini') {

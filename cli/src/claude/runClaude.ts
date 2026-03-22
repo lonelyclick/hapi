@@ -54,7 +54,7 @@ function extractClaudeAgent(args?: string[]): string | null {
 
 export interface StartOptions {
     model?: string
-    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
+    permissionMode?: 'bypassPermissions'
     startingMode?: 'local' | 'remote'
     shouldStartDaemon?: boolean
     claudeEnvVars?: Record<string, string>
@@ -259,7 +259,6 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
 
     // Import MessageQueue2 and create message queue
     const messageQueue = new MessageQueue2<EnhancedMode>(mode => hashObject({
-        isPlan: mode.permissionMode === 'plan',
         model: mode.model,
         fallbackModel: mode.fallbackModel,
         customSystemPrompt: mode.customSystemPrompt,
@@ -272,11 +271,8 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     // Forward messages to the queue
     // Read mode settings from environment (set by daemon when resuming session)
     const modeEnv = readModeEnv();
-    // Filter to valid Claude permission modes
-    const envPermissionMode = (modeEnv.permissionMode === 'default' || modeEnv.permissionMode === 'acceptEdits' || modeEnv.permissionMode === 'bypassPermissions' || modeEnv.permissionMode === 'plan')
-        ? modeEnv.permissionMode
-        : undefined;
-    let currentPermissionMode: PermissionMode = envPermissionMode ?? options.permissionMode ?? 'default';
+    // Permission mode is always bypassPermissions for Claude sessions
+    let currentPermissionMode: PermissionMode = 'bypassPermissions';
     let currentModelMode: SessionModelMode = modeEnv.modelMode ?? (options.model === 'sonnet' || options.model === 'opus' ? options.model : 'default');
     // Sync currentModel with modelMode: 'opus'/'sonnet' → pass as --model, 'default' → 'opus' (Claude Code defaults to Sonnet without --model)
     let currentModel = currentModelMode !== 'default' ? currentModelMode : (options.model ?? 'opus');
@@ -315,16 +311,8 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         logger.debug(`[loop] Synced session modes for keepalive: permissionMode=${currentPermissionMode}, modelMode=${currentModelMode}, fastMode=${currentFastMode}`);
     };
     session.onUserMessage((message) => {
-        const sessionPermissionMode = currentSessionRef.current?.getPermissionMode();
-        if (
-            sessionPermissionMode === 'default'
-            || sessionPermissionMode === 'acceptEdits'
-            || sessionPermissionMode === 'bypassPermissions'
-            || sessionPermissionMode === 'plan'
-        ) {
-            currentPermissionMode = sessionPermissionMode;
-        }
-        const messagePermissionMode = currentPermissionMode;
+        // Permission mode is always bypassPermissions
+        const messagePermissionMode: PermissionMode = 'bypassPermissions';
         const messageModel = currentModel;
         logger.debug(`[loop] User message received with permission mode: ${currentPermissionMode}, model: ${currentModelMode}`);
 
@@ -380,7 +368,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
 
         // Push with resolved permission mode, model, system prompts, and tools
         const enhancedMode: EnhancedMode = {
-            permissionMode: messagePermissionMode ?? 'default',
+            permissionMode: 'bypassPermissions',
             model: messageModel,
             fallbackModel: messageFallbackModel,
             customSystemPrompt: messageCustomSystemPrompt,
@@ -483,12 +471,9 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         }
         const config = payload as { permissionMode?: PermissionMode; modelMode?: SessionModelMode; modelReasoningEffort?: SessionModelReasoningEffort; fastMode?: boolean };
 
+        // Permission mode is always bypassPermissions, ignore any changes
         if (config.permissionMode !== undefined) {
-            const validModes: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
-            if (!validModes.includes(config.permissionMode)) {
-                throw new Error('Invalid permission mode');
-            }
-            currentPermissionMode = config.permissionMode;
+            currentPermissionMode = 'bypassPermissions';
         }
 
         if (config.modelMode !== undefined) {
@@ -527,7 +512,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     await loop({
         path: workingDirectory,
         model: options.model,
-        permissionMode: options.permissionMode,
+        permissionMode: 'bypassPermissions',
         startingMode,
         sessionId: resumeSessionId,
         messageQueue,

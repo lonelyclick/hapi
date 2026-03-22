@@ -91,7 +91,7 @@ export interface Session {
     thinking: boolean
     thinkingAt: number
     todos?: TodoItem[]
-    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
+    permissionMode?: 'bypassPermissions' | 'read-only' | 'safe-yolo' | 'yolo'
     modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     fastMode?: boolean
@@ -720,7 +720,7 @@ export class SyncEngine {
         time: number
         thinking?: boolean
         mode?: 'local' | 'remote'
-        permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
+        permissionMode?: 'bypassPermissions' | 'read-only' | 'safe-yolo' | 'yolo'
         modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
         modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
         fastMode?: boolean
@@ -1426,7 +1426,7 @@ export class SyncEngine {
     async approvePermission(
         sessionId: string,
         requestId: string,
-        mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan',
+        mode?: 'bypassPermissions',
         allowTools?: string[],
         decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort',
         answers?: Record<string, string[]>
@@ -1484,7 +1484,7 @@ export class SyncEngine {
 
     async setPermissionMode(
         sessionId: string,
-        mode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
+        mode: 'bypassPermissions' | 'read-only' | 'safe-yolo' | 'yolo'
     ): Promise<void> {
         const session = this.sessions.get(sessionId)
         if (session) {
@@ -1511,7 +1511,7 @@ export class SyncEngine {
     async applySessionConfig(
         sessionId: string,
         config: {
-            permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
+            permissionMode?: 'bypassPermissions' | 'read-only' | 'safe-yolo' | 'yolo'
             modelMode?: 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
             modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
             fastMode?: boolean

@@ -3,15 +3,15 @@ import type { ApiClient } from '@/api/client'
 import type { ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 
-type PermissionModeValue = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'read-only' | 'safe-yolo' | 'yolo'
+type PermissionModeValue = 'bypassPermissions' | 'read-only' | 'safe-yolo' | 'yolo'
 type ModelModeValue = 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
 type ModelConfig = { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }
 
 function toPermissionMode(mode: PermissionMode): PermissionModeValue {
-    if (mode === 'acceptEdits' || mode === 'bypassPermissions' || mode === 'plan' || mode === 'read-only' || mode === 'safe-yolo' || mode === 'yolo') {
+    if (mode === 'bypassPermissions' || mode === 'read-only' || mode === 'safe-yolo' || mode === 'yolo') {
         return mode
     }
-    return 'default'
+    return 'bypassPermissions'
 }
 
 function toModelMode(mode: ModelMode): ModelModeValue {

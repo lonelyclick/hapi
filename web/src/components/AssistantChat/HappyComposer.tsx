@@ -38,12 +38,9 @@ export interface TextInputState {
     selection: { start: number; end: number }
 }
 
-const CLAUDE_PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'] as const
-const CODEX_PERMISSION_MODES = ['default', 'read-only', 'safe-yolo', 'yolo'] as const
+const CLAUDE_PERMISSION_MODES = ['bypassPermissions'] as const
+const CODEX_PERMISSION_MODES = ['read-only', 'safe-yolo', 'yolo'] as const
 const PERMISSION_MODE_LABELS: Record<string, string> = {
-    default: 'Default',
-    acceptEdits: 'Accept Edits',
-    plan: 'Plan Mode',
     bypassPermissions: 'Yolo',
     'read-only': 'Read Only',
     'safe-yolo': 'Safe Yolo',
@@ -320,7 +317,7 @@ export function HappyComposer(props: {
     } = props
 
     // Use ?? so missing values fall back to default (destructuring defaults only handle undefined)
-    const permissionMode = rawPermissionMode ?? 'default'
+    const permissionMode = rawPermissionMode ?? 'bypassPermissions'
     const modelMode = rawModelMode ?? 'default'
     const serverFastMode = rawFastMode ?? false
     const [optimisticFastMode, setOptimisticFastMode] = useState<boolean | null>(null)
@@ -828,11 +825,11 @@ export function HappyComposer(props: {
             return
         }
 
-        if (key === 'Tab' && e.shiftKey && onPermissionModeChange && permissionModes.length > 0) {
+        if (key === 'Tab' && e.shiftKey && onPermissionModeChange && permissionModes.length > 1) {
             e.preventDefault()
             const currentIndex = permissionModes.indexOf(permissionMode)
             const nextIndex = (currentIndex + 1) % permissionModes.length
-            const nextMode = permissionModes[nextIndex] ?? 'default'
+            const nextMode = permissionModes[nextIndex] ?? 'bypassPermissions'
             onPermissionModeChange(nextMode)
             haptic('light')
             return
@@ -1205,7 +1202,7 @@ export function HappyComposer(props: {
         }, 50)
     }, [optimizePreview, buildMessageWithAttachments, assistantApi])
 
-    const showPermissionSettings = Boolean(onPermissionModeChange && permissionModes.length > 0)
+    const showPermissionSettings = Boolean(onPermissionModeChange && permissionModes.length > 1)
     const showModelSettings = Boolean(onModelModeChange && agentFlavor !== 'gemini')
     const showSettingsButton = true // Always show settings for auto-optimize toggle
     const showAbortButton = true

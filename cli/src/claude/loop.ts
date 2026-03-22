@@ -8,7 +8,7 @@ import { claudeRemoteLauncher } from "./claudeRemoteLauncher"
 import { ApiClient } from "@/lib"
 import type { SessionModelMode } from "@/api/types"
 
-export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+export type PermissionMode = 'bypassPermissions';
 
 export interface EnhancedMode {
     permissionMode: PermissionMode;
@@ -65,7 +65,7 @@ export async function loop(opts: LoopOptions) {
         startedBy,
         startingMode,
         hookSettingsPath: opts.hookSettingsPath,
-        permissionMode: opts.permissionMode ?? 'default',
+        permissionMode: opts.permissionMode ?? 'bypassPermissions',
         modelMode
     });
 

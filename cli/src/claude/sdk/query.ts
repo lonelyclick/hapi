@@ -268,7 +268,7 @@ export function query(config: {
             maxTurns,
             mcpServers,
             pathToClaudeCodeExecutable = getDefaultClaudeCodePath(),
-            permissionMode = 'default',
+            permissionMode = 'bypassPermissions',
             continue: continueConversation,
             resume,
             model,

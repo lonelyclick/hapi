@@ -7,7 +7,7 @@ import { requireSessionFromParam, requireSyncEngine } from './guards'
 const decisionSchema = z.enum(['approved', 'approved_for_session', 'denied', 'abort'])
 
 const approveBodySchema = z.object({
-    mode: z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan']).optional(),
+    mode: z.enum(['bypassPermissions']).optional(),
     allowTools: z.array(z.string()).optional(),
     decision: decisionSchema.optional(),
     answers: z.record(z.string(), z.array(z.string())).optional()
