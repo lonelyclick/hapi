@@ -5,7 +5,7 @@ import type { SSEManager } from '../../sse/sseManager'
 import type { IStore, UserRole, StoredSession } from '../../store'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireMachine, requireSessionFromParam, requireSessionFromParamWithShareCheck, requireSyncEngine } from './guards'
-import { buildInitPrompt, buildBrainInitPrompt } from '../prompts/initPrompt'
+import { buildInitPrompt, buildBrainInitPrompt, buildVijnaptiInitPrompt } from '../prompts/initPrompt'
 
 type SessionSummaryMetadata = {
     name?: string
@@ -321,9 +321,12 @@ async function sendInitPrompt(engine: SyncEngine, sessionId: string, role: UserR
             || null
         const source = session?.metadata?.source
         console.log(`[sendInitPrompt] sessionId=${sessionId}, role=${role}, projectRoot=${projectRoot}, userName=${userName}, source=${source}`)
-        const prompt = source === 'brain'
-            ? await buildBrainInitPrompt(role, { projectRoot, userName })
-            : await buildInitPrompt(role, { projectRoot, userName })
+        const isVijnapti = source === 'brain' && projectRoot?.includes('vijnapti-workspace')
+        const prompt = isVijnapti
+            ? await buildVijnaptiInitPrompt(role, { projectRoot, userName })
+            : source === 'brain'
+                ? await buildBrainInitPrompt(role, { projectRoot, userName })
+                : await buildInitPrompt(role, { projectRoot, userName })
         if (!prompt.trim()) {
             console.warn(`[sendInitPrompt] Empty prompt for session ${sessionId}, skipping`)
             return
@@ -622,6 +625,65 @@ export function createSessionsRoutes(
         const result = await engine.spawnSession(
             machine.id,
             brainDirectory,
+            'claude',
+            true,        // yolo
+            'simple',
+            undefined,
+            {
+                source: 'brain',
+                permissionMode: 'bypassPermissions',
+            }
+        )
+
+        if (result.type === 'success') {
+            void (async () => {
+                const isOnline = await waitForSessionOnline(engine, result.sessionId, 60_000)
+                if (!isOnline) return
+                await engine.waitForSocketInRoom(result.sessionId, 5000)
+                if (email) {
+                    await store.setSessionCreatedBy(result.sessionId, email, namespace)
+                }
+                await sendInitPrompt(engine, result.sessionId, role, userName)
+            })()
+        }
+
+        return c.json(result)
+    })
+
+    // Vijnapti Brain: singleton create (唯识意识架构 AI，全局单例)
+    app.post('/brain/vijnapti', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const namespace = c.get('namespace')
+        const email = c.get('email')
+        const role = c.get('role')
+        const userName = c.get('name')
+
+        // Singleton: check if an active vijnapti session already exists
+        const allSessions = engine.getSessionsByNamespace(namespace)
+        const existing = allSessions.find(s =>
+            s.active &&
+            s.metadata?.source === 'brain' &&
+            s.metadata?.path?.includes('vijnapti-workspace')
+        )
+        if (existing) {
+            return c.json({ type: 'success', sessionId: existing.id, existing: true })
+        }
+
+        const machines = engine.getOnlineMachinesByNamespace(namespace)
+        if (machines.length === 0) {
+            return c.json({ type: 'error', message: 'No machines online' }, 503)
+        }
+        const machine = machines[0]
+        const homeDir = machine.metadata?.homeDir || '/tmp'
+        const vijnaptiDirectory = `${homeDir}/.hapi/vijnapti-workspace`
+
+        const result = await engine.spawnSession(
+            machine.id,
+            vijnaptiDirectory,
             'claude',
             true,        // yolo
             'simple',
