@@ -1363,13 +1363,14 @@ export class FeishuBot {
                 : senderOpenIds ? [...senderOpenIds] : []
             ).filter(id => id !== this.botOpenId)
 
-            // Short plain text without markdown → try voice message
-            const isShortPlain = textReply.length <= 200
-                && !/^#{1,6}\s|(\*\*|__).+(\*\*|__)|```|^\s*[-*+]\s|^\s*\d+\.\s|\[.+\]\(.+\)|^\|.+\|/m.test(textReply)
+            // Short text without structural markdown (code blocks, tables, lists) → try voice message
+            // Simple inline formatting (bold, italic, links) is OK for TTS — it gets stripped
+            const isShortForVoice = textReply.length <= 200
+                && !/```|^\s*[-*+]\s|^\s*\d+\.\s|^\|.+\|/m.test(textReply)
                 && mediaRefs.length === 0
 
             let sentAsVoice = false
-            if (isShortPlain) {
+            if (isShortForVoice) {
                 console.log(`[FeishuBot] Sending voice to ${chatId.slice(0, 12)} (${textReply.length} chars)`)
                 sentAsVoice = await this.sendFeishuVoice(chatId, textReply, replyToMessageId)
             }
@@ -1514,7 +1515,15 @@ export class FeishuBot {
      */
     private async sendFeishuVoice(chatId: string, text: string, replyToMessageId?: string): Promise<boolean> {
         try {
-            const ttsResult = await textToSpeech(text)
+            // Strip inline markdown so TTS reads clean text
+            const ttsText = text
+                .replace(/\*\*(.+?)\*\*/g, '$1')
+                .replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '$1')
+                .replace(/~~(.+?)~~/g, '$1')
+                .replace(/`([^`]+)`/g, '$1')
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+                .replace(/^#{1,6}\s+/gm, '')
+            const ttsResult = await textToSpeech(ttsText)
             if (!ttsResult) return false
 
             // Upload opus to Feishu
