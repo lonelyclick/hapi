@@ -1062,7 +1062,11 @@ export function HappyComposer(props: {
         try {
             // Compress image to fit Claude API base64 limit
             const { dataUrl, base64: base64Content, mimeType } = await compressImage(file, MAX_BASE64_BYTES)
-            const filename = file.name || 'pasted-image.png'
+            let filename = file.name || 'pasted-image.png'
+            // If compression changed format to JPEG, update the file extension to match
+            if (mimeType === 'image/jpeg' && !/\.jpe?g$/i.test(filename)) {
+                filename = filename.replace(/\.[^.]+$/, '.jpg')
+            }
 
             // Upload to server
             const result = await apiClient.uploadImage(sessionId, filename, base64Content, mimeType)

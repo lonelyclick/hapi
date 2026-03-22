@@ -36,9 +36,17 @@ export function hasImageReferences(text: string): boolean {
 }
 
 /**
- * Get MIME type from file extension
+ * Detect MIME type from image data magic bytes, falling back to file extension
  */
-function getMimeType(path: string): string {
+function detectMimeType(data: Buffer, path: string): string {
+    // Check magic bytes first for reliable detection
+    if (data.length >= 3 && data[0] === 0xFF && data[1] === 0xD8 && data[2] === 0xFF) return 'image/jpeg'
+    if (data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47) return 'image/png'
+    if (data.length >= 4 && data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x38) return 'image/gif'
+    if (data.length >= 4 && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46 &&
+        data.length >= 12 && data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) return 'image/webp'
+
+    // Fallback to extension
     const ext = path.toLowerCase().split('.').pop() || ''
     const mimeTypes: Record<string, string> = {
         'jpg': 'image/jpeg',
@@ -155,7 +163,7 @@ export async function buildMessageContent(
             }
 
             const base64Data = imageData.toString('base64')
-            const mimeType = getMimeType(imagePath)
+            const mimeType = detectMimeType(imageData, imagePath)
 
             // Claude API limit: base64 must be under ~5MB
             const MAX_BASE64_SIZE = 4.5 * 1024 * 1024
