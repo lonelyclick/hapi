@@ -1397,11 +1397,12 @@ export class FeishuBot {
 
             // Fallback to post rich text (or for long/markdown messages)
             if (!sentAsVoice) {
-                console.log(`[FeishuBot] Sending summary to ${chatId.slice(0, 12)} (${textReply.length} chars, from ${msgs.length} messages${replyToMessageId ? ', reply' : ''}${atIds.length ? `, @${atIds.length}` : ''}${mediaRefs.length ? `, +${mediaRefs.length} media` : ''})`)
+                console.log(`[FeishuBot] Sending summary to ${chatId.slice(0, 12)} (${textReply.length} chars, from ${deduped.length} messages${replyToMessageId ? ', reply' : ''}${atIds.length ? `, @${atIds.length}` : ''}${mediaRefs.length ? `, +${mediaRefs.length} media` : ''})`)
                 await this.sendFeishuPost(chatId, textReply, replyToMessageId, atIds.length > 0 ? atIds : undefined)
-            } else if (atIds.length > 0) {
-                // Voice sent successfully but we still need to @mention people
-                await this.sendFeishuPost(chatId, '', undefined, atIds)
+            } else {
+                // Voice sent — also send text transcript with @mentions
+                const transcript = `[语音转录] ${textReply}`
+                await this.sendFeishuPost(chatId, transcript, undefined, atIds.length > 0 ? atIds : undefined)
             }
         }
 
