@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import type { SyncEngine, SyncEvent } from '../sync/syncEngine'
 import type { IStore } from '../store/interface'
 import { extractAgentText, isInternalBrainMessage, buildFeishuMessage } from './formatter'
+import { textToSpeech } from './tts'
 import { enrichTextWithDocContent } from './docFetcher'
 import { buildFeishuBrainInitPrompt } from '../web/prompts/initPrompt'
 import { selectBestAccount } from '../claude-accounts/accountsService'
@@ -1353,7 +1354,7 @@ export class FeishuBot {
         const senderOpenIds = this.lastSenderOpenIds.get(chatId)
         this.lastSenderOpenIds.delete(chatId)
 
-        // 1. Send text part (with inline @mentions in post format)
+        // 1. Send text part
         if (textReply) {
             // Group chat: compute @mention ids to embed in post message
             // Priority: K1's explicit [at: openId] > fallback to all senders
@@ -1362,8 +1363,25 @@ export class FeishuBot {
                 : senderOpenIds ? [...senderOpenIds] : []
             ).filter(id => id !== this.botOpenId)
 
-            console.log(`[FeishuBot] Sending summary to ${chatId.slice(0, 12)} (${textReply.length} chars, from ${msgs.length} messages${replyToMessageId ? ', reply' : ''}${atIds.length ? `, @${atIds.length}` : ''}${mediaRefs.length ? `, +${mediaRefs.length} media` : ''})`)
-            await this.sendFeishuPost(chatId, textReply, replyToMessageId, atIds.length > 0 ? atIds : undefined)
+            // Short plain text without markdown → try voice message
+            const isShortPlain = textReply.length <= 200
+                && !/^#{1,6}\s|(\*\*|__).+(\*\*|__)|```|^\s*[-*+]\s|^\s*\d+\.\s|\[.+\]\(.+\)|^\|.+\|/m.test(textReply)
+                && mediaRefs.length === 0
+
+            let sentAsVoice = false
+            if (isShortPlain) {
+                console.log(`[FeishuBot] Sending voice to ${chatId.slice(0, 12)} (${textReply.length} chars)`)
+                sentAsVoice = await this.sendFeishuVoice(chatId, textReply, replyToMessageId)
+            }
+
+            // Fallback to post rich text (or for long/markdown messages)
+            if (!sentAsVoice) {
+                console.log(`[FeishuBot] Sending summary to ${chatId.slice(0, 12)} (${textReply.length} chars, from ${msgs.length} messages${replyToMessageId ? ', reply' : ''}${atIds.length ? `, @${atIds.length}` : ''}${mediaRefs.length ? `, +${mediaRefs.length} media` : ''})`)
+                await this.sendFeishuPost(chatId, textReply, replyToMessageId, atIds.length > 0 ? atIds : undefined)
+            } else if (atIds.length > 0) {
+                // Voice sent successfully but we still need to @mention people
+                await this.sendFeishuPost(chatId, '', undefined, atIds)
+            }
         }
 
         // 2. Send media attachments
@@ -1487,6 +1505,65 @@ export class FeishuBot {
             }
         } catch (err) {
             console.error(`[FeishuBot] sendFeishuPost failed for chat ${chatId.slice(0, 12)}:`, err)
+        }
+    }
+
+    /**
+     * Convert text to speech and send as Feishu voice message.
+     * Returns true if sent successfully, false if TTS or send failed.
+     */
+    private async sendFeishuVoice(chatId: string, text: string, replyToMessageId?: string): Promise<boolean> {
+        try {
+            const ttsResult = await textToSpeech(text)
+            if (!ttsResult) return false
+
+            // Upload opus to Feishu
+            const token = await this.getToken()
+            const form = new FormData()
+            form.append('file_type', 'opus')
+            form.append('file_name', 'voice.opus')
+            form.append('duration', String(ttsResult.durationMs))
+            form.append('file', new Blob([ttsResult.opusBuffer], { type: 'audio/opus' }), 'voice.opus')
+
+            const uploadResp = await fetch('https://open.feishu.cn/open-apis/im/v1/files', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: form,
+            })
+            const uploadResult = await uploadResp.json() as any
+            if (uploadResult.code !== 0) {
+                console.error(`[FeishuBot] Voice upload failed: code=${uploadResult.code}, msg=${uploadResult.msg}`)
+                return false
+            }
+            const fileKey = uploadResult.data.file_key
+
+            // Send audio message
+            const content = JSON.stringify({ file_key: fileKey })
+            if (replyToMessageId) {
+                await fetch(`https://open.feishu.cn/open-apis/im/v1/messages/${replyToMessageId}/reply`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ msg_type: 'audio', content }),
+                })
+            } else {
+                await fetch('https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ receive_id: chatId, msg_type: 'audio', content }),
+                })
+            }
+
+            console.log(`[FeishuBot] Voice sent to ${chatId.slice(0, 12)} (${ttsResult.durationMs}ms audio)`)
+            return true
+        } catch (err) {
+            console.error(`[FeishuBot] sendFeishuVoice failed:`, err)
+            return false
         }
     }
 
