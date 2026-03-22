@@ -134,13 +134,17 @@ export async function claudeRemote(opts: {
         'Skill', 'EnterPlanMode',
     ];
 
-    // When allowedTools is set (e.g. Brain sessions), we use --disallowedTools to block all
+    // When mode.allowedTools is set (e.g. Brain sessions), we use --disallowedTools to block all
     // built-in tools that are NOT in the whitelist. This is the only reliable way to prevent
     // Claude Code from auto-allowing tools (e.g. Read for files within cwd) without going
     // through our canCallTool callback. --allowedTools only filters MCP/API tools, not built-ins.
     // We always pass bypassPermissions so whitelisted tools (MCP) execute without permission prompts.
+    //
+    // NOTE: opts.allowedTools are MCP tool registrations (always present for all sessions).
+    // initial.mode.allowedTools are explicit restrictions (only set for brain/restricted sessions).
+    // We only block built-in tools when mode.allowedTools is explicitly set.
     const allAllowedTools = initial.mode.allowedTools ? initial.mode.allowedTools.concat(opts.allowedTools) : opts.allowedTools;
-    const hasToolRestrictions = allAllowedTools.length > 0;
+    const hasToolRestrictions = !!initial.mode.allowedTools && initial.mode.allowedTools.length > 0;
     let effectiveDisallowedTools = initial.mode.disallowedTools ?? [];
     if (hasToolRestrictions) {
         // Block all built-in tools not explicitly allowed
