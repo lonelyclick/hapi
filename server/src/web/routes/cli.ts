@@ -369,6 +369,10 @@ export function createCliRoutes(
     // Brain: patch metadata on a child session
     const patchMetadataSchema = z.object({
         brainSummary: z.string().max(2000).optional(),
+        summary: z.object({
+            text: z.string().max(500),
+            updatedAt: z.number().optional(),
+        }).optional(),
     })
 
     app.patch('/sessions/:id/metadata', async (c) => {
