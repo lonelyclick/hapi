@@ -13,6 +13,17 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { ApiClient } from '@/api/api'
 import { logger } from '@/ui/logger'
 
+/** Context window budget by model mode (matches web/src/chat/modelConfig.ts) */
+function getContextBudget(modelMode?: string): number {
+    const HEADROOM = 10_000
+    const windows: Record<string, number> = {
+        default: 1_000_000,
+        sonnet: 1_000_000,
+        opus: 1_000_000,
+    }
+    return (windows[modelMode ?? 'default'] ?? 1_000_000) - HEADROOM
+}
+
 interface BrainToolsOptions {
     apiClient: ApiClient
     machineId: string
@@ -410,7 +421,7 @@ export function registerBrainTools(
             }
 
             if (status.lastUsage) {
-                const contextBudget = 990_000  // 1M - 10K headroom
+                const contextBudget = getContextBudget(status.modelMode)
                 const contextSize = status.lastUsage.contextSize ?? status.lastUsage.input_tokens
                 const remainingPercent = Math.max(0, Math.round((1 - contextSize / contextBudget) * 100))
                 lines.push(`Context 剩余: ~${remainingPercent}% (${contextSize.toLocaleString()} / ${contextBudget.toLocaleString()} tokens)`)

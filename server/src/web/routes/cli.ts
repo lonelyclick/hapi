@@ -423,6 +423,7 @@ export function createCliRoutes(
             thinking: session.thinking ?? false,
             messageCount,
             lastUsage,
+            modelMode: session.modelMode ?? 'default',
             metadata: session.metadata ? {
                 path: session.metadata.path,
                 summary: session.metadata.summary,

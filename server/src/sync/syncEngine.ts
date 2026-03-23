@@ -223,6 +223,17 @@ function shortId(id: string): string {
     return id.length <= 8 ? id : id.slice(0, 8)
 }
 
+/** Context window budget by model mode (matches web/src/chat/modelConfig.ts) */
+function getContextBudget(modelMode?: string): number {
+    const HEADROOM = 10_000
+    const windows: Record<string, number> = {
+        default: 1_000_000,
+        sonnet: 1_000_000,
+        opus: 1_000_000,
+    }
+    return (windows[modelMode ?? 'default'] ?? 1_000_000) - HEADROOM
+}
+
 export class SyncEngine {
     private sessions: Map<string, Session> = new Map()
     private machines: Map<string, Machine> = new Map()
@@ -458,6 +469,23 @@ export class SyncEngine {
 
     async deleteSession(sessionId: string, options?: { terminateSession?: boolean; force?: boolean }): Promise<boolean> {
         const session = this.sessions.get(sessionId)
+
+        // Cascade: if this is a Brain session, delete all its child sessions first
+        const source = (session?.metadata as any)?.source
+        if (source === 'brain') {
+            const childSessions = this.getSessions().filter(s => {
+                const meta = s.metadata as any
+                return meta?.source === 'brain-child' && meta?.mainSessionId === sessionId
+            })
+            for (const child of childSessions) {
+                try {
+                    await this.deleteSession(child.id, { terminateSession: child.active, force: true })
+                } catch (err) {
+                    console.error(`[deleteSession] Failed to cascade-delete child session ${child.id}:`, err)
+                }
+            }
+        }
+
         this.deletingSessions.add(sessionId)
         try {
             if (options?.terminateSession && session?.active) {
@@ -982,7 +1010,7 @@ export class SyncEngine {
 
             // Build token stats line (contextSize formula matches frontend: cache_creation + cache_read + input_tokens)
             const messageCount = await this.store.getMessageCount(session.id)
-            const CONTEXT_BUDGET = 990_000  // 1M - 10K headroom
+            const CONTEXT_BUDGET = getContextBudget(session.modelMode)
             let statsLine = `消息数: ${messageCount}`
             if (lastUsage) {
                 const remainingPercent = Math.max(0, Math.round((1 - lastUsage.contextSize / CONTEXT_BUDGET) * 100))
