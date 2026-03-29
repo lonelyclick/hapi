@@ -585,29 +585,33 @@ export class ApiClient {
     }
 
     // 项目管理
-    async getProjects(machineId?: string | null): Promise<ProjectsResponse> {
-        const url = machineId !== undefined
-            ? `/api/settings/projects?machineId=${encodeURIComponent(machineId)}`
-            : '/api/settings/projects'
-        return await this.request<ProjectsResponse>(url)
+    async getProjects(machineId?: string | null, orgId?: string | null): Promise<ProjectsResponse> {
+        const params = new URLSearchParams()
+        if (machineId !== undefined && machineId !== null) params.set('machineId', machineId)
+        if (orgId) params.set('orgId', orgId)
+        const qs = params.toString()
+        return await this.request<ProjectsResponse>(`/api/settings/projects${qs ? `?${qs}` : ''}`)
     }
 
-    async addProject(name: string, path: string, description?: string, machineId?: string | null): Promise<AddProjectResponse> {
-        return await this.request<AddProjectResponse>('/api/settings/projects', {
+    async addProject(name: string, path: string, description?: string, machineId?: string | null, orgId?: string | null): Promise<AddProjectResponse> {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<AddProjectResponse>(`/api/settings/projects${qs}`, {
             method: 'POST',
             body: JSON.stringify({ name, path, description, machineId })
         })
     }
 
-    async updateProject(id: string, name: string, path: string, description?: string, machineId?: string | null): Promise<UpdateProjectResponse> {
-        return await this.request<UpdateProjectResponse>(`/api/settings/projects/${encodeURIComponent(id)}`, {
+    async updateProject(id: string, name: string, path: string, description?: string, machineId?: string | null, orgId?: string | null): Promise<UpdateProjectResponse> {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<UpdateProjectResponse>(`/api/settings/projects/${encodeURIComponent(id)}${qs}`, {
             method: 'PUT',
             body: JSON.stringify({ name, path, description, machineId })
         })
     }
 
-    async removeProject(id: string): Promise<RemoveProjectResponse> {
-        return await this.request<RemoveProjectResponse>(`/api/settings/projects/${encodeURIComponent(id)}`, {
+    async removeProject(id: string, orgId?: string | null): Promise<RemoveProjectResponse> {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<RemoveProjectResponse>(`/api/settings/projects/${encodeURIComponent(id)}${qs}`, {
             method: 'DELETE'
         })
     }
@@ -637,26 +641,30 @@ export class ApiClient {
     }
 
     // 输入预设管理
-    async getInputPresets(): Promise<InputPresetsResponse> {
-        return await this.request<InputPresetsResponse>('/api/settings/input-presets')
+    async getInputPresets(orgId?: string | null): Promise<InputPresetsResponse> {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<InputPresetsResponse>(`/api/settings/input-presets${qs}`)
     }
 
-    async addInputPreset(trigger: string, title: string, prompt: string): Promise<AddInputPresetResponse> {
-        return await this.request<AddInputPresetResponse>('/api/settings/input-presets', {
+    async addInputPreset(trigger: string, title: string, prompt: string, orgId?: string | null): Promise<AddInputPresetResponse> {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<AddInputPresetResponse>(`/api/settings/input-presets${qs}`, {
             method: 'POST',
             body: JSON.stringify({ trigger, title, prompt })
         })
     }
 
-    async updateInputPreset(id: string, trigger: string, title: string, prompt: string): Promise<UpdateInputPresetResponse> {
-        return await this.request<UpdateInputPresetResponse>(`/api/settings/input-presets/${encodeURIComponent(id)}`, {
+    async updateInputPreset(id: string, trigger: string, title: string, prompt: string, orgId?: string | null): Promise<UpdateInputPresetResponse> {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<UpdateInputPresetResponse>(`/api/settings/input-presets/${encodeURIComponent(id)}${qs}`, {
             method: 'PUT',
             body: JSON.stringify({ trigger, title, prompt })
         })
     }
 
-    async removeInputPreset(id: string): Promise<RemoveInputPresetResponse> {
-        return await this.request<RemoveInputPresetResponse>(`/api/settings/input-presets/${encodeURIComponent(id)}`, {
+    async removeInputPreset(id: string, orgId?: string | null): Promise<RemoveInputPresetResponse> {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<RemoveInputPresetResponse>(`/api/settings/input-presets/${encodeURIComponent(id)}${qs}`, {
             method: 'DELETE'
         })
     }

@@ -15,6 +15,7 @@ import { NewSession } from '@/components/NewSession'
 import { LoadingState } from '@/components/LoadingState'
 import { OnlineUsersBadge } from '@/components/OnlineUsersBadge'
 import { useAppContext } from '@/lib/app-context'
+import { useMyOrgs } from '@/hooks/queries/useOrgs'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { isTelegramApp } from '@/hooks/useTelegram'
 import { useMessages } from '@/hooks/queries/useMessages'
@@ -144,17 +145,21 @@ function UsageIcon(props: { className?: string }) {
 }
 
 function SessionsPage() {
-    const { api, userEmail } = useAppContext()
+    const { api, userEmail, currentOrgId, setCurrentOrgId } = useAppContext()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const { sessions, isLoading, error, refetch } = useSessions(api)
     const { users: onlineUsers } = useOnlineUsers(api)
+    const { orgs } = useMyOrgs(api)
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [isCreatingBrain, setIsCreatingBrain] = useState(false)
+    const [showOrgPicker, setShowOrgPicker] = useState(false)
+
+    const currentOrg = orgs.find(o => o.id === currentOrgId) ?? orgs[0] ?? null
 
     const { data: projectsData } = useQuery({
-        queryKey: ['projects'],
-        queryFn: async () => api.getProjects()
+        queryKey: ['projects', currentOrgId],
+        queryFn: async () => api.getProjects(undefined, currentOrgId)
     })
     const projects = Array.isArray(projectsData?.projects) ? projectsData.projects : []
 
@@ -224,35 +229,56 @@ function SessionsPage() {
             <div className="bg-[var(--app-bg)] border-b border-[var(--app-divider)] pt-[env(safe-area-inset-top)]">
                 <div className="mx-auto w-full max-w-content px-3 py-2 flex items-center justify-between gap-2 sm:py-1.5">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm">
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="white"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    className="h-3.5 w-3.5"
-                                >
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="M2 12h20" />
-                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                            </svg>
-                        </div>
-                        <div className="flex flex-col items-start justify-center">
-                            <span className="max-w-[160px] truncate text-sm font-bold leading-tight yoho-brand-text sm:max-w-none">
-                                Yoho Remote
-                            </span>
+                        <div className="relative">
                             <button
                                 type="button"
-                                onClick={handleForceRefresh}
-                                disabled={isRefreshing}
-                                className="mt-0.5 text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50"
-                                title={`${gitCommitMessage}\n\nClick to force refresh`}
+                                onClick={() => orgs.length > 1 ? setShowOrgPicker(!showOrgPicker) : undefined}
+                                className={`flex items-center gap-2 min-w-0 ${orgs.length > 1 ? 'cursor-pointer' : ''}`}
                             >
-                                {isRefreshing ? '...' : gitCommitHash}
+                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-sm text-white text-xs font-bold">
+                                    {currentOrg?.name?.charAt(0)?.toUpperCase() ?? 'Y'}
+                                </div>
+                                <div className="flex flex-col items-start justify-center min-w-0">
+                                    <span className="max-w-[160px] truncate text-sm font-bold leading-tight yoho-brand-text sm:max-w-none">
+                                        {currentOrg?.name ?? 'Yoho Remote'}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleForceRefresh() }}
+                                        disabled={isRefreshing}
+                                        className="mt-0.5 text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors disabled:opacity-50"
+                                        title={`${gitCommitMessage}\n\nClick to force refresh`}
+                                    >
+                                        {isRefreshing ? '...' : gitCommitHash}
+                                    </button>
+                                </div>
+                                {orgs.length > 1 && (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--app-hint)]"><polyline points="6 9 12 15 18 9" /></svg>
+                                )}
                             </button>
+                            {showOrgPicker && orgs.length > 1 && (
+                                <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setShowOrgPicker(false)} />
+                                    <div className="absolute left-0 top-full mt-1 z-50 w-48 rounded-lg bg-[var(--app-bg)] border border-[var(--app-divider)] shadow-lg overflow-hidden">
+                                        {orgs.map((org) => (
+                                            <button
+                                                key={org.id}
+                                                type="button"
+                                                onClick={() => { setCurrentOrgId(org.id); setShowOrgPicker(false) }}
+                                                className={`w-full px-3 py-2 flex items-center gap-2 text-left text-sm hover:bg-[var(--app-subtle-bg)] transition-colors ${org.id === currentOrgId ? 'bg-[var(--app-subtle-bg)] font-medium' : ''}`}
+                                            >
+                                                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-gradient-to-br from-indigo-500 to-purple-600 text-white text-[10px] font-bold">
+                                                    {org.name.charAt(0).toUpperCase()}
+                                                </div>
+                                                <span className="truncate">{org.name}</span>
+                                                {org.id === currentOrgId && (
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 ml-auto text-green-500"><polyline points="20 6 9 17 4 12" /></svg>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -323,7 +349,7 @@ function SessionsPage() {
 }
 
 function SessionPage() {
-    const { api } = useAppContext()
+    const { api, currentOrgId } = useAppContext()
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const { sessionId } = useParams({ from: '/sessions/$sessionId' })
@@ -386,7 +412,7 @@ function SessionPage() {
     // Input presets (global, not session-specific)
     const {
         getSuggestions: getPresetSuggestions,
-    } = useInputPresets(api)
+    } = useInputPresets(api, currentOrgId)
 
     // 其他用户正在输入
     const otherUserTyping = useOtherUserTyping(sessionId)

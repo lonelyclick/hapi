@@ -267,7 +267,7 @@ function ProjectForm(props: {
 }
 
 export default function SettingsPage() {
-    const { api } = useAppContext()
+    const { api, currentOrgId } = useAppContext()
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
@@ -301,10 +301,10 @@ export default function SettingsPage() {
 
     // Projects
     const { data: projectsData, isLoading: projectsLoading } = useQuery({
-        queryKey: ['projects', selectedMachineId],
+        queryKey: ['projects', selectedMachineId, currentOrgId],
         queryFn: async () => {
             if (!api) throw new Error('API unavailable')
-            return await api.getProjects(selectedMachineId ?? undefined)
+            return await api.getProjects(selectedMachineId ?? undefined, currentOrgId)
         },
         enabled: Boolean(api)
     })
@@ -312,10 +312,10 @@ export default function SettingsPage() {
     const addProjectMutation = useMutation({
         mutationFn: async (data: ProjectFormData) => {
             if (!api) throw new Error('API unavailable')
-            return await api.addProject(data.name, data.path, data.description || undefined, data.machineId)
+            return await api.addProject(data.name, data.path, data.description || undefined, data.machineId, currentOrgId)
         },
-        onSuccess: (result) => {
-            queryClient.setQueryData(['projects'], { projects: result.projects })
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['projects'] })
             setShowAddProject(false)
             setProjectError(null)
         },
@@ -327,10 +327,10 @@ export default function SettingsPage() {
     const updateProjectMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: ProjectFormData }) => {
             if (!api) throw new Error('API unavailable')
-            return await api.updateProject(id, data.name, data.path, data.description || undefined, data.machineId)
+            return await api.updateProject(id, data.name, data.path, data.description || undefined, data.machineId, currentOrgId)
         },
-        onSuccess: (result) => {
-            queryClient.setQueryData(['projects'], { projects: result.projects })
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['projects'] })
             setEditingProject(null)
             setProjectError(null)
         },
@@ -342,10 +342,10 @@ export default function SettingsPage() {
     const removeProjectMutation = useMutation({
         mutationFn: async (id: string) => {
             if (!api) throw new Error('API unavailable')
-            return await api.removeProject(id)
+            return await api.removeProject(id, currentOrgId)
         },
-        onSuccess: (result) => {
-            queryClient.setQueryData(['projects'], { projects: result.projects })
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['projects'] })
         },
         onError: (err) => {
             setProjectError(err instanceof Error ? err.message : 'Failed to remove project')
@@ -371,10 +371,10 @@ export default function SettingsPage() {
     const [editingPreset, setEditingPreset] = useState<InputPreset | null>(null)
 
     const { data: presetsData, isLoading: presetsLoading } = useQuery({
-        queryKey: queryKeys.inputPresets(),
+        queryKey: [...queryKeys.inputPresets(), currentOrgId],
         queryFn: async () => {
             if (!api) throw new Error('API unavailable')
-            return await api.getInputPresets()
+            return await api.getInputPresets(currentOrgId)
         },
         enabled: Boolean(api)
     })
@@ -382,10 +382,10 @@ export default function SettingsPage() {
     const addPresetMutation = useMutation({
         mutationFn: async (data: PresetFormData) => {
             if (!api) throw new Error('API unavailable')
-            return await api.addInputPreset(data.trigger, data.title, data.prompt)
+            return await api.addInputPreset(data.trigger, data.title, data.prompt, currentOrgId)
         },
-        onSuccess: (result) => {
-            queryClient.setQueryData(queryKeys.inputPresets(), { presets: result.presets })
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.inputPresets() })
             setShowAddPreset(false)
             setPresetError(null)
         },
@@ -397,10 +397,10 @@ export default function SettingsPage() {
     const updatePresetMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: PresetFormData }) => {
             if (!api) throw new Error('API unavailable')
-            return await api.updateInputPreset(id, data.trigger, data.title, data.prompt)
+            return await api.updateInputPreset(id, data.trigger, data.title, data.prompt, currentOrgId)
         },
-        onSuccess: (result) => {
-            queryClient.setQueryData(queryKeys.inputPresets(), { presets: result.presets })
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.inputPresets() })
             setEditingPreset(null)
             setPresetError(null)
         },
@@ -412,10 +412,10 @@ export default function SettingsPage() {
     const removePresetMutation = useMutation({
         mutationFn: async (id: string) => {
             if (!api) throw new Error('API unavailable')
-            return await api.removeInputPreset(id)
+            return await api.removeInputPreset(id, currentOrgId)
         },
-        onSuccess: (result) => {
-            queryClient.setQueryData(queryKeys.inputPresets(), { presets: result.presets })
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.inputPresets() })
         },
         onError: (err) => {
             setPresetError(err instanceof Error ? err.message : 'Failed to remove preset')

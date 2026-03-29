@@ -40,12 +40,13 @@ export function createSettingsRoutes(
 
     // ==================== 项目管理 ====================
 
-    // 获取所有项目（支持按 machineId 过滤）
+    // 获取所有项目（支持按 machineId 和 orgId 过滤）
     app.get('/settings/projects', async (c) => {
         const machineId = c.req.query('machineId')
+        const orgId = c.req.query('orgId')
         // machineId 参数为空字符串时当作 null 处理（获取通用项目）
         const filterMachineId = machineId === '' ? null : machineId
-        const projects = await store.getProjects(filterMachineId)
+        const projects = await store.getProjects(filterMachineId, orgId)
         return c.json({ projects })
     })
 
@@ -57,17 +58,19 @@ export function createSettingsRoutes(
             return c.json({ error: 'Invalid project data' }, 400)
         }
 
+        const orgId = c.req.query('orgId')
         const project = await store.addProject(
             parsed.data.name,
             parsed.data.path,
             parsed.data.description,
-            parsed.data.machineId
+            parsed.data.machineId,
+            orgId
         )
         if (!project) {
             return c.json({ error: 'Failed to add project. Path may already exist.' }, 400)
         }
 
-        const projects = await store.getProjects()
+        const projects = await store.getProjects(undefined, orgId)
         return c.json({ ok: true, project, projects })
     })
 
@@ -80,6 +83,7 @@ export function createSettingsRoutes(
             return c.json({ error: 'Invalid project data' }, 400)
         }
 
+        const orgId = c.req.query('orgId')
         const project = await store.updateProject(
             id,
             parsed.data.name,
@@ -91,7 +95,7 @@ export function createSettingsRoutes(
             return c.json({ error: 'Project not found or path already exists' }, 404)
         }
 
-        const projects = await store.getProjects()
+        const projects = await store.getProjects(undefined, orgId)
         return c.json({ ok: true, project, projects })
     })
 
@@ -103,7 +107,8 @@ export function createSettingsRoutes(
             return c.json({ error: 'Project not found' }, 404)
         }
 
-        const projects = await store.getProjects()
+        const orgId = c.req.query('orgId')
+        const projects = await store.getProjects(undefined, orgId)
         return c.json({ ok: true, projects })
     })
 
@@ -161,10 +166,11 @@ export function createSettingsRoutes(
 
     // ==================== 输入预设管理 ====================
 
-    // 获取所有输入预设
-    app.get('/settings/input-presets', async (_c) => {
-        const presets = await store.getAllInputPresets()
-        return _c.json({ presets })
+    // 获取所有输入预设（支持按 orgId 过滤）
+    app.get('/settings/input-presets', async (c) => {
+        const orgId = c.req.query('orgId')
+        const presets = await store.getAllInputPresets(orgId)
+        return c.json({ presets })
     })
 
     // 添加输入预设
@@ -175,12 +181,13 @@ export function createSettingsRoutes(
             return c.json({ error: 'Invalid preset data' }, 400)
         }
 
-        const preset = await store.addInputPreset(parsed.data.trigger, parsed.data.title, parsed.data.prompt)
+        const orgId = c.req.query('orgId')
+        const preset = await store.addInputPreset(parsed.data.trigger, parsed.data.title, parsed.data.prompt, orgId)
         if (!preset) {
             return c.json({ error: 'Failed to add preset. Trigger may already exist.' }, 400)
         }
 
-        const presets = await store.getAllInputPresets()
+        const presets = await store.getAllInputPresets(orgId)
         return c.json({ ok: true, preset, presets })
     })
 
@@ -198,7 +205,8 @@ export function createSettingsRoutes(
             return c.json({ error: 'Preset not found or trigger already exists' }, 404)
         }
 
-        const presets = await store.getAllInputPresets()
+        const orgId = c.req.query('orgId')
+        const presets = await store.getAllInputPresets(orgId)
         return c.json({ ok: true, preset, presets })
     })
 

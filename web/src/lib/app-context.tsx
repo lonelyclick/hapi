@@ -5,9 +5,33 @@ type AppContextValue = {
     api: ApiClient
     token: string
     userEmail: string | null
+    currentOrgId: string | null
+    setCurrentOrgId: (id: string | null) => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
+
+const ORG_STORAGE_KEY = 'yoho-current-org-id'
+
+export function getStoredOrgId(): string | null {
+    try {
+        return localStorage.getItem(ORG_STORAGE_KEY)
+    } catch {
+        return null
+    }
+}
+
+export function setStoredOrgId(id: string | null) {
+    try {
+        if (id) {
+            localStorage.setItem(ORG_STORAGE_KEY, id)
+        } else {
+            localStorage.removeItem(ORG_STORAGE_KEY)
+        }
+    } catch {
+        // ignore
+    }
+}
 
 export function AppContextProvider(props: {
     value: AppContextValue

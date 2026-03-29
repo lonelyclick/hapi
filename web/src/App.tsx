@@ -8,7 +8,7 @@ import { useSSE } from '@/hooks/useSSE'
 import { useSyncingState } from '@/hooks/useSyncingState'
 import type { SyncEvent, SessionSummary, Project } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
-import { AppContextProvider, useAppContext } from '@/lib/app-context'
+import { AppContextProvider, useAppContext, getStoredOrgId, setStoredOrgId } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { SyncingBanner } from '@/components/SyncingBanner'
@@ -399,8 +399,14 @@ export function App() {
         )
     }
 
+    const [currentOrgId, setCurrentOrgIdState] = useState<string | null>(() => getStoredOrgId())
+    const setCurrentOrgId = useCallback((id: string | null) => {
+        setCurrentOrgIdState(id)
+        setStoredOrgId(id)
+    }, [])
+
     return (
-        <AppContextProvider value={{ api, token: token ?? '', userEmail: user?.email ?? null }}>
+        <AppContextProvider value={{ api, token: token ?? '', userEmail: user?.email ?? null, currentOrgId, setCurrentOrgId }}>
             {hasUpdate && <UpdateBanner onDismiss={handleDismiss} />}
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />
@@ -419,9 +425,18 @@ export function App() {
  * 如果没有组织，显示创建/加入引导页面
  */
 function OrgGate({ children }: { children: React.ReactNode }) {
-    const { api } = useAppContext()
+    const { api, currentOrgId, setCurrentOrgId } = useAppContext()
     const { orgs, isLoading } = useMyOrgs(api)
     const [setupDismissed, setSetupDismissed] = useState(false)
+
+    // Auto-set default org when orgs load
+    useEffect(() => {
+        if (orgs.length === 0) return
+        // If no org selected, or selected org no longer valid, pick first
+        if (!currentOrgId || !orgs.find(o => o.id === currentOrgId)) {
+            setCurrentOrgId(orgs[0].id)
+        }
+    }, [orgs, currentOrgId, setCurrentOrgId])
 
     if (isLoading) {
         return (

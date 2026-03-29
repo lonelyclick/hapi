@@ -6,7 +6,8 @@ import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { queryKeys } from '@/lib/query-keys'
 
 export function useInputPresets(
-    api: ApiClient | null
+    api: ApiClient | null,
+    orgId?: string | null
 ): {
     presets: InputPreset[]
     isLoading: boolean
@@ -14,12 +15,12 @@ export function useInputPresets(
     getSuggestions: (query: string) => Promise<Suggestion[]>
 } {
     const query = useQuery({
-        queryKey: queryKeys.inputPresets(),
+        queryKey: [...queryKeys.inputPresets(), orgId],
         queryFn: async () => {
             if (!api) {
                 throw new Error('API unavailable')
             }
-            return await api.getInputPresets()
+            return await api.getInputPresets(orgId)
         },
         enabled: Boolean(api),
         staleTime: 5 * 60 * 1000, // 5 minutes

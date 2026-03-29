@@ -168,7 +168,7 @@ export function NewSession(props: {
     onSuccess: (sessionId: string) => void
     onCancel: () => void
 }) {
-    const { userEmail } = useAppContext()
+    const { userEmail, currentOrgId } = useAppContext()
     const { haptic } = usePlatform()
     const queryClient = useQueryClient()
     const { spawnSession, isPending, error: spawnError } = useSpawnSession(props.api)
@@ -188,9 +188,9 @@ export function NewSession(props: {
 
     // Fetch projects for selected machine (includes global projects where machineId is null)
     const { data: projectsData, isLoading: projectsLoading } = useQuery({
-        queryKey: ['projects', machineId],
+        queryKey: ['projects', machineId, currentOrgId],
         queryFn: async () => {
-            return await props.api.getProjects(machineId ?? undefined)
+            return await props.api.getProjects(machineId ?? undefined, currentOrgId)
         },
         enabled: machineId !== null
     })
