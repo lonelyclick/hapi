@@ -1,4 +1,4 @@
-// Daemon-only bootstrap - minimal entry point for hapi-daemon executable
+// Daemon-only bootstrap - minimal entry point for yoho-remote-daemon executable
 process.env.DEV = 'false';
 
 import { initializeToken } from './ui/tokenInit';

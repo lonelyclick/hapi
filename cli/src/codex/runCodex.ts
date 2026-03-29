@@ -33,7 +33,7 @@ export async function runCodex(opts: {
     const workingDirectory = process.cwd();
     const sessionTag = randomUUID();
     const startedBy = opts.startedBy ?? 'terminal';
-    const sessionSource = process.env.HAPI_SESSION_SOURCE?.trim();
+    const sessionSource = process.env.YR_SESSION_SOURCE?.trim();
 
     logger.debug(`[codex] Starting with options: startedBy=${startedBy}`);
 

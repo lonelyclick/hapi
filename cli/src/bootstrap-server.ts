@@ -1,4 +1,4 @@
-// Server-only bootstrap - minimal entry point for hapi-server executable
+// Server-only bootstrap - minimal entry point for yoho-remote-server executable
 process.env.DEV = 'false';
 
 import('../../server/src/index').catch((error) => {

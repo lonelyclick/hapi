@@ -74,8 +74,8 @@ export async function textToSpeech(text: string): Promise<TTSResult | null> {
 
         // Step 2: mp3 → opus via ffmpeg
         const ts = Date.now()
-        const mp3Path = join(tmpdir(), `hapi-tts-${ts}.mp3`)
-        const opusPath = join(tmpdir(), `hapi-tts-${ts}.opus`)
+        const mp3Path = join(tmpdir(), `yr-tts-${ts}.mp3`)
+        const opusPath = join(tmpdir(), `yr-tts-${ts}.opus`)
 
         writeFileSync(mp3Path, mp3Buffer)
         execSync(`ffmpeg -i "${mp3Path}" -acodec libopus -ac 1 -ar 16000 "${opusPath}" -y 2>/dev/null`)

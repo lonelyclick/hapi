@@ -10,7 +10,7 @@ type CursorCredentialFile = {
     apiKey?: unknown;
 };
 
-type HapiSettingsFile = {
+type YohoRemoteSettingsFile = {
     cursorApiKey?: unknown;
 };
 
@@ -39,7 +39,7 @@ function asNonEmptyString(value: unknown): string | null {
  * 优先级:
  * 1. CURSOR_API_KEY 环境变量
  * 2. ~/happy/yoho-task-v2/data/credentials/cursor/default.json
- * 3. HAPI settings 文件
+ * 3. YR settings 文件
  */
 function loadCursorApiKey(): string | null {
     // 检查环境变量
@@ -58,8 +58,8 @@ function loadCursorApiKey(): string | null {
         return credentialKey;
     }
 
-    // 检查 HAPI settings 文件
-    const settingsFile = readJsonFile(configuration.settingsFile) as HapiSettingsFile | null;
+    // 检查 YR settings 文件
+    const settingsFile = readJsonFile(configuration.settingsFile) as YohoRemoteSettingsFile | null;
     const settingsKey = asNonEmptyString(settingsFile?.cursorApiKey);
     if (settingsKey) {
         logger.debug(`[Cursor] Loaded API key from ${configuration.settingsFile}`);
@@ -84,7 +84,7 @@ export function registerCursorAgent(yolo: boolean = false): void {
         AgentRegistry.register('cursor', () => {
             throw new Error(
                 'Cursor API key not configured. ' +
-                'Set CURSOR_API_KEY environment variable or add cursorApiKey to HAPI settings.'
+                'Set CURSOR_API_KEY environment variable or add cursorApiKey to YR settings.'
             );
         });
         return;

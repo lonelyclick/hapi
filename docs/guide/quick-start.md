@@ -28,7 +28,7 @@ Other install options: [Installation](/guide/installation)
 hapi server
 ```
 
-On first run, HAPI prints an access token and saves it to `~/.hapi/settings.json`.
+On first run, HAPI prints an access token and saves it to `~/.yoho-remote/settings.json`.
 
 ## Step 3: Start a coding session
 

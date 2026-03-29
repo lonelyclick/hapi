@@ -1,5 +1,5 @@
 /**
- * Uninstallation script for HAPI daemon LaunchDaemon
+ * Uninstallation script for Yoho Remote daemon LaunchDaemon
  * 
  * NOTE: This uninstallation method is currently NOT USED since we moved away from
  * system-level daemon installation. See install.ts for the full explanation.
@@ -12,7 +12,7 @@ import { existsSync, unlinkSync } from 'fs';
 import { execSync } from 'child_process';
 import { logger } from '@/ui/logger';
 
-const PLIST_LABEL = 'com.hapi-cli.daemon';
+const PLIST_LABEL = 'com.yoho-remote.daemon';
 const PLIST_FILE = `/Library/LaunchDaemons/${PLIST_LABEL}.plist`;
 
 export async function uninstall(): Promise<void> {

@@ -17,8 +17,8 @@ import { PermissionAdapter } from '@/agent/permissionAdapter';
 import type { AgentBackend, HistoryMessage, PromptContent } from '@/agent/types';
 import { notifyDaemonSessionStarted } from '@/daemon/controlClient';
 import { initialMachineMetadata } from '@/daemon/run';
-import { startHappyServer } from '@/claude/utils/startHappyServer';
-import { getHappyCliCommand } from '@/utils/spawnHappyCLI';
+import { startYohoRemoteServer } from '@/claude/utils/startYohoRemoteServer';
+import { getYohoRemoteCliCommand } from '@/utils/spawnHappyCLI';
 import { registerKillSessionHandler } from '@/claude/registerKillSessionHandler';
 import { readWorktreeEnv } from '@/utils/worktreeEnv';
 
@@ -64,7 +64,7 @@ export async function runAgentSession(opts: {
 }): Promise<void> {
     const sessionTag = randomUUID();
     const api = await ApiClient.create();
-    const sessionSource = process.env.HAPI_SESSION_SOURCE?.trim();
+    const sessionSource = process.env.YR_SESSION_SOURCE?.trim();
 
     const settings = await readSettings();
     const machineId = settings?.machineId;
@@ -91,9 +91,9 @@ export async function runAgentSession(opts: {
         machineId,
         source: sessionSource || undefined,
         homeDir: os.homedir(),
-        happyHomeDir: configuration.happyHomeDir,
-        happyLibDir: runtimePath(),
-        happyToolsDir: resolve(runtimePath(), 'tools', 'unpacked'),
+        yohoRemoteHomeDir: configuration.yohoRemoteHomeDir,
+        yohoRemoteLibDir: runtimePath(),
+        yohoRemoteToolsDir: resolve(runtimePath(), 'tools', 'unpacked'),
         startedFromDaemon: opts.startedBy === 'daemon',
         hostPid: process.pid,
         startedBy: opts.startedBy || 'terminal',
@@ -149,18 +149,18 @@ export async function runAgentSession(opts: {
 
     const permissionAdapter = new PermissionAdapter(session, backend);
 
-    let happyServer: Awaited<ReturnType<typeof startHappyServer>>;
+    let yohoRemoteServer: Awaited<ReturnType<typeof startYohoRemoteServer>>;
     try {
-        happyServer = await startHappyServer(session);
+        yohoRemoteServer = await startYohoRemoteServer(session);
     } catch (error) {
         await reportStartFailure('start-mcp', error);
         await backend.disconnect().catch(() => {});
         return;
     }
-    const bridgeCommand = getHappyCliCommand(['mcp', '--url', happyServer.url]);
+    const bridgeCommand = getYohoRemoteCliCommand(['mcp', '--url', yohoRemoteServer.url]);
     const mcpServers = [
         {
-            name: 'happy',
+            name: 'yoho-remote',
             command: bridgeCommand.command,
             args: bridgeCommand.args,
             env: []
@@ -175,7 +175,7 @@ export async function runAgentSession(opts: {
         });
     } catch (error) {
         await reportStartFailure('session', error);
-        happyServer.stop();
+        yohoRemoteServer.stop();
         await backend.disconnect().catch(() => {});
         return;
     }
@@ -327,6 +327,6 @@ export async function runAgentSession(opts: {
         await session.flush();
         session.close();
         await backend.disconnect();
-        happyServer.stop();
+        yohoRemoteServer.stop();
     }
 }

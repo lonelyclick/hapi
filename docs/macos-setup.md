@@ -2,13 +2,13 @@
 
 ## Problem: WebSocket Connection Failing
 
-When HAPI daemon connects through Cloudflare proxy (`https://remote.yohomobile.dev`), WebSocket connection fails with 401 errors.
+When yoho-remote daemon connects through Cloudflare proxy (`https://remote.yohomobile.dev`), WebSocket connection fails with 401 errors.
 
 **Solution:** Use internal network URL to bypass Cloudflare.
 
 ## Configuration
 
-For macmini (or any macOS machine on the same internal network as the HAPI server):
+For macmini (or any macOS machine on the same internal network as the yoho-remote server):
 
 ```bash
 # Internal network URL (replace with your server's internal IP)
@@ -18,40 +18,40 @@ export YOHO_REMOTE_URL="http://192.168.0.32:3006"
 export PATH="/usr/local/bin:/Users/guang/.bun/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 # Explicit path to claude executable (if not in standard PATH)
-export HAPI_CLAUDE_PATH="/usr/local/bin/claude"
+export YR_CLAUDE_PATH="/usr/local/bin/claude"
 ```
 
 ## Daemon Control Script
 
-The `hapi-daemon.sh` script provides convenient daemon management:
+The `yoho-remote-daemon.sh` script provides convenient daemon management:
 
 ```bash
 cd ~/softwares/hapi
-./hapi-daemon.sh start    # Start daemon
-./hapi-daemon.sh stop     # Stop daemon
-./hapi-daemon.sh restart  # Restart daemon
-./hapi-daemon.sh status   # Show status
-./hapi-daemon.sh logs     # Show recent logs
+./yoho-remote-daemon.sh start    # Start daemon
+./yoho-remote-daemon.sh stop     # Stop daemon
+./yoho-remote-daemon.sh restart  # Restart daemon
+./yoho-remote-daemon.sh status   # Show status
+./yoho-remote-daemon.sh logs     # Show recent logs
 ```
 
 ## Script Template
 
 ```bash
 #!/bin/zsh
-# HAPI Daemon Control Script for macOS
+# yoho-remote Daemon Control Script for macOS
 
 export CLI_API_TOKEN="your-token-here"
 export YOHO_REMOTE_URL="http://192.168.0.32:3006"
 export PATH="/usr/local/bin:/Users/guang/.bun/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-export HAPI_CLAUDE_PATH="/usr/local/bin/claude"
+export YR_CLAUDE_PATH="/usr/local/bin/claude"
 
-HAPI_DIR="/Users/guang/softwares/hapi"
-DAEMON_BIN="${HAPI_DIR}/cli/dist-exe/bun-darwin-arm64/hapi-daemon"
+YR_DIR="/Users/guang/softwares/hapi"
+DAEMON_BIN="${YR_DIR}/cli/dist-exe/bun-darwin-arm64/yoho-remote-daemon"
 
 # Start daemon with environment
 nohup env PATH="$PATH" CLI_API_TOKEN="$CLI_API_TOKEN" \
-     YOHO_REMOTE_URL="$YOHO_REMOTE_URL" HAPI_CLAUDE_PATH="$HAPI_CLAUDE_PATH" \
-     "$DAEMON_BIN" > ~/.hapi/logs/daemon.stdout.log 2>&1 &
+     YOHO_REMOTE_URL="$YOHO_REMOTE_URL" YR_CLAUDE_PATH="$YR_CLAUDE_PATH" \
+     "$DAEMON_BIN" > ~/.yoho-remote/logs/daemon.stdout.log 2>&1 &
 ```
 
 ## Auto-Start (Optional)
@@ -59,7 +59,7 @@ nohup env PATH="$PATH" CLI_API_TOKEN="$CLI_API_TOKEN" \
 To auto-start daemon on login, create a LaunchAgent:
 
 ```bash
-~/Library/LaunchAgents/com.hapi.daemon.plist
+~/Library/LaunchAgents/com.yoho-remote.daemon.plist
 ```
 
 ```xml
@@ -68,10 +68,10 @@ To auto-start daemon on login, create a LaunchAgent:
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.hapi.daemon</string>
+    <string>com.yoho-remote.daemon</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/guang/softwares/hapi/hapi-daemon.sh</string>
+        <string>/Users/guang/softwares/hapi/yoho-remote-daemon.sh</string>
         <string>start</string>
     </array>
     <key>RunAtLoad</key>
@@ -79,14 +79,14 @@ To auto-start daemon on login, create a LaunchAgent:
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/guang/.hapi/logs/launchagent.stdout.log</string>
+    <string>/Users/guang/.yoho-remote/logs/launchagent.stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/guang/.hapi/logs/launchagent.stderr.log</string>
+    <string>/Users/guang/.yoho-remote/logs/launchagent.stderr.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/Users/guang/.bun/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-        <key>HAPI_CLAUDE_PATH</key>
+        <key>YR_CLAUDE_PATH</key>
         <string>/usr/local/bin/claude</string>
     </dict>
 </dict>
@@ -95,5 +95,5 @@ To auto-start daemon on login, create a LaunchAgent:
 
 Load with:
 ```bash
-launchctl load ~/Library/LaunchAgents/com.hapi.daemon.plist
+launchctl load ~/Library/LaunchAgents/com.yoho-remote.daemon.plist
 ```

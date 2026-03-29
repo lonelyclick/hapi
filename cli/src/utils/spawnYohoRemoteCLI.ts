@@ -53,12 +53,12 @@ function resolveEntrypoint(projectRoot: string): string {
   throw new Error('No CLI entrypoint found (expected src/index.ts)');
 }
 
-export interface HappyCliCommand {
+export interface YohoRemoteCliCommand {
   command: string;
   args: string[];
 }
 
-export function getHappyCliCommand(args: string[]): HappyCliCommand {
+export function getYohoRemoteCliCommand(args: string[]): YohoRemoteCliCommand {
   // Compiled binary mode: just use the executable directly
   if (isBunCompiled()) {
     // Check if we're running as standalone daemon/server
@@ -98,7 +98,7 @@ export function getHappyCliCommand(args: string[]): HappyCliCommand {
   };
 }
 
-export function spawnHappyCLI(args: string[], options: SpawnOptions = {}): ChildProcess {
+export function spawnYohoRemoteCLI(args: string[], options: SpawnOptions = {}): ChildProcess {
 
   let directory: string | URL | undefined;
   if ('cwd' in options) {
@@ -109,7 +109,7 @@ export function spawnHappyCLI(args: string[], options: SpawnOptions = {}): Child
   const fullCommand = `cli ${args.join(' ')}`;
   logger.debug(`[SPAWN CLI] Spawning: ${fullCommand} in ${directory}`);
   
-  const { command: spawnCommand, args: spawnArgs } = getHappyCliCommand(args);
+  const { command: spawnCommand, args: spawnArgs } = getYohoRemoteCliCommand(args);
 
   // Sanity check that the entrypoint path exists
   if (!isBunCompiled()) {

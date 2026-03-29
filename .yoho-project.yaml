@@ -255,10 +255,10 @@ deployment:
   url: https://remote.yohomobile.dev
   services:
     server:
-      systemd: hapi-server.service
+      systemd: yoho-remote-server.service
       port: 3006
     daemon:
-      systemd: hapi-daemon.service
+      systemd: yoho-remote-daemon.service
       build_flag: --daemon
   nginx:
     domain: remote.yohomobile.dev
@@ -274,15 +274,15 @@ deployment:
     - 生成时间戳版本号 (vYYYY.MM.DD.HHMM)
     - 构建 web 前端 (bun run build:web)
     - 生成嵌入式 web 资源
-    - 构建 hapi-server 可执行文件
-    - 构建 hapi CLI 可执行文件
-    - (可选) 构建 hapi-daemon 可执行文件
+    - 构建 yoho-remote-server 可执行文件
+    - 构建 yoho-remote CLI 可执行文件
+    - (可选) 构建 yoho-remote-daemon 可执行文件
     - 杀死旧进程 (端口 3006, 3000)
-    - systemctl restart hapi-server.service
-    - (可选) systemctl restart hapi-daemon.service
+    - systemctl restart yoho-remote-server.service
+    - (可选) systemctl restart yoho-remote-daemon.service
   build_artifacts:
-    server: cli/dist-exe/bun-linux-x64/hapi-server
-    daemon: cli/dist-exe/bun-linux-x64/hapi-daemon
+    server: cli/dist-exe/bun-linux-x64/yoho-remote-server
+    daemon: cli/dist-exe/bun-linux-x64/yoho-remote-daemon
     cli: cli/dist-exe/bun-linux-x64/hapi
   notes:
     - 仅部署在本地服务器

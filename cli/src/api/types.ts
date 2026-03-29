@@ -38,9 +38,9 @@ export type Metadata = {
     tools?: string[]
     slashCommands?: string[]
     homeDir: string
-    happyHomeDir: string
-    happyLibDir: string
-    happyToolsDir: string
+    yohoRemoteHomeDir: string
+    yohoRemoteLibDir: string
+    yohoRemoteToolsDir: string
     startedFromDaemon?: boolean
     hostPid?: number
     startedBy?: 'daemon' | 'terminal'
@@ -79,9 +79,9 @@ export const MetadataSchema = z.object({
     tools: z.array(z.string()).optional(),
     slashCommands: z.array(z.string()).optional(),
     homeDir: z.string(),
-    happyHomeDir: z.string(),
-    happyLibDir: z.string(),
-    happyToolsDir: z.string(),
+    yohoRemoteHomeDir: z.string(),
+    yohoRemoteLibDir: z.string(),
+    yohoRemoteToolsDir: z.string(),
     startedFromDaemon: z.boolean().optional(),
     hostPid: z.number().optional(),
     startedBy: z.enum(['daemon', 'terminal']).optional(),
@@ -170,10 +170,10 @@ export type Session = {
 export const MachineMetadataSchema = z.object({
     host: z.string(),
     platform: z.string(),
-    happyCliVersion: z.string(),
+    yohoRemoteCliVersion: z.string(),
     homeDir: z.string(),
-    happyHomeDir: z.string(),
-    happyLibDir: z.string()
+    yohoRemoteHomeDir: z.string(),
+    yohoRemoteLibDir: z.string()
 }).passthrough()
 
 export type MachineMetadata = z.infer<typeof MachineMetadataSchema>

@@ -49,7 +49,7 @@ docker pull ghcr.io/tiann/hapi-server:latest
 docker run -d \
   --name hapi-server \
   -p 3006:3006 \
-  -v ~/.hapi:/root/.hapi \
+  -v ~/.yoho-remote:/root/.yoho-remote \
   -e CLI_API_TOKEN=your-secret-token \
   ghcr.io/tiann/hapi-server:latest
 ```
@@ -80,15 +80,15 @@ The server listens on `http://localhost:3006` by default.
 
 On first run, HAPI:
 
-1. Creates `~/.hapi/`
+1. Creates `~/.yoho-remote/`
 2. Generates a secure access token
-3. Prints the token and saves it to `~/.hapi/settings.json`
+3. Prints the token and saves it to `~/.yoho-remote/settings.json`
 
 <details>
 <summary>Config files</summary>
 
 ```
-~/.hapi/
+~/.yoho-remote/
 ├── settings.json      # Main configuration
 ├── daemon.state.json  # Daemon process state
 └── logs/              # Log files
@@ -103,7 +103,7 @@ On first run, HAPI:
 | `CLI_API_TOKEN` | Auto-generated | Shared secret for authentication |
 | `YOHO_REMOTE_URL` | `http://localhost:3006` | Server URL for CLI |
 | `WEBAPP_PORT` | `3006` | HTTP server port |
-| `YOHO_REMOTE_HOME` | `~/.hapi` | Config directory path |
+| `YOHO_REMOTE_HOME` | `~/.yoho-remote` | Config directory path |
 | `DATABASE_URL` | - | PostgreSQL connection string |
 | `CORS_ORIGINS` | - | Allowed CORS origins |
 | `FEISHU_APP_ID` | - | Feishu/Lark app ID (speech-to-text) |
@@ -134,7 +134,7 @@ hapi auth login
 hapi auth logout
 ```
 
-Each machine gets a unique ID stored in `~/.hapi/settings.json`. This allows:
+Each machine gets a unique ID stored in `~/.yoho-remote/settings.json`. This allows:
 
 - Multiple machines to connect to one server
 - Remote session spawning on specific machines

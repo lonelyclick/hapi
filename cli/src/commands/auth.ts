@@ -30,7 +30,7 @@ export async function handleAuthCommand(args: string[]): Promise<void> {
             console.log('')
             console.log(chalk.yellow('  Token not configured. To get your token:'))
             console.log(chalk.gray('    1. Check the server startup logs (first run shows generated token)'))
-            console.log(chalk.gray('    2. Read ~/.hapi/settings.json on the server'))
+            console.log(chalk.gray('    2. Read ~/.yoho-remote/settings.json on the server'))
             console.log(chalk.gray('    3. Ask your server administrator (if token is set via env var)'))
             console.log('')
             console.log(chalk.gray('  Then run: hapi auth login'))
@@ -94,7 +94,7 @@ ${chalk.bold('Usage:')}
 
 ${chalk.bold('Token priority (highest to lowest):')}
   1. CLI_API_TOKEN environment variable
-  2. ~/.hapi/settings.json
+  2. ~/.yoho-remote/settings.json
   3. Interactive prompt (on first run)
 `)
 }

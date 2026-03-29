@@ -10,8 +10,8 @@ import { ChildProcess } from 'child_process';
  */
 export interface TrackedSession {
   startedBy: 'daemon' | string;
-  happySessionId?: string;
-  happySessionMetadataFromLocalWebhook?: Metadata;
+  yohoRemoteSessionId?: string;
+  yohoRemoteSessionMetadataFromLocalWebhook?: Metadata;
   pid: number;
   childProcess?: ChildProcess;
   error?: string;

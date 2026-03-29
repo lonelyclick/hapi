@@ -1,10 +1,10 @@
-# hapi CLI
+# yoho-remote CLI
 
-Run Claude Code, Codex, or Gemini sessions from your terminal and control them remotely through the hapi server.
+Run Claude Code, Codex, or Gemini sessions from your terminal and control them remotely through the yoho-remote server.
 
 ## What it does
 
-- Starts Claude Code sessions and registers them with hapi-server.
+- Starts Claude Code sessions and registers them with yoho-remote-server.
 - Starts Codex mode for OpenAI-based sessions.
 - Starts Gemini mode via ACP (Anthropic Code Plugins).
 - Provides an MCP stdio bridge for external tools.
@@ -51,7 +51,7 @@ See `src/daemon/run.ts`.
 ### Diagnostics
 
 - `hapi doctor` - Show full diagnostics (version, daemon status, logs, processes).
-- `hapi doctor clean` - Kill runaway HAPI processes.
+- `hapi doctor clean` - Kill runaway yoho-remote processes.
 
 See `src/ui/doctor.ts`.
 
@@ -66,31 +66,31 @@ See `src/configuration.ts` for all options.
 
 ### Required
 
-- `CLI_API_TOKEN` - Shared secret; must match the server. Can be set via env or `~/.hapi/settings.json` (env wins).
+- `CLI_API_TOKEN` - Shared secret; must match the server. Can be set via env or `~/.yoho-remote/settings.json` (env wins).
 - `YOHO_REMOTE_URL` - Server base URL (default: http://localhost:3006).
 
 ### Optional
 
-- `YOHO_REMOTE_HOME` - Config/data directory (default: ~/.hapi).
-- `HAPI_EXPERIMENTAL` - Enable experimental features (true/1/yes).
-- `HAPI_CLAUDE_PATH` - Path to a specific `claude` executable.
-- `HAPI_HTTP_MCP_URL` - Default MCP target for `hapi mcp`.
-- `HAPI_LANGFUSE_PUBLIC_KEY`/`LANGFUSE_PUBLIC_KEY` - Langfuse public key (enables OTLP tracing from Claude hooks).
-- `HAPI_LANGFUSE_SECRET_KEY`/`LANGFUSE_SECRET_KEY` - Langfuse secret key.
-- `HAPI_LANGFUSE_BASE_URL`/`LANGFUSE_BASE_URL` - Langfuse base URL (default: https://cloud.langfuse.com).
-- `HAPI_LANGFUSE_HOST`/`LANGFUSE_HOST` - Alias for base URL.
-- `HAPI_LANGFUSE_OTEL_ENDPOINT`/`LANGFUSE_OTEL_ENDPOINT` - Override OTLP endpoint (default: /api/public/otel/v1/traces).
-- `HAPI_MCP_EVENT_LOG` - Enable MCP event logging (true/1/yes, default: true).
-- `HAPI_MCP_EVENT_LOG_SAMPLE`/`HAPI_MCP_EVENT_LOG_SAMPLE_RATE` - Sampling rate for MCP event logs (0..1, default: 1).
+- `YOHO_REMOTE_HOME` - Config/data directory (default: ~/.yoho-remote).
+- `YR_EXPERIMENTAL` - Enable experimental features (true/1/yes).
+- `YR_CLAUDE_PATH` - Path to a specific `claude` executable.
+- `YR_HTTP_MCP_URL` - Default MCP target for `hapi mcp`.
+- `YR_LANGFUSE_PUBLIC_KEY`/`LANGFUSE_PUBLIC_KEY` - Langfuse public key (enables OTLP tracing from Claude hooks).
+- `YR_LANGFUSE_SECRET_KEY`/`LANGFUSE_SECRET_KEY` - Langfuse secret key.
+- `YR_LANGFUSE_BASE_URL`/`LANGFUSE_BASE_URL` - Langfuse base URL (default: https://cloud.langfuse.com).
+- `YR_LANGFUSE_HOST`/`LANGFUSE_HOST` - Alias for base URL.
+- `YR_LANGFUSE_OTEL_ENDPOINT`/`LANGFUSE_OTEL_ENDPOINT` - Override OTLP endpoint (default: /api/public/otel/v1/traces).
+- `YR_MCP_EVENT_LOG` - Enable MCP event logging (true/1/yes, default: true).
+- `YR_MCP_EVENT_LOG_SAMPLE`/`YR_MCP_EVENT_LOG_SAMPLE_RATE` - Sampling rate for MCP event logs (0..1, default: 1).
 
 ### Daemon
 
-- `HAPI_DAEMON_HEARTBEAT_INTERVAL` - Heartbeat interval in ms (default: 60000).
-- `HAPI_DAEMON_HTTP_TIMEOUT` - HTTP timeout for daemon control in ms (default: 10000).
+- `YR_DAEMON_HEARTBEAT_INTERVAL` - Heartbeat interval in ms (default: 60000).
+- `YR_DAEMON_HTTP_TIMEOUT` - HTTP timeout for daemon control in ms (default: 10000).
 
 ## Storage
 
-Data is stored in `~/.hapi/` (or `$YOHO_REMOTE_HOME`):
+Data is stored in `~/.yoho-remote/` (or `$YOHO_REMOTE_HOME`):
 
 - `settings.json` - User settings (machineId, token, onboarding flag). See `src/persistence.ts`.
 - `daemon.state.json` - Daemon state (pid, port, version, heartbeat).

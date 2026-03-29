@@ -2,9 +2,9 @@
  * Brain MCP Tools
  *
  * Provides session orchestration tools for Brain mode.
- * Brain sessions can create, control, and monitor other hapi sessions.
+ * Brain sessions can create, control, and monitor other yoho-remote sessions.
  *
- * Uses true async callback: hapi_session_send returns immediately,
+ * Uses true async callback: session_send returns immediately,
  * and the server pushes results back to the Brain session when
  * the child session completes (via sendBrainCallbackIfNeeded in syncEngine).
  */
@@ -49,9 +49,9 @@ export function registerBrainTools(
         return false
     }
 
-    // ===== 1. hapi_session_create =====
+    // ===== 1. session_create =====
     const createSchema: z.ZodTypeAny = z.object({
-        directory: z.string().describe('工作目录的绝对路径，如 /home/guang/softwares/hapi'),
+        directory: z.string().describe('工作目录的绝对路径，如 /home/guang/softwares/yoho-remote'),
         machineId: z.string().optional().describe('目标机器 ID。不填则使用当前机器。'),
         agent: z.enum(['claude', 'codex', 'opencode']).optional().describe('Agent 类型，默认 claude'),
     })
@@ -101,7 +101,7 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 2. hapi_session_find_or_create =====
+    // ===== 2. session_find_or_create =====
     const findOrCreateSchema: z.ZodTypeAny = z.object({
         directory: z.string().describe('工作目录的绝对路径'),
         hint: z.string().optional().describe('任务意图关键词（如 "订单API 优惠券"），用于匹配已有上下文的 session，优先复用做过相关工作的 session，省去重新理解代码的成本'),
@@ -210,7 +210,7 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 3. hapi_session_send (async, non-blocking) =====
+    // ===== 3. session_send (async, non-blocking) =====
     const sendSchema: z.ZodTypeAny = z.object({
         sessionId: z.string().describe('目标 session ID'),
         message: z.string().describe('要发送的消息/任务指令'),
@@ -276,7 +276,7 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 4. hapi_session_list =====
+    // ===== 4. session_list =====
     const listSchema: z.ZodTypeAny = z.object({
         includeOffline: z.boolean().optional().describe('是否包含离线 session，默认 false（只返回在线的）'),
     })
@@ -327,7 +327,7 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 5. hapi_session_close =====
+    // ===== 5. session_close =====
     const closeSchema: z.ZodTypeAny = z.object({
         sessionId: z.string().describe('要关闭的 session ID'),
     })
@@ -365,7 +365,7 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 6. hapi_session_update =====
+    // ===== 6. session_update =====
     const updateSchema: z.ZodTypeAny = z.object({
         sessionId: z.string().describe('目标 session ID'),
         brainSummary: z.string().describe('Brain 写入的任务总结（持久化到 session metadata）'),
@@ -397,7 +397,7 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 7. hapi_session_status =====
+    // ===== 7. session_status =====
     const statusSchema: z.ZodTypeAny = z.object({
         sessionId: z.string().describe('要查询的 session ID'),
     })
@@ -448,7 +448,7 @@ export function registerBrainTools(
         }
     })
 
-    // ===== 8. hapi_chat_messages =====
+    // ===== 8. chat_messages =====
     const chatMessagesSchema: z.ZodTypeAny = z.object({
         chatId: z.string().describe('飞书 chat_id（群聊或单聊）'),
         limit: z.number().optional().describe('返回条数，默认 50，最大 200'),

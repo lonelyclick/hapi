@@ -29,7 +29,7 @@ const DEFAULT_MAX_TERMINALS = 4
 const SENSITIVE_ENV_KEYS = new Set([
     'CLI_API_TOKEN',
     'YOHO_REMOTE_URL',
-    'HAPI_HTTP_MCP_URL',
+    'YR_HTTP_MCP_URL',
     'TELEGRAM_BOT_TOKEN',
     'OPENAI_API_KEY',
     'ANTHROPIC_API_KEY',
@@ -89,8 +89,8 @@ export class TerminalManager {
         this.onOutput = options.onOutput
         this.onExit = options.onExit
         this.onError = options.onError
-        this.idleTimeoutMs = options.idleTimeoutMs ?? resolveEnvNumber('HAPI_TERMINAL_IDLE_TIMEOUT_MS', DEFAULT_IDLE_TIMEOUT_MS)
-        this.maxTerminals = options.maxTerminals ?? resolveEnvNumber('HAPI_TERMINAL_MAX_TERMINALS', DEFAULT_MAX_TERMINALS)
+        this.idleTimeoutMs = options.idleTimeoutMs ?? resolveEnvNumber('YR_TERMINAL_IDLE_TIMEOUT_MS', DEFAULT_IDLE_TIMEOUT_MS)
+        this.maxTerminals = options.maxTerminals ?? resolveEnvNumber('YR_TERMINAL_MAX_TERMINALS', DEFAULT_MAX_TERMINALS)
         this.filteredEnv = buildFilteredEnv()
     }
 

@@ -1,5 +1,5 @@
 /**
- * WebSocket client for machine/daemon communication with hapi-server
+ * WebSocket client for machine/daemon communication with yoho-remote server
  */
 
 import { io, type Socket } from 'socket.io-client'

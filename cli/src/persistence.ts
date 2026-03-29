@@ -1,7 +1,7 @@
 /**
  * Minimal persistence functions for HAPI CLI
  * 
- * Handles settings and private key storage in ~/.hapi/ (or YOHO_REMOTE_HOME override)
+ * Handles settings and private key storage in ~/.yoho-remote/ (or YOHO_REMOTE_HOME override)
  */
 
 import { FileHandle } from 'node:fs/promises'

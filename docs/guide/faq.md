@@ -42,7 +42,7 @@ The `CLI_API_TOKEN` is a shared secret that authenticates:
 - Web app logins
 - Telegram account binding
 
-It's auto-generated on first server start and saved to `~/.hapi/settings.json`.
+It's auto-generated on first server start and saved to `~/.yoho-remote/settings.json`.
 
 ### Do you support multiple accounts?
 
@@ -87,7 +87,7 @@ Yes. Open any session and use the chat interface to send messages directly to th
 Yes. HAPI is local-first:
 - All data stays on your machine
 - Nothing is uploaded to external servers
-- The database is stored locally in `~/.hapi/`
+- The database is stored locally in `~/.yoho-remote/`
 
 ### How secure is the token authentication?
 
@@ -112,7 +112,7 @@ Only if they have your access token. For additional security:
 
 - Re-run `hapi auth login`
 - Check token matches in CLI and server
-- Verify `~/.hapi/settings.json` has correct `cliApiToken`
+- Verify `~/.yoho-remote/settings.json` has correct `cliApiToken`
 
 ### Daemon won't start
 
@@ -121,7 +121,7 @@ Only if they have your access token. For additional security:
 hapi daemon status
 
 # Clear stale lock file
-rm ~/.hapi/daemon.state.json.lock
+rm ~/.yoho-remote/daemon.state.json.lock
 
 # Check logs
 hapi daemon logs
@@ -133,7 +133,7 @@ Install Claude Code or set custom path:
 ```bash
 npm install -g @anthropic-ai/claude-code
 # or
-export HAPI_CLAUDE_PATH=/path/to/claude
+export YR_CLAUDE_PATH=/path/to/claude
 ```
 
 ### How do I run diagnostics?

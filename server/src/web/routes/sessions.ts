@@ -630,7 +630,7 @@ export function createSessionsRoutes(
         }
         const machine = machines[0]
         const homeDir = machine.metadata?.homeDir || '/tmp'
-        const brainDirectory = `${homeDir}/.hapi/brain-workspace`
+        const brainDirectory = `${homeDir}/.yoho-remote/brain-workspace`
 
         const result = await engine.spawnSession(
             machine.id,
@@ -689,7 +689,7 @@ export function createSessionsRoutes(
         }
         const machine = machines[0]
         const homeDir = machine.metadata?.homeDir || '/tmp'
-        const vijnaptiDirectory = `${homeDir}/.hapi/vijnapti-workspace`
+        const vijnaptiDirectory = `${homeDir}/.yoho-remote/vijnapti-workspace`
 
         const result = await engine.spawnSession(
             machine.id,
@@ -1160,7 +1160,7 @@ export function createSessionsRoutes(
         })()
         console.log(`[refresh-account] sessionId=${sessionId}, resumeSessionId=${resumeSessionId ?? 'NONE'}`)
 
-        // Spawn new Claude process with the SAME hapi session ID + Claude --resume
+        // Spawn new Claude process with the SAME YR session ID + Claude --resume
         const spawnResult = await engine.spawnSession(
             machineId,
             spawnTarget.directory,

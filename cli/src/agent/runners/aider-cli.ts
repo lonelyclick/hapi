@@ -9,7 +9,7 @@ import { logger } from '@/ui/logger';
 // 默认模型 - 使用 OpenRouter 格式
 const DEFAULT_MODEL = 'openrouter/anthropic/claude-sonnet-4';
 
-type HapiSettingsFile = {
+type YohoRemoteSettingsFile = {
     openrouterApiKey?: unknown;
 };
 
@@ -38,7 +38,7 @@ function asNonEmptyString(value: unknown): string | null {
  * 优先级:
  * 1. OPENROUTER_API_KEY 环境变量
  * 2. ~/happy/yoho-task-v2/data/credentials/openrouter/default.json
- * 3. HAPI settings 文件
+ * 3. YR settings 文件
  */
 function loadOpenRouterApiKey(): string | null {
     // 检查环境变量
@@ -57,8 +57,8 @@ function loadOpenRouterApiKey(): string | null {
         return credentialKey;
     }
 
-    // 检查 HAPI settings 文件
-    const settingsFile = readJsonFile(configuration.settingsFile) as HapiSettingsFile | null;
+    // 检查 YR settings 文件
+    const settingsFile = readJsonFile(configuration.settingsFile) as YohoRemoteSettingsFile | null;
     const settingsKey = asNonEmptyString(settingsFile?.openrouterApiKey);
     if (settingsKey) {
         logger.debug(`[Aider-CLI] Loaded API key from ${configuration.settingsFile}`);
@@ -114,7 +114,7 @@ export function registerAiderCliAgent(model?: string, _yolo: boolean = false): v
         AgentRegistry.register('aider-cli', () => {
             throw new Error(
                 'OpenRouter API key not configured for Aider CLI. ' +
-                'Set OPENROUTER_API_KEY environment variable or add openrouterApiKey to HAPI settings.'
+                'Set OPENROUTER_API_KEY environment variable or add openrouterApiKey to YR settings.'
             );
         });
         return;

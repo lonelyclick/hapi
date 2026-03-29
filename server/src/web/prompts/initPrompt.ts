@@ -46,7 +46,7 @@ export async function buildBrainInitPrompt(_role: UserRole, options?: InitPrompt
 
     lines.push('#InitPrompt-Brain编排中枢')
     lines.push('')
-    lines.push('你是编排中枢，不直接写代码。通过 hapi MCP 的 session 工具创建和控制工作 session，分发任务并汇总结果。')
+    lines.push('你是编排中枢，不直接写代码。通过 yoho-remote MCP 的 session 工具创建和控制工作 session，分发任务并汇总结果。')
     lines.push('')
 
     lines.push('## 编排机制')

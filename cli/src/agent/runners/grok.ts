@@ -24,7 +24,7 @@ function isGrokModel(mode: string | undefined): mode is GrokModelMode {
 }
 
 export function registerGrokAgent(_yolo: boolean): void {
-    // Check for model from environment variable or HAPI_MODEL_MODE
+    // Check for model from environment variable or YR_MODEL_MODE
     const envMode = readModeEnv();
     const envGrokModel = process.env.GROK_MODEL;
 

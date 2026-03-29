@@ -558,7 +558,7 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
         }
     });
 
-    // Upload image handler - saves image to .hapi/uploads directory
+    // Upload image handler - saves image to .yoho-remote/uploads directory
     rpcHandlerManager.registerHandler<UploadImageRequest, UploadImageResponse>('uploadImage', async (data) => {
         logger.debug('[upload image] request', {
             filename: data.filename,
@@ -591,7 +591,7 @@ export function registerCommonHandlers(rpcHandlerManager: RpcHandlerManager, wor
         }
     });
 
-    // Upload file handler - saves file to .hapi/uploads directory
+    // Upload file handler - saves file to .yoho-remote/uploads directory
     rpcHandlerManager.registerHandler<UploadFileRequest, UploadFileResponse>('uploadFile', async (data) => {
         logger.debug('[upload file] request', {
             filename: data.filename,
@@ -640,8 +640,8 @@ type UploadSaveOptions = {
 };
 
 async function saveUploadedFile(options: UploadSaveOptions): Promise<UploadFileResponse> {
-    // Create uploads directory under .hapi
-    const uploadsDir = join(options.workingDirectory, '.hapi', 'uploads');
+    // Create uploads directory under .yoho-remote
+    const uploadsDir = join(options.workingDirectory, '.yoho-remote', 'uploads');
     await mkdir(uploadsDir, { recursive: true });
 
     const safeName = basename(options.filename);
@@ -671,7 +671,7 @@ async function saveUploadedFile(options: UploadSaveOptions): Promise<UploadFileR
     await writeFile(filePath, buffer);
 
     // Return relative path from working directory
-    const relativePath = join('.hapi', 'uploads', uniqueFilename);
+    const relativePath = join('.yoho-remote', 'uploads', uniqueFilename);
     logger.debug('[upload] saved', { path: relativePath, bytes: sizeBytes });
     return { success: true, path: relativePath };
 }

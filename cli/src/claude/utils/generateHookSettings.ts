@@ -11,7 +11,7 @@ import { homedir } from 'node:os';
 import { writeFileSync, mkdirSync, unlinkSync, existsSync, readFileSync } from 'node:fs';
 import { configuration } from '@/configuration';
 import { logger } from '@/ui/logger';
-import { getHappyCliCommand } from '@/utils/spawnHappyCLI';
+import { getYohoRemoteCliCommand } from '@/utils/spawnYohoRemoteCLI';
 
 function shellQuote(value: string): string {
     if (value.length === 0) {
@@ -34,13 +34,13 @@ function shellJoin(parts: string[]): string {
  * and optional litellm/claude settings merged in.
  */
 export function generateHookSettingsFile(port: number, token: string, claudeSettingsType?: 'litellm' | 'claude'): string {
-    const hooksDir = join(configuration.happyHomeDir, 'tmp', 'hooks');
+    const hooksDir = join(configuration.yohoRemoteHomeDir, 'tmp', 'hooks');
     mkdirSync(hooksDir, { recursive: true });
 
     const filename = `session-hook-${process.pid}.json`;
     const filepath = join(hooksDir, filename);
 
-    const { command, args } = getHappyCliCommand(['hook-forwarder', '--port', String(port), '--token', token]);
+    const { command, args } = getYohoRemoteCliCommand(['hook-forwarder', '--port', String(port), '--token', token]);
     const hookCommand = shellJoin([command, ...args]);
 
     // Start with hooks config

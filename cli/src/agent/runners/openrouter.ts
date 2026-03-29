@@ -9,7 +9,7 @@ import { logger } from '@/ui/logger';
 // Default model for OpenRouter - Claude Sonnet is a good coding model
 const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-sonnet-4';
 
-type HapiSettingsFile = {
+type YohoRemoteSettingsFile = {
     openrouterApiKey?: unknown;
 };
 
@@ -50,8 +50,8 @@ function loadOpenRouterApiKey(): string | null {
         return credentialKey;
     }
 
-    // Check HAPI settings file
-    const settingsFile = readJsonFile(configuration.settingsFile) as HapiSettingsFile | null;
+    // Check YR settings file
+    const settingsFile = readJsonFile(configuration.settingsFile) as YohoRemoteSettingsFile | null;
     const settingsKey = asNonEmptyString(settingsFile?.openrouterApiKey);
     if (settingsKey) {
         logger.debug(`[OpenRouter] Loaded API key from ${configuration.settingsFile}`);
@@ -69,7 +69,7 @@ export function registerOpenRouterAgent(model?: string): void {
         logger.warn('[OpenRouter] No OpenRouter API key found. Set OPENROUTER_API_KEY or add openrouterApiKey to settings.');
         // Still register but will fail when used
         AgentRegistry.register('openrouter', () => {
-            throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY environment variable or add openrouterApiKey to HAPI settings.');
+            throw new Error('OpenRouter API key not configured. Set OPENROUTER_API_KEY environment variable or add openrouterApiKey to YR settings.');
         });
         return;
     }

@@ -153,7 +153,7 @@ export function createPushRoutes(): Hono<WebAppEnv> {
 
         const namespace = c.get('namespace') || 'default'
         const result = await webPush.sendToNamespace(namespace, {
-            title: '🎉 HAPI 测试通知',
+            title: '🎉 Yoho Remote 测试通知',
             body: '如果你看到这条通知，说明 Web Push 功能正常工作！',
             tag: 'test-notification',
             data: {

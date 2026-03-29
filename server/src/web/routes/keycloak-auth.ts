@@ -1,5 +1,5 @@
 /**
- * Keycloak authentication routes for hapi-server
+ * Keycloak authentication routes for yoho-remote server
  * Provides OAuth2/OIDC endpoints for SSO login
  */
 

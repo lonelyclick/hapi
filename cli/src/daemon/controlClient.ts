@@ -14,7 +14,7 @@ import { isProcessAlive, killProcess } from '@/utils/process';
 
 /**
  * Get the mtime of the daemon executable for version checking.
- * In split deployment mode (hapi + hapi-daemon), we always check hapi-daemon's mtime
+ * In split deployment mode (hapi + yoho-remote-daemon), we always check yoho-remote-daemon's mtime
  * to ensure consistent version detection between daemon and sessions.
  */
 export function getInstalledCliMtimeMs(): number | undefined {
@@ -68,7 +68,7 @@ async function daemonPost(path: string, body?: any): Promise<{ error?: string } 
   }
 
   try {
-    const timeout = process.env.HAPI_DAEMON_HTTP_TIMEOUT ? parseInt(process.env.HAPI_DAEMON_HTTP_TIMEOUT) : 10_000;
+    const timeout = process.env.YR_DAEMON_HTTP_TIMEOUT ? parseInt(process.env.YR_DAEMON_HTTP_TIMEOUT) : 10_000;
     const response = await fetch(`http://127.0.0.1:${state.httpPort}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -126,7 +126,7 @@ export async function stopDaemonHttp(): Promise<void> {
 
 /**
  * The version check is still quite naive.
- * For instance we are not handling the case where we upgraded hapi,
+ * For instance we are not handling the case where we upgraded yoho-remote,
  * the daemon is still running, and it recieves a new message to spawn a new session.
  * This is a tough case - we need to somehow figure out to restart ourselves,
  * yet still handle the original request.
@@ -174,7 +174,7 @@ export async function checkIfDaemonRunningAndCleanupStaleState(): Promise<boolea
  * 
  * @returns true if versions match, false if versions differ or no daemon running
  */
-export async function isDaemonRunningCurrentlyInstalledHappyVersion(): Promise<boolean> {
+export async function isDaemonRunningCurrentlyInstalledVersion(): Promise<boolean> {
   logger.debug('[DAEMON CONTROL] Checking if daemon is running same version');
   const runningDaemon = await checkIfDaemonRunningAndCleanupStaleState();
   if (!runningDaemon) {
@@ -205,13 +205,13 @@ export async function isDaemonRunningCurrentlyInstalledHappyVersion(): Promise<b
     // If reading package.json doesn't work correctly after npm upgrades, 
     // we can revert to spawning a process (but should add timeout and cleanup!)
     /*
-    const { spawnHappyCLI } = await import('@/utils/spawnHappyCLI');
-    const happyProcess = spawnHappyCLI(['--version'], { stdio: 'pipe' });
+    const { spawnYohoRemoteCLI } = await import('@/utils/spawnYohoRemoteCLI');
+    const cliProcess = spawnYohoRemoteCLI(['--version'], { stdio: 'pipe' });
     let version: string | null = null;
-    happyProcess.stdout?.on('data', (data) => {
+    cliProcess.stdout?.on('data', (data) => {
       version = data.toString().trim();
     });
-    await new Promise(resolve => happyProcess.stdout?.on('close', resolve));
+    await new Promise(resolve => cliProcess.stdout?.on('close', resolve));
     logger.debug(`[DAEMON CONTROL] Current CLI version: ${version}, Daemon started with version: ${state.startedWithCliVersion}`);
     return version === state.startedWithCliVersion;
     */

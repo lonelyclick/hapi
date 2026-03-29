@@ -3,7 +3,7 @@
  *
  * Handles CLI_API_TOKEN initialization with priority:
  * 1. Environment variable (highest - allows temporary override)
- * 2. Settings file (~/.hapi/settings.json)
+ * 2. Settings file (~/.yoho-remote/settings.json)
  * 3. Interactive prompt (only when both above are missing)
  */
 
@@ -52,7 +52,7 @@ async function promptForToken(): Promise<string> {
     console.log(chalk.yellow('\nNo CLI_API_TOKEN found.'))
     console.log(chalk.gray('Where to find the token:'))
     console.log(chalk.gray('  1. Check the server startup logs (first run shows generated token)'))
-    console.log(chalk.gray('  2. Read ~/.hapi/settings.json on the server'))
+    console.log(chalk.gray('  2. Read ~/.yoho-remote/settings.json on the server'))
     console.log(chalk.gray('  3. Ask your server administrator (if token is set via env var)\n'))
 
     try {

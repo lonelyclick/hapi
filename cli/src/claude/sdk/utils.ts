@@ -54,19 +54,19 @@ function findGlobalClaudePath(): string | null {
  * Get default path to Claude Code executable.
  *
  * Environment variables:
- * - HAPI_CLAUDE_PATH: Force a specific path to claude executable
+ * - YR_CLAUDE_PATH: Force a specific path to claude executable
  */
 export function getDefaultClaudeCodePath(): string {
     // Allow explicit override via env var
-    if (process.env.HAPI_CLAUDE_PATH) {
-        logger.debug(`[Claude SDK] Using HAPI_CLAUDE_PATH: ${process.env.HAPI_CLAUDE_PATH}`)
-        return process.env.HAPI_CLAUDE_PATH
+    if (process.env.YR_CLAUDE_PATH) {
+        logger.debug(`[Claude SDK] Using YR_CLAUDE_PATH: ${process.env.YR_CLAUDE_PATH}`)
+        return process.env.YR_CLAUDE_PATH
     }
 
     // Find global claude
     const globalPath = findGlobalClaudePath()
     if (!globalPath) {
-        throw new Error('Claude Code CLI not found on PATH. Install Claude Code or set HAPI_CLAUDE_PATH.')
+        throw new Error('Claude Code CLI not found on PATH. Install Claude Code or set YR_CLAUDE_PATH.')
     }
     return globalPath
 }

@@ -9,7 +9,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 // 读取配置
-const settingsPath = join(homedir(), '.hapi', 'settings.json')
+const settingsPath = join(homedir(), '.yoho-remote', 'settings.json')
 const settings = JSON.parse(readFileSync(settingsPath, 'utf8'))
 const token = settings.cliApiToken
 const port = settings.webappPort || 3006

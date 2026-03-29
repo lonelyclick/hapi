@@ -38,17 +38,17 @@ export interface ModeEnvSettings {
 export function readModeEnv(): ModeEnvSettings {
     const result: ModeEnvSettings = {};
 
-    const permissionMode = process.env.HAPI_PERMISSION_MODE?.trim();
+    const permissionMode = process.env.YR_PERMISSION_MODE?.trim();
     if (permissionMode && PERMISSION_MODES.has(permissionMode as SessionPermissionMode)) {
         result.permissionMode = permissionMode as SessionPermissionMode;
     }
 
-    const modelMode = process.env.HAPI_MODEL_MODE?.trim();
+    const modelMode = process.env.YR_MODEL_MODE?.trim();
     if (modelMode && MODEL_MODES.has(modelMode as SessionModelMode)) {
         result.modelMode = modelMode as SessionModelMode;
     }
 
-    const modelReasoningEffort = process.env.HAPI_MODEL_REASONING_EFFORT?.trim();
+    const modelReasoningEffort = process.env.YR_MODEL_REASONING_EFFORT?.trim();
     if (modelReasoningEffort && REASONING_EFFORTS.has(modelReasoningEffort as SessionModelReasoningEffort)) {
         result.modelReasoningEffort = modelReasoningEffort as SessionModelReasoningEffort;
     }

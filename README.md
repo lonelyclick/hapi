@@ -43,7 +43,7 @@ hapi server
 hapi
 ```
 
-3. Open the UI at `http://localhost:3006` and log in with the token in `~/.hapi/settings.json`.
+3. Open the UI at `http://localhost:3006` and log in with the token in `~/.yoho-remote/settings.json`.
 
 ## Docker (server only)
 

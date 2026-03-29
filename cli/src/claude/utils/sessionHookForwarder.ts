@@ -49,7 +49,7 @@ type SessionHookPayload = Record<string, unknown> & {
     cwd?: string;
     hook_event_name?: string;
     source?: string;
-    hapi_source?: string;
+    yoho_remote_source?: string;
 };
 
 const MAX_RESPONSE_BODY_BYTES = 4096;
@@ -149,17 +149,17 @@ function coerceString(value: unknown): string | null {
 }
 
 function resolveLangfuseConfig(): LangfuseConfig | null {
-    const publicKey = (process.env.HAPI_LANGFUSE_PUBLIC_KEY || process.env.LANGFUSE_PUBLIC_KEY || '').trim();
-    const secretKey = (process.env.HAPI_LANGFUSE_SECRET_KEY || process.env.LANGFUSE_SECRET_KEY || '').trim();
+    const publicKey = (process.env.YR_LANGFUSE_PUBLIC_KEY || process.env.LANGFUSE_PUBLIC_KEY || '').trim();
+    const secretKey = (process.env.YR_LANGFUSE_SECRET_KEY || process.env.LANGFUSE_SECRET_KEY || '').trim();
     if (!publicKey || !secretKey) {
         return null;
     }
 
-    const endpointOverride = (process.env.HAPI_LANGFUSE_OTEL_ENDPOINT || process.env.LANGFUSE_OTEL_ENDPOINT || '').trim();
+    const endpointOverride = (process.env.YR_LANGFUSE_OTEL_ENDPOINT || process.env.LANGFUSE_OTEL_ENDPOINT || '').trim();
     const baseUrl = (
-        process.env.HAPI_LANGFUSE_BASE_URL ||
+        process.env.YR_LANGFUSE_BASE_URL ||
         process.env.LANGFUSE_BASE_URL ||
-        process.env.HAPI_LANGFUSE_HOST ||
+        process.env.YR_LANGFUSE_HOST ||
         process.env.LANGFUSE_HOST ||
         'https://cloud.langfuse.com'
     ).trim();
@@ -208,19 +208,19 @@ function buildLangfuseOtelPayload(payload: SessionHookPayload, sessionSource: st
     const traceName = 'claude.session';
     const spanName = `claude.${hookEventName}`;
     const resolvedSource = coerceString(payload.source) || sessionSource;
-    const resolvedHapiSource = coerceString(payload.hapi_source) || sessionSource;
+    const resolvedYohoRemoteSource = coerceString(payload.yoho_remote_source) || sessionSource;
 
     const attributes: OtelKeyValue[] = [];
     addAttribute(attributes, 'langfuse.session.id', sessionId);
     addAttribute(attributes, 'langfuse.trace.name', traceName);
     addAttribute(attributes, 'langfuse.trace.metadata.hook_event_name', hookEventName);
     addAttribute(attributes, 'langfuse.trace.metadata.source', resolvedSource);
-    addAttribute(attributes, 'langfuse.trace.metadata.hapi_source', resolvedHapiSource);
+    addAttribute(attributes, 'langfuse.trace.metadata.yoho_remote_source', resolvedYohoRemoteSource);
     addAttribute(attributes, 'langfuse.trace.metadata.cwd', coerceString(payload.cwd));
     addAttribute(attributes, 'langfuse.trace.metadata.transcript_path', coerceString(payload.transcript_path));
 
     const resourceAttributes: OtelKeyValue[] = [];
-    addAttribute(resourceAttributes, 'service.name', 'hapi-cli');
+    addAttribute(resourceAttributes, 'service.name', 'yoho-remote-cli');
 
     const traceId = buildTraceId(sessionId);
     const spanId = buildSpanId();
@@ -231,7 +231,7 @@ function buildLangfuseOtelPayload(payload: SessionHookPayload, sessionSource: st
         resourceSpans: [{
             resource: { attributes: resourceAttributes },
             scopeSpans: [{
-                scope: { name: 'hapi.hook-forwarder' },
+                scope: { name: 'yoho-remote.hook-forwarder' },
                 spans: [{
                     traceId,
                     spanId,
@@ -405,17 +405,17 @@ export async function runSessionHookForwarder(args: string[]): Promise<void> {
             });
         }
 
-        const sessionSource = process.env.HAPI_SESSION_SOURCE?.trim() || null;
+        const sessionSource = process.env.YR_SESSION_SOURCE?.trim() || null;
         if (payload && sessionSource) {
             logDebug('Injecting session source into hook payload', { sessionSource });
             const hadSource = 'source' in payload;
             if (!hadSource) {
                 payload.source = sessionSource;
             }
-            payload.hapi_source = sessionSource;
+            payload.yoho_remote_source = sessionSource;
             logDebug('Session source injected into hook payload', {
                 addedSource: !hadSource,
-                addedHapiSource: true
+                addedYohoRemoteSource: true
             });
         }
 
@@ -432,7 +432,7 @@ export async function runSessionHookForwarder(args: string[]): Promise<void> {
                 headers: {
                     'Content-Type': 'application/json',
                     'Content-Length': body.length,
-                    'x-hapi-hook-token': token
+                    'x-yoho-remote-hook-token': token
                 }
             }, (res) => {
                 const statusCode = res.statusCode ?? 0;

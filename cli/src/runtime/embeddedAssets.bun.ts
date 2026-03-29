@@ -25,7 +25,7 @@ const COMMON_ASSETS: EmbeddedAsset[] = [
 ];
 
 async function selectEmbeddedAssets(): Promise<EmbeddedAsset[]> {
-    if (feature('HAPI_TARGET_DARWIN_ARM64')) {
+    if (feature('YR_TARGET_DARWIN_ARM64')) {
         const [{ default: difftasticArm64Darwin }, { default: ripgrepArm64Darwin }] = await Promise.all([
             import('../../tools/archives/difftastic-arm64-darwin.tar.gz', { assert: { type: 'file' } }),
             import('../../tools/archives/ripgrep-arm64-darwin.tar.gz', { assert: { type: 'file' } })
@@ -37,7 +37,7 @@ async function selectEmbeddedAssets(): Promise<EmbeddedAsset[]> {
         ];
     }
 
-    if (feature('HAPI_TARGET_DARWIN_X64')) {
+    if (feature('YR_TARGET_DARWIN_X64')) {
         const [{ default: difftasticX64Darwin }, { default: ripgrepX64Darwin }] = await Promise.all([
             import('../../tools/archives/difftastic-x64-darwin.tar.gz', { assert: { type: 'file' } }),
             import('../../tools/archives/ripgrep-x64-darwin.tar.gz', { assert: { type: 'file' } })
@@ -49,7 +49,7 @@ async function selectEmbeddedAssets(): Promise<EmbeddedAsset[]> {
         ];
     }
 
-    if (feature('HAPI_TARGET_LINUX_ARM64')) {
+    if (feature('YR_TARGET_LINUX_ARM64')) {
         const [{ default: difftasticArm64Linux }, { default: ripgrepArm64Linux }] = await Promise.all([
             import('../../tools/archives/difftastic-arm64-linux.tar.gz', { assert: { type: 'file' } }),
             import('../../tools/archives/ripgrep-arm64-linux.tar.gz', { assert: { type: 'file' } })
@@ -61,7 +61,7 @@ async function selectEmbeddedAssets(): Promise<EmbeddedAsset[]> {
         ];
     }
 
-    if (feature('HAPI_TARGET_LINUX_X64')) {
+    if (feature('YR_TARGET_LINUX_X64')) {
         const [{ default: difftasticX64Linux }, { default: ripgrepX64Linux }] = await Promise.all([
             import('../../tools/archives/difftastic-x64-linux.tar.gz', { assert: { type: 'file' } }),
             import('../../tools/archives/ripgrep-x64-linux.tar.gz', { assert: { type: 'file' } })
@@ -73,7 +73,7 @@ async function selectEmbeddedAssets(): Promise<EmbeddedAsset[]> {
         ];
     }
 
-    if (feature('HAPI_TARGET_WIN32_X64')) {
+    if (feature('YR_TARGET_WIN32_X64')) {
         const [{ default: difftasticX64Win32 }, { default: ripgrepX64Win32 }] = await Promise.all([
             import('../../tools/archives/difftastic-x64-win32.tar.gz', { assert: { type: 'file' } }),
             import('../../tools/archives/ripgrep-x64-win32.tar.gz', { assert: { type: 'file' } })
@@ -85,7 +85,7 @@ async function selectEmbeddedAssets(): Promise<EmbeddedAsset[]> {
         ];
     }
 
-    throw new Error('No build target feature flag set. Build with --feature=HAPI_TARGET_*.');
+    throw new Error('No build target feature flag set. Build with --feature=YR_TARGET_*.');
 }
 
 export async function loadEmbeddedAssets(): Promise<EmbeddedAsset[]> {

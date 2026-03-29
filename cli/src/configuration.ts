@@ -17,7 +17,7 @@ class Configuration {
     public readonly isDaemonProcess: boolean
 
     // Directories and paths (from persistence)
-    public readonly happyHomeDir: string
+    public readonly yohoRemoteHomeDir: string
     public readonly logsDir: string
     public readonly settingsFile: string
     public readonly privateKeyFile: string
@@ -40,23 +40,23 @@ class Configuration {
         if (process.env.YOHO_REMOTE_HOME) {
             // Expand ~ to home directory if present
             const expandedPath = process.env.YOHO_REMOTE_HOME.replace(/^~/, homedir())
-            this.happyHomeDir = expandedPath
+            this.yohoRemoteHomeDir = expandedPath
         } else {
-            this.happyHomeDir = join(homedir(), '.hapi')
+            this.yohoRemoteHomeDir = join(homedir(), '.yoho-remote')
         }
 
-        this.logsDir = join(this.happyHomeDir, 'logs')
-        this.settingsFile = join(this.happyHomeDir, 'settings.json')
-        this.privateKeyFile = join(this.happyHomeDir, 'access.key')
-        this.daemonStateFile = join(this.happyHomeDir, 'daemon.state.json')
-        this.daemonLockFile = join(this.happyHomeDir, 'daemon.state.json.lock')
+        this.logsDir = join(this.yohoRemoteHomeDir, 'logs')
+        this.settingsFile = join(this.yohoRemoteHomeDir, 'settings.json')
+        this.privateKeyFile = join(this.yohoRemoteHomeDir, 'access.key')
+        this.daemonStateFile = join(this.yohoRemoteHomeDir, 'daemon.state.json')
+        this.daemonLockFile = join(this.yohoRemoteHomeDir, 'daemon.state.json.lock')
 
-        this.isExperimentalEnabled = ['true', '1', 'yes'].includes(process.env.HAPI_EXPERIMENTAL?.toLowerCase() || '')
+        this.isExperimentalEnabled = ['true', '1', 'yes'].includes(process.env.YR_EXPERIMENTAL?.toLowerCase() || '')
 
         this.currentCliVersion = packageJson.version
 
-        if (!existsSync(this.happyHomeDir)) {
-            mkdirSync(this.happyHomeDir, { recursive: true })
+        if (!existsSync(this.yohoRemoteHomeDir)) {
+            mkdirSync(this.yohoRemoteHomeDir, { recursive: true })
         }
         // Ensure directories exist
         if (!existsSync(this.logsDir)) {

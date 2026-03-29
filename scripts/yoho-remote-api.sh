@@ -1,11 +1,11 @@
 #!/bin/bash
-# HAPI API 调用帮助脚本
+# yoho-remote API 调用帮助脚本
 # 自动处理认证和 Token 获取
 
 set -e
 
-HAPI_SERVER="${HAPI_SERVER:-http://localhost:3006}"
-SETTINGS_FILE="${HOME}/.hapi/settings.json"
+YR_SERVER="${YR_SERVER:-http://localhost:3006}"
+SETTINGS_FILE="${HOME}/.yoho-remote/settings.json"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -28,7 +28,7 @@ get_jwt_token() {
         exit 1
     fi
 
-    local response=$(curl -s -X POST "${HAPI_SERVER}/api/auth" \
+    local response=$(curl -s -X POST "${YR_SERVER}/api/auth" \
         -H "Content-Type: application/json" \
         -d "{\"accessToken\": \"${cli_token}\"}")
 
@@ -51,11 +51,11 @@ call_api() {
     local jwt_token=$(get_jwt_token)
 
     if [[ "$method" == "GET" ]]; then
-        curl -s -X GET "${HAPI_SERVER}/api${endpoint}" \
+        curl -s -X GET "${YR_SERVER}/api${endpoint}" \
             -H "Authorization: Bearer ${jwt_token}" \
             -H "Content-Type: application/json"
     else
-        curl -s -X "$method" "${HAPI_SERVER}/api${endpoint}" \
+        curl -s -X "$method" "${YR_SERVER}/api${endpoint}" \
             -H "Authorization: Bearer ${jwt_token}" \
             -H "Content-Type: application/json" \
             -d "$data"
@@ -64,7 +64,7 @@ call_api() {
 
 # 显示帮助
 show_help() {
-    echo "HAPI API 调用帮助脚本"
+    echo "yoho-remote API 调用帮助脚本"
     echo ""
     echo "用法: $0 <command> [args]"
     echo ""

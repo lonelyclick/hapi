@@ -25,7 +25,7 @@ export function getEnvironmentInfo(): Record<string, any> {
         PWD: process.env.PWD,
         YOHO_REMOTE_HOME: process.env.YOHO_REMOTE_HOME,
         YOHO_REMOTE_URL: process.env.YOHO_REMOTE_URL,
-        HAPI_PROJECT_ROOT: process.env.HAPI_PROJECT_ROOT,
+        YR_PROJECT_ROOT: process.env.YR_PROJECT_ROOT,
         CLI_API_TOKEN_SET: Boolean(process.env.CLI_API_TOKEN),
         DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING: process.env.DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING,
         NODE_ENV: process.env.NODE_ENV,

@@ -11,7 +11,7 @@
  * - MiniMax API Key
  *
  * 凭证目录结构：
- * ~/.hapi/credentials/
+ * ~/.yoho-remote/credentials/
  *   ├── jwt-secret.json      # JWT 签名密钥
  *   ├── api-tokens.json      # 各类 API Token
  *   └── vapid-keys.json      # Web Push VAPID 密钥对

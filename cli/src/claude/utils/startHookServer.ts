@@ -19,7 +19,7 @@ export interface SessionHookData {
     cwd?: string;
     hook_event_name?: string;
     source?: string;
-    hapi_source?: string;
+    yoho_remote_source?: string;
     [key: string]: unknown;
 }
 
@@ -40,7 +40,7 @@ export interface HookServer {
 }
 
 function readHookToken(req: IncomingMessage): string | null {
-    const header = req.headers['x-hapi-hook-token'];
+    const header = req.headers['x-yoho-remote-hook-token'];
     if (Array.isArray(header)) {
         return header[0] ?? null;
     }

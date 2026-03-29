@@ -1,5 +1,5 @@
 /**
- * Keycloak integration for hapi-server
+ * Keycloak integration for yoho-remote server
  * Handles SSO authentication via Keycloak OAuth2/OIDC
  */
 

@@ -1,7 +1,7 @@
 /**
- * Feishu Bot for HAPI
+ * Feishu Bot for Yoho Remote
  *
- * Integrates Feishu (Lark) messaging with HAPI Brain sessions.
+ * Integrates Feishu (Lark) messaging with Yoho Remote Brain sessions.
  * Each Feishu chat (DM or group) maps to a Brain session.
  * Brain replies are automatically pushed back to Feishu.
  */
@@ -1065,7 +1065,7 @@ export class FeishuBot {
                 console.warn(`[FeishuBot] ncu not online, falling back to ${machine.id}`)
             }
             const homeDir = (machine.metadata as Record<string, unknown>)?.homeDir as string || '/tmp'
-            const brainDirectory = `${homeDir}/.hapi/brain-workspace`
+            const brainDirectory = `${homeDir}/.yoho-remote/brain-workspace`
 
             const result = await this.syncEngine.spawnSession(
                 machine.id,
@@ -1213,7 +1213,7 @@ export class FeishuBot {
 
     /**
      * Try to resume a dead brain session by spawning a new CLI process
-     * that reuses the same hapi session ID and Claude conversation.
+     * that reuses the same yoho-remote session ID and Claude conversation.
      */
     private async resumeBrainSession(oldSessionId: string, claudeSessionId: string): Promise<boolean> {
         try {
@@ -1224,7 +1224,7 @@ export class FeishuBot {
             const NCU_MACHINE_ID = 'e16b3653-ad9f-46a7-89fd-48a3d576cccb'
             const machine = machines.find(m => m.id === NCU_MACHINE_ID) || machines[0]
             const homeDir = (machine.metadata as Record<string, unknown>)?.homeDir as string || '/tmp'
-            const brainDirectory = `${homeDir}/.hapi/brain-workspace`
+            const brainDirectory = `${homeDir}/.yoho-remote/brain-workspace`
 
             const result = await this.syncEngine.spawnSession(
                 machine.id,
@@ -1234,7 +1234,7 @@ export class FeishuBot {
                 'simple',
                 undefined,
                 {
-                    sessionId: oldSessionId,           // reuse hapi session ID
+                    sessionId: oldSessionId,           // reuse YR session ID
                     resumeSessionId: claudeSessionId,  // resume Claude conversation
                     source: 'brain',
                     permissionMode: 'bypassPermissions',

@@ -37,7 +37,7 @@ export type AiderCliBackendOptions = {
 const DEFAULT_MODEL = 'openrouter/anthropic/claude-sonnet-4';
 
 // 临时文件目录
-const TEMP_DIR = join(tmpdir(), 'hapi-aider');
+const TEMP_DIR = join(tmpdir(), 'yr-aider');
 
 export class AiderCliBackend implements AgentBackend {
     private readonly model: string;

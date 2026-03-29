@@ -1,6 +1,6 @@
-# hapi-server
+# yoho-remote-server
 
-Telegram bot + HTTP API + realtime updates for hapi.
+Telegram bot + HTTP API + realtime updates for yoho-remote.
 
 ## What it does
 
@@ -34,7 +34,7 @@ See `src/configuration.ts` for all options.
 
 - `WEBAPP_PORT` - HTTP port (default: 3006).
 - `CORS_ORIGINS` - Comma-separated origins, or `*`.
-- `YOHO_REMOTE_HOME` - Data directory (default: ~/.hapi).
+- `YOHO_REMOTE_HOME` - Data directory (default: ~/.yoho-remote).
 - `DATABASE_URL` - PostgreSQL connection string.
 
 ## Running
@@ -207,7 +207,7 @@ node server/scripts/cleanup-offline-sessions.js --min-idle-minutes=60
 node server/scripts/cleanup-offline-sessions.js --delete --force --yes
 ```
 
-The script uses `CLI_API_TOKEN` (or `~/.hapi/settings.json`) to authenticate and defaults to `http://localhost:3006`.
+The script uses `CLI_API_TOKEN` (or `~/.yoho-remote/settings.json`) to authenticate and defaults to `http://localhost:3006`.
 
 ## Source structure
 
@@ -248,6 +248,6 @@ The web UI can be hosted separately from the server (for example on GitHub Pages
 
 1. Build and deploy `web/dist` from the repo root.
 2. Set `CORS_ORIGINS` (or `WEBAPP_URL`) to the static host origin.
-3. Open the static site, click the Server button on the login screen, and enter the hapi server origin.
+3. Open the static site, click the Server button on the login screen, and enter the yoho-remote server origin.
 
 Leaving the server override empty preserves the default same-origin behavior when the server serves the web assets directly.

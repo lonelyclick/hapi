@@ -1,6 +1,6 @@
-# HAPI CLI Daemon: Control Flow and Lifecycle
+# yoho-remote CLI Daemon: Control Flow and Lifecycle
 
-The daemon is a persistent background process that manages HAPI sessions, enables remote control from the mobile app, and handles auto-updates when the CLI version changes.
+The daemon is a persistent background process that manages yoho-remote sessions, enables remote control from the mobile app, and handles auto-updates when the CLI version changes.
 
 ## 1. Daemon Lifecycle
 
@@ -23,7 +23,7 @@ Control Flow:
    - HTTP server: starts Fastify on random port for local CLI control (list, stop, spawn)
    - WebSocket: establishes persistent connection to backend via `ApiMachineClient`
    - RPC registration: exposes `spawn-happy-session`, `stop-session`, `stop-daemon` handlers
-   - Heartbeat loop: every 60s (or `HAPI_DAEMON_HEARTBEAT_INTERVAL`) checks for version updates, prunes dead sessions, verifies PID ownership
+   - Heartbeat loop: every 60s (or `YR_DAEMON_HEARTBEAT_INTERVAL`) checks for version updates, prunes dead sessions, verifies PID ownership
 5. Awaits shutdown promise which resolves when:
    - OS signal received (SIGINT/SIGTERM) - source: `os-signal`
    - HTTP `/stop` endpoint called - source: `hapi-cli`
@@ -53,7 +53,7 @@ The daemon detects when CLI binary changes (e.g., after `npm upgrade hapi`):
 
 ### Heartbeat System
 
-Every 60 seconds (configurable via `HAPI_DAEMON_HEARTBEAT_INTERVAL`):
+Every 60 seconds (configurable via `YR_DAEMON_HEARTBEAT_INTERVAL`):
 1. **Guard**: Skips if previous heartbeat still running (prevents concurrent heartbeats)
 2. **Session Pruning**: Checks each tracked PID with `isProcessAlive(pid)`, removes dead sessions
 3. **Version Check**: Compares CLI binary mtime, triggers self-restart if changed
@@ -90,7 +90,7 @@ The daemon supports spawning sessions with different AI agents:
 
 When spawning a session with a token:
 - **Claude**: Sets `CLAUDE_CODE_OAUTH_TOKEN` environment variable
-- **Codex**: Creates temp directory at `os.tmpdir()/hapi-codex-*`, writes token to `auth.json`, sets `CODEX_HOME`
+- **Codex**: Creates temp directory at `os.tmpdir()/yr-codex-*`, writes token to `auth.json`, sets `CODEX_HOME`
 
 ## 3. Session Management
 
@@ -102,10 +102,10 @@ Initiated by mobile app via backend RPC:
 3. `spawnSession()`:
    - Validates/creates directory (with approval flow)
    - Configures agent-specific token environment
-   - Spawns detached HAPI process with `--hapi-starting-mode remote --started-by daemon`
+   - Spawns detached yoho-remote process with `--hapi-starting-mode remote --started-by daemon`
    - Adds to `pidToTrackedSession` map
    - Sets up 15-second awaiter for session webhook
-4. New HAPI process:
+4. New yoho-remote process:
    - Creates session with backend, receives `happySessionId`
    - Calls `notifyDaemonSessionStarted()` to POST to daemon's `/session-started`
 5. Daemon updates tracking with `happySessionId`, resolves awaiter
@@ -115,7 +115,7 @@ Initiated by mobile app via backend RPC:
 
 User runs `hapi` directly:
 1. CLI auto-starts daemon if configured
-2. HAPI process calls `notifyDaemonSessionStarted()`
+2. yoho-remote process calls `notifyDaemonSessionStarted()`
 3. Daemon receives webhook, creates `TrackedSession` with `startedBy: 'hapi directly - likely by user from terminal'`
 4. Session tracked for health monitoring
 
@@ -262,7 +262,7 @@ All data is plain JSON over TLS; authentication is `CLI_API_TOKEN` (no end-to-en
 
 ### Doctor Command
 
-`hapi doctor` uses `ps aux | grep` to find all HAPI processes:
+`hapi doctor` uses `ps aux | grep` to find all yoho-remote processes:
 - Production: matches `hapi` binary, `happy-coder`
 - Development: matches `src/index.ts` (run via `bun`)
 - Categorizes by command args: daemon, daemon-spawned, user-session, doctor
@@ -280,8 +280,8 @@ All data is plain JSON over TLS; authentication is `CLI_API_TOKEN` (no end-to-en
 
 ### Test Environment
 - Requires `.env.integration-test`
-- Uses local hapi-server (http://localhost:3006)
-- Separate `~/.hapi-dev-test` home directory
+- Uses local yoho-remote-server (http://localhost:3006)
+- Separate `~/.yoho-remote-dev-test` home directory
 
 ### Key Test Scenarios
 - Session listing, spawning, stopping
@@ -296,7 +296,7 @@ All data is plain JSON over TLS; authentication is `CLI_API_TOKEN` (no end-to-en
 
 # Machine Sync Architecture - Separated Metadata & Daemon State
 
-> Direct-connect note: the "server" is `hapi-server`, payloads are plain JSON (no base64/encryption),
+> Direct-connect note: the "server" is `yoho-remote-server`, payloads are plain JSON (no base64/encryption),
 > and authentication uses `CLI_API_TOKEN` (REST `Authorization: Bearer ...` + Socket.IO `handshake.auth.token`).
 
 ## Data Structure (Similar to Session's metadata + agentState)
@@ -341,7 +341,7 @@ Checks if machine ID exists in settings:
     "platform": "darwin",
     "happyCliVersion": "v2026.01.02.1338",
     "homeDir": "/Users/john",
-    "happyHomeDir": "/Users/john/.hapi",
+    "happyHomeDir": "/Users/john/.yoho-remote",
     "happyLibDir": "/usr/local/lib/node_modules/hapi"
   },
   "daemonState": {
@@ -438,16 +438,16 @@ socket.emit('machine-update-metadata', {
     "platform": "darwin",
     "happyCliVersion": "v2026.01.02.1340",
     "homeDir": "/Users/john",
-    "happyHomeDir": "/Users/john/.hapi"
+    "happyHomeDir": "/Users/john/.yoho-remote"
   },
   "expectedVersion": 1
 }, callback)
 ```
 
-## 5. Mini App RPC Calls (via hapi-server)
+## 5. Mini App RPC Calls (via yoho-remote-server)
 
-The Telegram Mini App calls REST endpoints on `hapi-server` (for example `POST /api/machines/:id/spawn`).
-`hapi-server` then relays those requests to the daemon via Socket.IO `rpc-request` on the `/cli` namespace.
+The Telegram Mini App calls REST endpoints on `yoho-remote-server` (for example `POST /api/machines/:id/spawn`).
+`yoho-remote-server` then relays those requests to the daemon via Socket.IO `rpc-request` on the `/cli` namespace.
 
 RPC method naming (machine-scoped) uses a `${machineId}:` prefix, for example:
 - `${machineId}:spawn-happy-session`
@@ -551,38 +551,38 @@ Authorization: Bearer <CLI_API_TOKEN>
 
 # Split Deployment Architecture
 
-For server deployments, HAPI uses a split executable architecture that allows updating the server/frontend without restarting the daemon (and thus keeping sessions online).
+For server deployments, yoho-remote uses a split executable architecture that allows updating the server/frontend without restarting the daemon (and thus keeping sessions online).
 
 ## Executables
 
 | Executable | Purpose | Systemd Service |
 |------------|---------|-----------------|
-| `hapi-server` | Web frontend + REST API | `hapi-server.service` |
-| `hapi-daemon` | Session management, WebSocket to server | `hapi-daemon.service` |
+| `yoho-remote-server` | Web frontend + REST API | `yoho-remote-server.service` |
+| `yoho-remote-daemon` | Session management, WebSocket to server | `yoho-remote-daemon.service` |
 | `hapi` | Main CLI, used by daemon to spawn sessions | (not a service) |
 
 ## Build Commands
 
 ```bash
 # In cli/ directory:
-bun run build:exe:server    # Build hapi-server (with embedded web assets)
-bun run build:exe:daemon    # Build hapi-daemon
+bun run build:exe:server    # Build yoho-remote-server (with embedded web assets)
+bun run build:exe:daemon    # Build yoho-remote-daemon
 bun run build:exe           # Build hapi (main CLI)
 ```
 
 ## Version Detection
 
-In split deployment mode, version detection uses `hapi-daemon`'s mtime exclusively:
+In split deployment mode, version detection uses `yoho-remote-daemon`'s mtime exclusively:
 
-- `getInstalledCliMtimeMs()` checks if `hapi-daemon` exists alongside the current executable
-- If found, returns `hapi-daemon`'s mtime (not the current executable's mtime)
-- This ensures consistent version detection whether called from `hapi` or `hapi-daemon`
+- `getInstalledCliMtimeMs()` checks if `yoho-remote-daemon` exists alongside the current executable
+- If found, returns `yoho-remote-daemon`'s mtime (not the current executable's mtime)
+- This ensures consistent version detection whether called from `hapi` or `yoho-remote-daemon`
 
 ## Session Spawning
 
-When `hapi-daemon` needs to spawn a session:
+When `yoho-remote-daemon` needs to spawn a session:
 
-1. `spawnHappyCLI()` detects it's running as `hapi-daemon` (standalone mode)
+1. `spawnHappyCLI()` detects it's running as `yoho-remote-daemon` (standalone mode)
 2. Uses the `hapi` executable in the same directory instead of `process.execPath`
 3. Spawns: `hapi claude --hapi-starting-mode remote --started-by daemon`
 
@@ -597,8 +597,8 @@ When `hapi-daemon` needs to spawn a session:
 
 | Command | Builds | Restarts | Sessions |
 |---------|--------|----------|----------|
-| `./deploy.sh` | `hapi-server`, `hapi` | server only | Stay online |
-| `./deploy.sh --daemon` | `hapi-server`, `hapi`, `hapi-daemon` | server + daemon | Disconnect |
+| `./deploy.sh` | `yoho-remote-server`, `hapi` | server only | Stay online |
+| `./deploy.sh --daemon` | `yoho-remote-server`, `hapi`, `yoho-remote-daemon` | server + daemon | Disconnect |
 
 ### When to Use `--daemon`
 
@@ -613,13 +613,13 @@ For frontend/API changes, the default `./deploy.sh` is sufficient.
 ## Systemd Service Configuration
 
 ```ini
-# /etc/systemd/system/hapi-server.service
+# /etc/systemd/system/yoho-remote-server.service
 [Service]
-ExecStart=/path/to/cli/dist-exe/bun-linux-x64/hapi-server
+ExecStart=/path/to/cli/dist-exe/bun-linux-x64/yoho-remote-server
 
-# /etc/systemd/system/hapi-daemon.service
+# /etc/systemd/system/yoho-remote-daemon.service
 [Service]
-ExecStart=/path/to/cli/dist-exe/bun-linux-x64/hapi-daemon
+ExecStart=/path/to/cli/dist-exe/bun-linux-x64/yoho-remote-daemon
 Restart=always
 RestartSec=10
 ```
@@ -629,6 +629,6 @@ RestartSec=10
 1. **`cli/src/bootstrap-server.ts`** - Standalone server entry point
 2. **`cli/src/bootstrap-daemon.ts`** - Standalone daemon entry point
 3. **`cli/scripts/build-executable.ts`** - Supports `--name` parameter for different executables
-4. **`cli/src/daemon/controlClient.ts`** - `getInstalledCliMtimeMs()` checks `hapi-daemon` mtime
+4. **`cli/src/daemon/controlClient.ts`** - `getInstalledCliMtimeMs()` checks `yoho-remote-daemon` mtime
 5. **`cli/src/utils/spawnHappyCLI.ts`** - Detects standalone mode, uses correct executable
 6. **`deploy.sh`** - Selective build and restart logic

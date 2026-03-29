@@ -1,6 +1,6 @@
 /**
- * HAPI MCP server
- * Provides HAPI CLI specific tools including chat session title management
+ * YR MCP server
+ * Provides yoho-remote CLI specific tools including chat session title management
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -13,7 +13,7 @@ import { ApiSessionClient } from "@/api/apiSession";
 import type { ApiClient } from "@/api/api";
 import { randomUUID } from "node:crypto";
 
-interface StartHappyServerOptions {
+interface StartYohoRemoteServerOptions {
     sessionSource?: string
     sessionCaller?: string
     apiClient?: ApiClient
@@ -21,11 +21,11 @@ interface StartHappyServerOptions {
     hapiSessionId?: string
 }
 
-export async function startHappyServer(client: ApiSessionClient, options?: StartHappyServerOptions) {
-    logger.debug(`[hapiMCP] startHappyServer: sessionSource=${options?.sessionSource}, clientSessionId=${client.sessionId}`)
+export async function startYohoRemoteServer(client: ApiSessionClient, options?: StartYohoRemoteServerOptions) {
+    logger.debug(`[yrMCP] startYohoRemoteServer: sessionSource=${options?.sessionSource}, clientSessionId=${client.sessionId}`)
     // Handler that sends title updates via the client
     const handler = async (title: string) => {
-        logger.debug('[hapiMCP] Changing title to:', title);
+        logger.debug('[yrMCP] Changing title to:', title);
         try {
             // Send title as a summary message, similar to title generator
             client.sendClaudeSessionMessage({
@@ -45,7 +45,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
     //
 
     const mcp = new McpServer({
-        name: "HAPI MCP",
+        name: "YR MCP",
         version: "1.0.0",
     });
 
@@ -63,7 +63,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
             inputSchema: changeTitleInputSchema,
         }, async (args: { title: string }) => {
             const response = await handler(args.title);
-            logger.debug('[hapiMCP] Response:', response);
+            logger.debug('[yrMCP] Response:', response);
 
             if (response.success) {
                 return {
@@ -98,7 +98,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
             machineId: options.machineId,
             brainSessionId: options.hapiSessionId,
         });
-        logger.debug('[hapiMCP] Brain tools registered');
+        logger.debug('[yrMCP] Brain tools registered');
     }
 
     const transport = new StreamableHTTPServerTransport({
@@ -132,7 +132,7 @@ export async function startHappyServer(client: ApiSessionClient, options?: Start
         url: baseUrl.toString(),
         toolNames,
         stop: () => {
-            logger.debug('[hapiMCP] Stopping server');
+            logger.debug('[yrMCP] Stopping server');
             mcp.close();
             server.close();
         }

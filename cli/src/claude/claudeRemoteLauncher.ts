@@ -312,7 +312,7 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                     const isSidechain = assistantMsg.parent_tool_use_id !== undefined;
 
                     if (!isSidechain) {
-                        // Check if all tool calls are pre-allowed (e.g. hapi MCP tools)
+                        // Check if all tool calls are pre-allowed (e.g. YR MCP tools)
                         // Pre-allowed tools don't need permission delay since they execute immediately
                         const allPreAllowed = assistantMsg.message.content.every((block) => {
                             if (block.type !== 'tool_use') return true;

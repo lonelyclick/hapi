@@ -10,8 +10,8 @@
  * and the daemon will not work properly!
  * 
  * The integration test environment uses .env.integration-test which sets:
- * - YOHO_REMOTE_HOME=~/.hapi-dev-test (DIFFERENT from dev's ~/.hapi-dev!)
- * - YOHO_REMOTE_URL=http://localhost:3006 (local hapi-server)
+ * - YOHO_REMOTE_HOME=~/.yoho-remote-dev-test (DIFFERENT from dev's ~/.yoho-remote-dev!)
+ * - YOHO_REMOTE_URL=http://localhost:3006 (local yoho-remote-server)
  * - CLI_API_TOKEN=... (must match the server)
  */
 
@@ -30,7 +30,7 @@ import {
 } from '@/daemon/controlClient';
 import { readDaemonState, clearDaemonState } from '@/persistence';
 import { Metadata } from '@/api/types';
-import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
+import { spawnYohoRemoteCLI } from '@/utils/spawnYohoRemoteCLI';
 import { getLatestDaemonLog } from '@/ui/logger';
 import { isProcessAlive, isWindows, killProcess, killProcessByChildProcess } from '@/utils/process';
 
@@ -87,7 +87,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
     
     // Start fresh daemon for this test
     // This will return and start a background process - we don't need to wait for it
-    void spawnHappyCLI(['daemon', 'start'], {
+    void spawnYohoRemoteCLI(['daemon', 'start'], {
       stdio: 'ignore'
     });
     
@@ -122,9 +122,9 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
       path: '/test/path',
       host: 'test-host',
       homeDir: '/test/home',
-      happyHomeDir: '/test/happy-home',
-      happyLibDir: '/test/happy-lib',
-      happyToolsDir: '/test/happy-tools',
+      yohoRemoteHomeDir: '/test/yoho-remote-home',
+      yohoRemoteLibDir: '/test/yoho-remote-lib',
+      yohoRemoteToolsDir: '/test/yoho-remote-tools',
       hostPid: 99999,
       startedBy: 'terminal',
       machineId: 'test-machine-123'
@@ -137,8 +137,8 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
     expect(sessions).toHaveLength(1);
     
     const tracked = sessions[0];
-    expect(tracked.startedBy).toBe('hapi directly - likely by user from terminal');
-    expect(tracked.happySessionId).toBe('test-session-123');
+    expect(tracked.startedBy).toBe('yr directly - likely by user from terminal');
+    expect(tracked.yohoRemoteSessionId).toBe('test-session-123');
     expect(tracked.pid).toBe(99999);
   });
 
@@ -151,15 +151,15 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
     // Verify session is tracked
     const sessions = await listDaemonSessions();
     const spawnedSession = sessions.find(
-      (s: any) => s.happySessionId === response.sessionId
+      (s: any) => s.yohoRemoteSessionId === response.sessionId
     );
     
     expect(spawnedSession).toBeDefined();
     expect(spawnedSession.startedBy).toBe('daemon');
     
     // Clean up - stop the spawned session
-    expect(spawnedSession.happySessionId).toBeDefined();
-    await stopDaemonSession(spawnedSession.happySessionId);
+    expect(spawnedSession.yohoRemoteSessionId).toBeDefined();
+    await stopDaemonSession(spawnedSession.yohoRemoteSessionId);
   });
 
   it('stress test: spawn / stop', { timeout: 60_000 }, async () => {
@@ -193,17 +193,17 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
   });
 
   it('should track both daemon-spawned and terminal sessions', async () => {
-    // Spawn a real hapi process that looks like it was started from terminal
-    const terminalHappyProcess = spawnHappyCLI([
-      '--hapi-starting-mode', 'remote',
+    // Spawn a real yoho-remote process that looks like it was started from terminal
+    const terminalYohoRemoteProcess = spawnYohoRemoteCLI([
+      '--yoho-remote-starting-mode', 'remote',
       '--started-by', 'terminal'
     ], {
       cwd: '/tmp',
       detached: true,
       stdio: 'ignore'
     });
-    if (!terminalHappyProcess || !terminalHappyProcess.pid) {
-      throw new Error('Failed to spawn terminal hapi process');
+    if (!terminalYohoRemoteProcess || !terminalYohoRemoteProcess.pid) {
+      throw new Error('Failed to spawn terminal yoho-remote process');
     }
     // Give time to start & report itself
     await new Promise(resolve => setTimeout(resolve, 5_000));
@@ -217,25 +217,25 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
 
     // Verify we have one of each type
     const terminalSession = sessions.find(
-      (s: any) => s.pid === terminalHappyProcess.pid
+      (s: any) => s.pid === terminalYohoRemoteProcess.pid
     );
     const daemonSession = sessions.find(
-      (s: any) => s.happySessionId === spawnResponse.sessionId
+      (s: any) => s.yohoRemoteSessionId === spawnResponse.sessionId
     );
 
     expect(terminalSession).toBeDefined();
-    expect(terminalSession.startedBy).toBe('hapi directly - likely by user from terminal');
+    expect(terminalSession.startedBy).toBe('yr directly - likely by user from terminal');
     
     expect(daemonSession).toBeDefined();
     expect(daemonSession.startedBy).toBe('daemon');
 
     // Clean up both sessions
     await stopDaemonSession('terminal-session-aaa');
-    await stopDaemonSession(daemonSession.happySessionId);
+    await stopDaemonSession(daemonSession.yohoRemoteSessionId);
     
     // Also kill the terminal process directly to be sure
     try {
-      await killProcessByChildProcess(terminalHappyProcess);
+      await killProcessByChildProcess(terminalYohoRemoteProcess);
     } catch (e) {
       // Process might already be dead
     }
@@ -247,7 +247,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
 
     // Verify webhook was processed (session ID updated)
     const sessions = await listDaemonSessions();
-    const session = sessions.find((s: any) => s.happySessionId === spawnResponse.sessionId);
+    const session = sessions.find((s: any) => s.yohoRemoteSessionId === spawnResponse.sessionId);
     expect(session).toBeDefined();
 
     // Clean up
@@ -306,14 +306,14 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
     // List should show all sessions
     const sessions = await listDaemonSessions();
     const daemonSessions = sessions.filter(
-      (s: any) => s.startedBy === 'daemon' && spawnedSessionIds.includes(s.happySessionId)
+      (s: any) => s.startedBy === 'daemon' && spawnedSessionIds.includes(s.yohoRemoteSessionId)
     );
     expect(daemonSessions.length).toBeGreaterThanOrEqual(3);
 
     // Stop all spawned sessions
     for (const session of daemonSessions) {
-      expect(session.happySessionId).toBeDefined();
-      await stopDaemonSession(session.happySessionId);
+      expect(session.yohoRemoteSessionId).toBeDefined();
+      await stopDaemonSession(session.yohoRemoteSessionId);
     }
   });
 
@@ -391,13 +391,13 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
    * 3. Test runs `yarn build` to recompile with new version
    * 4. Daemon's heartbeat (every 30s) reads package.json and compares to its compiled version
    * 5. Daemon detects mismatch: package.json != configuration.currentCliVersion
-   * 6. Daemon spawns new daemon via spawnHappyCLI(['daemon', 'start'])
+   * 6. Daemon spawns new daemon via spawnYohoRemoteCLI(['daemon', 'start'])
    * 7. New daemon starts, reads daemon.state.json, sees old version != its compiled version
    * 8. New daemon calls stopDaemon() to kill old daemon, then takes over
    * 
-   * This simulates what happens during `npm upgrade hapi`:
+   * This simulates what happens during `npm upgrade yoho-remote`:
    * - Running daemon has OLD version loaded in memory (configuration.currentCliVersion)
-   * - npm replaces node_modules/hapi/ with NEW version files
+   * - npm replaces node_modules/yoho-remote/ with NEW version files
    * - package.json on disk now has NEW version
    * - Daemon reads package.json, detects mismatch, triggers self-update
    * - Key difference: npm atomically replaces the entire module directory, while
@@ -439,7 +439,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
       // and think it is a new version
       // We are not using yarn build here because it cleans out dist/
       // and we want to avoid that, 
-      // otherwise daemon will spawn a non existing happy js script.
+      // otherwise daemon will spawn a non existing yoho-remote js script.
       // We need to remove index, but not the other files, otherwise some of our code might fail when called from within the daemon.
       execSync('yarn build', { stdio: 'ignore' });
       
@@ -449,7 +449,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
 
       // The daemon should automatically detect the version mismatch and restart itself
       // We check once per minute, wait for a little longer than that
-      await new Promise(resolve => setTimeout(resolve, parseInt(process.env.HAPI_DAEMON_HEARTBEAT_INTERVAL || '30000') + 10_000));
+      await new Promise(resolve => setTimeout(resolve, parseInt(process.env.YR_DAEMON_HEARTBEAT_INTERVAL || '30000') + 10_000));
 
       // Check that the daemon is running with the new version
       const finalState = await readDaemonState();
@@ -469,7 +469,7 @@ describe.skipIf(!await isServerHealthy())('Daemon Integration Tests', { timeout:
 
   // TODO: Add a test to see if a corrupted file will work
   
-  // TODO: Test npm uninstall scenario - daemon should gracefully handle when hapi is uninstalled
+  // TODO: Test npm uninstall scenario - daemon should gracefully handle when yoho-remote is uninstalled
   // Current behavior: daemon tries to spawn new daemon on version mismatch but entrypoint is gone
   // Expected: daemon should detect missing entrypoint and either exit cleanly or at minimum not respawn infinitely
 });

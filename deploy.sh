@@ -158,28 +158,28 @@ if [[ "$BUILD_DAEMON" == "true" ]]; then
 fi
 
 # 确保 systemd service 包含 EnvironmentFile（加载 .env 中的 LITELLM 等变量）
-HAPI_ENV_FILE="/home/guang/softwares/hapi/.env"
-SERVICE_FILE="/etc/systemd/system/hapi-server.service"
+YR_ENV_FILE="/home/guang/softwares/yoho-remote/.env"
+SERVICE_FILE="/etc/systemd/system/yoho-remote-server.service"
 if ! grep -q "EnvironmentFile=" "$SERVICE_FILE" 2>/dev/null; then
     echo "=== Adding EnvironmentFile to systemd service..."
-    echo "guang" | sudo -S sed -i "/^ExecStart=/i EnvironmentFile=$HAPI_ENV_FILE" "$SERVICE_FILE"
+    echo "guang" | sudo -S sed -i "/^ExecStart=/i EnvironmentFile=$YR_ENV_FILE" "$SERVICE_FILE"
     echo "guang" | sudo -S systemctl daemon-reload
 fi
 
 echo "=== Restarting services..."
 if [[ "$BUILD_DAEMON" == "true" ]]; then
     echo "    (with daemon restart)"
-    echo "guang" | sudo -S systemctl restart hapi-daemon.service
+    echo "guang" | sudo -S systemctl restart yoho-remote-daemon.service
 fi
-echo "guang" | sudo -S systemctl restart hapi-server.service
+echo "guang" | sudo -S systemctl restart yoho-remote-server.service
 
 # 等待服务启动
 sleep 2
 
 # 验证服务运行
-if ! systemctl is-active --quiet hapi-server.service; then
-    echo "ERROR: hapi-server.service failed to start"
-    echo "guang" | sudo -S journalctl -u hapi-server.service -n 20 --no-pager
+if ! systemctl is-active --quiet yoho-remote-server.service; then
+    echo "ERROR: yoho-remote-server.service failed to start"
+    echo "guang" | sudo -S journalctl -u yoho-remote-server.service -n 20 --no-pager
     exit 1
 fi
 

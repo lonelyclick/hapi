@@ -14,6 +14,6 @@ export async function uninstall(): Promise<void> {
         throw new Error('Daemon uninstallation requires sudo privileges. Please run with sudo.');
     }
     
-    logger.info('Uninstalling HAPI CLI daemon for macOS...');
+    logger.info('Uninstalling yoho-remote daemon for macOS...');
     await uninstallMac();
 }

@@ -10,7 +10,7 @@ type GeminiCredentialFile = {
     apiKey?: unknown;
 };
 
-type HapiSettingsFile = {
+type YohoRemoteSettingsFile = {
     geminiApiKey?: unknown;
 };
 
@@ -43,7 +43,7 @@ function loadGeminiApiKeyFromFiles(): string | null {
         return credentialKey;
     }
 
-    const settingsFile = readJsonFile(configuration.settingsFile) as HapiSettingsFile | null;
+    const settingsFile = readJsonFile(configuration.settingsFile) as YohoRemoteSettingsFile | null;
     const settingsKey = asNonEmptyString(settingsFile?.geminiApiKey);
     if (settingsKey) {
         logger.debug(`[Gemini] Loaded API key from ${configuration.settingsFile}`);

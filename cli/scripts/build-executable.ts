@@ -85,7 +85,7 @@ function parseTarget(target: string): { platform: string; arch: string } {
 
 function getFeatureFlag(platform: string, arch: string): string {
     const platformToken = platform === 'win32' ? 'WIN32' : platform.toUpperCase();
-    return `HAPI_TARGET_${platformToken}_${arch.toUpperCase()}`;
+    return `YR_TARGET_${platformToken}_${arch.toUpperCase()}`;
 }
 
 function getPlatformDir(platform: string, arch: string): string {

@@ -14,6 +14,6 @@ export async function install(): Promise<void> {
         throw new Error('Daemon installation requires sudo privileges. Please run with sudo.');
     }
     
-    logger.info('Installing HAPI CLI daemon for macOS...');
+    logger.info('Installing yoho-remote daemon for macOS...');
     await installMac();
 }

@@ -17,7 +17,7 @@ import { getEnvironmentInfo } from '@/ui/doctor';
 import { configuration } from '@/configuration';
 import { notifyDaemonSessionStarted } from '@/daemon/controlClient';
 import { initialMachineMetadata } from '@/daemon/run';
-import { startHappyServer } from '@/claude/utils/startHappyServer';
+import { startYohoRemoteServer } from '@/claude/utils/startYohoRemoteServer';
 import { startHookServer } from '@/claude/utils/startHookServer';
 import { generateHookSettingsFile, cleanupHookSettingsFile, updateHookSettingsFastMode, readHookSettingsFastMode } from '@/claude/utils/generateHookSettings';
 import { registerKillSessionHandler } from './registerKillSessionHandler';
@@ -59,7 +59,7 @@ export interface StartOptions {
     claudeEnvVars?: Record<string, string>
     claudeArgs?: string[]
     startedBy?: 'daemon' | 'terminal'
-    hapiSessionId?: string
+    yohoRemoteSessionId?: string
     resumeSessionId?: string
 }
 
@@ -68,13 +68,13 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     const sessionTag = randomUUID();
     const startedBy = options.startedBy ?? 'terminal';
     const runtimeAgent = extractClaudeAgent(options.claudeArgs);
-    const sessionSource = process.env.HAPI_SESSION_SOURCE?.trim();
-    const mainSessionId = process.env.HAPI_MAIN_SESSION_ID?.trim();
-    const sessionCaller = process.env.HAPI_CALLER?.trim();
+    const sessionSource = process.env.YR_SESSION_SOURCE?.trim();
+    const mainSessionId = process.env.YR_MAIN_SESSION_ID?.trim();
+    const sessionCaller = process.env.YR_CALLER?.trim();
     logger.debug(`[START] sessionSource=${sessionSource}, mainSessionId=${mainSessionId}, caller=${sessionCaller}`);
 
     // Log environment info at startup
-    logger.debugLargeJson('[START] HAPI process started', getEnvironmentInfo());
+    logger.debugLargeJson('[START] YR process started', getEnvironmentInfo());
     logger.debug(`[START] Options: startedBy=${startedBy}, startingMode=${options.startingMode}`);
 
     // Validate daemon spawn requirements
@@ -116,9 +116,9 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         source: sessionSource || undefined,
         mainSessionId: mainSessionId || undefined,
         homeDir: os.homedir(),
-        happyHomeDir: configuration.happyHomeDir,
-        happyLibDir: runtimePath(),
-        happyToolsDir: resolve(runtimePath(), 'tools', 'unpacked'),
+        yohoRemoteHomeDir: configuration.yohoRemoteHomeDir,
+        yohoRemoteLibDir: runtimePath(),
+        yohoRemoteToolsDir: resolve(runtimePath(), 'tools', 'unpacked'),
         startedFromDaemon: startedBy === 'daemon',
         hostPid: process.pid,
         startedBy,
@@ -130,13 +130,13 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         worktree: worktreeInfo ?? undefined,
     };
     let response: Awaited<ReturnType<typeof api.getOrCreateSession>> | null = null;
-    const hapiSessionId = options.hapiSessionId?.trim() || null;
-    if (hapiSessionId) {
+    const yohoRemoteSessionId = options.yohoRemoteSessionId?.trim() || null;
+    if (yohoRemoteSessionId) {
         try {
-            response = await api.getSession(hapiSessionId);
+            response = await api.getSession(yohoRemoteSessionId);
             logger.debug(`Session loaded: ${response.id}`);
         } catch (error) {
-            logger.debug(`[START] Failed to load session ${hapiSessionId}, creating new one`, error);
+            logger.debug(`[START] Failed to load session ${yohoRemoteSessionId}, creating new one`, error);
         }
     }
     if (!response) {
@@ -175,7 +175,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
 
     // Create realtime session
     const session = api.sessionSyncClient(response);
-    if (hapiSessionId) {
+    if (yohoRemoteSessionId) {
         session.updateMetadata((current) => ({
             ...current,
             ...metadata,
@@ -185,15 +185,15 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         }));
     }
 
-    // Start HAPI MCP server
-    const happyServer = await startHappyServer(session, {
+    // Start YR MCP server
+    const yohoRemoteServer = await startYohoRemoteServer(session, {
         sessionSource: sessionSource || undefined,
         sessionCaller: sessionCaller || undefined,
         apiClient: api,
         machineId,
-        hapiSessionId: response.id,
+        yohoRemoteSessionId: response.id,
     });
-    logger.debug(`[START] HAPI MCP server started at ${happyServer.url}`);
+    logger.debug(`[START] YR MCP server started at ${yohoRemoteServer.url}`);
 
     // Variable to track current session instance (updated via onSessionReady callback)
     const currentSessionRef: { current: Session | null } = { current: null };
@@ -225,7 +225,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     });
     logger.debug(`[START] Hook server started on port ${hookServer.port}`);
 
-    const claudeSettingsType = process.env.HAPI_CLAUDE_SETTINGS_TYPE as 'litellm' | 'claude' | undefined;
+    const claudeSettingsType = process.env.YR_CLAUDE_SETTINGS_TYPE as 'litellm' | 'claude' | undefined;
     const hookSettingsPath = generateHookSettingsFile(hookServer.port, hookServer.token, claudeSettingsType);
     logger.debug(`[START] Generated hook settings file: ${hookSettingsPath} (settingsType=${claudeSettingsType ?? 'default'})`);
 
@@ -269,7 +269,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     let currentAppendSystemPrompt: string | undefined = undefined; // Track current append system prompt
     let currentAllowedTools: string[] | undefined = sessionSource === 'brain'
         ? [
-            ...happyServer.toolNames
+            ...yohoRemoteServer.toolNames
                 .filter(t => sessionCaller === 'feishu' ? t !== 'change_title' : true)
                 .map(toolName => `mcp__yoho_remote__${toolName}`),
             'mcp__yoho-memory__recall',
@@ -413,8 +413,8 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
                 await session.close();
             }
 
-            // Stop HAPI MCP server
-            happyServer.stop();
+            // Stop YR MCP server
+            yohoRemoteServer.stop();
 
             // Stop Hook server and cleanup settings file
             hookServer.stop();
@@ -494,7 +494,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             ? [
                 // Brain mode: whitelist only MCP tools, no built-in tools (Read, Write, Bash, etc.)
                 // Feishu sessions: exclude change_title (title is set server-side)
-                ...happyServer.toolNames
+                ...yohoRemoteServer.toolNames
                     .filter(t => sessionCaller === 'feishu' ? t !== 'change_title' : true)
                     .map(toolName => `mcp__yoho_remote__${toolName}`),
                 'mcp__yoho-memory__recall',
@@ -506,7 +506,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
                 'mcp__yoho-credentials__set_credential',
                 'mcp__yoho-credentials__delete_credential',
             ]
-            : happyServer.toolNames.map(toolName => `mcp__yoho_remote__${toolName}`),
+            : yohoRemoteServer.toolNames.map(toolName => `mcp__yoho_remote__${toolName}`),
         onModeChange: (newMode) => {
             session.sendSessionEvent({ type: 'switch', mode: newMode });
             session.updateAgentState((currentState) => ({
@@ -521,7 +521,7 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         mcpServers: {
             'yoho_remote': {
                 type: 'http' as const,
-                url: happyServer.url,
+                url: yohoRemoteServer.url,
             },
             'yoho-memory': {
                 command: 'bun',
@@ -565,9 +565,9 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     logger.debug('Closing session...');
     await session.close();
 
-    // Stop HAPI MCP server
-    happyServer.stop();
-    logger.debug('Stopped HAPI MCP server');
+    // Stop YR MCP server
+    yohoRemoteServer.stop();
+    logger.debug('Stopped YR MCP server');
 
     // Stop Hook server and cleanup settings file
     hookServer.stop();

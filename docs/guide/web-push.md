@@ -62,7 +62,7 @@ export WEB_PUSH_VAPID_SUBJECT="mailto:your-email@example.com"
 
 **方式二：settings.json**
 
-编辑 `~/.hapi/settings.json`：
+编辑 `~/.yoho-remote/settings.json`：
 
 ```json
 {

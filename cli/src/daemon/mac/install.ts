@@ -1,8 +1,8 @@
 /**
- * Installation script for HAPI daemon using macOS LaunchDaemons
- * 
- * NOTE: This installation method is currently NOT USED in favor of auto-starting 
- * the daemon when the user runs the hapi command. 
+ * Installation script for Yoho Remote daemon using macOS LaunchDaemons
+ *
+ * NOTE: This installation method is currently NOT USED in favor of auto-starting
+ * the daemon when the user runs the yoho-remote command. 
  * 
  * Why we're not using this approach:
  * 1. Installing a LaunchDaemon requires sudo permissions, which users might not be comfortable with
@@ -18,7 +18,7 @@ import { logger } from '@/ui/logger';
 import { trimIdent } from '@/utils/trimIdent';
 import os from 'os';
 
-const PLIST_LABEL = 'com.hapi-cli.daemon';
+const PLIST_LABEL = 'com.yoho-remote.daemon';
 const PLIST_FILE = `/Library/LaunchDaemons/${PLIST_LABEL}.plist`;
 
 // NOTE: Local installation like --local does not make too much sense I feel like
@@ -32,7 +32,7 @@ export async function install(): Promise<void> {
         }
 
         // Get the path to the hapi CLI executable
-        const happyPath = process.argv[0]; // Node.js executable
+        const cliPath = process.argv[0]; // Node.js executable
         const scriptPath = process.argv[1]; // Script path
 
         // Create plist content
@@ -46,14 +46,14 @@ export async function install(): Promise<void> {
                 
                 <key>ProgramArguments</key>
                 <array>
-                    <string>${happyPath}</string>
+                    <string>${cliPath}</string>
                     <string>${scriptPath}</string>
-                    <string>hapi-daemon</string>
+                    <string>yoho-remote-daemon</string>
                 </array>
                 
                 <key>EnvironmentVariables</key>
                 <dict>
-                    <key>HAPI_DAEMON_MODE</key>
+                    <key>YR_DAEMON_MODE</key>
                     <string>true</string>
                 </dict>
                 
@@ -64,10 +64,10 @@ export async function install(): Promise<void> {
                 <true/>
                 
                 <key>StandardErrorPath</key>
-                <string>${os.homedir()}/.hapi/daemon.err</string>
+                <string>${os.homedir()}/.yoho-remote/daemon.err</string>
                 
                 <key>StandardOutPath</key>
-                <string>${os.homedir()}/.hapi/daemon.log</string>
+                <string>${os.homedir()}/.yoho-remote/daemon.log</string>
                 
                 <key>WorkingDirectory</key>
                 <string>/tmp</string>
@@ -85,7 +85,7 @@ export async function install(): Promise<void> {
         execSync(`launchctl load ${PLIST_FILE}`, { stdio: 'inherit' });
 
         logger.info('Daemon installed and started successfully');
-        logger.info('Check logs at ~/.hapi/daemon.log');
+        logger.info('Check logs at ~/.yoho-remote/daemon.log');
 
     } catch (error) {
         logger.debug('Failed to install daemon:', error);

@@ -1,5 +1,5 @@
 /**
- * Telegram Bot for HAPI
+ * Telegram Bot for Yoho Remote
  *
  * Simplified bot that only handles notifications (permission requests and ready events).
  * All interactive features are handled by the Telegram Mini App.
@@ -23,7 +23,7 @@ export interface HappyBotConfig {
 }
 
 /**
- * HAPI Telegram Bot - Notification-only mode
+ * Yoho Remote Telegram Bot - Notification-only mode
  */
 export class HappyBot {
     private bot: Bot<BotContext>
@@ -91,13 +91,13 @@ export class HappyBot {
     async start(): Promise<void> {
         if (this.isRunning) return
 
-        console.log('[HAPIBot] Starting Telegram bot...')
+        console.log('[YRBot] Starting Telegram bot...')
         this.isRunning = true
 
         // Start polling
         this.bot.start({
             onStart: (botInfo) => {
-                console.log(`[HAPIBot] Bot @${botInfo.username} started`)
+                console.log(`[YRBot] Bot @${botInfo.username} started`)
             }
         })
     }
@@ -108,7 +108,7 @@ export class HappyBot {
     async stop(): Promise<void> {
         if (!this.isRunning) return
 
-        console.log('[HAPIBot] Stopping Telegram bot...')
+        console.log('[YRBot] Stopping Telegram bot...')
 
         // Unsubscribe from sync events
         if (this.unsubscribeSyncEvents) {
@@ -132,7 +132,7 @@ export class HappyBot {
     private setupMiddleware(): void {
         // Error handling middleware
         this.bot.catch((err) => {
-            console.error('[HAPIBot] Error:', err.message)
+            console.error('[YRBot] Error:', err.message)
         })
     }
 
@@ -143,14 +143,14 @@ export class HappyBot {
         // /app - Open Telegram Mini App (primary entry point)
         this.bot.command('app', async (ctx) => {
             const keyboard = new InlineKeyboard().webApp('Open App', this.miniAppUrl)
-            await ctx.reply('Open HAPI Mini App:', { reply_markup: keyboard })
+            await ctx.reply('Open Yoho Remote Mini App:', { reply_markup: keyboard })
         })
 
         // /start - Simple welcome with Mini App link
         this.bot.command('start', async (ctx) => {
             const keyboard = new InlineKeyboard().webApp('Open App', this.miniAppUrl)
             await ctx.reply(
-                'Welcome to HAPI Bot!\n\n' +
+                'Welcome to Yoho Remote Bot!\n\n' +
                 'Use the Mini App for full session management.',
                 { reply_markup: keyboard }
             )
@@ -211,7 +211,7 @@ export class HappyBot {
 
             if (eventType === 'ready') {
                 this.sendReadyNotification(event.sessionId).catch((error) => {
-                    console.error('[HAPIBot] Failed to send ready notification:', error)
+                    console.error('[YRBot] Failed to send ready notification:', error)
                 })
             }
         }
@@ -281,7 +281,7 @@ export class HappyBot {
                     { reply_markup: keyboard, parse_mode: 'HTML' }
                 )
             } catch (error) {
-                console.error(`[HAPIBot] Failed to send ready notification to chat ${chatId}:`, error)
+                console.error(`[YRBot] Failed to send ready notification to chat ${chatId}:`, error)
             }
         }
     }
@@ -335,7 +335,7 @@ export class HappyBot {
 
         // 自动批准所有新的权限请求
         this.autoApprovePermissions(currentSession.id, newRequests, requests).catch(err => {
-            console.error('[HAPIBot] Failed to auto-approve permissions:', err)
+            console.error('[YRBot] Failed to auto-approve permissions:', err)
         })
     }
 
@@ -379,9 +379,9 @@ export class HappyBot {
 
             try {
                 await this.syncEngine.approvePermission(sessionId, requestId, undefined, undefined, 'approved')
-                console.log(`[HAPIBot] Auto-approved permission request ${requestId} for tool ${request.tool}`)
+                console.log(`[YRBot] Auto-approved permission request ${requestId} for tool ${request.tool}`)
             } catch (error) {
-                console.error(`[HAPIBot] Failed to auto-approve permission ${requestId}:`, error)
+                console.error(`[YRBot] Failed to auto-approve permission ${requestId}:`, error)
             }
         }
 
@@ -402,7 +402,7 @@ export class HappyBot {
                     try {
                         await this.bot.api.sendMessage(chatId, text, { parse_mode: 'HTML' })
                     } catch (error) {
-                        console.error(`[HAPIBot] Failed to send notification to chat ${chatId}:`, error)
+                        console.error(`[YRBot] Failed to send notification to chat ${chatId}:`, error)
                     }
                 }
             }
@@ -425,7 +425,7 @@ export class HappyBot {
                 try {
                     await this.bot.api.sendMessage(chatId, text, { parse_mode: 'HTML' })
                 } catch (error) {
-                    console.error(`[HAPIBot] Failed to send auto-approve notification to chat ${chatId}:`, error)
+                    console.error(`[YRBot] Failed to send auto-approve notification to chat ${chatId}:`, error)
                 }
             }
         }
@@ -512,7 +512,7 @@ export class HappyBot {
                     reply_markup: keyboard
                 })
             } catch (error) {
-                console.error(`[HAPIBot] Failed to send notification to chat ${chatId}:`, error)
+                console.error(`[YRBot] Failed to send notification to chat ${chatId}:`, error)
             }
         }
     }

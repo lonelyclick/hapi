@@ -293,11 +293,11 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
         return parsed;
     }
 
-    const TURN_TIMEOUT_MS = parseTimeoutEnv('HAPI_CODEX_TURN_TIMEOUT_MS', 3 * 60 * 60 * 1000);
-    const TURN_COMPLETE_GRACE_MS = parseTimeoutEnv('HAPI_CODEX_TURN_COMPLETE_GRACE_MS', 15000);
-    const mcpLogEnabled = parseBooleanEnv('HAPI_MCP_EVENT_LOG', true);
-    const mcpLogSampleRate = parseSampleRateEnv('HAPI_MCP_EVENT_LOG_SAMPLE')
-        ?? parseSampleRateEnv('HAPI_MCP_EVENT_LOG_SAMPLE_RATE')
+    const TURN_TIMEOUT_MS = parseTimeoutEnv('YR_CODEX_TURN_TIMEOUT_MS', 3 * 60 * 60 * 1000);
+    const TURN_COMPLETE_GRACE_MS = parseTimeoutEnv('YR_CODEX_TURN_COMPLETE_GRACE_MS', 15000);
+    const mcpLogEnabled = parseBooleanEnv('YR_MCP_EVENT_LOG', true);
+    const mcpLogSampleRate = parseSampleRateEnv('YR_MCP_EVENT_LOG_SAMPLE')
+        ?? parseSampleRateEnv('YR_MCP_EVENT_LOG_SAMPLE_RATE')
         ?? 1;
 
     const permissionHandler = new CodexPermissionHandler(session.client);
@@ -719,13 +719,13 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
             pending = null;
             if (!message) {
                 const waitSignal = abortController.signal;
-                console.error('[HAPI codex] Waiting for messages...');
+                console.error('[YR codex] Waiting for messages...');
                 const batch = await session.queue.waitForMessagesAndGetAsString(waitSignal);
-                console.error('[HAPI codex] Got batch:', batch ? 'yes' : 'no', 'shouldExit:', shouldExit);
+                console.error('[YR codex] Got batch:', batch ? 'yes' : 'no', 'shouldExit:', shouldExit);
                 if (!batch) {
                     if (waitSignal.aborted && !shouldExit) {
                         logger.debug('[codex]: Wait aborted while idle; ignoring and continuing');
-                        console.error('[HAPI codex] Wait aborted while idle, continuing...');
+                        console.error('[YR codex] Wait aborted while idle, continuing...');
                         continue;
                     }
                     logger.debug(`[codex]: batch=${!!batch}, shouldExit=${shouldExit}`);
@@ -767,7 +767,7 @@ export async function codexRemoteLauncher(session: CodexSession): Promise<'switc
 
             messageBuffer.addMessage(message.message, 'user');
             currentModeHash = message.hash;
-            console.error('[HAPI codex] Processing message:', message.message.slice(0, 50));
+            console.error('[YR codex] Processing message:', message.message.slice(0, 50));
             const outgoingMessage = appendTitleInstructionIfNeeded(message.message);
 
             try {

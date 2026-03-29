@@ -15,10 +15,10 @@ jobs:
             - name: Create integration test env
               run: |
                   {
-                      echo "YOHO_REMOTE_HOME=~/.hapi-dev-test"
+                      echo "YOHO_REMOTE_HOME=~/.yoho-remote-dev-test"
                       echo "YOHO_REMOTE_URL=http://localhost:3006"
                       echo "CLI_API_TOKEN=${CLI_API_TOKEN:-dev-test-token}"
-                      echo "HAPI_DAEMON_HTTP_TIMEOUT=60000"
-                      echo "HAPI_DAEMON_HEARTBEAT_INTERVAL=30000"
+                      echo "YR_DAEMON_HTTP_TIMEOUT=60000"
+                      echo "YR_DAEMON_HEARTBEAT_INTERVAL=30000"
                   } > cli/.env.integration-test
             - run: bun run test

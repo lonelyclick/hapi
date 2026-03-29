@@ -10,7 +10,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-const YOHO_REMOTE_HOME = process.env.YOHO_REMOTE_HOME || join(homedir(), '.hapi')
+const YOHO_REMOTE_HOME = process.env.YOHO_REMOTE_HOME || join(homedir(), '.yoho-remote')
 const CREDENTIALS_DIR = join(YOHO_REMOTE_HOME, 'credentials')
 
 interface MigrationResult {
@@ -151,7 +151,7 @@ async function main() {
 
     for (const result of results) {
         const status = result.success ? '✅' : '❌'
-        const target = result.target.replace(YOHO_REMOTE_HOME, '~/.hapi')
+        const target = result.target.replace(YOHO_REMOTE_HOME, '~/.yoho-remote')
         console.log(`${status} ${target}`)
         if (result.error) {
             console.log(`   ${result.error}`)

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
-import { Spinner } from '@/components/Spinner'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -44,53 +43,6 @@ function RefreshIcon(props: { className?: string }) {
     )
 }
 
-function formatResetTime(isoString: string): string {
-    if (!isoString) return 'Unknown'
-    try {
-        const date = new Date(isoString)
-        const now = new Date()
-        const diff = date.getTime() - now.getTime()
-
-        if (diff < 0) return 'Just reset'
-
-        const hours = Math.floor(diff / (1000 * 60 * 60))
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-
-        if (hours > 0) {
-            return `${hours}h ${minutes}m`
-        }
-        return `${minutes}m`
-    } catch {
-        return 'Unknown'
-    }
-}
-
-function UsageBar(props: { utilization: number; label: string; resetsAt: string }) {
-    const percentage = Math.min(100, Math.max(0, props.utilization * 100))
-    const isHigh = percentage > 80
-    const isMedium = percentage > 50 && percentage <= 80
-
-    return (
-        <div className="space-y-1">
-            <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--app-hint)]">{props.label}</span>
-                <span className={`font-mono ${isHigh ? 'text-red-500' : isMedium ? 'text-yellow-500' : 'text-[var(--app-fg)]'}`}>
-                    {percentage.toFixed(1)}%
-                </span>
-            </div>
-            <div className="h-2 bg-[var(--app-border)] rounded-full overflow-hidden">
-                <div
-                    className={`h-full transition-all duration-300 ${isHigh ? 'bg-red-500' : isMedium ? 'bg-yellow-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${percentage}%` }}
-                />
-            </div>
-            <div className="text-[10px] text-[var(--app-hint)]">
-                Resets in {formatResetTime(props.resetsAt)}
-            </div>
-        </div>
-    )
-}
-
 function formatTokens(tokens: number): string {
     if (tokens >= 1_000_000) {
         return `${(tokens / 1_000_000).toFixed(2)}M`
@@ -101,64 +53,11 @@ function formatTokens(tokens: number): string {
     return tokens.toLocaleString()
 }
 
-function TokenStats(props: {
-    label: string
-    data: {
-        inputTokens: number
-        outputTokens: number
-        cacheCreationTokens: number
-        cacheReadTokens: number
-        totalTokens: number
-        sessions: number
-    }
-}) {
-    return (
-        <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--app-hint)]">{props.label}</span>
-                <span className="font-mono text-[var(--app-fg)]">{formatTokens(props.data.totalTokens)} tokens</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[10px]">
-                <div className="flex justify-between">
-                    <span className="text-[var(--app-hint)]">Input</span>
-                    <span className="font-mono">{formatTokens(props.data.inputTokens)}</span>
-                </div>
-                <div className="flex justify-between">
-                    <span className="text-[var(--app-hint)]">Output</span>
-                    <span className="font-mono">{formatTokens(props.data.outputTokens)}</span>
-                </div>
-                <div className="flex justify-between">
-                    <span className="text-[var(--app-hint)]">Cache Create</span>
-                    <span className="font-mono">{formatTokens(props.data.cacheCreationTokens)}</span>
-                </div>
-                <div className="flex justify-between">
-                    <span className="text-[var(--app-hint)]">Cache Read</span>
-                    <span className="font-mono">{formatTokens(props.data.cacheReadTokens)}</span>
-                </div>
-            </div>
-            <div className="text-[10px] text-[var(--app-hint)]">
-                {props.data.sessions} session{props.data.sessions !== 1 ? 's' : ''}
-            </div>
-        </div>
-    )
-}
-
 export default function UsagePage() {
     const { api } = useAppContext()
     const goBack = useAppGoBack()
 
-    const { data, isLoading, error, refetch, isFetching } = useQuery({
-        queryKey: ['usage'],
-        queryFn: async () => {
-            if (!api) throw new Error('API unavailable')
-            return await api.getUsage()
-        },
-        enabled: Boolean(api),
-        refetchInterval: 5 * 60_000 // 5 分钟自动刷新
-    })
-
-    // 24h hourly analysis
-    const { data: hourlyData } = useQuery({
+    const { data: hourlyData, refetch, isFetching } = useQuery({
         queryKey: ['usage-hourly'],
         queryFn: async () => {
             if (!api) throw new Error('API unavailable')
@@ -194,140 +93,6 @@ export default function UsagePage() {
 
             <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                 <div className="mx-auto w-full max-w-content p-3 space-y-4">
-                    {isLoading ? (
-                        <div className="flex justify-center py-8">
-                            <Spinner size="md" label="Loading usage data..." />
-                        </div>
-                    ) : error ? (
-                        <div className="text-center py-8 text-red-500 text-sm">
-                            {error instanceof Error ? error.message : 'Failed to load usage data'}
-                        </div>
-                    ) : (
-                        <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                            <div className="divide-y divide-[var(--app-divider)]">
-                                {/* Claude Code Usage */}
-                                <div className="px-3 py-3">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="w-6 h-6 rounded bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
-                                            <span className="text-white text-xs font-bold">C</span>
-                                        </div>
-                                        <span className="text-sm font-medium">Claude Code</span>
-                                    </div>
-
-                                    {data?.claude?.error ? (
-                                        <div className="text-xs text-[var(--app-hint)]">
-                                            {data.claude.error}
-                                        </div>
-                                    ) : data?.claude?.fiveHour || data?.claude?.sevenDay ? (
-                                        <div className="space-y-3">
-                                            {data.claude.fiveHour && (
-                                                <UsageBar
-                                                    utilization={data.claude.fiveHour.utilization}
-                                                    label="5-Hour Limit"
-                                                    resetsAt={data.claude.fiveHour.resetsAt}
-                                                />
-                                            )}
-                                            {data.claude.sevenDay && (
-                                                <UsageBar
-                                                    utilization={data.claude.sevenDay.utilization}
-                                                    label="7-Day Limit"
-                                                    resetsAt={data.claude.sevenDay.resetsAt}
-                                                />
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="text-xs text-[var(--app-hint)]">
-                                            No usage data available
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Local Token Statistics */}
-                                {data?.local && !data.local.error && (
-                                    <div className="px-3 py-3">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                                                <span className="text-white text-xs font-bold">#</span>
-                                            </div>
-                                            <span className="text-sm font-medium">Token Statistics</span>
-                                        </div>
-
-                                        <div className="space-y-4">
-                                            <TokenStats label="Today" data={data.local.today} />
-                                            <div className="border-t border-[var(--app-divider)] pt-3">
-                                                <TokenStats label="All Time" data={data.local.total} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Codex Usage */}
-                                <div className="px-3 py-3">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="w-6 h-6 rounded bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                                            <span className="text-white text-xs font-bold">X</span>
-                                        </div>
-                                        <span className="text-sm font-medium">OpenAI Codex</span>
-                                    </div>
-
-                                    {data?.codex?.error ? (
-                                        <div className="text-xs text-[var(--app-hint)]">
-                                            {data.codex.error}
-                                        </div>
-                                    ) : data?.codex?.fiveHour || data?.codex?.sevenDay ? (
-                                        <div className="space-y-3">
-                                            {data.codex.fiveHour && (
-                                                <UsageBar
-                                                    utilization={data.codex.fiveHour.utilization}
-                                                    label="5-Hour Limit"
-                                                    resetsAt={data.codex.fiveHour.resetsAt}
-                                                />
-                                            )}
-                                            {data.codex.sevenDay && (
-                                                <UsageBar
-                                                    utilization={data.codex.sevenDay.utilization}
-                                                    label="7-Day Limit"
-                                                    resetsAt={data.codex.sevenDay.resetsAt}
-                                                />
-                                            )}
-                                            {data.codex.tokenUsage && (
-                                                <div className="pt-2 border-t border-[var(--app-divider)] grid grid-cols-2 gap-2 text-[10px]">
-                                                    <div className="flex justify-between">
-                                                        <span className="text-[var(--app-hint)]">Input</span>
-                                                        <span className="font-mono">{formatTokens(data.codex.tokenUsage.inputTokens)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-[var(--app-hint)]">Output</span>
-                                                        <span className="font-mono">{formatTokens(data.codex.tokenUsage.outputTokens)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-[var(--app-hint)]">Cached</span>
-                                                        <span className="font-mono">{formatTokens(data.codex.tokenUsage.cachedInputTokens)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="text-[var(--app-hint)]">Reasoning</span>
-                                                        <span className="font-mono">{formatTokens(data.codex.tokenUsage.reasoningOutputTokens)}</span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="text-xs text-[var(--app-hint)]">
-                                            No Codex usage data available
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {data?.timestamp && (
-                                <div className="px-3 py-2 border-t border-[var(--app-divider)] text-[10px] text-[var(--app-hint)]">
-                                    Updated: {new Date(data.timestamp).toLocaleTimeString()}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* 24h Analysis Panel */}
                     {hourlyData && !hourlyData.error && hourlyData.hourly.length > 0 && (
                         <HourlyAnalysisPanel data={hourlyData} />
                     )}

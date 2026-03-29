@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
 /**
- * CLI entry point for hapi command
- * 
+ * CLI entry point for yoho-remote command
+ *
  * Simple argument parsing without any CLI framework dependencies
  */
 
@@ -74,7 +74,7 @@ import { getCliArgs } from './utils/cliArgs'
 
   await ensureRuntimeAssets()
 
-  logger.debug('Starting hapi CLI with args: ', process.argv)
+  logger.debug('Starting YR CLI with args: ', process.argv)
 
   if (subcommand === 'doctor') {
     // Check for clean subcommand
@@ -399,7 +399,7 @@ import { getCliArgs } from './utils/cliArgs'
   } else if (subcommand === 'notify') {
     // Handle notification command
     console.error(chalk.red('The `hapi notify` command is not available in direct-connect mode.'))
-    console.error(chalk.gray('Use Telegram notifications from hapi-server instead.'))
+    console.error(chalk.gray('Use Telegram notifications from yoho-remote server instead.'))
     process.exit(1)
     return;
   } else if (subcommand === 'daemon') {
@@ -567,7 +567,7 @@ ${chalk.bold('To clean up runaway processes:')} Use ${chalk.cyan('hapi doctor cl
     // Show help
     if (showHelp) {
       console.log(`
-${chalk.bold('hapi')} - Claude Code On the Go
+${chalk.bold('hapi')} - Yoho Remote
 
 ${chalk.bold('Usage:')}
   hapi [options]         Start Claude with Telegram control (direct-connect)
@@ -625,10 +625,10 @@ ${chalk.bold.cyan('Claude Code Options (from `claude --help`):')}
     await authAndSetupMachineIfNeeded();
 
     // Always auto-start daemon for simplicity
-    logger.debug('Ensuring hapi background service is running & matches our version...');
+    logger.debug('Ensuring YR background service is running & matches our version...');
 
     if (!(await isDaemonRunningCurrentlyInstalledHappyVersion())) {
-      logger.debug('Starting hapi background service...');
+      logger.debug('Starting YR background service...');
 
       // Use the built binary to spawn daemon
       const daemonProcess = spawnHappyCLI(['daemon', 'start-sync'], {
@@ -659,7 +659,7 @@ ${chalk.bold.cyan('Claude Code Options (from `claude --help`):')}
           messageLower.includes('econnrefused') || messageLower.includes('etimedout') ||
           messageLower.includes('enotfound') || messageLower.includes('network error')) {
         const { configuration } = await import('@/configuration');
-        console.error(chalk.yellow('Unable to connect to HAPI server'));
+        console.error(chalk.yellow('Unable to connect to YR server'));
         console.error(chalk.gray(`  Server URL: ${configuration.serverUrl}`));
         console.error(chalk.gray('  Please check your network connection or server status'));
       } else if (httpStatus === 403 && responseErrorText === 'Machine access denied') {

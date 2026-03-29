@@ -10,11 +10,11 @@ import { authAndSetupMachineIfNeeded } from '@/ui/auth';
 import { configuration } from '@/configuration';
 import packageJson from '../../package.json';
 import { getEnvironmentInfo } from '@/ui/doctor';
-import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
+import { spawnYohoRemoteCLI } from '@/utils/spawnYohoRemoteCLI';
 import { writeDaemonState, DaemonLocallyPersistedState, readDaemonState, readSettings, applyPathMapping, acquireDaemonLock, releaseDaemonLock } from '@/persistence';
 import { isProcessAlive, isWindows, killProcess, killProcessByChildProcess } from '@/utils/process';
 
-import { cleanupDaemonState, getInstalledCliMtimeMs, isDaemonRunningCurrentlyInstalledHappyVersion, stopDaemon } from './controlClient';
+import { cleanupDaemonState, getInstalledCliMtimeMs, isDaemonRunningCurrentlyInstalledVersion, stopDaemon } from './controlClient';
 import { startDaemonControlServer } from './controlServer';
 import { createWorktree, removeWorktree, type WorktreeInfo } from './worktree';
 import { join } from 'path';
@@ -24,10 +24,10 @@ import { runtimePath } from '@/projectPath';
 export const initialMachineMetadata: MachineMetadata = {
   host: os.hostname(),
   platform: os.platform(),
-  happyCliVersion: packageJson.version,
+  yohoRemoteCliVersion: packageJson.version,
   homeDir: os.homedir(),
-  happyHomeDir: configuration.happyHomeDir,
-  happyLibDir: runtimePath()
+  yohoRemoteHomeDir: configuration.yohoRemoteHomeDir,
+  yohoRemoteLibDir: runtimePath()
 };
 
 export async function startDaemon(): Promise<void> {
@@ -40,8 +40,8 @@ export async function startDaemon(): Promise<void> {
   //
   // In case the setup malfunctions - our signal handlers will not properly
   // shut down. We will force exit the process with code 1.
-  let requestShutdown: (source: 'hapi-app' | 'hapi-cli' | 'os-signal' | 'exception', errorMessage?: string) => void;
-  let resolvesWhenShutdownRequested = new Promise<({ source: 'hapi-app' | 'hapi-cli' | 'os-signal' | 'exception', errorMessage?: string })>((resolve) => {
+  let requestShutdown: (source: 'yr-app' | 'yr-cli' | 'os-signal' | 'exception', errorMessage?: string) => void;
+  let resolvesWhenShutdownRequested = new Promise<({ source: 'yr-app' | 'yr-cli' | 'os-signal' | 'exception', errorMessage?: string })>((resolve) => {
     requestShutdown = (source, errorMessage) => {
       logger.debug(`[DAEMON RUN] Requesting shutdown (source: ${source}, errorMessage: ${errorMessage})`);
 
@@ -105,7 +105,7 @@ export async function startDaemon(): Promise<void> {
 
   // Check if already running
   // Check if running daemon version matches current CLI version
-  const runningDaemonVersionMatches = await isDaemonRunningCurrentlyInstalledHappyVersion();
+  const runningDaemonVersionMatches = await isDaemonRunningCurrentlyInstalledVersion();
   if (!runningDaemonVersionMatches) {
     logger.debug('[DAEMON RUN] Daemon version mismatch detected, restarting daemon with current CLI version');
     await stopDaemon();
@@ -140,8 +140,8 @@ export async function startDaemon(): Promise<void> {
     // Helper functions
     const getCurrentChildren = () => Array.from(pidToTrackedSession.values());
 
-    // Handle webhook from HAPI session reporting itself
-    const onHappySessionWebhook = (sessionId: string, sessionMetadata: Metadata) => {
+    // Handle webhook from YR session reporting itself
+    const onYohoRemoteSessionWebhook = (sessionId: string, sessionMetadata: Metadata) => {
       logger.debugLargeJson(`[DAEMON RUN] Session reported`, sessionMetadata);
 
       const pid = sessionMetadata.hostPid;
@@ -158,8 +158,8 @@ export async function startDaemon(): Promise<void> {
 
       if (existingSession && existingSession.startedBy === 'daemon') {
         // Update daemon-spawned session with reported data
-        existingSession.happySessionId = sessionId;
-        existingSession.happySessionMetadataFromLocalWebhook = sessionMetadata;
+        existingSession.yohoRemoteSessionId = sessionId;
+        existingSession.yohoRemoteSessionMetadataFromLocalWebhook = sessionMetadata;
         logger.debug(`[DAEMON RUN] Updated daemon-spawned session ${sessionId} with metadata`);
 
         // Resolve any awaiter for this PID
@@ -172,9 +172,9 @@ export async function startDaemon(): Promise<void> {
       } else if (!existingSession) {
         // New session started externally
         const trackedSession: TrackedSession = {
-          startedBy: 'hapi directly - likely by user from terminal',
-          happySessionId: sessionId,
-          happySessionMetadataFromLocalWebhook: sessionMetadata,
+          startedBy: 'yr directly - likely by user from terminal',
+          yohoRemoteSessionId: sessionId,
+          yohoRemoteSessionMetadataFromLocalWebhook: sessionMetadata,
           pid
         };
         pidToTrackedSession.set(pid, trackedSession);
@@ -203,7 +203,7 @@ export async function startDaemon(): Promise<void> {
       let directoryCreated = false;
       let spawnDirectory = directory;
       let worktreeInfo: WorktreeInfo | null = null;
-      let happyProcess: ReturnType<typeof spawnHappyCLI> | null = null;
+      let cliProcess: ReturnType<typeof spawnYohoRemoteCLI> | null = null;
 
       // Apply path mapping if configured
       try {
@@ -328,7 +328,7 @@ export async function startDaemon(): Promise<void> {
         if (!worktreeInfo) {
           return;
         }
-        const pid = happyProcess?.pid;
+        const pid = cliProcess?.pid;
         if (pid && isProcessAlive(pid)) {
           logger.debug(`[DAEMON RUN] Skipping worktree cleanup after ${reason}; child still running`, {
             pid,
@@ -348,7 +348,7 @@ export async function startDaemon(): Promise<void> {
           if (options.agent === 'codex') {
             addLog('env', `Setting up Codex authentication`, 'running');
             // Create a temporary directory for Codex
-            const codexHomeDir = await fs.mkdtemp(join(os.tmpdir(), 'hapi-codex-'));
+            const codexHomeDir = await fs.mkdtemp(join(os.tmpdir(), 'yr-codex-'));
 
             // Write the token to the temporary directory
             await fs.writeFile(join(codexHomeDir, 'auth.json'), options.token);
@@ -370,37 +370,37 @@ export async function startDaemon(): Promise<void> {
         if (worktreeInfo) {
           extraEnv = {
             ...extraEnv,
-            HAPI_WORKTREE_BASE_PATH: worktreeInfo.basePath,
-            HAPI_WORKTREE_BRANCH: worktreeInfo.branch,
-            HAPI_WORKTREE_NAME: worktreeInfo.name,
-            HAPI_WORKTREE_PATH: worktreeInfo.worktreePath,
-            HAPI_WORKTREE_CREATED_AT: String(worktreeInfo.createdAt)
+            YR_WORKTREE_BASE_PATH: worktreeInfo.basePath,
+            YR_WORKTREE_BRANCH: worktreeInfo.branch,
+            YR_WORKTREE_NAME: worktreeInfo.name,
+            YR_WORKTREE_PATH: worktreeInfo.worktreePath,
+            YR_WORKTREE_CREATED_AT: String(worktreeInfo.createdAt)
           };
         }
 
         // Pass permission mode and model settings from original session
         if (options.permissionMode) {
-          extraEnv = { ...extraEnv, HAPI_PERMISSION_MODE: options.permissionMode };
+          extraEnv = { ...extraEnv, YR_PERMISSION_MODE: options.permissionMode };
         }
         if (options.modelMode) {
-          extraEnv = { ...extraEnv, HAPI_MODEL_MODE: options.modelMode };
+          extraEnv = { ...extraEnv, YR_MODEL_MODE: options.modelMode };
         }
         if (options.modelReasoningEffort) {
-          extraEnv = { ...extraEnv, HAPI_MODEL_REASONING_EFFORT: options.modelReasoningEffort };
+          extraEnv = { ...extraEnv, YR_MODEL_REASONING_EFFORT: options.modelReasoningEffort };
         }
         const sessionSource = typeof options.source === 'string' ? options.source.trim() : '';
         if (sessionSource) {
-          extraEnv = { ...extraEnv, HAPI_SESSION_SOURCE: sessionSource };
+          extraEnv = { ...extraEnv, YR_SESSION_SOURCE: sessionSource };
         }
         if (options.mainSessionId) {
-          extraEnv = { ...extraEnv, HAPI_MAIN_SESSION_ID: options.mainSessionId };
+          extraEnv = { ...extraEnv, YR_MAIN_SESSION_ID: options.mainSessionId };
         }
         if (options.caller) {
-          extraEnv = { ...extraEnv, HAPI_CALLER: options.caller };
+          extraEnv = { ...extraEnv, YR_CALLER: options.caller };
         }
         // Pass Claude settings type (litellm or claude)
         if (options.claudeSettingsType) {
-          extraEnv = { ...extraEnv, HAPI_CLAUDE_SETTINGS_TYPE: options.claudeSettingsType };
+          extraEnv = { ...extraEnv, YR_CLAUDE_SETTINGS_TYPE: options.claudeSettingsType };
         }
 
         addLog('env', `Environment prepared successfully`, 'success');
@@ -415,7 +415,7 @@ export async function startDaemon(): Promise<void> {
         })();
         const args = [
           agentCommand,
-          '--hapi-starting-mode', 'remote',
+          '--yoho-remote-starting-mode', 'remote',
           '--started-by', 'daemon'
         ];
         const claudeAgent = typeof options.claudeAgent === 'string' ? options.claudeAgent.trim() : '';
@@ -431,16 +431,16 @@ export async function startDaemon(): Promise<void> {
           extraEnv = { ...extraEnv, OPENCODE_VARIANT: 'max' };
         }
         if (options.sessionId) {
-          args.push('--hapi-session-id', options.sessionId);
+          args.push('--yoho-remote-session-id', options.sessionId);
         }
         if (options.resumeSessionId) {
-          args.push('--hapi-resume-session-id', options.resumeSessionId);
+          args.push('--yoho-remote-resume-session-id', options.resumeSessionId);
         }
         if (yolo) {
           args.push('--yolo');
         }
 
-        addLog('spawn', `Spawning CLI process: hapi ${args.join(' ')}`, 'running');
+        addLog('spawn', `Spawning CLI process: yoho-remote ${args.join(' ')}`, 'running');
         addLog('spawn', `Working directory: ${spawnDirectory}`, 'running');
 
         const MAX_TAIL_CHARS = 4000;
@@ -461,7 +461,7 @@ export async function startDaemon(): Promise<void> {
           logger.debug('[DAEMON RUN] Child stderr tail', trimmed);
         };
 
-        happyProcess = spawnHappyCLI(args, {
+        cliProcess = spawnYohoRemoteCLI(args, {
           cwd: spawnDirectory,
           detached: true,  // Sessions stay alive when daemon stops
           stdio: ['ignore', 'pipe', 'pipe'],  // Capture stdout/stderr for debugging
@@ -471,36 +471,36 @@ export async function startDaemon(): Promise<void> {
           }
         });
 
-        happyProcess.stderr?.on('data', (data) => {
+        cliProcess.stderr?.on('data', (data) => {
           stderrTail = appendTail(stderrTail, data);
         });
 
-        if (!happyProcess.pid) {
+        if (!cliProcess.pid) {
           logger.debug('[DAEMON RUN] Failed to spawn process - no PID returned');
           addLog('spawn', `Failed to spawn process - no PID returned`, 'error');
           await maybeCleanupWorktree('no-pid');
           return {
             type: 'error',
-            errorMessage: 'Failed to spawn HAPI process - no PID returned',
+            errorMessage: 'Failed to spawn YR process - no PID returned',
             logs: spawnLogs
           };
         }
 
-        const pid = happyProcess.pid;
+        const pid = cliProcess.pid;
         logger.debug(`[DAEMON RUN] Spawned process with PID ${pid}`);
         addLog('spawn', `Process spawned with PID: ${pid}`, 'success');
 
         const trackedSession: TrackedSession = {
           startedBy: 'daemon',
           pid,
-          childProcess: happyProcess,
+          childProcess: cliProcess,
           directoryCreated,
           message: directoryCreated ? `The path '${directory}' did not exist. We created a new folder and spawned a new session there.` : undefined
         };
 
         pidToTrackedSession.set(pid, trackedSession);
 
-        happyProcess.on('exit', (code, signal) => {
+        cliProcess.on('exit', (code, signal) => {
           logger.debug(`[DAEMON RUN] Child PID ${pid} exited with code ${code}, signal ${signal}`);
           if (code !== 0 || signal) {
             logStderrTail();
@@ -508,12 +508,12 @@ export async function startDaemon(): Promise<void> {
           onChildExited(pid);
         });
 
-        happyProcess.on('error', (error) => {
+        cliProcess.on('error', (error) => {
           logger.debug(`[DAEMON RUN] Child process error:`, error);
           onChildExited(pid);
         });
 
-        // Wait for webhook to populate session with happySessionId
+        // Wait for webhook to populate session with yohoRemoteSessionId
         logger.debug(`[DAEMON RUN] Waiting for session webhook for PID ${pid}`);
         addLog('webhook', `Waiting for session to report back (PID: ${pid})...`, 'running');
 
@@ -536,12 +536,12 @@ export async function startDaemon(): Promise<void> {
           // Register awaiter
           pidToAwaiter.set(pid, (completedSession) => {
             clearTimeout(timeout);
-            logger.debug(`[DAEMON RUN] Session ${completedSession.happySessionId} fully spawned with webhook`);
-            addLog('webhook', `Session ready: ${completedSession.happySessionId}`, 'success');
+            logger.debug(`[DAEMON RUN] Session ${completedSession.yohoRemoteSessionId} fully spawned with webhook`);
+            addLog('webhook', `Session ready: ${completedSession.yohoRemoteSessionId}`, 'success');
             addLog('complete', `Session created successfully`, 'success');
             resolve({
               type: 'success',
-              sessionId: completedSession.happySessionId!,
+              sessionId: completedSession.yohoRemoteSessionId!,
               logs: spawnLogs
             });
           });
@@ -569,7 +569,7 @@ export async function startDaemon(): Promise<void> {
 
       // Try to find by sessionId first
       for (const [pid, session] of pidToTrackedSession.entries()) {
-        if (session.happySessionId === sessionId ||
+        if (session.yohoRemoteSessionId === sessionId ||
           (sessionId.startsWith('PID-') && pid === parseInt(sessionId.replace('PID-', '')))) {
 
           if (session.startedBy === 'daemon' && session.childProcess) {
@@ -610,8 +610,8 @@ export async function startDaemon(): Promise<void> {
       getChildren: getCurrentChildren,
       stopSession,
       spawnSession,
-      requestShutdown: () => requestShutdown('hapi-cli'),
-      onHappySessionWebhook
+      requestShutdown: () => requestShutdown('yr-cli'),
+      onYohoRemoteSessionWebhook
     });
 
     const startedWithCliMtimeMs = getInstalledCliMtimeMs();
@@ -654,7 +654,7 @@ export async function startDaemon(): Promise<void> {
     apiMachine.setRPCHandlers({
       spawnSession,
       stopSession,
-      requestShutdown: () => requestShutdown('hapi-app')
+      requestShutdown: () => requestShutdown('yr-app')
     });
 
     // Connect to server
@@ -665,7 +665,7 @@ export async function startDaemon(): Promise<void> {
     // 2. Check if daemon needs update
     // 3. If outdated, restart with latest version
     // 4. Write heartbeat
-    const heartbeatIntervalMs = parseInt(process.env.HAPI_DAEMON_HEARTBEAT_INTERVAL || '60000');
+    const heartbeatIntervalMs = parseInt(process.env.YR_DAEMON_HEARTBEAT_INTERVAL || '60000');
     let heartbeatRunning = false
     const restartOnStaleVersionAndHeartbeat = setInterval(async () => {
       if (heartbeatRunning) {
@@ -697,7 +697,7 @@ export async function startDaemon(): Promise<void> {
         // Spawn new daemon
         // We do not need to clean ourselves up - we will be killed by the new daemon.
         try {
-          // Check if we're running as standalone hapi-daemon executable
+          // Check if we're running as standalone yoho-remote-daemon executable
           const isStandaloneDaemon = process.execPath.endsWith('yoho-remote-daemon') ||
                                       process.execPath.endsWith('yoho-remote-daemon.exe');
 
@@ -711,7 +711,7 @@ export async function startDaemon(): Promise<void> {
             }).unref();
           } else {
             // Unified CLI mode: use the CLI to start daemon
-            spawnHappyCLI(['daemon', 'start'], {
+            spawnYohoRemoteCLI(['daemon', 'start'], {
               detached: true,
               stdio: 'ignore'
             });
@@ -757,7 +757,7 @@ export async function startDaemon(): Promise<void> {
     }, heartbeatIntervalMs); // Every 60 seconds in production
 
     // Setup signal handlers
-    const cleanupAndShutdown = async (source: 'hapi-app' | 'hapi-cli' | 'os-signal' | 'exception', errorMessage?: string) => {
+    const cleanupAndShutdown = async (source: 'yr-app' | 'yr-cli' | 'os-signal' | 'exception', errorMessage?: string) => {
       logger.debug(`[DAEMON RUN] Starting proper cleanup (source: ${source}, errorMessage: ${errorMessage})...`);
 
       // Clear health check interval

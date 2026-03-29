@@ -1,5 +1,5 @@
 /**
- * HAPI Server - Main Entry Point
+ * Yoho Remote Server - Main Entry Point
  *
  * Provides:
  * - Web app + HTTP API
@@ -42,7 +42,7 @@ let webServer: BunServer<WebSocketData> | null = null
 let sseManager: SSEManager | null = null
 
 async function main() {
-    console.log('HAPI Server starting...')
+    console.log('YR Server starting...')
 
     // Load configuration (async - loads from env/file with persistence)
     const config = await createConfiguration()
@@ -168,7 +168,7 @@ async function main() {
         await feishuBot.start()
     }
 
-    console.log('\nHAPI Server is ready!')
+    console.log('\nYR Server is ready!')
 
     // Handle shutdown
     const shutdown = async () => {
