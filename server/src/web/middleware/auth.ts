@@ -1,6 +1,12 @@
 import type { MiddlewareHandler } from 'hono'
 import { verifyKeycloakToken, extractUserFromToken } from '../keycloak'
-import type { UserRole } from '../../store'
+import type { UserRole, OrgRole, IStore } from '../../store'
+
+export type UserOrgInfo = {
+    id: string
+    name: string
+    role: OrgRole
+}
 
 export type WebAppEnv = {
     Variables: {
@@ -11,6 +17,7 @@ export type WebAppEnv = {
         role: UserRole  // Role from Keycloak token (developer or operator)
         clientId?: string  // Client identifier for SSE connections
         deviceType?: string  // Device type for SSE connections
+        orgs: UserOrgInfo[]  // User's organizations with roles
     }
 }
 
@@ -22,7 +29,7 @@ const publicPaths = [
     '/api/auth/keycloak/logout',
 ]
 
-export function createAuthMiddleware(): MiddlewareHandler<WebAppEnv> {
+export function createAuthMiddleware(store: IStore): MiddlewareHandler<WebAppEnv> {
     return async (c, next) => {
         const path = c.req.path
 
@@ -57,6 +64,16 @@ export function createAuthMiddleware(): MiddlewareHandler<WebAppEnv> {
             if (clientIdHeader) {
                 c.set('clientId', clientIdHeader)
             }
+
+            // Load user's organizations (single query with JOIN)
+            const userOrgs = await store.getOrganizationsForUser(user.email)
+            const orgsWithRoles: UserOrgInfo[] = userOrgs.map((org) => ({
+                id: org.id,
+                name: org.name,
+                role: org.myRole,
+            }))
+            c.set('orgs', orgsWithRoles)
+
             await next()
             return
         } catch (error) {

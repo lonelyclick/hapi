@@ -35,7 +35,16 @@ import type {
     UpdateInputPresetResponse,
     UpdateProjectResponse,
     UpdateUserPreferencesResponse,
-    UserPreferencesResponse
+    UserPreferencesResponse,
+    OrgsResponse,
+    OrgDetailResponse,
+    CreateOrgResponse,
+    UpdateOrgResponse,
+    OrgMembersResponse,
+    OrgInvitationsResponse,
+    PendingInvitationsResponse,
+    OrgActionResponse,
+    CreateInvitationResponse,
 } from '@/types/api'
 
 type ApiClientOptions = {
@@ -837,6 +846,80 @@ export class ApiClient {
                 method: 'DELETE'
             }
         )
+    }
+
+    // ========== Organizations ==========
+
+    async getMyOrgs(): Promise<OrgsResponse> {
+        return await this.request<OrgsResponse>('/api/orgs')
+    }
+
+    async createOrg(name: string, slug: string): Promise<CreateOrgResponse> {
+        return await this.request<CreateOrgResponse>('/api/orgs', {
+            method: 'POST',
+            body: JSON.stringify({ name, slug })
+        })
+    }
+
+    async getOrg(orgId: string): Promise<OrgDetailResponse> {
+        return await this.request<OrgDetailResponse>(`/api/orgs/${encodeURIComponent(orgId)}`)
+    }
+
+    async updateOrg(orgId: string, data: { name?: string; settings?: Record<string, unknown> }): Promise<UpdateOrgResponse> {
+        return await this.request<UpdateOrgResponse>(`/api/orgs/${encodeURIComponent(orgId)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data)
+        })
+    }
+
+    async deleteOrg(orgId: string): Promise<OrgActionResponse> {
+        return await this.request<OrgActionResponse>(`/api/orgs/${encodeURIComponent(orgId)}`, {
+            method: 'DELETE'
+        })
+    }
+
+    async getOrgMembers(orgId: string): Promise<OrgMembersResponse> {
+        return await this.request<OrgMembersResponse>(`/api/orgs/${encodeURIComponent(orgId)}/members`)
+    }
+
+    async inviteOrgMember(orgId: string, email: string, role: string = 'member'): Promise<CreateInvitationResponse> {
+        return await this.request<CreateInvitationResponse>(`/api/orgs/${encodeURIComponent(orgId)}/members`, {
+            method: 'POST',
+            body: JSON.stringify({ email, role })
+        })
+    }
+
+    async updateOrgMemberRole(orgId: string, email: string, role: string): Promise<OrgActionResponse> {
+        return await this.request<OrgActionResponse>(`/api/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(email)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ role })
+        })
+    }
+
+    async removeOrgMember(orgId: string, email: string): Promise<OrgActionResponse> {
+        return await this.request<OrgActionResponse>(`/api/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(email)}`, {
+            method: 'DELETE'
+        })
+    }
+
+    async getOrgInvitations(orgId: string): Promise<OrgInvitationsResponse> {
+        return await this.request<OrgInvitationsResponse>(`/api/orgs/${encodeURIComponent(orgId)}/invitations`)
+    }
+
+    async deleteOrgInvitation(orgId: string, invitationId: string): Promise<OrgActionResponse> {
+        return await this.request<OrgActionResponse>(`/api/orgs/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(invitationId)}`, {
+            method: 'DELETE'
+        })
+    }
+
+    async getPendingInvitations(): Promise<PendingInvitationsResponse> {
+        return await this.request<PendingInvitationsResponse>('/api/invitations/pending')
+    }
+
+    async acceptInvitation(invitationId: string): Promise<OrgActionResponse> {
+        return await this.request<OrgActionResponse>(`/api/invitations/${encodeURIComponent(invitationId)}/accept`, {
+            method: 'POST'
+        })
     }
 
     async get<T>(path: string): Promise<{ data: T }> {

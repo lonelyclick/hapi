@@ -365,4 +365,47 @@ export type SyncEvent =
 
 export type OnlineUsersResponse = { users: OnlineUser[] }
 
+// Organization 类型
+export type OrgRole = 'owner' | 'admin' | 'member'
 
+export type Organization = {
+    id: string
+    name: string
+    slug: string
+    createdBy: string
+    createdAt: number
+    updatedAt: number
+    settings: Record<string, unknown>
+    myRole?: OrgRole
+}
+
+export type OrgMember = {
+    orgId: string
+    userEmail: string
+    userId: string
+    role: OrgRole
+    joinedAt: number
+    invitedBy: string | null
+}
+
+export type OrgInvitation = {
+    id: string
+    orgId: string
+    email: string
+    role: OrgRole
+    invitedBy: string
+    createdAt: number
+    expiresAt: number
+    acceptedAt: number | null
+    orgName?: string
+}
+
+export type OrgsResponse = { orgs: Organization[] }
+export type OrgDetailResponse = { org: Organization; members: OrgMember[]; myRole: OrgRole }
+export type CreateOrgResponse = { ok: true; org: Organization }
+export type UpdateOrgResponse = { ok: true; org: Organization }
+export type OrgMembersResponse = { members: OrgMember[] }
+export type OrgInvitationsResponse = { invitations: OrgInvitation[] }
+export type PendingInvitationsResponse = { invitations: OrgInvitation[] }
+export type OrgActionResponse = { ok: true }
+export type CreateInvitationResponse = { ok: true; invitation: OrgInvitation }

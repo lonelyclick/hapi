@@ -32,6 +32,7 @@ import { queryKeys } from '@/lib/query-keys'
 import TerminalPage from '@/routes/sessions/terminal'
 import SettingsPage from '@/routes/settings'
 import UsagePage from '@/routes/usage'
+import OrgDetailPage from '@/routes/orgs'
 import { LoginPage } from '@/routes/login'
 import { AuthCallbackPage } from '@/routes/auth/callback'
 
@@ -553,6 +554,11 @@ const usageRoute = createRoute({
     component: UsagePage,
 })
 
+const orgDetailRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/orgs/$orgId',
+    component: OrgDetailPage,
+})
 
 // Auth routes (public - no authentication required)
 const loginRoute = createRoute({
@@ -577,6 +583,7 @@ export const routeTree = rootRoute.addChildren([
     newSessionRoute,
     settingsRoute,
     usageRoute,
+    orgDetailRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']

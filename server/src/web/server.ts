@@ -23,6 +23,7 @@ import { createPushRoutes } from './routes/push'
 import { createUsageRoutes } from './routes/usage'
 import { createYohoCredentialsRoutes } from './routes/yoho-credentials'
 import { createOpenCodeRoutes } from './routes/opencode'
+import { createOrgsRoutes } from './routes/orgs'
 import { createCodexOpenAIRoutes } from './routes/codex-openai'
 import type { SSEManager } from '../sse/sseManager'
 import type { Server as BunServer } from 'bun'
@@ -101,8 +102,8 @@ function createWebApp(options: {
     app.route('/api', createKeycloakAuthRoutes())
     app.route('/api', createVersionRoutes(options.embeddedAssetMap))  // Public, no auth required
 
-    // Auth middleware - verifies Keycloak JWT tokens
-    app.use('/api/*', createAuthMiddleware())
+    // Auth middleware - verifies Keycloak JWT tokens and loads org info
+    app.use('/api/*', createAuthMiddleware(options.store))
     app.route('/api', createEventsRoutes(options.getSseManager, options.getSyncEngine))
     app.route('/api', createSessionsRoutes(options.getSyncEngine, options.getSseManager, options.store))
     app.route('/api', createMessagesRoutes(options.getSyncEngine, options.store))
@@ -115,6 +116,7 @@ function createWebApp(options: {
     app.route('/api', createPushRoutes())
     app.route('/api', createUsageRoutes(options.getSyncEngine))
     app.route('/api', createYohoCredentialsRoutes())
+    app.route('/api', createOrgsRoutes(options.store))
     app.route('/api', createOpenCodeRoutes(options.getSyncEngine, () => options.getSseManager()))
 
     if (options.embeddedAssetMap) {

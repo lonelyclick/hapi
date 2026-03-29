@@ -49,6 +49,39 @@ export type StoredMessage = {
 
 export type UserRole = 'developer' | 'operator'
 
+// Organization 相关类型
+export type OrgRole = 'owner' | 'admin' | 'member'
+
+export type StoredOrganization = {
+    id: string
+    name: string
+    slug: string
+    createdBy: string
+    createdAt: number
+    updatedAt: number
+    settings: Record<string, unknown>
+}
+
+export type StoredOrgMember = {
+    orgId: string
+    userEmail: string
+    userId: string
+    role: OrgRole
+    joinedAt: number
+    invitedBy: string | null
+}
+
+export type StoredOrgInvitation = {
+    id: string
+    orgId: string
+    email: string
+    role: OrgRole
+    invitedBy: string
+    createdAt: number
+    expiresAt: number
+    acceptedAt: number | null
+}
+
 export type StoredPushSubscription = {
     id: number
     namespace: string
@@ -308,6 +341,7 @@ export type StoredProject = {
     path: string
     description: string | null
     machineId: string | null  // 关联的机器 ID，null 表示通用项目（所有机器可用）
+    orgId: string | null      // 所属组织 ID，null 表示全局项目
     createdAt: number
     updatedAt: number
 }
@@ -325,6 +359,7 @@ export type StoredInputPreset = {
     trigger: string
     title: string
     prompt: string
+    orgId: string | null      // 所属组织 ID，null 表示全局预设
     createdAt: number
     updatedAt: number
 }

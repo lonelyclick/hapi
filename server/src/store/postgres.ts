@@ -27,6 +27,10 @@ import type {
     StoredInputPreset,
     StoredAllowedEmail,
     StoredSessionShare,
+    StoredOrganization,
+    StoredOrgMember,
+    StoredOrgInvitation,
+    OrgRole,
     UserRole,
     VersionedUpdateResult,
     SuggestionStatus,
@@ -476,6 +480,53 @@ export class PostgresStore implements IStore {
                 created_at BIGINT NOT NULL DEFAULT FLOOR(EXTRACT(EPOCH FROM NOW()) * 1000)
             );
             CREATE INDEX IF NOT EXISTS idx_fcm_chat_id_created ON feishu_chat_messages(chat_id, created_at DESC);
+
+            -- Organizations 表
+            CREATE TABLE IF NOT EXISTS organizations (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                created_by TEXT NOT NULL,
+                created_at BIGINT NOT NULL,
+                updated_at BIGINT NOT NULL,
+                settings JSONB DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug);
+
+            -- Org Members 表
+            CREATE TABLE IF NOT EXISTS org_members (
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                user_email TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                joined_at BIGINT NOT NULL,
+                invited_by TEXT,
+                PRIMARY KEY (org_id, user_email)
+            );
+            CREATE INDEX IF NOT EXISTS idx_org_members_email ON org_members(user_email);
+            CREATE INDEX IF NOT EXISTS idx_org_members_org ON org_members(org_id);
+
+            -- Org Invitations 表
+            CREATE TABLE IF NOT EXISTS org_invitations (
+                id TEXT PRIMARY KEY,
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                invited_by TEXT NOT NULL,
+                created_at BIGINT NOT NULL,
+                expires_at BIGINT NOT NULL,
+                accepted_at BIGINT,
+                UNIQUE(org_id, email)
+            );
+            CREATE INDEX IF NOT EXISTS idx_org_invitations_email ON org_invitations(email);
+
+            -- Migration: Add org_id to projects
+            ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL;
+            CREATE INDEX IF NOT EXISTS idx_projects_org_id ON projects(org_id);
+
+            -- Migration: Add org_id to input_presets
+            ALTER TABLE input_presets ADD COLUMN IF NOT EXISTS org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL;
+            CREATE INDEX IF NOT EXISTS idx_input_presets_org_id ON input_presets(org_id);
         `)
     }
 
@@ -1131,24 +1182,36 @@ export class PostgresStore implements IStore {
 
     // ========== Project 操作 ==========
 
-    async getProjects(machineId?: string | null): Promise<StoredProject[]> {
-        // 获取指定机器的项目 + 通用项目（machine_id IS NULL）
-        let query = 'SELECT * FROM projects'
+    async getProjects(machineId?: string | null, orgId?: string | null): Promise<StoredProject[]> {
+        const conditions: string[] = []
         const params: (string | null)[] = []
+        let idx = 1
 
         if (machineId !== undefined) {
-            // machineId 传入时：返回该机器的项目 + 通用项目
-            // machineId 传入 null：只返回通用项目
-            // machineId 不传入：返回所有项目
             if (machineId === null) {
-                query += ' WHERE machine_id IS NULL'
+                conditions.push('machine_id IS NULL')
             } else {
-                query += ' WHERE machine_id = $1 OR machine_id IS NULL ORDER BY machine_id NULLS LAST, name'
+                conditions.push(`(machine_id = $${idx} OR machine_id IS NULL)`)
                 params.push(machineId)
+                idx++
             }
-        } else {
-            query += ' ORDER BY name'
         }
+
+        if (orgId !== undefined) {
+            if (orgId === null) {
+                conditions.push('org_id IS NULL')
+            } else {
+                conditions.push(`(org_id = $${idx} OR org_id IS NULL)`)
+                params.push(orgId)
+                idx++
+            }
+        }
+
+        let query = 'SELECT * FROM projects'
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ')
+        }
+        query += ' ORDER BY name'
 
         const result = await this.pool.query(query, params)
         return result.rows.map(row => ({
@@ -1157,6 +1220,7 @@ export class PostgresStore implements IStore {
             path: row.path,
             description: row.description,
             machineId: row.machine_id as string | null,
+            orgId: row.org_id as string | null,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }))
@@ -1172,20 +1236,21 @@ export class PostgresStore implements IStore {
             path: row.path,
             description: row.description,
             machineId: row.machine_id as string | null,
+            orgId: row.org_id as string | null,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }
     }
 
-    async addProject(name: string, path: string, description?: string, machineId?: string | null): Promise<StoredProject | null> {
+    async addProject(name: string, path: string, description?: string, machineId?: string | null, orgId?: string | null): Promise<StoredProject | null> {
         const id = randomUUID()
         const now = Date.now()
         try {
             await this.pool.query(
-                'INSERT INTO projects (id, name, path, description, machine_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-                [id, name, path, description || null, machineId || null, now, now]
+                'INSERT INTO projects (id, name, path, description, machine_id, org_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+                [id, name, path, description || null, machineId || null, orgId || null, now, now]
             )
-            return { id, name, path, description: description || null, machineId: machineId || null, createdAt: now, updatedAt: now }
+            return { id, name, path, description: description || null, machineId: machineId || null, orgId: orgId || null, createdAt: now, updatedAt: now }
         } catch {
             return null
         }
@@ -1205,6 +1270,7 @@ export class PostgresStore implements IStore {
             path: row.path,
             description: row.description,
             machineId: row.machine_id as string | null,
+            orgId: row.org_id as string | null,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }
@@ -1315,13 +1381,23 @@ export class PostgresStore implements IStore {
 
     // ========== Input Preset 操作 ==========
 
-    async getAllInputPresets(): Promise<StoredInputPreset[]> {
-        const result = await this.pool.query('SELECT * FROM input_presets ORDER BY trigger')
+    async getAllInputPresets(orgId?: string | null): Promise<StoredInputPreset[]> {
+        let query = 'SELECT * FROM input_presets'
+        const params: string[] = []
+
+        if (orgId !== undefined && orgId !== null) {
+            query += ' WHERE org_id = $1 OR org_id IS NULL'
+            params.push(orgId)
+        }
+        query += ' ORDER BY trigger'
+
+        const result = await this.pool.query(query, params)
         return result.rows.map(row => ({
             id: row.id,
             trigger: row.trigger,
             title: row.title,
             prompt: row.prompt,
+            orgId: row.org_id as string | null,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }))
@@ -1336,20 +1412,21 @@ export class PostgresStore implements IStore {
             trigger: row.trigger,
             title: row.title,
             prompt: row.prompt,
+            orgId: row.org_id as string | null,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }
     }
 
-    async addInputPreset(trigger: string, title: string, prompt: string): Promise<StoredInputPreset | null> {
+    async addInputPreset(trigger: string, title: string, prompt: string, orgId?: string | null): Promise<StoredInputPreset | null> {
         const id = randomUUID()
         const now = Date.now()
         try {
             await this.pool.query(
-                'INSERT INTO input_presets (id, trigger, title, prompt, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)',
-                [id, trigger, title, prompt, now, now]
+                'INSERT INTO input_presets (id, trigger, title, prompt, org_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                [id, trigger, title, prompt, orgId || null, now, now]
             )
-            return { id, trigger, title, prompt, createdAt: now, updatedAt: now }
+            return { id, trigger, title, prompt, orgId: orgId || null, createdAt: now, updatedAt: now }
         } catch {
             return null
         }
@@ -1368,6 +1445,7 @@ export class PostgresStore implements IStore {
             trigger: row.trigger,
             title: row.title,
             prompt: row.prompt,
+            orgId: row.org_id as string | null,
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at)
         }
@@ -3149,5 +3227,257 @@ export class PostgresStore implements IStore {
             [cutoff]
         )
         return result.rowCount ?? 0
+    }
+
+    // ========== Organization 操作 ==========
+
+    private toStoredOrganization(row: any): StoredOrganization {
+        return {
+            id: row.id,
+            name: row.name,
+            slug: row.slug,
+            createdBy: row.created_by,
+            createdAt: Number(row.created_at),
+            updatedAt: Number(row.updated_at),
+            settings: row.settings ?? {},
+        }
+    }
+
+    private toStoredOrgMember(row: any): StoredOrgMember {
+        return {
+            orgId: row.org_id,
+            userEmail: row.user_email,
+            userId: row.user_id,
+            role: row.role as OrgRole,
+            joinedAt: Number(row.joined_at),
+            invitedBy: row.invited_by,
+        }
+    }
+
+    private toStoredOrgInvitation(row: any): StoredOrgInvitation {
+        return {
+            id: row.id,
+            orgId: row.org_id,
+            email: row.email,
+            role: row.role as OrgRole,
+            invitedBy: row.invited_by,
+            createdAt: Number(row.created_at),
+            expiresAt: Number(row.expires_at),
+            acceptedAt: row.accepted_at ? Number(row.accepted_at) : null,
+        }
+    }
+
+    async createOrganization(data: { name: string; slug: string; createdBy: string }): Promise<StoredOrganization | null> {
+        const now = Date.now()
+        const id = randomUUID()
+        try {
+            await this.pool.query(
+                `INSERT INTO organizations (id, name, slug, created_by, created_at, updated_at, settings)
+                 VALUES ($1, $2, $3, $4, $5, $6, '{}')`,
+                [id, data.name, data.slug, data.createdBy, now, now]
+            )
+            return { id, name: data.name, slug: data.slug, createdBy: data.createdBy, createdAt: now, updatedAt: now, settings: {} }
+        } catch (e: any) {
+            if (e.code === '23505') return null // unique violation (slug)
+            throw e
+        }
+    }
+
+    async getOrganization(id: string): Promise<StoredOrganization | null> {
+        const result = await this.pool.query('SELECT * FROM organizations WHERE id = $1', [id])
+        return result.rows.length > 0 ? this.toStoredOrganization(result.rows[0]) : null
+    }
+
+    async getOrganizationBySlug(slug: string): Promise<StoredOrganization | null> {
+        const result = await this.pool.query('SELECT * FROM organizations WHERE slug = $1', [slug])
+        return result.rows.length > 0 ? this.toStoredOrganization(result.rows[0]) : null
+    }
+
+    async getOrganizationsForUser(email: string): Promise<(StoredOrganization & { myRole: OrgRole })[]> {
+        const result = await this.pool.query(
+            `SELECT o.*, m.role as my_role FROM organizations o
+             INNER JOIN org_members m ON o.id = m.org_id
+             WHERE m.user_email = $1
+             ORDER BY o.created_at ASC`,
+            [email]
+        )
+        return result.rows.map((r: any) => ({
+            ...this.toStoredOrganization(r),
+            myRole: r.my_role as OrgRole,
+        }))
+    }
+
+    async updateOrganization(id: string, data: { name?: string; settings?: Record<string, unknown> }): Promise<StoredOrganization | null> {
+        const sets: string[] = ['updated_at = $2']
+        const params: unknown[] = [id, Date.now()]
+        let idx = 3
+
+        if (data.name !== undefined) {
+            sets.push(`name = $${idx}`)
+            params.push(data.name)
+            idx++
+        }
+        if (data.settings !== undefined) {
+            sets.push(`settings = $${idx}`)
+            params.push(JSON.stringify(data.settings))
+            idx++
+        }
+
+        const result = await this.pool.query(
+            `UPDATE organizations SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+            params
+        )
+        return result.rows.length > 0 ? this.toStoredOrganization(result.rows[0]) : null
+    }
+
+    async deleteOrganization(id: string): Promise<boolean> {
+        const result = await this.pool.query('DELETE FROM organizations WHERE id = $1', [id])
+        return (result.rowCount ?? 0) > 0
+    }
+
+    // ========== Org Member 操作 ==========
+
+    async addOrgMember(data: { orgId: string; userEmail: string; userId: string; role: OrgRole; invitedBy?: string }): Promise<StoredOrgMember | null> {
+        const now = Date.now()
+        try {
+            await this.pool.query(
+                `INSERT INTO org_members (org_id, user_email, user_id, role, joined_at, invited_by)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [data.orgId, data.userEmail, data.userId, data.role, now, data.invitedBy ?? null]
+            )
+            return { orgId: data.orgId, userEmail: data.userEmail, userId: data.userId, role: data.role, joinedAt: now, invitedBy: data.invitedBy ?? null }
+        } catch (e: any) {
+            if (e.code === '23505') return null // already a member
+            throw e
+        }
+    }
+
+    async getOrgMembers(orgId: string): Promise<StoredOrgMember[]> {
+        const result = await this.pool.query(
+            'SELECT * FROM org_members WHERE org_id = $1 ORDER BY joined_at ASC',
+            [orgId]
+        )
+        return result.rows.map((r: any) => this.toStoredOrgMember(r))
+    }
+
+    async getOrgMember(orgId: string, email: string): Promise<StoredOrgMember | null> {
+        const result = await this.pool.query(
+            'SELECT * FROM org_members WHERE org_id = $1 AND user_email = $2',
+            [orgId, email]
+        )
+        return result.rows.length > 0 ? this.toStoredOrgMember(result.rows[0]) : null
+    }
+
+    async updateOrgMemberRole(orgId: string, email: string, role: OrgRole): Promise<boolean> {
+        const result = await this.pool.query(
+            'UPDATE org_members SET role = $3 WHERE org_id = $1 AND user_email = $2',
+            [orgId, email, role]
+        )
+        return (result.rowCount ?? 0) > 0
+    }
+
+    async removeOrgMember(orgId: string, email: string): Promise<boolean> {
+        const result = await this.pool.query(
+            'DELETE FROM org_members WHERE org_id = $1 AND user_email = $2',
+            [orgId, email]
+        )
+        return (result.rowCount ?? 0) > 0
+    }
+
+    async getUserOrgRole(orgId: string, email: string): Promise<OrgRole | null> {
+        const result = await this.pool.query(
+            'SELECT role FROM org_members WHERE org_id = $1 AND user_email = $2',
+            [orgId, email]
+        )
+        return result.rows.length > 0 ? result.rows[0].role as OrgRole : null
+    }
+
+    // ========== Org Invitation 操作 ==========
+
+    async createOrgInvitation(data: { orgId: string; email: string; role: OrgRole; invitedBy: string; expiresAt: number }): Promise<StoredOrgInvitation | null> {
+        const now = Date.now()
+        const id = randomUUID()
+        const result = await this.pool.query(
+            `INSERT INTO org_invitations (id, org_id, email, role, invited_by, created_at, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (org_id, email) DO UPDATE SET role = $4, invited_by = $5, created_at = $6, expires_at = $7, accepted_at = NULL
+             RETURNING *`,
+            [id, data.orgId, data.email, data.role, data.invitedBy, now, data.expiresAt]
+        )
+        return result.rows.length > 0 ? this.toStoredOrgInvitation(result.rows[0]) : null
+    }
+
+    async getOrgInvitations(orgId: string): Promise<StoredOrgInvitation[]> {
+        const result = await this.pool.query(
+            'SELECT * FROM org_invitations WHERE org_id = $1 AND accepted_at IS NULL ORDER BY created_at DESC',
+            [orgId]
+        )
+        return result.rows.map((r: any) => this.toStoredOrgInvitation(r))
+    }
+
+    async getPendingInvitationsForUser(email: string): Promise<(StoredOrgInvitation & { orgName: string })[]> {
+        const now = Date.now()
+        const result = await this.pool.query(
+            `SELECT i.*, o.name as org_name FROM org_invitations i
+             INNER JOIN organizations o ON i.org_id = o.id
+             WHERE i.email = $1 AND i.accepted_at IS NULL AND i.expires_at > $2
+             ORDER BY i.created_at DESC`,
+            [email, now]
+        )
+        return result.rows.map((r: any) => ({
+            ...this.toStoredOrgInvitation(r),
+            orgName: r.org_name,
+        }))
+    }
+
+    async acceptOrgInvitation(id: string, userId: string, email: string): Promise<boolean> {
+        const client = await this.pool.connect()
+        try {
+            await client.query('BEGIN')
+            const now = Date.now()
+
+            // Get invitation and verify it belongs to this user
+            const invResult = await client.query(
+                'SELECT * FROM org_invitations WHERE id = $1 AND email = $2 AND accepted_at IS NULL AND expires_at > $3',
+                [id, email, now]
+            )
+            if (invResult.rows.length === 0) {
+                await client.query('ROLLBACK')
+                return false
+            }
+
+            const inv = invResult.rows[0]
+
+            // Mark as accepted
+            await client.query(
+                'UPDATE org_invitations SET accepted_at = $2 WHERE id = $1',
+                [id, now]
+            )
+
+            // Add as member
+            await client.query(
+                `INSERT INTO org_members (org_id, user_email, user_id, role, joined_at, invited_by)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 ON CONFLICT (org_id, user_email) DO NOTHING`,
+                [inv.org_id, inv.email, userId, inv.role, now, inv.invited_by]
+            )
+
+            await client.query('COMMIT')
+            return true
+        } catch (e) {
+            await client.query('ROLLBACK')
+            throw e
+        } finally {
+            client.release()
+        }
+    }
+
+    async deleteOrgInvitation(id: string, orgId?: string): Promise<boolean> {
+        if (orgId) {
+            const result = await this.pool.query('DELETE FROM org_invitations WHERE id = $1 AND org_id = $2', [id, orgId])
+            return (result.rowCount ?? 0) > 0
+        }
+        const result = await this.pool.query('DELETE FROM org_invitations WHERE id = $1', [id])
+        return (result.rowCount ?? 0) > 0
     }
 }

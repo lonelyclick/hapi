@@ -17,4 +17,9 @@ export const queryKeys = {
     typing: (sessionId: string) => ['typing', sessionId] as const,
     inputPresets: () => ['input-presets'] as const,
     userPreferences: ['user-preferences'] as const,
+    orgs: ['orgs'] as const,
+    org: (orgId: string) => ['org', orgId] as const,
+    orgMembers: (orgId: string) => ['org-members', orgId] as const,
+    orgInvitations: (orgId: string) => ['org-invitations', orgId] as const,
+    pendingInvitations: ['pending-invitations'] as const,
 }

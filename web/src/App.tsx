@@ -8,7 +8,7 @@ import { useSSE } from '@/hooks/useSSE'
 import { useSyncingState } from '@/hooks/useSyncingState'
 import type { SyncEvent, SessionSummary, Project } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
-import { AppContextProvider } from '@/lib/app-context'
+import { AppContextProvider, useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { SyncingBanner } from '@/components/SyncingBanner'
@@ -18,6 +18,8 @@ import { Toaster } from '@/components/ui/toaster'
 import { useVersionCheck } from '@/hooks/useVersionCheck'
 import { notifyTaskComplete, getPendingNotification, clearPendingNotification, useWebPushSubscription } from '@/hooks/useNotification'
 import { getAccessTokenSync } from '@/services/keycloak'
+import { useMyOrgs } from '@/hooks/queries/useOrgs'
+import { OrgSetup } from '@/components/OrgSetup'
 
 export function App() {
     const { baseUrl } = useServerUrl()
@@ -403,9 +405,35 @@ export function App() {
             <SyncingBanner isSyncing={isSyncing} />
             <OfflineBanner />
             <div className="h-full flex flex-col">
-                <Outlet />
+                <OrgGate>
+                    <Outlet />
+                </OrgGate>
             </div>
             <Toaster />
         </AppContextProvider>
     )
+}
+
+/**
+ * OrgGate - 检查用户是否属于至少一个组织
+ * 如果没有组织，显示创建/加入引导页面
+ */
+function OrgGate({ children }: { children: React.ReactNode }) {
+    const { api } = useAppContext()
+    const { orgs, isLoading } = useMyOrgs(api)
+    const [setupDismissed, setSetupDismissed] = useState(false)
+
+    if (isLoading) {
+        return (
+            <div className="h-full flex items-center justify-center p-4">
+                <LoadingState label="Loading..." className="text-sm" />
+            </div>
+        )
+    }
+
+    if (orgs.length === 0 && !setupDismissed) {
+        return <OrgSetup onComplete={() => setSetupDismissed(true)} />
+    }
+
+    return <>{children}</>
 }

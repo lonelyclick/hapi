@@ -24,6 +24,10 @@ import type {
     StoredInputPreset,
     StoredAllowedEmail,
     StoredSessionShare,
+    StoredOrganization,
+    StoredOrgMember,
+    StoredOrgInvitation,
+    OrgRole,
     UserRole,
     VersionedUpdateResult,
     SuggestionStatus,
@@ -118,9 +122,9 @@ export interface IStore {
     setSessionPrivacyMode(sessionId: string, privacyMode: boolean, namespace: string): Promise<boolean>
 
     // === Project 操作 ===
-    getProjects(machineId?: string | null): Promise<StoredProject[]>  // 按 machineId 过滤，null 或不传则返回所有
+    getProjects(machineId?: string | null, orgId?: string | null): Promise<StoredProject[]>
     getProject(id: string): Promise<StoredProject | null>
-    addProject(name: string, path: string, description?: string, machineId?: string | null): Promise<StoredProject | null>
+    addProject(name: string, path: string, description?: string, machineId?: string | null, orgId?: string | null): Promise<StoredProject | null>
     updateProject(id: string, name: string, path: string, description?: string, machineId?: string | null): Promise<StoredProject | null>
     removeProject(id: string): Promise<boolean>
 
@@ -147,9 +151,9 @@ export interface IStore {
     removePushSubscriptionById(id: number): Promise<boolean>
 
     // === Input Preset 操作 ===
-    getAllInputPresets(): Promise<StoredInputPreset[]>
+    getAllInputPresets(orgId?: string | null): Promise<StoredInputPreset[]>
     getInputPreset(id: string): Promise<StoredInputPreset | null>
-    addInputPreset(trigger: string, title: string, prompt: string): Promise<StoredInputPreset | null>
+    addInputPreset(trigger: string, title: string, prompt: string, orgId?: string | null): Promise<StoredInputPreset | null>
     updateInputPreset(id: string, trigger: string, title: string, prompt: string): Promise<StoredInputPreset | null>
     removeInputPreset(id: string): Promise<boolean>
 
@@ -420,6 +424,29 @@ export interface IStore {
     }>>
     cleanOldFeishuChatMessages(olderThanMs: number): Promise<number>
 
+    // === Organization 操作 ===
+    createOrganization(data: { name: string; slug: string; createdBy: string }): Promise<StoredOrganization | null>
+    getOrganization(id: string): Promise<StoredOrganization | null>
+    getOrganizationBySlug(slug: string): Promise<StoredOrganization | null>
+    getOrganizationsForUser(email: string): Promise<(StoredOrganization & { myRole: OrgRole })[]>
+    updateOrganization(id: string, data: { name?: string; settings?: Record<string, unknown> }): Promise<StoredOrganization | null>
+    deleteOrganization(id: string): Promise<boolean>
+
+    // === Org Member 操作 ===
+    addOrgMember(data: { orgId: string; userEmail: string; userId: string; role: OrgRole; invitedBy?: string }): Promise<StoredOrgMember | null>
+    getOrgMembers(orgId: string): Promise<StoredOrgMember[]>
+    getOrgMember(orgId: string, email: string): Promise<StoredOrgMember | null>
+    updateOrgMemberRole(orgId: string, email: string, role: OrgRole): Promise<boolean>
+    removeOrgMember(orgId: string, email: string): Promise<boolean>
+    getUserOrgRole(orgId: string, email: string): Promise<OrgRole | null>
+
+    // === Org Invitation 操作 ===
+    createOrgInvitation(data: { orgId: string; email: string; role: OrgRole; invitedBy: string; expiresAt: number }): Promise<StoredOrgInvitation | null>
+    getOrgInvitations(orgId: string): Promise<StoredOrgInvitation[]>
+    getPendingInvitationsForUser(email: string): Promise<(StoredOrgInvitation & { orgName: string })[]>
+    acceptOrgInvitation(id: string, userId: string, email: string): Promise<boolean>
+    deleteOrgInvitation(id: string, orgId?: string): Promise<boolean>
+
     // === 关闭连接 ===
     close(): Promise<void>
 }
@@ -449,6 +476,10 @@ export type {
     StoredRolePrompt,
     StoredInputPreset,
     StoredAllowedEmail,
+    StoredOrganization,
+    StoredOrgMember,
+    StoredOrgInvitation,
+    OrgRole,
     UserRole,
     VersionedUpdateResult,
     SuggestionStatus,

@@ -43,6 +43,15 @@ if [[ "$MACMINO_ONLY" == "true" ]]; then
         server/src/ \
         guang@192.168.0.236:~/softwares/yoho-remote/server/src/ 2>/dev/null || true
 
+    # 同步 package.json 和 scripts（构建脚本依赖这些）
+    rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
+        cli/package.json \
+        guang@192.168.0.236:~/softwares/yoho-remote/cli/package.json 2>/dev/null || true
+
+    rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
+        cli/scripts/ \
+        guang@192.168.0.236:~/softwares/yoho-remote/cli/scripts/ 2>/dev/null || true
+
     # 在 macmini 上重新构建 daemon
     echo "=== Building daemon on macmini..."
     sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 \

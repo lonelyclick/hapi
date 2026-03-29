@@ -1002,6 +1002,14 @@ export function createSessionsRoutes(
             claudeAgent: flavor === 'claude' ? (session.metadata?.runtimeAgent ?? undefined) : undefined
         }
 
+        // Extract native session ID for Claude/Codex resume
+        const resumeSessionId = (() => {
+            const value = flavor === 'claude'
+                ? session.metadata?.claudeSessionId
+                : session.metadata?.codexSessionId
+            return typeof value === 'string' && value.trim() ? value : undefined
+        })()
+
         // Pre-activate session in DB and memory so heartbeats are accepted
         // and subsequent resume requests are rejected as already-active
         // (archived sessions have active=false which blocks heartbeats)
@@ -1013,6 +1021,8 @@ export function createSessionsRoutes(
         // Reset thinking state so resumed session starts clean
         session.thinking = false
 
+        // Primary attempt: spawn with both yoho-remote session ID and native resume ID
+        // so the CLI binds to this session AND Claude/Codex resumes the old conversation
         const resumeAttempt = await engine.spawnSession(
             machineId,
             spawnTarget.directory,
@@ -1020,7 +1030,7 @@ export function createSessionsRoutes(
             undefined,
             spawnTarget.sessionType,
             spawnTarget.worktreeName,
-            { sessionId, ...modeSettings }
+            { sessionId, resumeSessionId, ...modeSettings }
         )
 
         if (resumeAttempt.type === 'success') {
@@ -1036,13 +1046,7 @@ export function createSessionsRoutes(
             }
         }
 
-        const resumeSessionId = (() => {
-            const value = flavor === 'claude'
-                ? session.metadata?.claudeSessionId
-                : session.metadata?.codexSessionId
-            return typeof value === 'string' && value.trim() ? value : undefined
-        })()
-
+        // Fallback: spawn a new session with only the native resume ID
         const fallbackResult = await engine.spawnSession(
             machineId,
             spawnTarget.directory,
