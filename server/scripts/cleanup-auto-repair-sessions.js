@@ -14,7 +14,7 @@ Delete all sessions with metadata.source starting with "hapi_repair" (Auto Repai
 
 Options:
   --base-url=URL         API base URL (default: http://localhost:<webappPort>)
-  --settings=PATH        Path to settings.json (default: ~/.hapi/settings.json or $HAPI_HOME)
+  --settings=PATH        Path to settings.json (default: ~/.hapi/settings.json or $YOHO_REMOTE_HOME)
   --token=TOKEN          CLI API token (default: $CLI_API_TOKEN or settings.json)
   --namespace=NAME       Namespace for access token (default: token namespace or "default")
   --limit=N              Max sessions to show/delete
@@ -77,8 +77,8 @@ function resolveSettingsPath(explicitPath) {
     if (explicitPath) {
         return explicitPath;
     }
-    const dataDir = process.env.HAPI_HOME
-        ? process.env.HAPI_HOME.replace(/^~/, os.homedir())
+    const dataDir = process.env.YOHO_REMOTE_HOME
+        ? process.env.YOHO_REMOTE_HOME.replace(/^~/, os.homedir())
         : path.join(os.homedir(), '.hapi');
     return path.join(dataDir, 'settings.json');
 }

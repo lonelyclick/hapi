@@ -1,6 +1,6 @@
 {
   "name": "@twsxtd/hapi",
-  "version": "v2026.03.27.1306",
+  "version": "v2026.03.27.1452",
   "description": "App for agentic coding - access coding agent anywhere",
   "author": "Kirill Dubovitskiy & weishu",
   "license": "LGPL-3.0-or-later",
@@ -38,6 +38,7 @@
     "build:exe:all": "bun run scripts/build-executable.ts --all",
     "build:exe:allinone": "bun run scripts/build-executable.ts --with-web-assets",
     "build:exe:allinone:all": "bun run scripts/build-executable.ts --with-web-assets --all",
+    "build:exe:cli": "bun run scripts/build-executable.ts --name yoho-remote",
     "build:exe:server": "bun run scripts/build-executable.ts --name yoho-remote-server --with-web-assets",
     "build:exe:daemon": "bun run scripts/build-executable.ts --name yoho-remote-daemon",
     "prepare-npm-packages": "bun run scripts/prepare-npm-packages.ts",

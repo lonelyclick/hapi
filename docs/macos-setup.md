@@ -12,7 +12,7 @@ For macmini (or any macOS machine on the same internal network as the HAPI serve
 
 ```bash
 # Internal network URL (replace with your server's internal IP)
-export HAPI_SERVER_URL="http://192.168.0.32:3006"
+export YOHO_REMOTE_URL="http://192.168.0.32:3006"
 
 # Full PATH including /usr/local/bin
 export PATH="/usr/local/bin:/Users/guang/.bun/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -41,7 +41,7 @@ cd ~/softwares/hapi
 # HAPI Daemon Control Script for macOS
 
 export CLI_API_TOKEN="your-token-here"
-export HAPI_SERVER_URL="http://192.168.0.32:3006"
+export YOHO_REMOTE_URL="http://192.168.0.32:3006"
 export PATH="/usr/local/bin:/Users/guang/.bun/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export HAPI_CLAUDE_PATH="/usr/local/bin/claude"
 
@@ -50,7 +50,7 @@ DAEMON_BIN="${HAPI_DIR}/cli/dist-exe/bun-darwin-arm64/hapi-daemon"
 
 # Start daemon with environment
 nohup env PATH="$PATH" CLI_API_TOKEN="$CLI_API_TOKEN" \
-     HAPI_SERVER_URL="$HAPI_SERVER_URL" HAPI_CLAUDE_PATH="$HAPI_CLAUDE_PATH" \
+     YOHO_REMOTE_URL="$YOHO_REMOTE_URL" HAPI_CLAUDE_PATH="$HAPI_CLAUDE_PATH" \
      "$DAEMON_BIN" > ~/.hapi/logs/daemon.stdout.log 2>&1 &
 ```
 

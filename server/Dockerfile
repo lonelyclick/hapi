@@ -27,7 +27,7 @@ WORKDIR /home/bun/app
 
 ENV NODE_ENV=production
 ENV WEBAPP_PORT=3006
-ENV HAPI_HOME=/data
+ENV YOHO_REMOTE_HOME=/data
 
 USER root
 RUN mkdir -p /data && chown bun:bun /data

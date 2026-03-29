@@ -139,7 +139,7 @@ User interface components.
 hapi daemon start
 
 # With custom bot URL (for local development):
-HAPI_SERVER_URL=http://localhost:3006 CLI_API_TOKEN=your_token hapi daemon start
+YOHO_REMOTE_URL=http://localhost:3006 CLI_API_TOKEN=your_token hapi daemon start
 
 # Stop the daemon:
 hapi daemon stop
@@ -149,7 +149,7 @@ hapi daemon status
 ```
 
 ## Daemon Logs
-- Daemon logs are stored in `~/.hapi/logs/` (or `$HAPI_HOME/logs/`)
+- Daemon logs are stored in `~/.hapi/logs/` (or `$YOHO_REMOTE_HOME/logs/`)
 - Named with format: `YYYY-MM-DD-HH-MM-SS-daemon.log`
 
 # Session Forking `claude` and sdk behavior

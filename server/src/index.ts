@@ -159,8 +159,8 @@ async function main() {
         socketEngine: socketServer.engine
     })
 
-    // Start background token refresh timer for Claude accounts
-    startTokenRefreshTimer()
+    // Disabled: Claude Code now uses relay service, no need for local OAuth token refresh
+    // startTokenRefreshTimer()
 
     // Start the bot if configured
     if (happyBot) {

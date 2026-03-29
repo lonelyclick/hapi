@@ -23,7 +23,7 @@ export function getInstalledCliMtimeMs(): number | undefined {
       // Check if we're in split deployment mode (hapi-daemon exists alongside hapi)
       const execDir = dirname(process.execPath);
       const isWindows = process.platform === 'win32';
-      const daemonExe = join(execDir, isWindows ? 'hapi-daemon.exe' : 'hapi-daemon');
+      const daemonExe = join(execDir, isWindows ? 'yoho-remote-daemon.exe' : 'yoho-remote-daemon');
 
       // If hapi-daemon exists, use its mtime for consistent version checking
       if (existsSync(daemonExe)) {

@@ -10,8 +10,8 @@
  * and the daemon will not work properly!
  * 
  * The integration test environment uses .env.integration-test which sets:
- * - HAPI_HOME=~/.hapi-dev-test (DIFFERENT from dev's ~/.hapi-dev!)
- * - HAPI_SERVER_URL=http://localhost:3006 (local hapi-server)
+ * - YOHO_REMOTE_HOME=~/.hapi-dev-test (DIFFERENT from dev's ~/.hapi-dev!)
+ * - YOHO_REMOTE_URL=http://localhost:3006 (local hapi-server)
  * - CLI_API_TOKEN=... (must match the server)
  */
 

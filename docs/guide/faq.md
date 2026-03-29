@@ -106,7 +106,7 @@ Only if they have your access token. For additional security:
 
 - Ensure server is running: `hapi server`
 - Check firewall allows port 3006
-- Verify `HAPI_SERVER_URL` is correct
+- Verify `YOHO_REMOTE_URL` is correct
 
 ### "Invalid token" error
 

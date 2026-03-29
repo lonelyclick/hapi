@@ -29,17 +29,17 @@ class Configuration {
 
     constructor() {
         // Server configuration
-        this.serverUrl = process.env.HAPI_SERVER_URL || 'http://localhost:3006'
+        this.serverUrl = process.env.YOHO_REMOTE_URL || 'http://localhost:3006'
         this._cliApiToken = process.env.CLI_API_TOKEN || ''
 
         // Check if we're running as daemon based on process args
         const args = getCliArgs()
         this.isDaemonProcess = args.length >= 2 && args[0] === 'daemon' && (args[1] === 'start-sync')
 
-        // Directory configuration - Priority: HAPI_HOME env > default home dir
-        if (process.env.HAPI_HOME) {
+        // Directory configuration - Priority: YOHO_REMOTE_HOME env > default home dir
+        if (process.env.YOHO_REMOTE_HOME) {
             // Expand ~ to home directory if present
-            const expandedPath = process.env.HAPI_HOME.replace(/^~/, homedir())
+            const expandedPath = process.env.YOHO_REMOTE_HOME.replace(/^~/, homedir())
             this.happyHomeDir = expandedPath
         } else {
             this.happyHomeDir = join(homedir(), '.hapi')

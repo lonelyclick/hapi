@@ -10,8 +10,8 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-const HAPI_HOME = process.env.HAPI_HOME || join(homedir(), '.hapi')
-const CREDENTIALS_DIR = join(HAPI_HOME, 'credentials')
+const YOHO_REMOTE_HOME = process.env.YOHO_REMOTE_HOME || join(homedir(), '.hapi')
+const CREDENTIALS_DIR = join(YOHO_REMOTE_HOME, 'credentials')
 
 interface MigrationResult {
     source: string
@@ -32,7 +32,7 @@ async function writeSecurely(filePath: string, data: object): Promise<void> {
 }
 
 async function migrateJwtSecret(): Promise<MigrationResult> {
-    const source = join(HAPI_HOME, 'jwt-secret.json')
+    const source = join(YOHO_REMOTE_HOME, 'jwt-secret.json')
     const target = join(CREDENTIALS_DIR, 'jwt-secret.json')
 
     if (existsSync(target)) {
@@ -58,7 +58,7 @@ async function migrateJwtSecret(): Promise<MigrationResult> {
 }
 
 async function migrateApiTokens(): Promise<MigrationResult> {
-    const source = join(HAPI_HOME, 'settings.json')
+    const source = join(YOHO_REMOTE_HOME, 'settings.json')
     const target = join(CREDENTIALS_DIR, 'api-tokens.json')
 
     if (existsSync(target)) {
@@ -93,7 +93,7 @@ async function migrateApiTokens(): Promise<MigrationResult> {
 }
 
 async function migrateVapidKeys(): Promise<MigrationResult> {
-    const source = join(HAPI_HOME, 'settings.json')
+    const source = join(YOHO_REMOTE_HOME, 'settings.json')
     const target = join(CREDENTIALS_DIR, 'vapid-keys.json')
 
     if (existsSync(target)) {
@@ -128,7 +128,7 @@ async function migrateVapidKeys(): Promise<MigrationResult> {
 async function main() {
     console.log('🔐 HAPI Credentials Migration')
     console.log('=============================')
-    console.log(`HAPI_HOME: ${HAPI_HOME}`)
+    console.log(`YOHO_REMOTE_HOME: ${YOHO_REMOTE_HOME}`)
     console.log(`Target: ${CREDENTIALS_DIR}`)
     console.log('')
 
@@ -151,7 +151,7 @@ async function main() {
 
     for (const result of results) {
         const status = result.success ? '✅' : '❌'
-        const target = result.target.replace(HAPI_HOME, '~/.hapi')
+        const target = result.target.replace(YOHO_REMOTE_HOME, '~/.hapi')
         console.log(`${status} ${target}`)
         if (result.error) {
             console.log(`   ${result.error}`)

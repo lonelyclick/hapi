@@ -211,6 +211,7 @@ const ENTRYPOINTS: Record<string, string> = {
     'hapi': 'bootstrap.ts',
     'hapi-server': 'bootstrap-server.ts',
     'hapi-daemon': 'bootstrap-daemon.ts',
+    'yoho-remote': 'bootstrap.ts',
     'yoho-remote-server': 'bootstrap-server.ts',
     'yoho-remote-daemon': 'bootstrap-daemon.ts',
 };

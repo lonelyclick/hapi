@@ -101,9 +101,9 @@ On first run, HAPI:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CLI_API_TOKEN` | Auto-generated | Shared secret for authentication |
-| `HAPI_SERVER_URL` | `http://localhost:3006` | Server URL for CLI |
+| `YOHO_REMOTE_URL` | `http://localhost:3006` | Server URL for CLI |
 | `WEBAPP_PORT` | `3006` | HTTP server port |
-| `HAPI_HOME` | `~/.hapi` | Config directory path |
+| `YOHO_REMOTE_HOME` | `~/.hapi` | Config directory path |
 | `DATABASE_URL` | - | PostgreSQL connection string |
 | `CORS_ORIGINS` | - | Allowed CORS origins |
 | `FEISHU_APP_ID` | - | Feishu/Lark app ID (speech-to-text) |
@@ -116,7 +116,7 @@ On first run, HAPI:
 If the server is not on localhost, set these before running `hapi`:
 
 ```bash
-export HAPI_SERVER_URL="http://your-server:3006"
+export YOHO_REMOTE_URL="http://your-server:3006"
 export CLI_API_TOKEN="your-token-here"
 ```
 

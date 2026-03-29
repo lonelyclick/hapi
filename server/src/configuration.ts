@@ -14,7 +14,7 @@
  * - FEISHU_APP_ID: Feishu/Lark app ID for speech-to-text
  * - FEISHU_APP_SECRET: Feishu/Lark app secret for speech-to-text
  * - FEISHU_BASE_URL: Feishu/Lark OpenAPI base URL (default: https://open.feishu.cn)
- * - HAPI_HOME: Data directory (default: ~/.hapi)
+ * - YOHO_REMOTE_HOME: Data directory (default: ~/.hapi)
  */
 
 import { existsSync, mkdirSync } from 'node:fs'
@@ -137,8 +137,8 @@ class Configuration {
     /** Create configuration asynchronously */
     static async create(): Promise<Configuration> {
         // 1. Determine data directory (env only - not persisted)
-        const dataDir = process.env.HAPI_HOME
-            ? process.env.HAPI_HOME.replace(/^~/, homedir())
+        const dataDir = process.env.YOHO_REMOTE_HOME
+            ? process.env.YOHO_REMOTE_HOME.replace(/^~/, homedir())
             : join(homedir(), '.hapi')
 
         // Ensure data directory exists before loading settings

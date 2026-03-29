@@ -698,8 +698,8 @@ export async function startDaemon(): Promise<void> {
         // We do not need to clean ourselves up - we will be killed by the new daemon.
         try {
           // Check if we're running as standalone hapi-daemon executable
-          const isStandaloneDaemon = process.execPath.endsWith('hapi-daemon') ||
-                                      process.execPath.endsWith('hapi-daemon.exe');
+          const isStandaloneDaemon = process.execPath.endsWith('yoho-remote-daemon') ||
+                                      process.execPath.endsWith('yoho-remote-daemon.exe');
 
           if (isStandaloneDaemon) {
             // Standalone mode: just spawn ourselves directly (no arguments needed)

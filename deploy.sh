@@ -51,7 +51,7 @@ if [[ "$MACMINO_ONLY" == "true" ]]; then
     # 重启 macmini 上的 daemon
     echo "=== Restarting daemon on macmini..."
     sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 \
-        'pkill -f hapi-daemon || true; sleep 1; ~/softwares/hapi/start-daemon.sh > /dev/null 2>&1 &'
+        'pkill -f yoho-remote-daemon || true; sleep 1; ~/softwares/hapi/start-daemon.sh > /dev/null 2>&1 &'
 
     echo "=== macmini daemon updated and restarted"
     exit 0
@@ -104,8 +104,8 @@ fi
 echo "=== Server build verified (age: ${SERVER_AGE}s)"
 
 # 构建主 CLI (用于 spawn session，不会触发 daemon 重启)
-echo "=== Building hapi CLI..."
-(cd cli && bun run build:exe)
+echo "=== Building yoho-remote CLI..."
+(cd cli && bun run build:exe:cli)
 sync
 
 # 如果需要，构建 daemon
@@ -152,7 +152,7 @@ if [[ "$BUILD_DAEMON" == "true" ]]; then
 
     # 重启 macmini 上的 daemon
     sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 \
-        'pkill -f hapi-daemon || true; sleep 1; ~/softwares/hapi/start-daemon.sh > /dev/null 2>&1 &'
+        'pkill -f yoho-remote-daemon || true; sleep 1; ~/softwares/hapi/start-daemon.sh > /dev/null 2>&1 &'
 
     echo "=== macmini daemon updated and restarted"
 fi

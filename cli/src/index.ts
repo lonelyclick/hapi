@@ -665,7 +665,7 @@ ${chalk.bold.cyan('Claude Code Options (from `claude --help`):')}
       } else if (httpStatus === 403 && responseErrorText === 'Machine access denied') {
         console.error(chalk.red('Machine access denied.'));
         console.error(chalk.gray('  This machineId is already registered under a different namespace.'));
-        console.error(chalk.gray('  Fix: run `hapi auth logout`, or set a separate HAPI_HOME per namespace.'));
+        console.error(chalk.gray('  Fix: run `hapi auth logout`, or set a separate YOHO_REMOTE_HOME per namespace.'));
       } else if (httpStatus === 403 && responseErrorText === 'Session access denied') {
         console.error(chalk.red('Session access denied.'));
         console.error(chalk.gray('  This session belongs to a different namespace.'));

@@ -32,7 +32,7 @@ function getMainCliExecutable(): string | null {
 
   const execDir = dirname(process.execPath);
   const isWindows = process.platform === 'win32';
-  const cliExe = join(execDir, isWindows ? 'hapi.exe' : 'hapi');
+  const cliExe = join(execDir, isWindows ? 'yoho-remote.exe' : 'yoho-remote');
 
   if (existsSync(cliExe)) {
     return cliExe;

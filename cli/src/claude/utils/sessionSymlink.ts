@@ -84,7 +84,7 @@ export function ensureClaudeSessionSymlink(opts: {
     const candidateAccountBases = new Set<string>([
         // Default hapi home on most systems
         join(homeDir, '.hapi', 'claude-accounts'),
-        // Respect HAPI_HOME if CLI is configured
+        // Respect YOHO_REMOTE_HOME if CLI is configured
         join(configuration.happyHomeDir, 'claude-accounts'),
     ]);
 

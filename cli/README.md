@@ -67,11 +67,11 @@ See `src/configuration.ts` for all options.
 ### Required
 
 - `CLI_API_TOKEN` - Shared secret; must match the server. Can be set via env or `~/.hapi/settings.json` (env wins).
-- `HAPI_SERVER_URL` - Server base URL (default: http://localhost:3006).
+- `YOHO_REMOTE_URL` - Server base URL (default: http://localhost:3006).
 
 ### Optional
 
-- `HAPI_HOME` - Config/data directory (default: ~/.hapi).
+- `YOHO_REMOTE_HOME` - Config/data directory (default: ~/.hapi).
 - `HAPI_EXPERIMENTAL` - Enable experimental features (true/1/yes).
 - `HAPI_CLAUDE_PATH` - Path to a specific `claude` executable.
 - `HAPI_HTTP_MCP_URL` - Default MCP target for `hapi mcp`.
@@ -90,7 +90,7 @@ See `src/configuration.ts` for all options.
 
 ## Storage
 
-Data is stored in `~/.hapi/` (or `$HAPI_HOME`):
+Data is stored in `~/.hapi/` (or `$YOHO_REMOTE_HOME`):
 
 - `settings.json` - User settings (machineId, token, onboarding flag). See `src/persistence.ts`.
 - `daemon.state.json` - Daemon state (pid, port, version, heartbeat).

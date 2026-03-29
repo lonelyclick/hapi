@@ -34,7 +34,7 @@ See `src/configuration.ts` for all options.
 
 - `WEBAPP_PORT` - HTTP port (default: 3006).
 - `CORS_ORIGINS` - Comma-separated origins, or `*`.
-- `HAPI_HOME` - Data directory (default: ~/.hapi).
+- `YOHO_REMOTE_HOME` - Data directory (default: ~/.hapi).
 - `DATABASE_URL` - PostgreSQL connection string.
 
 ## Running
