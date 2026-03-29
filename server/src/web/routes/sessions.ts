@@ -140,7 +140,7 @@ const modelModeSchema = z.object({
 const createSessionSchema = z.object({
     machineId: z.string().min(1),
     directory: z.string().min(1),
-    agent: z.enum(['claude', 'codex', 'opencode', 'gemini', 'glm', 'minimax', 'grok', 'openrouter', 'aider-cli']).optional(),
+    agent: z.enum(['claude', 'codex', 'opencode', 'gemini', 'glm', 'minimax', 'grok', 'openrouter', 'aider-cli', 'droid']).optional(),
     yolo: z.boolean().optional(),
     sessionType: z.enum(['simple', 'worktree']).optional(),
     worktreeName: z.string().optional(),

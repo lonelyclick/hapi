@@ -410,6 +410,7 @@ export async function startDaemon(): Promise<void> {
           switch (agent) {
             case 'codex': return 'codex';
             case 'opencode': return 'opencode';
+            case 'droid': return 'droid';
             default: return 'claude';
           }
         })();

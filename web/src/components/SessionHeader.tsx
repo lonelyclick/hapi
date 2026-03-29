@@ -223,6 +223,7 @@ function getAgentLabel(session: Session): string {
     if (flavor === 'claude') return 'Claude'
     if (flavor === 'codex') return 'Codex'
     if (flavor === 'gemini') return 'Gemini'
+    if (flavor === 'droid') return 'Droid'
     if (flavor) return flavor
     return 'Agent'
 }

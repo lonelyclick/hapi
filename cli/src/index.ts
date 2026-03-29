@@ -319,6 +319,34 @@ import { getCliArgs } from './utils/cliArgs'
       process.exit(1)
     }
     return;
+  } else if (subcommand === 'droid') {
+    // Handle droid command (Factory Droid CLI)
+    try {
+      let startedBy: 'daemon' | 'terminal' | undefined = undefined;
+      let yolo = false;
+      for (let i = 1; i < args.length; i++) {
+        if (args[i] === '--started-by') {
+          startedBy = args[++i] as 'daemon' | 'terminal';
+        } else if (args[i] === '--yolo') {
+          yolo = true;
+        }
+      }
+
+      const { registerDroidAgent } = await import('./agent/runners/droid');
+      const { runAgentSession } = await import('./agent/runners/runAgentSession');
+      registerDroidAgent(yolo);
+
+      await initializeToken();
+      await authAndSetupMachineIfNeeded();
+      await runAgentSession({ agentType: 'droid', startedBy });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
+      if (process.env.DEBUG) {
+        console.error(error)
+      }
+      process.exit(1)
+    }
+    return;
   } else if (subcommand === 'aider-cli') {
     // Handle aider-cli command (真正的 Aider CLI)
     try {

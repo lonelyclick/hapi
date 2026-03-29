@@ -125,6 +125,7 @@ function getAgentLabel(session: SessionSummary): string {
     if (flavor === 'codex') return 'Codex'
     if (flavor === 'opencode') return 'OpenCode'
     if (flavor === 'gemini') return 'Gemini'
+    if (flavor === 'droid') return 'Droid'
     if (flavor) return flavor
     return 'Agent'
 }
