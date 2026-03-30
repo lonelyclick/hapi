@@ -33,6 +33,7 @@ import { queryKeys } from '@/lib/query-keys'
 import TerminalPage from '@/routes/sessions/terminal'
 import SettingsPage from '@/routes/settings'
 import OrgDetailPage from '@/routes/orgs'
+import AcceptInvitationPage from '@/routes/invitations/accept'
 import { LoginPage } from '@/routes/login'
 import { AuthCallbackPage } from '@/routes/auth/callback'
 
@@ -557,6 +558,12 @@ const authCallbackRoute = createRoute({
     component: AuthCallbackPage,
 })
 
+const acceptInvitationRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/invitations/accept/$invitationId',
+    component: AcceptInvitationPage,
+})
+
 export const routeTree = rootRoute.addChildren([
     indexRoute,
     loginRoute,
@@ -567,6 +574,7 @@ export const routeTree = rootRoute.addChildren([
     newSessionRoute,
     settingsRoute,
     orgDetailRoute,
+    acceptInvitationRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']

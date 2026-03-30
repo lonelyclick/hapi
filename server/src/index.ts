@@ -18,6 +18,7 @@ import { startWebServer } from './web/server'
 import { createSocketServer } from './socket/server'
 import { SSEManager } from './sse/sseManager'
 import { initWebPushService } from './services/webPush'
+import { emailService } from './services/emailService'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 
@@ -108,6 +109,48 @@ async function main() {
         console.log('[Server] Web Push: enabled')
     } else {
         console.log('[Server] Web Push: disabled (missing VAPID keys)')
+    }
+
+    // Initialize Email service
+    // Try to load from credential system first, fallback to env vars
+    let emailConfig: { host: string; port: number; secure: boolean; user: string; password: string; from: string } | null = null
+    try {
+        const fs = await import('node:fs/promises')
+        const path = await import('node:path')
+        const credPath = path.join(process.env.HOME || '/home/guang', '.credentials', 'stalwart_smtp', 'it.json')
+        const credContent = await fs.readFile(credPath, 'utf-8')
+        const cred = JSON.parse(credContent)
+        if (cred.host && cred.port && cred.user && cred.password) {
+            emailConfig = {
+                host: cred.host,
+                port: cred.port,
+                secure: cred.secure ?? true,
+                user: cred.user,
+                password: cred.password,
+                from: cred.from || cred.user,
+            }
+            console.log(`[Server] Email: loaded from credential system (${emailConfig.from})`)
+        }
+    } catch (error) {
+        // Fallback to environment variables
+        if (process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+            emailConfig = {
+                host: process.env.SMTP_HOST,
+                port: parseInt(process.env.SMTP_PORT, 10),
+                secure: process.env.SMTP_SECURE === 'true',
+                user: process.env.SMTP_USER,
+                password: process.env.SMTP_PASSWORD,
+                from: process.env.SMTP_FROM || process.env.SMTP_USER,
+            }
+            console.log(`[Server] Email: loaded from environment (${emailConfig.from})`)
+        }
+    }
+
+    if (emailConfig) {
+        emailService.initialize(emailConfig)
+        console.log(`[Server] Email: enabled (${emailConfig.from})`)
+    } else {
+        console.log('[Server] Email: disabled (missing SMTP config)')
     }
 
     console.log('[Server] Auth: Keycloak SSO')

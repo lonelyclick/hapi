@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { WebAppEnv } from '../middleware/auth'
 import type { IStore, OrgRole } from '../../store'
+import { emailService } from '../../services/emailService'
 
 const createOrgSchema = z.object({
     name: z.string().min(1).max(100),
@@ -198,6 +199,43 @@ export function createOrgsRoutes(store: IStore): Hono<WebAppEnv> {
 
         if (!invitation) {
             return c.json({ error: 'Failed to create invitation' }, 500)
+        }
+
+        // 获取组织详情用于邮件
+        const org = await store.getOrganization(orgId)
+        if (!org) {
+            return c.json({ error: 'Organization not found' }, 404)
+        }
+
+        // 发送邀请邮件
+        try {
+            await emailService.sendOrgInvitation({
+                to: parsed.data.email,
+                orgName: org.name,
+                orgSlug: org.slug,
+                inviterEmail: email,
+                invitationId: invitation.id,
+                role: parsed.data.role,
+                expiresAt,
+            })
+            console.log('[Email] Invitation email sent successfully:', {
+                to: parsed.data.email,
+                orgName: org.name,
+                invitationId: invitation.id,
+            })
+        } catch (error) {
+            console.error('[Email] Failed to send invitation email:', {
+                to: parsed.data.email,
+                orgName: org.name,
+                orgSlug: org.slug,
+                invitationId: invitation.id,
+                role: parsed.data.role,
+                error: error instanceof Error ? {
+                    message: error.message,
+                    stack: error.stack,
+                } : error,
+            })
+            // 邮件发送失败不影响邀请创建，继续返回成功
         }
 
         return c.json({ ok: true, invitation })
