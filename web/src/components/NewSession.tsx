@@ -159,7 +159,7 @@ export function NewSession(props: {
     const [machineId, setMachineId] = useState<string | null>(savedPrefs.machineId ?? null)
     const [projectPath, setProjectPath] = useState(savedPrefs.projectPath ?? '')
     const [agent, setAgent] = useState<AgentType>(savedPrefs.agent ?? 'claude')
-    const [claudeModel, setClaudeModel] = useState<ClaudeModelMode>(savedPrefs.claudeModel ?? 'default')
+    const [claudeModel, setClaudeModel] = useState<ClaudeModelMode>(savedPrefs.claudeModel ?? 'sonnet')
     const [codexReasoningEffort, setCodexReasoningEffort] = useState<'medium' | 'high' | 'xhigh'>(savedPrefs.codexReasoningEffort ?? 'medium')
     const [droidModel, setDroidModel] = useState(savedPrefs.droidModel ?? DROID_MODELS[0].value)
     const [droidReasoningEffort, setDroidReasoningEffort] = useState(savedPrefs.droidReasoningEffort ?? DROID_MODELS[0].defaultEffort)
@@ -440,35 +440,18 @@ export function NewSession(props: {
                     <label className="text-xs font-medium text-[var(--app-hint)]">
                         Model
                     </label>
-                    <div className="space-y-1">
+                    <select
+                        value={claudeModel}
+                        onChange={(e) => setClaudeModel(e.target.value as ClaudeModelMode)}
+                        disabled={isFormDisabled}
+                        className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
+                    >
                         {CLAUDE_MODES.map((mode) => (
-                            <button
-                                key={mode.value}
-                                type="button"
-                                disabled={isFormDisabled}
-                                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors ${
-                                    claudeModel === mode.value
-                                        ? 'bg-[var(--app-button)]/10 text-[var(--app-button)]'
-                                        : 'hover:bg-[var(--app-secondary-bg)] text-[var(--app-fg)]'
-                                } disabled:cursor-not-allowed disabled:opacity-50`}
-                                onClick={() => setClaudeModel(mode.value)}
-                            >
-                                <div className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                                    claudeModel === mode.value
-                                        ? 'border-[var(--app-button)]'
-                                        : 'border-[var(--app-hint)]'
-                                }`}>
-                                    {claudeModel === mode.value && (
-                                        <div className="h-2 w-2 rounded-full bg-[var(--app-button)]" />
-                                    )}
-                                </div>
-                                <div className="flex flex-col gap-0.5">
-                                    <span className="font-medium">{mode.label}</span>
-                                    <span className="text-[10px] text-[var(--app-hint)]">{mode.description}</span>
-                                </div>
-                            </button>
+                            <option key={mode.value} value={mode.value}>
+                                {mode.label} - {mode.description}
+                            </option>
                         ))}
-                    </div>
+                    </select>
                 </div>
             ) : null}
 
