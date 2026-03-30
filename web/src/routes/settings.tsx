@@ -316,10 +316,10 @@ export default function SettingsPage() {
 
     // Machines (for project form)
     const { data: machinesData } = useQuery({
-        queryKey: ['machines'],
+        queryKey: ['machines', currentOrgId],
         queryFn: async () => {
             if (!api) throw new Error('API unavailable')
-            return await api.getMachines()
+            return await api.getMachines(currentOrgId ?? undefined)
         },
         enabled: Boolean(api)
     })
