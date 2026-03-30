@@ -148,39 +148,41 @@ if ! grep -q "EnvironmentFile=" "$SERVICE_FILE" 2>/dev/null; then
     echo "guang" | sudo -S systemctl daemon-reload
 fi
 
-echo "=== Stopping and restarting services..."
-# 先 stop 再 start，用 nohup 确保 deploy.sh 即使父进程被杀也能继续
+# 重启服务：用独立后台脚本执行，避免 stop daemon 杀掉当前会话导致脚本中断
+RESTART_SCRIPT=$(mktemp /tmp/yr-restart-XXXXXX.sh)
+cat > "$RESTART_SCRIPT" << 'RESTART_EOF'
+#!/bin/bash
+BUILD_DAEMON="$1"
+
 if [[ "$BUILD_DAEMON" == "true" ]]; then
-    echo "    (stopping daemon...)"
-    echo "guang" | sudo -S systemctl stop yoho-remote-daemon.service || true
-    sleep 1
-    # 杀掉残留的 yoho-remote 进程（非 deploy.sh 自身）
-    pkill -f 'yoho-remote-(daemon|server)$' || true
-    pkill -f '/yoho-remote ' || true
-    sleep 1
+    echo "guang" | sudo -S systemctl stop yoho-remote-daemon.service 2>/dev/null || true
+    sleep 2
 fi
-echo "guang" | sudo -S systemctl stop yoho-remote-server.service || true
+echo "guang" | sudo -S systemctl stop yoho-remote-server.service 2>/dev/null || true
 sleep 1
 
 if [[ "$BUILD_DAEMON" == "true" ]]; then
-    echo "    (starting daemon...)"
     echo "guang" | sudo -S systemctl start yoho-remote-daemon.service
 fi
 echo "guang" | sudo -S systemctl start yoho-remote-server.service
 
-# 等待服务启动
 sleep 2
-
-# 验证服务运行
-if ! systemctl is-active --quiet yoho-remote-server.service; then
+if systemctl is-active --quiet yoho-remote-server.service; then
+    echo "=== Done! Services restarted successfully."
+else
     echo "ERROR: yoho-remote-server.service failed to start"
     echo "guang" | sudo -S journalctl -u yoho-remote-server.service -n 20 --no-pager
-    exit 1
 fi
 
-echo "=== Done! Services restarted successfully."
+rm -f "$0"
+RESTART_EOF
+chmod +x "$RESTART_SCRIPT"
+
+echo "=== Restarting services in background..."
 if [[ "$BUILD_DAEMON" == "true" ]]; then
-    echo "    (daemon was rebuilt and restarted)"
+    echo "    (with daemon restart)"
 else
     echo "    (daemon was NOT rebuilt - sessions should remain online)"
 fi
+nohup bash "$RESTART_SCRIPT" "$BUILD_DAEMON" > /tmp/yr-restart.log 2>&1 &
+echo "=== Restart dispatched (log: /tmp/yr-restart.log)"
