@@ -15,10 +15,14 @@ export function AcceptInvitationPage() {
     const [error, setError] = useState<string>('')
 
     useEffect(() => {
+        let mounted = true
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
+
         const acceptInvitation = async () => {
             if (!userEmail) {
-                // 未登录，跳转到登录页，登录后回到这里
-                navigate({ to: '/login', search: { redirect: `/invitations/accept/${invitationId}` } })
+                // 未登录，跳转到登录页
+                // TODO: 实现登录后重定向回邀请接受页面
+                navigate({ to: '/login' })
                 return
             }
 
@@ -26,24 +30,34 @@ export function AcceptInvitationPage() {
                 setStatus('loading')
                 const response = await api.acceptInvitation(invitationId)
 
+                if (!mounted) return
+
                 if (response.ok) {
                     setStatus('success')
                     // 等待 1 秒后跳转到组织列表
-                    setTimeout(() => {
-                        navigate({ to: '/' })
+                    timeoutId = setTimeout(() => {
+                        if (mounted) {
+                            navigate({ to: '/' })
+                        }
                     }, 1000)
                 } else {
                     setStatus('error')
                     setError('Failed to accept invitation')
                 }
             } catch (err) {
+                if (!mounted) return
                 setStatus('error')
                 setError(err instanceof Error ? err.message : 'Failed to accept invitation')
             }
         }
 
         acceptInvitation()
-    }, [api, invitationId, navigate, userEmail])
+
+        return () => {
+            mounted = false
+            if (timeoutId) clearTimeout(timeoutId)
+        }
+    }, [invitationId, userEmail]) // 移除 api 和 navigate，它们是稳定的引用
 
     return (
         <div className="flex h-full items-center justify-center p-4">
