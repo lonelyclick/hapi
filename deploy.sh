@@ -137,33 +137,6 @@ if [[ "$BUILD_DAEMON" == "true" ]]; then
     fi
 
     echo "=== Daemon build verified (age: ${DAEMON_AGE}s)"
-
-    # 同步 daemon 到 macmini
-    echo "=== Deploying daemon to macmini..."
-    sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 'mkdir -p ~/softwares/yoho-remote'
-
-    # 同步源文件到 macmini
-    rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
-        --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
-        --exclude='.git' --exclude='test-fixtures' --exclude='.cache' \
-        cli/src/ \
-        guang@192.168.0.236:~/softwares/yoho-remote/cli/src/ 2>/dev/null || true
-
-    rsync -avz -e 'sshpass -p guang ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password' \
-        --exclude='node_modules' --exclude='dist' --exclude='dist-exe' \
-        --exclude='.git' --exclude='.cache' \
-        server/src/ \
-        guang@192.168.0.236:~/softwares/yoho-remote/server/src/ 2>/dev/null || true
-
-    # 在 macmini 上重新构建 daemon
-    sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 \
-        'cd ~/softwares/yoho-remote/cli && ~/.bun/bin/bun run build:exe:daemon'
-
-    # 重启 macmini 上的 daemon
-    sshpass -p 'guang' ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=password guang@192.168.0.236 \
-        'pkill -f yoho-remote-daemon || true; sleep 1; ~/softwares/yoho-remote/start-daemon.sh > /dev/null 2>&1 &'
-
-    echo "=== macmini daemon updated and restarted"
 fi
 
 # 确保 systemd service 包含 EnvironmentFile（加载 .env 中的 LITELLM 等变量）
