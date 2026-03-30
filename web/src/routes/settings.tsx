@@ -11,6 +11,7 @@ import { getLogoutUrl, clearTokens } from '@/services/keycloak'
 import type { InputPreset, Project } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { useMyOrgs } from '@/hooks/queries/useOrgs'
+import { useCreateOrg } from '@/hooks/mutations/useOrgMutations'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -267,7 +268,7 @@ function ProjectForm(props: {
 }
 
 export default function SettingsPage() {
-    const { api, currentOrgId } = useAppContext()
+    const { api, currentOrgId, setCurrentOrgId } = useAppContext()
     const goBack = useAppGoBack()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
@@ -284,6 +285,34 @@ export default function SettingsPage() {
 
     // Organizations
     const { orgs } = useMyOrgs(api)
+    const { createOrg, isPending: isCreatingOrg, error: createOrgError } = useCreateOrg(api)
+    const [showCreateOrg, setShowCreateOrg] = useState(false)
+    const [newOrgName, setNewOrgName] = useState('')
+    const [newOrgSlug, setNewOrgSlug] = useState('')
+    const [newOrgSlugTouched, setNewOrgSlugTouched] = useState(false)
+
+    const handleNewOrgNameChange = useCallback((name: string) => {
+        setNewOrgName(name)
+        if (!newOrgSlugTouched) {
+            setNewOrgSlug(name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+        }
+    }, [newOrgSlugTouched])
+
+    const handleCreateOrg = useCallback(async () => {
+        if (!newOrgName.trim() || !newOrgSlug.trim()) return
+        try {
+            const result = await createOrg({ name: newOrgName.trim(), slug: newOrgSlug.trim() })
+            if (result?.org) {
+                setCurrentOrgId(result.org.id)
+            }
+            setShowCreateOrg(false)
+            setNewOrgName('')
+            setNewOrgSlug('')
+            setNewOrgSlugTouched(false)
+        } catch {
+            // error handled by hook
+        }
+    }, [createOrg, newOrgName, newOrgSlug, setCurrentOrgId])
 
     // Machines (for project form)
     const { data: machinesData } = useQuery({
@@ -624,34 +653,89 @@ export default function SettingsPage() {
                     </div>
 
                     {/* Organization Section */}
-                    {orgs.length > 0 && (
-                        <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                            <div className="px-3 py-2 border-b border-[var(--app-divider)]">
-                                <h2 className="text-sm font-medium">Organization</h2>
-                            </div>
-                            <div className="divide-y divide-[var(--app-divider)]">
-                                {orgs.map((org) => (
-                                    <button
-                                        key={org.id}
-                                        type="button"
-                                        onClick={() => navigate({ to: '/orgs/$orgId', params: { orgId: org.id } })}
-                                        className="w-full px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-[var(--app-secondary-bg)] transition-colors"
-                                    >
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white text-xs font-bold">
-                                                {org.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div className="min-w-0 text-left">
-                                                <div className="text-sm font-medium truncate">{org.name}</div>
-                                                <div className="text-[10px] text-[var(--app-hint)]">{org.myRole}</div>
-                                            </div>
-                                        </div>
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--app-hint)]"><polyline points="9 18 15 12 9 6" /></svg>
-                                    </button>
-                                ))}
-                            </div>
+                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                        <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                            <h2 className="text-sm font-medium">Organization</h2>
                         </div>
-                    )}
+                        <div className="divide-y divide-[var(--app-divider)]">
+                            {orgs.map((org) => (
+                                <button
+                                    key={org.id}
+                                    type="button"
+                                    onClick={() => navigate({ to: '/orgs/$orgId', params: { orgId: org.id } })}
+                                    className="w-full px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-[var(--app-secondary-bg)] transition-colors"
+                                >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white text-xs font-bold">
+                                            {org.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0 text-left">
+                                            <div className="text-sm font-medium truncate">{org.name}</div>
+                                            <div className="text-[10px] text-[var(--app-hint)]">{org.myRole}</div>
+                                        </div>
+                                    </div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--app-hint)]"><polyline points="9 18 15 12 9 6" /></svg>
+                                </button>
+                            ))}
+                        </div>
+                        {!showCreateOrg ? (
+                            <div className="border-t border-[var(--app-divider)] px-3 py-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCreateOrg(true)}
+                                    className="w-full py-2 text-sm font-medium rounded-lg text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors flex items-center justify-center gap-1.5"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                    Create Organization
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="border-t border-[var(--app-divider)] p-3 space-y-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-[var(--app-hint)] mb-1">Organization Name</label>
+                                    <input
+                                        type="text"
+                                        value={newOrgName}
+                                        onChange={(e) => handleNewOrgNameChange(e.target.value)}
+                                        placeholder="My Team"
+                                        className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--app-bg)] border border-[var(--app-divider)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)]"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-[var(--app-hint)] mb-1">URL Slug</label>
+                                    <input
+                                        type="text"
+                                        value={newOrgSlug}
+                                        onChange={(e) => { setNewOrgSlug(e.target.value); setNewOrgSlugTouched(true) }}
+                                        placeholder="my-team"
+                                        className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--app-bg)] border border-[var(--app-divider)] text-[var(--app-fg)] placeholder:text-[var(--app-hint)]"
+                                    />
+                                    <div className="mt-1 text-[10px] text-[var(--app-hint)]">Lowercase letters, numbers, and hyphens only</div>
+                                </div>
+                                {createOrgError && (
+                                    <div className="text-xs text-red-500">{createOrgError}</div>
+                                )}
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowCreateOrg(false); setNewOrgName(''); setNewOrgSlug(''); setNewOrgSlugTouched(false) }}
+                                        className="flex-1 py-2 text-sm rounded-lg bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)] transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleCreateOrg}
+                                        disabled={isCreatingOrg || !newOrgName.trim() || !newOrgSlug.trim()}
+                                        className="flex-1 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white disabled:opacity-50"
+                                    >
+                                        {isCreatingOrg ? 'Creating...' : 'Create'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Privacy Settings Section */}
                     <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
