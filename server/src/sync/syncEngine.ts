@@ -1261,12 +1261,16 @@ export class SyncEngine {
         // Wait for daemon RPC handlers to be registered
         await new Promise(r => setTimeout(r, 3000))
 
+        const now = Date.now()
+        const MAX_OFFLINE_MS = 10 * 60 * 1000 // Only resume sessions inactive for <10 minutes
+
         const candidates = Array.from(this.sessions.values()).filter(s =>
             !s.active &&
             s.metadata?.machineId === machineId &&
             s.namespace === namespace &&
             (s.metadata?.flavor === 'claude' || s.metadata?.flavor === 'codex') &&
-            (s.metadata?.claudeSessionId || s.metadata?.codexSessionId)
+            (s.metadata?.claudeSessionId || s.metadata?.codexSessionId) &&
+            (now - s.activeAt) < MAX_OFFLINE_MS
         )
 
         if (candidates.length === 0) return
@@ -1283,10 +1287,10 @@ export class SyncEngine {
             const worktreeName = session.metadata!.worktree?.name
 
             // Pre-activate so heartbeats are accepted
-            const now = Date.now()
-            await this.store.setSessionActive(session.id, true, now, namespace)
+            const activateTime = Date.now()
+            await this.store.setSessionActive(session.id, true, activateTime, namespace)
             session.active = true
-            session.activeAt = now
+            session.activeAt = activateTime
             session.thinking = false
 
             const result = await this.spawnSession(
@@ -1306,7 +1310,7 @@ export class SyncEngine {
                 console.log(`[auto-resume] Resumed session ${session.id.slice(0, 8)}`)
             } else {
                 // Rollback pre-activation
-                await this.store.setSessionActive(session.id, false, now, namespace)
+                await this.store.setSessionActive(session.id, false, activateTime, namespace)
                 session.active = false
                 console.warn(`[auto-resume] Failed to resume session ${session.id.slice(0, 8)}: ${result.message}`)
             }
