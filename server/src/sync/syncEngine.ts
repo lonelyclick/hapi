@@ -1211,6 +1211,11 @@ export class SyncEngine {
             this.lastBroadcastAtByMachineId.set(machine.id, now)
             this.emit({ type: 'machine-updated', machineId: machine.id, data: { activeAt: machine.activeAt } })
         }
+
+        // Auto-resume sessions when machine comes back online
+        if (!wasActive && machine.active) {
+            void this.autoResumeSessions(machine.id, machine.namespace)
+        }
     }
 
     private expireInactive(): void {
@@ -1245,6 +1250,66 @@ export class SyncEngine {
             if (now - machine.activeAt <= machineTimeoutMs) continue
             machine.active = false
             this.emit({ type: 'machine-updated', machineId: machine.id, data: { active: false } })
+        }
+    }
+
+    /**
+     * Auto-resume inactive sessions when their machine comes back online.
+     * Called when a machine transitions from offline to online (e.g. daemon restart).
+     */
+    private async autoResumeSessions(machineId: string, namespace: string): Promise<void> {
+        // Wait for daemon RPC handlers to be registered
+        await new Promise(r => setTimeout(r, 3000))
+
+        const candidates = Array.from(this.sessions.values()).filter(s =>
+            !s.active &&
+            s.metadata?.machineId === machineId &&
+            s.namespace === namespace &&
+            (s.metadata?.flavor === 'claude' || s.metadata?.flavor === 'codex') &&
+            (s.metadata?.claudeSessionId || s.metadata?.codexSessionId)
+        )
+
+        if (candidates.length === 0) return
+        console.log(`[auto-resume] Machine ${machineId.slice(0, 8)} online, resuming ${candidates.length} session(s)`)
+
+        for (const session of candidates) {
+            const flavor = session.metadata!.flavor as string
+            const resumeSessionId = flavor === 'claude'
+                ? session.metadata!.claudeSessionId as string
+                : session.metadata!.codexSessionId as string
+
+            const directory = session.metadata!.path
+            const sessionType = session.metadata!.worktree ? 'worktree' as const : 'simple' as const
+            const worktreeName = session.metadata!.worktree?.name
+
+            // Pre-activate so heartbeats are accepted
+            const now = Date.now()
+            await this.store.setSessionActive(session.id, true, now, namespace)
+            session.active = true
+            session.activeAt = now
+            session.thinking = false
+
+            const result = await this.spawnSession(
+                machineId, directory, flavor, undefined,
+                sessionType, worktreeName,
+                {
+                    sessionId: session.id,
+                    resumeSessionId,
+                    permissionMode: session.permissionMode,
+                    modelMode: session.modelMode,
+                    modelReasoningEffort: session.modelReasoningEffort,
+                    claudeAgent: flavor === 'claude' ? (session.metadata?.runtimeAgent ?? undefined) : undefined
+                }
+            )
+
+            if (result.type === 'success') {
+                console.log(`[auto-resume] Resumed session ${session.id.slice(0, 8)}`)
+            } else {
+                // Rollback pre-activation
+                await this.store.setSessionActive(session.id, false, now, namespace)
+                session.active = false
+                console.warn(`[auto-resume] Failed to resume session ${session.id.slice(0, 8)}: ${result.message}`)
+            }
         }
     }
 
