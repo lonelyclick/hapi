@@ -16,7 +16,6 @@ import {
 import type { TypingUser } from '@/types/api'
 import { useSessionDraft } from '@/hooks/useSessionDraft'
 import { useInputHistory } from '@/hooks/useInputHistory'
-import { createPortal } from 'react-dom'
 import type { AgentState, ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { useActiveWord } from '@/hooks/useActiveWord'
@@ -778,11 +777,6 @@ export function YohoRemoteComposer(props: {
         }
 
         if (key === 'Enter' && !e.shiftKey && !controlsDisabled && !threadIsRunning && !isUploadingImage && !isUploadingFile) {
-            if (autoOptimize && hasText && !isOptimizing) {
-                e.preventDefault()
-                handleOptimizeForPreview()
-                return
-            }
             if (hasAttachments) {
                 e.preventDefault()
                 handleSendWithAttachments()
@@ -801,14 +795,10 @@ export function YohoRemoteComposer(props: {
         permissionMode,
         permissionModes,
         haptic,
-        autoOptimize,
-        hasText,
         hasAttachments,
-        isOptimizing,
         isUploadingImage,
         isUploadingFile,
         controlsDisabled,
-        handleOptimizeForPreview,
         handleSendWithAttachments,
         navigateUp,
         navigateDown,
@@ -902,15 +892,6 @@ export function YohoRemoteComposer(props: {
             localStorage.setItem('yr-fast-mode', String(!newValue))
         }
     }, [onFastModeChange, fastMode, haptic])
-
-    const handleAutoOptimizeToggle = useCallback(() => {
-        setAutoOptimize(prev => {
-            const newValue = !prev
-            localStorage.setItem('yr-auto-optimize', String(newValue))
-            return newValue
-        })
-        haptic('light')
-    }, [haptic])
 
     const handleImageClick = useCallback(() => {
         imageInputRef.current?.click()
@@ -1119,51 +1100,9 @@ export function YohoRemoteComposer(props: {
         haptic('light')
     }, [haptic])
 
-    const handlePreviewConfirm = useCallback(() => {
-        if (!optimizePreview) return
-        const nextText = buildMessageWithAttachments(optimizePreview.optimized)
-        assistantApi.composer().setText(nextText)
-        setInputState({
-            text: nextText,
-            selection: { start: nextText.length, end: nextText.length }
-        })
-        setOptimizePreview(null)
-        // Send after state update
-        setTimeout(() => {
-            const form = textareaRef.current?.closest('form')
-            if (form) {
-                form.requestSubmit()
-            }
-        }, 50)
-    }, [optimizePreview, buildMessageWithAttachments, assistantApi])
-
-    const handlePreviewCancel = useCallback(() => {
-        setOptimizePreview(null)
-        // Focus back to textarea
-        textareaRef.current?.focus()
-    }, [])
-
-    const handlePreviewSendOriginal = useCallback(() => {
-        if (!optimizePreview) return
-        const nextText = buildMessageWithAttachments(optimizePreview.original)
-        assistantApi.composer().setText(nextText)
-        setInputState({
-            text: nextText,
-            selection: { start: nextText.length, end: nextText.length }
-        })
-        setOptimizePreview(null)
-        // Send original text
-        setTimeout(() => {
-            const form = textareaRef.current?.closest('form')
-            if (form) {
-                form.requestSubmit()
-            }
-        }, 50)
-    }, [optimizePreview, buildMessageWithAttachments, assistantApi])
-
     const showPermissionSettings = Boolean(onPermissionModeChange && permissionModes.length > 1)
     const showModelSettings = Boolean(onModelModeChange && agentFlavor !== 'gemini')
-    const showSettingsButton = true // Always show settings for auto-optimize toggle
+    const showSettingsButton = showPermissionSettings || showModelSettings
     const showAbortButton = true
     const isCodex = agentFlavor === 'codex'
     const isGrok = agentFlavor === 'grok'
@@ -1331,23 +1270,6 @@ export function YohoRemoteComposer(props: {
                                 <div className="mx-3 h-px bg-[var(--app-divider)]" />
                             </>
                         ) : null}
-                        {/* Auto Optimize Toggle */}
-                        <div className="py-2">
-                            <div className="px-3 pb-1 text-xs font-semibold text-[var(--app-hint)]">
-                                AI Optimize
-                            </div>
-                            <button
-                                type="button"
-                                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors cursor-pointer hover:bg-[var(--app-secondary-bg)]"
-                                onClick={handleAutoOptimizeToggle}
-                                onMouseDown={(e) => e.preventDefault()}
-                            >
-                                <span>Auto-optimize before sending</span>
-                                <div className={`relative h-5 w-9 rounded-full transition-colors ${autoOptimize ? 'bg-purple-600' : 'bg-gray-300'}`}>
-                                    <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${autoOptimize ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                                </div>
-                            </button>
-                        </div>
 
                         {showPermissionSettings ? (
                             <div className="mx-3 h-px bg-[var(--app-divider)]" />
@@ -1631,8 +1553,6 @@ export function YohoRemoteComposer(props: {
         handleModelChange,
         handleSuggestionSelect,
         apiClient,
-        autoOptimize,
-        handleAutoOptimizeToggle,
         isClaude,
         fastMode,
         handleFastModeToggle
@@ -1759,9 +1679,9 @@ export function YohoRemoteComposer(props: {
                                 ref={textareaRef}
                                 autoFocus={!controlsDisabled && !isTouch}
                                 placeholder={showContinueHint ? "Type 'continue' to resume..." : "Type a message..."}
-                                disabled={controlsDisabled || isOptimizing || speechToText.status === 'connecting' || speechToText.status === 'recording' || speechToText.status === 'stopping'}
+                                disabled={controlsDisabled || speechToText.status === 'connecting' || speechToText.status === 'recording' || speechToText.status === 'stopping'}
                                 maxRows={5}
-                                submitOnEnter={!autoOptimize}
+                                submitOnEnter={true}
                                 cancelOnEscape={false}
                                 enterKeyHint="send"
                                 onChange={handleChange}
@@ -1839,9 +1759,6 @@ export function YohoRemoteComposer(props: {
                             switchDisabled={switchDisabled}
                             isSwitching={isSwitching}
                             onSwitch={handleSwitch}
-                            autoOptimizeEnabled={autoOptimize}
-                            isOptimizing={isOptimizing}
-                            onOptimizeSend={handleOptimizeForPreview}
                             hasAttachments={hasAttachments}
                             onSendWithAttachments={handleSendWithAttachments}
                         />
@@ -1863,67 +1780,6 @@ export function YohoRemoteComposer(props: {
                     </div>
                 </ComposerPrimitive.Root>
             </div>
-
-            {/* Optimize Preview Dialog */}
-            {optimizePreview ? createPortal(
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-lg rounded-2xl bg-[var(--app-bg)] p-4 shadow-xl">
-                        <div className="mb-4 text-lg font-semibold text-[var(--app-fg)]">
-                            AI Optimization Result
-                        </div>
-
-                        <div className="mb-4 space-y-3">
-                            <div>
-                                <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">Original</div>
-                                <div className="rounded-lg bg-[var(--app-secondary-bg)] p-3 text-sm text-[var(--app-fg)]/70 line-through">
-                                    {optimizePreview.original}
-                                </div>
-                            </div>
-                            <div>
-                                <div className="mb-1 text-xs font-medium text-purple-500">Optimized (editable)</div>
-                                <textarea
-                                    value={optimizePreview.optimized}
-                                    onChange={(e) => setOptimizePreview(prev => prev ? { ...prev, optimized: e.target.value } : null)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                                            e.preventDefault()
-                                            handlePreviewConfirm()
-                                        }
-                                    }}
-                                    autoFocus
-                                    rows={3}
-                                    className="w-full resize-none rounded-lg bg-purple-50 p-3 text-sm text-[var(--app-fg)] focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-purple-900/20"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button
-                                type="button"
-                                onClick={handlePreviewCancel}
-                                className="flex-1 rounded-lg border border-[var(--app-divider)] px-4 py-2 text-sm font-medium text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)]"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handlePreviewSendOriginal}
-                                className="flex-1 rounded-lg border border-[var(--app-divider)] px-4 py-2 text-sm font-medium text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)]"
-                            >
-                                Send Original
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handlePreviewConfirm}
-                                className="flex-1 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
-                            >
-                                Send
-                            </button>
-                        </div>
-                    </div>
-                </div>,
-                document.body
-            ) : null}
         </div>
     )
 }

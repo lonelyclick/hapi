@@ -168,22 +168,6 @@ function SendIcon() {
     )
 }
 
-function SpinnerIcon() {
-    return (
-        <svg
-            className="animate-spin"
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-        >
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
-            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        </svg>
-    )
-}
-
 export function ComposerButtons(props: {
     canSend: boolean
     controlsDisabled: boolean
@@ -214,9 +198,6 @@ export function ComposerButtons(props: {
     switchDisabled: boolean
     isSwitching: boolean
     onSwitch: () => void
-    autoOptimizeEnabled: boolean
-    isOptimizing: boolean
-    onOptimizeSend?: () => void
     hasAttachments?: boolean
     onSendWithAttachments?: () => void
 }) {
@@ -326,27 +307,10 @@ export function ComposerButtons(props: {
                 ) : null}
             </div>
 
-            {props.autoOptimizeEnabled && props.onOptimizeSend ? (
+            {props.hasAttachments && props.onSendWithAttachments ? (
                 <button
                     type="button"
-                    disabled={props.controlsDisabled || !props.canSend || props.isOptimizing}
-                    aria-label={props.isOptimizing ? "Optimizing..." : "Optimize and Send"}
-                    title={props.isOptimizing ? "Optimizing..." : "Optimize and Send"}
-                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                        props.isOptimizing
-                            ? 'bg-purple-600 text-white'
-                            : props.canSend && !props.controlsDisabled
-                                ? 'bg-purple-600 text-white hover:bg-purple-700'
-                                : 'bg-[#C0C0C0] text-white'
-                    } disabled:cursor-not-allowed`}
-                    onClick={props.onOptimizeSend}
-                >
-                    {props.isOptimizing ? <SpinnerIcon /> : <SendIcon />}
-                </button>
-            ) : props.hasAttachments && props.onSendWithAttachments ? (
-                <button
-                    type="button"
-                    disabled={props.controlsDisabled || !props.canSend || props.isOptimizing}
+                    disabled={props.controlsDisabled || !props.canSend}
                     aria-label="Send"
                     title="Send"
                     className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
@@ -360,7 +324,7 @@ export function ComposerButtons(props: {
                 </button>
             ) : (
                 <ComposerPrimitive.Send
-                    disabled={props.controlsDisabled || !props.canSend || props.isOptimizing}
+                    disabled={props.controlsDisabled || !props.canSend}
                     aria-label="Send"
                     title="Send"
                     className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
