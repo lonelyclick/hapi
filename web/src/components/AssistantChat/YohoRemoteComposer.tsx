@@ -353,14 +353,6 @@ export function YohoRemoteComposer(props: {
     const [isSwitching, setIsSwitching] = useState(false)
     const [showContinueHint, setShowContinueHint] = useState(false)
     const [voiceMode, setVoiceMode] = useState(false)
-    const [isOptimizing, setIsOptimizing] = useState(false)
-    const [autoOptimize, setAutoOptimize] = useState(() => {
-        if (typeof window !== 'undefined') {
-            return localStorage.getItem('yr-auto-optimize') === 'true'
-        }
-        return false
-    })
-    const [optimizePreview, setOptimizePreview] = useState<{ original: string; optimized: string } | null>(null)
     const fastModeSyncedRef = useRef(false)
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -672,11 +664,6 @@ export function YohoRemoteComposer(props: {
         return CLAUDE_PERMISSION_MODES as readonly PermissionMode[]
     }, [agentFlavor])
 
-    const optimizeText = useCallback(async (text: string): Promise<string> => {
-        const result = await apiClient.optimizeText(text)
-        return result.optimized
-    }, [apiClient])
-
     const buildMessageWithAttachments = useCallback((baseText: string) => {
         const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
         const fileRefs = uploadedFiles.map(file => `[File: ${file.path}]`).join('\n')
@@ -713,51 +700,6 @@ export function YohoRemoteComposer(props: {
             }
         }, 50)
     }, [buildMessageWithAttachments, composerText, assistantApi, uploadedImages.length, uploadedFiles.length])
-
-    const handleOptimizeForPreview = useCallback(async () => {
-        if (controlsDisabled || isOptimizing) return
-        if (!hasText) {
-            if (hasAttachments) {
-                handleSendWithAttachments()
-            }
-            return
-        }
-
-        setIsOptimizing(true)
-        haptic('light')
-
-        try {
-            const optimizedResult = await optimizeText(trimmed)
-            // If text is the same, just send directly
-            if (optimizedResult === trimmed) {
-                if (hasAttachments) {
-                    handleSendWithAttachments(optimizedResult)
-                } else {
-                    const form = textareaRef.current?.closest('form')
-                    if (form) {
-                        form.requestSubmit()
-                    }
-                }
-            } else {
-                // Show preview dialog
-                setOptimizePreview({ original: trimmed, optimized: optimizedResult })
-            }
-        } catch (error) {
-            console.error('Failed to optimize text:', error)
-            haptic('error')
-            // On error, just send the original
-            if (hasAttachments) {
-                handleSendWithAttachments(trimmed)
-            } else {
-                const form = textareaRef.current?.closest('form')
-                if (form) {
-                    form.requestSubmit()
-                }
-            }
-        } finally {
-            setIsOptimizing(false)
-        }
-    }, [controlsDisabled, hasText, hasAttachments, isOptimizing, trimmed, optimizeText, haptic, handleSendWithAttachments])
 
     const handleKeyDown = useCallback((e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
         const key = e.key

@@ -10,12 +10,14 @@ import { queryKeys } from '@/lib/query-keys'
 import { useAppContext } from '@/lib/app-context'
 
 type AgentType = 'claude' | 'codex' | 'droid'
+type ClaudeModelMode = 'default' | 'sonnet' | 'opus'
 
 /** 上次创建 session 时的偏好设置，存储在 localStorage */
 interface SpawnPrefs {
     machineId?: string
     projectPath?: string
     agent?: AgentType
+    claudeModel?: ClaudeModelMode
     codexReasoningEffort?: 'medium' | 'high' | 'xhigh'
     droidModel?: string
     droidReasoningEffort?: string
@@ -42,6 +44,13 @@ function saveSpawnPrefs(userEmail: string | null, prefs: SpawnPrefs): void {
         // Ignore storage errors
     }
 }
+
+// Claude 模型选项
+const CLAUDE_MODES: { value: ClaudeModelMode; label: string; description: string }[] = [
+    { value: 'default', label: 'Default', description: 'Claude 默认模型' },
+    { value: 'sonnet', label: 'Sonnet', description: 'Claude Sonnet 4.5+' },
+    { value: 'opus', label: 'Opus', description: 'Claude Opus 4.6' },
+]
 
 // Codex 固定使用 gpt-5.3-codex
 const CODEX_MODEL = 'openai/gpt-5.3-codex'
@@ -150,6 +159,7 @@ export function NewSession(props: {
     const [machineId, setMachineId] = useState<string | null>(savedPrefs.machineId ?? null)
     const [projectPath, setProjectPath] = useState(savedPrefs.projectPath ?? '')
     const [agent, setAgent] = useState<AgentType>(savedPrefs.agent ?? 'claude')
+    const [claudeModel, setClaudeModel] = useState<ClaudeModelMode>(savedPrefs.claudeModel ?? 'default')
     const [codexReasoningEffort, setCodexReasoningEffort] = useState<'medium' | 'high' | 'xhigh'>(savedPrefs.codexReasoningEffort ?? 'medium')
     const [droidModel, setDroidModel] = useState(savedPrefs.droidModel ?? DROID_MODELS[0].value)
     const [droidReasoningEffort, setDroidReasoningEffort] = useState(savedPrefs.droidReasoningEffort ?? DROID_MODELS[0].defaultEffort)
@@ -275,6 +285,7 @@ export function NewSession(props: {
                 agent,
                 yolo: true,
                 sessionType: 'simple',
+                claudeModel: agent === 'claude' ? claudeModel : undefined,
                 codexModel: agent === 'codex' ? CODEX_MODEL : undefined,
                 modelReasoningEffort: agent === 'codex' ? codexReasoningEffort : undefined,
                 droidModel: agent === 'droid' ? droidModel : undefined,
@@ -293,6 +304,7 @@ export function NewSession(props: {
                     machineId: machineId ?? undefined,
                     projectPath: directory,
                     agent,
+                    claudeModel,
                     codexReasoningEffort,
                     droidModel,
                     droidReasoningEffort,
@@ -421,6 +433,44 @@ export function NewSession(props: {
                     ))}
                 </div>
             </div>
+
+            {/* Claude Model Selector */}
+            {agent === 'claude' ? (
+                <div className="flex flex-col gap-1.5 px-3 pb-3">
+                    <label className="text-xs font-medium text-[var(--app-hint)]">
+                        Model
+                    </label>
+                    <div className="space-y-1">
+                        {CLAUDE_MODES.map((mode) => (
+                            <button
+                                key={mode.value}
+                                type="button"
+                                disabled={isFormDisabled}
+                                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors ${
+                                    claudeModel === mode.value
+                                        ? 'bg-[var(--app-button)]/10 text-[var(--app-button)]'
+                                        : 'hover:bg-[var(--app-secondary-bg)] text-[var(--app-fg)]'
+                                } disabled:cursor-not-allowed disabled:opacity-50`}
+                                onClick={() => setClaudeModel(mode.value)}
+                            >
+                                <div className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                                    claudeModel === mode.value
+                                        ? 'border-[var(--app-button)]'
+                                        : 'border-[var(--app-hint)]'
+                                }`}>
+                                    {claudeModel === mode.value && (
+                                        <div className="h-2 w-2 rounded-full bg-[var(--app-button)]" />
+                                    )}
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="font-medium">{mode.label}</span>
+                                    <span className="text-[10px] text-[var(--app-hint)]">{mode.description}</span>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
 
             {/* Codex Reasoning Effort Selector */}
             {agent === 'codex' ? (

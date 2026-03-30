@@ -10,6 +10,7 @@ type SpawnInput = {
     yolo?: boolean
     sessionType?: 'simple' | 'worktree'
     worktreeName?: string
+    claudeModel?: 'default' | 'sonnet' | 'opus'
     codexModel?: string
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     droidModel?: string
@@ -36,6 +37,7 @@ export function useSpawnSession(api: ApiClient | null): {
                 input.yolo,
                 input.sessionType,
                 input.worktreeName,
+                input.claudeModel,
                 input.codexModel,
                 input.modelReasoningEffort,
                 input.droidModel,
