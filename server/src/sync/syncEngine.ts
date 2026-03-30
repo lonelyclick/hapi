@@ -1258,62 +1258,86 @@ export class SyncEngine {
      * Auto-resume inactive sessions when their machine comes back online.
      * Called when a machine transitions from offline to online (e.g. daemon restart).
      */
+    private _autoResumeInProgress = new Set<string>()
+
     private async autoResumeSessions(machineId: string, namespace: string): Promise<void> {
-        // Wait for daemon RPC handlers to be registered
-        await new Promise(r => setTimeout(r, 3000))
+        // Prevent concurrent auto-resume for the same machine
+        if (this._autoResumeInProgress.has(machineId)) return
+        this._autoResumeInProgress.add(machineId)
 
-        const candidates = Array.from(this.sessions.values()).filter(s =>
-            !s.active &&
-            this._dbActiveSessionIds.has(s.id) && // Was active in DB at server startup
-            s.metadata?.machineId === machineId &&
-            s.namespace === namespace &&
-            (s.metadata?.flavor === 'claude' || s.metadata?.flavor === 'codex') &&
-            (s.metadata?.claudeSessionId || s.metadata?.codexSessionId)
-        )
+        try {
+            // Wait for daemon RPC handlers to be registered (poll instead of fixed delay)
+            const rpcMethod = `${machineId}:spawn-yoho-remote-session`
+            const maxWait = 10_000
+            const start = Date.now()
+            while (Date.now() - start < maxWait) {
+                if (this.rpcRegistry.getSocketIdForMethod(rpcMethod)) break
+                await new Promise(r => setTimeout(r, 500))
+            }
 
-        if (candidates.length === 0) return
-        console.log(`[auto-resume] Machine ${machineId.slice(0, 8)} online, resuming ${candidates.length} session(s)`)
+            // Verify machine is still online after waiting
+            const machine = this.machines.get(machineId)
+            if (!machine?.active) return
 
-        for (const session of candidates) {
-            const flavor = session.metadata!.flavor as string
-            const resumeSessionId = flavor === 'claude'
-                ? session.metadata!.claudeSessionId as string
-                : session.metadata!.codexSessionId as string
-
-            const directory = session.metadata!.path
-            const sessionType = session.metadata!.worktree ? 'worktree' as const : 'simple' as const
-            const worktreeName = session.metadata!.worktree?.name
-
-            // Pre-activate so heartbeats are accepted
-            const activateTime = Date.now()
-            await this.store.setSessionActive(session.id, true, activateTime, namespace)
-            session.active = true
-            session.activeAt = activateTime
-            session.thinking = false
-
-            const result = await this.spawnSession(
-                machineId, directory, flavor, undefined,
-                sessionType, worktreeName,
-                {
-                    sessionId: session.id,
-                    resumeSessionId,
-                    permissionMode: session.permissionMode,
-                    modelMode: session.modelMode,
-                    modelReasoningEffort: session.modelReasoningEffort,
-                    claudeAgent: flavor === 'claude' ? (session.metadata?.runtimeAgent ?? undefined) : undefined
-                }
+            const candidates = Array.from(this.sessions.values()).filter(s =>
+                !s.active &&
+                this._dbActiveSessionIds.has(s.id) &&
+                s.metadata?.machineId === machineId &&
+                s.namespace === namespace &&
+                s.metadata?.path &&
+                (s.metadata?.flavor === 'claude' || s.metadata?.flavor === 'codex') &&
+                (typeof s.metadata?.claudeSessionId === 'string' || typeof s.metadata?.codexSessionId === 'string')
             )
 
-            if (result.type === 'success') {
-                console.log(`[auto-resume] Resumed session ${session.id.slice(0, 8)}`)
-            } else {
-                // Rollback pre-activation
-                await this.store.setSessionActive(session.id, false, activateTime, namespace)
-                session.active = false
-                console.warn(`[auto-resume] Failed to resume session ${session.id.slice(0, 8)}: ${result.message}`)
+            if (candidates.length === 0) return
+            console.log(`[auto-resume] Machine ${machineId.slice(0, 8)} online, resuming ${candidates.length} session(s)`)
+
+            for (const session of candidates) {
+                this._dbActiveSessionIds.delete(session.id)
+                try {
+                    const flavor = session.metadata!.flavor as string
+                    const rawId = flavor === 'claude' ? session.metadata?.claudeSessionId : session.metadata?.codexSessionId
+                    if (typeof rawId !== 'string' || !rawId) continue
+
+                    const directory = session.metadata!.path
+                    const sessionType = session.metadata!.worktree ? 'worktree' as const : 'simple' as const
+                    const worktreeName = session.metadata!.worktree?.name
+
+                    // Pre-activate so heartbeats are accepted
+                    const activateTime = Date.now()
+                    await this.store.setSessionActive(session.id, true, activateTime, namespace)
+                    session.active = true
+                    session.activeAt = activateTime
+                    session.thinking = false
+
+                    const result = await this.spawnSession(
+                        machineId, directory, flavor, undefined,
+                        sessionType, worktreeName,
+                        {
+                            sessionId: session.id,
+                            resumeSessionId: rawId,
+                            permissionMode: session.permissionMode,
+                            modelMode: session.modelMode,
+                            modelReasoningEffort: session.modelReasoningEffort,
+                            claudeAgent: flavor === 'claude' ? (session.metadata?.runtimeAgent ?? undefined) : undefined
+                        }
+                    )
+
+                    if (result.type === 'success') {
+                        console.log(`[auto-resume] Resumed session ${session.id.slice(0, 8)}`)
+                    } else {
+                        await this.store.setSessionActive(session.id, false, activateTime, namespace)
+                        session.active = false
+                        console.warn(`[auto-resume] Failed to resume session ${session.id.slice(0, 8)}: ${result.message}`)
+                    }
+                } catch (err) {
+                    console.error(`[auto-resume] Error resuming session ${session.id.slice(0, 8)}:`, err)
+                }
             }
-            // Remove from candidates so it won't be retried
-            this._dbActiveSessionIds.delete(session.id)
+        } catch (err) {
+            console.error('[auto-resume] Unexpected error:', err)
+        } finally {
+            this._autoResumeInProgress.delete(machineId)
         }
     }
 
