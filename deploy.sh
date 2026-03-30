@@ -148,22 +148,25 @@ if ! grep -q "EnvironmentFile=" "$SERVICE_FILE" 2>/dev/null; then
     echo "guang" | sudo -S systemctl daemon-reload
 fi
 
-echo "=== Killing existing yoho-remote processes..."
-# 杀掉 yoho-remote 相关进程，排除 deploy.sh 自身和 systemctl/sudo
-pgrep -f 'yoho-remote' | while read pid; do
-    cmdline=$(cat /proc/$pid/cmdline 2>/dev/null | tr '\0' ' ')
-    if [[ "$pid" != "$$" && "$cmdline" != *"deploy.sh"* && "$cmdline" != *"systemctl"* && "$cmdline" != *"sudo"* ]]; then
-        kill "$pid" 2>/dev/null || true
-    fi
-done
+echo "=== Stopping and restarting services..."
+# 先 stop 再 start，用 nohup 确保 deploy.sh 即使父进程被杀也能继续
+if [[ "$BUILD_DAEMON" == "true" ]]; then
+    echo "    (stopping daemon...)"
+    echo "guang" | sudo -S systemctl stop yoho-remote-daemon.service || true
+    sleep 1
+    # 杀掉残留的 yoho-remote 进程（非 deploy.sh 自身）
+    pkill -f 'yoho-remote-(daemon|server)$' || true
+    pkill -f '/yoho-remote ' || true
+    sleep 1
+fi
+echo "guang" | sudo -S systemctl stop yoho-remote-server.service || true
 sleep 1
 
-echo "=== Restarting services..."
 if [[ "$BUILD_DAEMON" == "true" ]]; then
-    echo "    (with daemon restart)"
-    echo "guang" | sudo -S systemctl restart yoho-remote-daemon.service
+    echo "    (starting daemon...)"
+    echo "guang" | sudo -S systemctl start yoho-remote-daemon.service
 fi
-echo "guang" | sudo -S systemctl restart yoho-remote-server.service
+echo "guang" | sudo -S systemctl start yoho-remote-server.service
 
 # 等待服务启动
 sleep 2
