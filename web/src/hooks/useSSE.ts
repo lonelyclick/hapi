@@ -190,8 +190,8 @@ export function useSSE(options: {
                                 }
                             )
                             // Update sessions list cache (only fields that exist in SessionSummary)
-                            queryClient.setQueryData<SessionsResponse>(
-                                queryKeys.sessions,
+                            queryClient.setQueriesData<SessionsResponse>(
+                                { queryKey: queryKeys.sessions },
                                 (prev) => {
                                     if (!prev?.sessions) return prev
                                     return {

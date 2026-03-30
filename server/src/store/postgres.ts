@@ -527,6 +527,14 @@ export class PostgresStore implements IStore {
             -- Migration: Add org_id to input_presets
             ALTER TABLE input_presets ADD COLUMN IF NOT EXISTS org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL;
             CREATE INDEX IF NOT EXISTS idx_input_presets_org_id ON input_presets(org_id);
+
+            -- Migration: Add org_id to sessions
+            ALTER TABLE sessions ADD COLUMN IF NOT EXISTS org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL;
+            CREATE INDEX IF NOT EXISTS idx_sessions_org_id ON sessions(org_id);
+
+            -- Migration: Assign existing sessions to 'yoho' org
+            UPDATE sessions SET org_id = (SELECT id FROM organizations WHERE slug = 'yoho' LIMIT 1)
+            WHERE org_id IS NULL AND (SELECT id FROM organizations WHERE slug = 'yoho' LIMIT 1) IS NOT NULL;
         `)
     }
 
@@ -712,6 +720,14 @@ export class PostgresStore implements IStore {
         return (result.rowCount ?? 0) > 0
     }
 
+    async setSessionOrgId(id: string, orgId: string, namespace: string): Promise<boolean> {
+        const result = await this.pool.query(`
+            UPDATE sessions SET org_id = $1, updated_at = $2
+            WHERE id = $3 AND namespace = $4 AND org_id IS NULL
+        `, [orgId, Date.now(), id, namespace])
+        return (result.rowCount ?? 0) > 0
+    }
+
     async setSessionActive(id: string, active: boolean, activeAt: number, namespace: string): Promise<boolean> {
         const result = await this.pool.query(`
             UPDATE sessions SET active = $1, active_at = $2
@@ -730,7 +746,11 @@ export class PostgresStore implements IStore {
         return result.rows.length > 0 ? this.toStoredSession(result.rows[0]) : null
     }
 
-    async getSessions(): Promise<StoredSession[]> {
+    async getSessions(orgId?: string | null): Promise<StoredSession[]> {
+        if (orgId) {
+            const result = await this.pool.query('SELECT * FROM sessions WHERE org_id = $1 ORDER BY updated_at DESC', [orgId])
+            return result.rows.map(row => this.toStoredSession(row))
+        }
         const result = await this.pool.query('SELECT * FROM sessions ORDER BY updated_at DESC')
         return result.rows.map(row => this.toStoredSession(row))
     }
@@ -2803,6 +2823,7 @@ export class PostgresStore implements IStore {
             createdAt: Number(row.created_at),
             updatedAt: Number(row.updated_at),
             createdBy: row.created_by ?? null,
+            orgId: row.org_id ?? null,
             metadata: row.metadata,
             metadataVersion: row.metadata_version,
             agentState: row.agent_state,

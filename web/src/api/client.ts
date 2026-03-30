@@ -232,8 +232,9 @@ export class ApiClient {
         return await res.json() as AuthResponse
     }
 
-    async getSessions(): Promise<SessionsResponse> {
-        return await this.request<SessionsResponse>('/api/sessions')
+    async getSessions(orgId?: string | null): Promise<SessionsResponse> {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<SessionsResponse>(`/api/sessions${qs}`)
     }
 
     async getSession(sessionId: string): Promise<SessionResponse> {
@@ -547,16 +548,19 @@ export class ApiClient {
         codexModel?: string,
         modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh',
         droidModel?: string,
-        droidReasoningEffort?: string
+        droidReasoningEffort?: string,
+        orgId?: string | null
     ): Promise<SpawnResponse> {
-        return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn`, {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn${qs}`, {
             method: 'POST',
             body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeSettingsType, claudeAgent, opencodeModel, codexModel, modelReasoningEffort, droidModel, droidReasoningEffort, source: 'webapp' })
         })
     }
 
-    async createBrainSession(): Promise<SpawnResponse> {
-        return await this.request<SpawnResponse>('/api/brain/sessions', {
+    async createBrainSession(orgId?: string | null): Promise<SpawnResponse> {
+        const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
+        return await this.request<SpawnResponse>(`/api/brain/sessions${qs}`, {
             method: 'POST',
             body: JSON.stringify({})
         })

@@ -17,6 +17,7 @@ type SpawnInput = {
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     droidModel?: string
     droidReasoningEffort?: string
+    orgId?: string | null
 }
 
 export function useSpawnSession(api: ApiClient | null): {
@@ -44,7 +45,8 @@ export function useSpawnSession(api: ApiClient | null): {
                 input.codexModel,
                 input.modelReasoningEffort,
                 input.droidModel,
-                input.droidReasoningEffort
+                input.droidReasoningEffort,
+                input.orgId
             )
         },
         onSuccess: () => {

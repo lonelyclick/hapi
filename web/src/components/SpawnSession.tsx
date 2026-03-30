@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
+import { useAppContext } from '@/lib/app-context'
 
 type SessionType = 'simple' | 'worktree'
 
@@ -23,6 +24,7 @@ export function SpawnSession(props: {
     onCancel: () => void
 }) {
     const { haptic } = usePlatform()
+    const { currentOrgId } = useAppContext()
     const [directory, setDirectory] = useState('')
     const [sessionType, setSessionType] = useState<SessionType>('simple')
     const [worktreeName, setWorktreeName] = useState('')
@@ -41,7 +43,8 @@ export function SpawnSession(props: {
                 machineId: props.machineId,
                 directory: trimmed,
                 sessionType,
-                worktreeName: sessionType === 'worktree' ? (worktreeName.trim() || undefined) : undefined
+                worktreeName: sessionType === 'worktree' ? (worktreeName.trim() || undefined) : undefined,
+                orgId: currentOrgId,
             })
             if (result.type === 'success') {
                 haptic.notification('success')

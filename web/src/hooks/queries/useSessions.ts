@@ -3,19 +3,19 @@ import type { ApiClient } from '@/api/client'
 import type { SessionSummary } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 
-export function useSessions(api: ApiClient | null): {
+export function useSessions(api: ApiClient | null, orgId?: string | null): {
     sessions: SessionSummary[]
     isLoading: boolean
     error: string | null
     refetch: () => Promise<unknown>
 } {
     const query = useQuery({
-        queryKey: queryKeys.sessions,
+        queryKey: [...queryKeys.sessions, orgId ?? 'all'],
         queryFn: async () => {
             if (!api) {
                 throw new Error('API unavailable')
             }
-            return await api.getSessions()
+            return await api.getSessions(orgId)
         },
         enabled: Boolean(api),
     })

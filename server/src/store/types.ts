@@ -8,6 +8,7 @@ export type StoredSession = {
     createdAt: number
     updatedAt: number
     createdBy: string | null  // 创建者 email
+    orgId: string | null
     metadata: unknown | null
     metadataVersion: number
     agentState: unknown | null

@@ -608,6 +608,10 @@ export function createSessionsRoutes(
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
+                const orgId = c.req.query('orgId')
+                if (orgId) {
+                    await store.setSessionOrgId(result.sessionId, orgId, namespace)
+                }
                 await sendInitPrompt(engine, result.sessionId, role, userName)
             })()
         }
@@ -656,6 +660,10 @@ export function createSessionsRoutes(
                 await engine.waitForSocketInRoom(result.sessionId, 5000)
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
+                }
+                const orgId = c.req.query('orgId')
+                if (orgId) {
+                    await store.setSessionOrgId(result.sessionId, orgId, namespace)
                 }
                 await sendInitPrompt(engine, result.sessionId, role, userName)
             })()
@@ -716,6 +724,10 @@ export function createSessionsRoutes(
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
+                const orgId = c.req.query('orgId')
+                if (orgId) {
+                    await store.setSessionOrgId(result.sessionId, orgId, namespace)
+                }
                 await sendInitPrompt(engine, result.sessionId, role, userName)
             })()
         }
@@ -742,8 +754,8 @@ export function createSessionsRoutes(
         // Get sessions from database
         let storedSessions: StoredSession[]
         if (isKeycloakUser) {
-            // Keycloak users see all sessions (filter by created_by after fetching)
-            storedSessions = await store.getSessions()
+            const orgId = c.req.query('orgId') || null
+            storedSessions = await store.getSessions(orgId)
         } else {
             // CLI users see only their namespace
             storedSessions = await store.getSessionsByNamespace(namespace)
@@ -1072,11 +1084,15 @@ export function createSessionsRoutes(
             return c.json({ error: 'Session resume timed out' }, 409)
         }
 
-        // Set createdBy after session is confirmed online (exists in DB)
+        // Set createdBy and orgId after session is confirmed online (exists in DB)
         const email = c.get('email')
         if (email) {
-            const namespace = c.get('namespace')
             void store.setSessionCreatedBy(newSessionId, email, namespace)
+        }
+        // Inherit org from original session
+        const originalStored = await store.getSession(sessionId)
+        if (originalStored?.orgId) {
+            void store.setSessionOrgId(newSessionId, originalStored.orgId, namespace)
         }
 
         const role = c.get('role')  // Role from Keycloak token

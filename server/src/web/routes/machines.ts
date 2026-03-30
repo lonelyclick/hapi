@@ -178,6 +178,10 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
+                const orgId = c.req.query('orgId')
+                if (orgId) {
+                    await store.setSessionOrgId(result.sessionId, orgId, namespace)
+                }
                 await sendInitPrompt(engine, result.sessionId, role, userName)
             })().catch((err: unknown) => {
                 console.error(`[machines/spawn] Post-spawn setup failed for session ${result.sessionId}:`, err)

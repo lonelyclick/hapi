@@ -64,10 +64,11 @@ export interface IStore {
     isRolePromptSent(id: string): Promise<boolean>
     setSessionRolePromptSent(id: string, namespace: string): Promise<boolean>
     setSessionCreatedBy(id: string, email: string, namespace: string): Promise<boolean>
+    setSessionOrgId(id: string, orgId: string, namespace: string): Promise<boolean>
     setSessionActive(id: string, active: boolean, activeAt: number, namespace: string): Promise<boolean>
     getSession(id: string): Promise<StoredSession | null>
     getSessionByNamespace(id: string, namespace: string): Promise<StoredSession | null>
-    getSessions(): Promise<StoredSession[]>
+    getSessions(orgId?: string | null): Promise<StoredSession[]>
     getSessionsByNamespace(namespace: string): Promise<StoredSession[]>
     deleteSession(id: string): Promise<boolean>
     patchSessionMetadata(id: string, patch: Record<string, unknown>, namespace: string): Promise<boolean>

@@ -336,6 +336,7 @@ export function NewSession(props: {
                 modelReasoningEffort: agent === 'codex' ? codexReasoningEffort : undefined,
                 droidModel: agent === 'droid' ? droidModel : undefined,
                 droidReasoningEffort: agent === 'droid' ? droidReasoningEffort : undefined,
+                orgId: currentOrgId,
             })
 
             // Update logs from server response

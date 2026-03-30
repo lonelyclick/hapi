@@ -290,7 +290,7 @@ export function App() {
                     return
                 }
 
-                const sessionsData = queryClient.getQueryData<{ sessions: SessionSummary[] }>(queryKeys.sessions)
+                const sessionsData = queryClient.getQueryData<{ sessions: SessionSummary[] }>([...queryKeys.sessions, currentOrgId ?? 'all'])
                 const session = sessionsData?.sessions.find(s => s.id === event.sessionId)
 
                 if (!session) {

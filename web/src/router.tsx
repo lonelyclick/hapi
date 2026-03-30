@@ -148,7 +148,7 @@ function SessionsPage() {
     const { api, userEmail, currentOrgId, setCurrentOrgId } = useAppContext()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
-    const { sessions, isLoading, error, refetch } = useSessions(api)
+    const { sessions, isLoading, error, refetch } = useSessions(api, currentOrgId)
     const { users: onlineUsers } = useOnlineUsers(api)
     const { orgs } = useMyOrgs(api)
     const [isRefreshing, setIsRefreshing] = useState(false)
@@ -205,7 +205,7 @@ function SessionsPage() {
         if (isCreatingBrain) return
         setIsCreatingBrain(true)
         try {
-            const result = await api.createBrainSession()
+            const result = await api.createBrainSession(currentOrgId)
             if (result.type === 'success' && result.sessionId) {
                 void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
                 navigate({
