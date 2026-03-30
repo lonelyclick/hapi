@@ -24,19 +24,6 @@ type SessionSummaryMetadata = {
         worktreePath?: string
         createdAt?: number
     }
-    // OpenCode 特有字段
-    opencodeCapabilities?: {
-        fs: boolean
-        terminal: boolean
-        mcp: boolean
-        tools: string[]
-    }
-    opencodeStatus?: {
-        initialized: boolean
-        sessionActive: boolean
-        lastActivity?: number
-        errorCount?: number
-    }
     privacyMode?: boolean  // 私密模式，true表示不分享给其他人
 }
 
@@ -76,9 +63,6 @@ function toSessionSummary(session: Session): SessionSummary {
         runtimeModel: session.metadata.runtimeModel,
         runtimeModelReasoningEffort: session.metadata.runtimeModelReasoningEffort,
         worktree: session.metadata.worktree,
-        // OpenCode 特有字段
-        opencodeCapabilities: session.metadata.opencodeCapabilities,
-        opencodeStatus: session.metadata.opencodeStatus,
         privacyMode: session.metadata.privacyMode,
     } : null
 
@@ -140,13 +124,10 @@ const modelModeSchema = z.object({
 const createSessionSchema = z.object({
     machineId: z.string().min(1),
     directory: z.string().min(1),
-    agent: z.enum(['claude', 'codex', 'opencode', 'gemini', 'glm', 'minimax', 'grok', 'openrouter', 'aider-cli', 'droid']).optional(),
+    agent: z.enum(['claude', 'codex', 'droid']).optional(),
     yolo: z.boolean().optional(),
     sessionType: z.enum(['simple', 'worktree']).optional(),
     worktreeName: z.string().optional(),
-    claudeSettingsType: z.enum(['litellm', 'claude']).optional(),
-    claudeAgent: z.string().min(1).optional(),
-    opencodeModel: z.string().min(1).optional(),
     codexModel: z.string().min(1).optional(),
     droidModel: z.string().min(1).optional(),
     droidReasoningEffort: z.string().min(1).optional(),
@@ -554,11 +535,9 @@ export function createSessionsRoutes(
         const rawSource = parsed.data.source?.trim()
         const source = rawSource ? rawSource : 'external-api'
 
-        // 将 opencodeModel/codexModel 转换为 modelMode
+        // 将 codexModel 转换为 modelMode
         let modelMode = parsed.data.modelMode
-        if (parsed.data.opencodeModel) {
-            modelMode = parsed.data.opencodeModel as any
-        } else if (parsed.data.codexModel) {
+        if (parsed.data.codexModel) {
             // codex 模型值如 'openai/gpt-5.2-codex' -> 'gpt-5.2-codex'
             const codexModelValue = parsed.data.codexModel.replace('openai/', '') as any
             modelMode = codexModelValue
@@ -572,8 +551,6 @@ export function createSessionsRoutes(
             parsed.data.sessionType,
             parsed.data.worktreeName,
             {
-                claudeAgent: parsed.data.claudeAgent,
-                claudeSettingsType: parsed.data.claudeSettingsType,
                 openrouterModel: parsed.data.openrouterModel,
                 droidModel: parsed.data.droidModel,
                 droidReasoningEffort: parsed.data.droidReasoningEffort,
@@ -1014,8 +991,7 @@ export function createSessionsRoutes(
         const modeSettings = {
             permissionMode: session.permissionMode,
             modelMode: session.modelMode,
-            modelReasoningEffort: session.modelReasoningEffort,
-            claudeAgent: flavor === 'claude' ? (session.metadata?.runtimeAgent ?? undefined) : undefined
+            modelReasoningEffort: session.modelReasoningEffort
         }
 
         // Extract native session ID for Claude/Codex resume
@@ -1154,8 +1130,7 @@ export function createSessionsRoutes(
         const modeSettings = {
             permissionMode: session.permissionMode,
             modelMode: session.modelMode,
-            modelReasoningEffort: session.modelReasoningEffort,
-            claudeAgent: session.metadata?.runtimeAgent ?? undefined
+            modelReasoningEffort: session.modelReasoningEffort
         }
 
         // Kill the old Claude process (fire-and-forget, tolerate failure)

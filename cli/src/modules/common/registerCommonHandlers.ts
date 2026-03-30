@@ -152,10 +152,6 @@ export interface SpawnSessionOptions {
     token?: string;
     sessionType?: 'simple' | 'worktree';
     worktreeName?: string;
-    claudeSettingsType?: 'litellm' | 'claude';
-    claudeAgent?: string;
-    opencodeModel?: string;
-    opencodeVariant?: string;
     droidModel?: string;
     droidReasoningEffort?: string;
     permissionMode?: 'bypassPermissions' | 'read-only' | 'safe-yolo' | 'yolo';

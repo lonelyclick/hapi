@@ -22,7 +22,6 @@ import { createSettingsRoutes } from './routes/settings'
 import { createPushRoutes } from './routes/push'
 import { createUsageRoutes } from './routes/usage'
 import { createYohoCredentialsRoutes } from './routes/yoho-credentials'
-import { createOpenCodeRoutes } from './routes/opencode'
 import { createOrgsRoutes } from './routes/orgs'
 import { createCodexOpenAIRoutes } from './routes/codex-openai'
 import type { SSEManager } from '../sse/sseManager'
@@ -117,7 +116,6 @@ function createWebApp(options: {
     app.route('/api', createUsageRoutes(options.getSyncEngine))
     app.route('/api', createYohoCredentialsRoutes())
     app.route('/api', createOrgsRoutes(options.store))
-    app.route('/api', createOpenCodeRoutes(options.getSyncEngine, () => options.getSseManager()))
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap

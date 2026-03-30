@@ -1323,8 +1323,7 @@ export class SyncEngine {
                             resumeSessionId: rawId,
                             permissionMode: session.permissionMode,
                             modelMode: session.modelMode,
-                            modelReasoningEffort: session.modelReasoningEffort,
-                            claudeAgent: flavor === 'claude' ? (session.metadata?.runtimeAgent ?? undefined) : undefined
+                            modelReasoningEffort: session.modelReasoningEffort
                         }
                     )
 
@@ -1777,11 +1776,7 @@ export class SyncEngine {
             sessionId?: string
             resumeSessionId?: string
             token?: string
-            claudeSettingsType?: 'litellm' | 'claude'
-            claudeAgent?: string
             codexModel?: string
-            opencodeModel?: string
-            opencodeVariant?: string
             droidModel?: string
             droidReasoningEffort?: string
             permissionMode?: Session['permissionMode']
@@ -1806,11 +1801,7 @@ export class SyncEngine {
                     sessionId: options?.sessionId,
                     resumeSessionId: options?.resumeSessionId,
                     token: options?.token,
-                    claudeSettingsType: options?.claudeSettingsType,
-                    claudeAgent: options?.claudeAgent,
                     codexModel: options?.codexModel,
-                    opencodeModel: options?.opencodeModel,
-                    opencodeVariant: options?.opencodeVariant,
                     droidModel: options?.droidModel,
                     droidReasoningEffort: options?.droidReasoningEffort,
                     permissionMode: options?.permissionMode,

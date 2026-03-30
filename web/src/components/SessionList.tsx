@@ -33,15 +33,6 @@ function matchSessionToProject(session: SessionSummary, projects: Project[]): Pr
     return null
 }
 
-// Get agent type (used for OpenCode display logic)
-function getAgentType(session: SessionSummary): 'claude' | 'codex' | 'opencode' | 'other' {
-    const flavor = session.metadata?.flavor?.trim()?.toLowerCase()
-    if (flavor === 'claude') return 'claude'
-    if (flavor === 'codex') return 'codex'
-    if (flavor === 'opencode') return 'opencode'
-    return 'other'
-}
-
 // Sort sessions flat
 function sortSessions(sessions: SessionSummary[]): SessionSummary[] {
     if (!Array.isArray(sessions)) return []
@@ -123,8 +114,6 @@ function getAgentLabel(session: SessionSummary): string {
     const flavor = session.metadata?.flavor?.trim()
     if (flavor === 'claude') return 'Claude'
     if (flavor === 'codex') return 'Codex'
-    if (flavor === 'opencode') return 'OpenCode'
-    if (flavor === 'gemini') return 'Gemini'
     if (flavor === 'droid') return 'Droid'
     if (flavor) return flavor
     return 'Agent'
@@ -157,69 +146,6 @@ function getSourceTag(session: SessionSummary): { label: string; color: string }
         return { label: source.slice(0, 20), color: 'bg-gray-500/15 text-gray-600' }
     }
     return null
-}
-
-// OpenCode 特有状态和配置显示
-function getOpenCodeStatus(session: SessionSummary): { label: string; color: string; icon?: string } | null {
-    if (getAgentType(session) !== 'opencode') return null
-    
-    const status = session.metadata?.opencodeStatus
-    if (!status) return null
-    
-    if (!status.initialized) {
-        return { label: '初始化中', color: 'bg-amber-500/15 text-amber-600', icon: '⏳' }
-    }
-    
-    if (!status.sessionActive) {
-        return { label: '未激活', color: 'bg-gray-500/15 text-gray-600', icon: '💤' }
-    }
-    
-    if (status.errorCount && status.errorCount > 0) {
-        return { label: `${status.errorCount} 错误`, color: 'bg-red-500/15 text-red-600', icon: '⚠️' }
-    }
-    
-    return { label: '运行中', color: 'bg-emerald-500/15 text-emerald-600', icon: '✅' }
-}
-
-function getOpenCodeModelDisplay(session: SessionSummary): string | null {
-    if (getAgentType(session) !== 'opencode') return null
-    
-    const model = session.metadata?.runtimeModel
-    const effort = session.metadata?.runtimeModelReasoningEffort
-    
-    if (!model) return null
-    
-    const modelName = model.includes('/') ? model.split('/')[1] : model
-    let display = modelName
-    
-    if (effort) {
-        const effortMap: Record<string, string> = {
-            'low': '🟢 低',
-            'medium': '🟡 中', 
-            'high': '🟠 高',
-            'xhigh': '🔴 极高'
-        }
-        display += ` ${effortMap[effort] || effort}`
-    }
-    
-    return display
-}
-
-function getOpenCodeCapabilities(session: SessionSummary): string[] | null {
-    if (getAgentType(session) !== 'opencode') return null
-    
-    const caps = session.metadata?.opencodeCapabilities
-    if (!caps) return null
-    
-    const capabilities: string[] = []
-    if (caps.fs) capabilities.push('📁 文件')
-    if (caps.terminal) capabilities.push('💻 终端')
-    if (caps.mcp) capabilities.push('🔌 MCP')
-    if (caps.tools && caps.tools.length > 0) {
-        capabilities.push(`🛠️ ${caps.tools.length} 工具`)
-    }
-    
-    return capabilities.length > 0 ? capabilities : null
 }
 
 function formatRelativeTime(value: number): string | null {
@@ -261,11 +187,6 @@ function SessionItem(props: {
     const hasPending = s.pendingRequestsCount > 0
     const runtimeAgent = s.metadata?.runtimeAgent?.trim()
     const sourceTag = getSourceTag(s)
-    
-    // OpenCode 特有信息
-    const openCodeStatus = getOpenCodeStatus(s)
-    const openCodeModelDisplay = getOpenCodeModelDisplay(s)
-    const openCodeCapabilities = getOpenCodeCapabilities(s)
 
     return (
         <button
@@ -300,11 +221,6 @@ function SessionItem(props: {
                             {sourceTag.label}
                         </span>
                     )}
-                    {openCodeStatus && (
-                        <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${openCodeStatus.color}`}>
-                            {openCodeStatus.icon} {openCodeStatus.label}
-                        </span>
-                    )}
                     {hasPending && (
                         <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600">
                             {s.pendingRequestsCount} pending
@@ -316,14 +232,6 @@ function SessionItem(props: {
                 </div>
                 <div className="flex items-center gap-1 mt-0.5 text-[11px] text-[var(--app-hint)] flex-wrap">
                     <span className="shrink-0">{getAgentLabel(s)}</span>
-                    {openCodeModelDisplay && (
-                        <>
-                            <span className="opacity-50">·</span>
-                            <span className="shrink-0 font-medium" title={s.metadata?.runtimeModel}>
-                                {openCodeModelDisplay}
-                            </span>
-                        </>
-                    )}
                     {project && (
                         <>
                             <span className="opacity-50">·</span>
@@ -343,16 +251,6 @@ function SessionItem(props: {
                         </>
                     )}
                 </div>
-                {/* OpenCode 能力显示 */}
-                {openCodeCapabilities && openCodeCapabilities.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-[var(--app-hint)]">
-                        {openCodeCapabilities.map((cap, index) => (
-                            <span key={index} className="shrink-0 px-1 py-0.5 bg-[var(--app-subtle-bg)] rounded">
-                                {cap}
-                            </span>
-                        ))}
-                    </div>
-                )}
             </div>
 
             {/* Time */}

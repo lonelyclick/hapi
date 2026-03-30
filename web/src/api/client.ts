@@ -539,13 +539,10 @@ export class ApiClient {
     async spawnSession(
         machineId: string,
         directory: string,
-        agent?: 'claude' | 'codex' | 'opencode' | 'gemini' | 'glm' | 'minimax' | 'grok' | 'openrouter' | 'aider-cli' | 'droid',
+        agent?: 'claude' | 'codex' | 'droid',
         yolo?: boolean,
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
-        claudeSettingsType?: 'litellm' | 'claude',
-        claudeAgent?: string,
-        opencodeModel?: string,
         codexModel?: string,
         modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh',
         droidModel?: string,
@@ -555,7 +552,7 @@ export class ApiClient {
         const qs = orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''
         return await this.request<SpawnResponse>(`/api/machines/${encodeURIComponent(machineId)}/spawn${qs}`, {
             method: 'POST',
-            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, claudeSettingsType, claudeAgent, opencodeModel, codexModel, modelReasoningEffort, droidModel, droidReasoningEffort, source: 'webapp' })
+            body: JSON.stringify({ directory, agent, yolo, sessionType, worktreeName, codexModel, modelReasoningEffort, droidModel, droidReasoningEffort, source: 'webapp' })
         })
     }
 

@@ -236,7 +236,6 @@ function mergeCliOutputBlocks(blocks: ChatBlock[]): ChatBlock[] {
 }
 
 // Maximum time gap (ms) between consecutive agent-text blocks to be considered same turn
-// This is used for streaming backends like OpenCode where each chunk has a unique message ID
 const STREAMING_MERGE_GAP_MS = 2000
 
 function mergeAgentTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
@@ -260,7 +259,7 @@ function mergeAgentTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
                 continue
             }
 
-            // For streaming backends (like OpenCode), merge blocks with small time gaps
+            // For streaming backends, merge blocks with small time gaps
             // This handles cases where each streaming chunk has a unique message ID
             const timeGap = block.createdAt - prev.createdAt
             if (timeGap >= 0 && timeGap < STREAMING_MERGE_GAP_MS) {
