@@ -225,7 +225,7 @@ export function CRSApiKeyManager({ api, orgId, orgSlug }: Props) {
                                 <div key={key.id} className="px-3 py-3">
                                     <div className="flex items-start justify-between gap-2 mb-2">
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
                                                 <div className="text-sm font-medium truncate">{key.name}</div>
                                                 <button
                                                     type="button"
@@ -239,12 +239,33 @@ export function CRSApiKeyManager({ api, orgId, orgSlug }: Props) {
                                                 >
                                                     {key.isActive ? 'Active' : 'Inactive'}
                                                 </button>
+                                                {/* Limits badges */}
+                                                {key.dailyCostLimit > 0 && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">
+                                                        Daily: ${key.dailyCostLimit}
+                                                    </span>
+                                                )}
+                                                {key.totalCostLimit > 0 && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600">
+                                                        Total: ${key.totalCostLimit}
+                                                    </span>
+                                                )}
+                                                {key.concurrencyLimit > 0 && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600">
+                                                        Concurrent: {key.concurrencyLimit}
+                                                    </span>
+                                                )}
                                             </div>
+                                            {key.description && (
+                                                <div className="mt-1 text-xs text-[var(--app-hint)]">{key.description}</div>
+                                            )}
                                             <div className="mt-1 flex items-center gap-1">
-                                                <code className="text-[11px] font-mono text-[var(--app-hint)] truncate">{key.key}</code>
+                                                <code className="text-[11px] font-mono text-[var(--app-hint)] truncate">
+                                                    {key.apiKey ? key.apiKey : `${key.id.substring(0, 8)}...`}
+                                                </code>
                                                 <button
                                                     type="button"
-                                                    onClick={() => copyToClipboard(key.key)}
+                                                    onClick={() => copyToClipboard(key.apiKey || key.id)}
                                                     className="shrink-0 p-0.5 text-[var(--app-hint)] hover:text-[var(--app-fg)]"
                                                     title="Copy to clipboard"
                                                 >
@@ -282,9 +303,25 @@ export function CRSApiKeyManager({ api, orgId, orgSlug }: Props) {
                                     )}
 
                                     {/* Metadata */}
-                                    <div className="mt-2 text-[10px] text-[var(--app-hint)]">
-                                        Created {new Date(key.createdAt).toLocaleDateString()}
-                                        {key.lastUsedAt && ` • Last used ${new Date(key.lastUsedAt).toLocaleDateString()}`}
+                                    <div className="mt-2 text-[10px] text-[var(--app-hint)] space-y-0.5">
+                                        <div>
+                                            Created {new Date(key.createdAt).toLocaleDateString()}
+                                            {key.lastUsedAt && ` • Last used ${new Date(key.lastUsedAt).toLocaleDateString()}`}
+                                        </div>
+                                        {key.expiresAt && (
+                                            <div>
+                                                Expires: {new Date(key.expiresAt).toLocaleDateString()}
+                                                {key.expirationMode === 'activation' && !key.isActivated && ' (after first use)'}
+                                            </div>
+                                        )}
+                                        {key.enableModelRestriction && key.restrictedModels.length > 0 && (
+                                            <div>
+                                                Models: {key.restrictedModels.join(', ')}
+                                            </div>
+                                        )}
+                                        {key.claudeAccountId && (
+                                            <div>Claude Account: {key.claudeAccountId}</div>
+                                        )}
                                     </div>
                                 </div>
                             )

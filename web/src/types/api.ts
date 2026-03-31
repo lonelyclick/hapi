@@ -385,14 +385,38 @@ export type CreateInvitationResponse = { ok: true; invitation: OrgInvitation }
 // CRS API Key Types
 export type CRSApiKey = {
     id: string
-    key: string
+    apiKey?: string  // 只在创建时返回
     name: string
-    owner: string
+    description?: string
     tags: string[]
     isActive: boolean
-    createdAt: number
-    expiresAt: number | null
-    lastUsedAt: number | null
+    createdAt: string
+    expiresAt: string | null
+    lastUsedAt: string | null
+    activatedAt?: string
+    // Limits
+    concurrencyLimit: number
+    dailyCostLimit: number
+    totalCostLimit: number
+    weeklyOpusCostLimit: number
+    rateLimitWindow: number
+    rateLimitRequests: number
+    rateLimitCost: number
+    // Restrictions
+    enableModelRestriction: boolean
+    restrictedModels: string[]
+    enableClientRestriction: boolean
+    allowedClients: string[]
+    // Expiration
+    expirationMode: 'fixed' | 'activation'
+    activationDays: number
+    activationUnit: 'hours' | 'days'
+    isActivated: boolean
+    // Account bindings
+    claudeAccountId?: string
+    geminiAccountId?: string
+    openaiAccountId?: string
+    bedrockAccountId?: string
 }
 
 export type CRSKeyStats = {
