@@ -796,7 +796,7 @@ export class PostgresStore implements IStore {
 
         const result = await this.pool.query(`
             UPDATE sessions SET ${updates.join(', ')}
-            WHERE id = $${paramIndex++} AND namespace = $${paramIndex++}
+            WHERE id = $${paramIndex} AND namespace = $${paramIndex + 1}
         `, values)
         return (result.rowCount ?? 0) > 0
     }
