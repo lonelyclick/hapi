@@ -257,9 +257,20 @@ function SessionItem(props: {
                 </div>
             </div>
 
-            {/* Time */}
-            <div className="shrink-0 text-[11px] text-[var(--app-hint)]">
-                {formatRelativeTime(s.updatedAt)}
+            {/* Status and Time */}
+            <div className="shrink-0 flex items-center gap-1.5">
+                {hasPending ? (
+                    <span className="text-[10px] font-medium text-amber-600">
+                        Thinking
+                    </span>
+                ) : s.active ? (
+                    <span className="text-[10px] font-medium text-emerald-600">
+                        Idle
+                    </span>
+                ) : null}
+                <span className="text-[11px] text-[var(--app-hint)]">
+                    {formatRelativeTime(s.updatedAt)}
+                </span>
             </div>
         </button>
     )

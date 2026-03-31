@@ -12,6 +12,7 @@ import type { Project, Machine } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 import { useMyOrgs } from '@/hooks/queries/useOrgs'
 import { useCreateOrg } from '@/hooks/mutations/useOrgMutations'
+import { CRSApiKeyManager } from '@/components/CRSApiKeyManager'
 
 function BackIcon(props: { className?: string }) {
     return (
@@ -488,40 +489,143 @@ export default function SettingsPage() {
 
             <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                 <div className="mx-auto w-full max-w-content p-3 space-y-4">
-                    {/* Current Session Section */}
-                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                        <div className="px-3 py-2 border-b border-[var(--app-divider)]">
-                            <h2 className="text-sm font-medium">Current Session</h2>
+                    {/* ========== GENERAL SETTINGS ========== */}
+                    <div className="space-y-4">
+                        <h2 className="text-xs font-semibold text-[var(--app-hint)] uppercase tracking-wide px-1">General Settings</h2>
+
+                        {/* Current Session Section */}
+                        <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                            <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                                <h3 className="text-sm font-medium">Current Session</h3>
+                            </div>
+                            <div className="divide-y divide-[var(--app-divider)]">
+                                <div className="px-3 py-2 flex items-center justify-between gap-2">
+                                    <span className="text-sm text-[var(--app-hint)]">Email</span>
+                                    <span className="text-sm font-mono truncate">{currentSession.email}</span>
+                                </div>
+                                <div className="px-3 py-2 flex items-center justify-between gap-2">
+                                    <span className="text-sm text-[var(--app-hint)]">Device</span>
+                                    <span className="text-sm font-mono">{currentSession.deviceType}</span>
+                                </div>
+                                <div className="px-3 py-2 flex items-center justify-between gap-2">
+                                    <span className="text-sm text-[var(--app-hint)]">Client ID</span>
+                                    <span className="text-sm font-mono">{currentSession.clientId}</span>
+                                </div>
+                                <div className="px-3 py-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleLogout}
+                                        className="w-full px-3 py-2 text-sm font-medium rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                                    >
+                                        Logout
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div className="divide-y divide-[var(--app-divider)]">
-                            <div className="px-3 py-2 flex items-center justify-between gap-2">
-                                <span className="text-sm text-[var(--app-hint)]">Email</span>
-                                <span className="text-sm font-mono truncate">{currentSession.email}</span>
+
+                        {/* Privacy Settings Section */}
+                        <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                            <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                                <h3 className="text-sm font-medium">Privacy</h3>
                             </div>
-                            <div className="px-3 py-2 flex items-center justify-between gap-2">
-                                <span className="text-sm text-[var(--app-hint)]">Device</span>
-                                <span className="text-sm font-mono">{currentSession.deviceType}</span>
-                            </div>
-                            <div className="px-3 py-2 flex items-center justify-between gap-2">
-                                <span className="text-sm text-[var(--app-hint)]">Client ID</span>
-                                <span className="text-sm font-mono">{currentSession.clientId}</span>
-                            </div>
-                            <div className="px-3 py-2">
-                                <button
-                                    type="button"
-                                    onClick={handleLogout}
-                                    className="w-full px-3 py-2 text-sm font-medium rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
-                                >
-                                    Logout
-                                </button>
+                            <div className="divide-y divide-[var(--app-divider)]">
+                                <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                                    <div className="flex-1">
+                                        <div className="text-sm">Share My Sessions</div>
+                                        <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                            Allow team members to view and interact with your sessions
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleToggleShareAllSessions}
+                                        disabled={preferencesLoading || updatePreferencesMutation.isPending}
+                                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                                            userPreferences?.shareAllSessions ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                                        }`}
+                                    >
+                                        <span
+                                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                                userPreferences?.shareAllSessions ? 'translate-x-5' : 'translate-x-0'
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
+                                <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                                    <div className="flex-1">
+                                        <div className="text-sm">View Others' Sessions</div>
+                                        <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                            Show sessions shared by other team members
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleToggleViewOthersSessions}
+                                        disabled={preferencesLoading || updatePreferencesMutation.isPending}
+                                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                                            userPreferences?.viewOthersSessions ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                                        }`}
+                                    >
+                                        <span
+                                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                                userPreferences?.viewOthersSessions ? 'translate-x-5' : 'translate-x-0'
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
                             </div>
                         </div>
+
+                        {/* Notifications Section */}
+                        {isNotificationSupported && (
+                            <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                                <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                                    <h3 className="text-sm font-medium">Notifications</h3>
+                                    <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                        Get notified when AI tasks complete.
+                                    </p>
+                                </div>
+                                <div className="divide-y divide-[var(--app-divider)]">
+                                    <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm">Push Notifications</div>
+                                            <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                                {notificationPermission === 'denied'
+                                                    ? 'Blocked by browser. Enable in system settings.'
+                                                    : notificationPermission === 'default'
+                                                        ? 'Click to enable notifications.'
+                                                        : 'Receive alerts when tasks finish.'}
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleNotificationToggle}
+                                            disabled={notificationPermission === 'denied'}
+                                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                                                notificationPermission === 'granted' && notificationEnabled
+                                                    ? 'bg-green-500'
+                                                    : 'bg-gray-300 dark:bg-gray-600'
+                                            }`}
+                                        >
+                                            <span
+                                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                                    notificationPermission === 'granted' && notificationEnabled ? 'translate-x-5' : 'translate-x-0'
+                                                }`}
+                                            />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Organization Section */}
+                    {/* ========== ORGANIZATION SWITCHER ========== */}
                     <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
                         <div className="px-3 py-2 border-b border-[var(--app-divider)]">
                             <h2 className="text-sm font-medium">Organization</h2>
+                            <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                Select an organization to view its settings below
+                            </p>
                         </div>
                         <div className="divide-y divide-[var(--app-divider)]">
                             {orgs.map((org) => {
@@ -530,7 +634,7 @@ export default function SettingsPage() {
                                     <button
                                         key={org.id}
                                         type="button"
-                                        onClick={() => navigate({ to: '/orgs/$orgId', params: { orgId: org.id } })}
+                                        onClick={() => setCurrentOrgId(org.id)}
                                         className={`w-full px-3 py-2.5 flex items-center justify-between gap-2 transition-colors ${
                                             isCurrent ? 'bg-[var(--app-button)]/10' : 'hover:bg-[var(--app-secondary-bg)]'
                                         }`}
@@ -625,185 +729,111 @@ export default function SettingsPage() {
                         )}
                     </div>
 
-                    {/* Machines Section */}
-                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                        <div className="px-3 py-2 border-b border-[var(--app-divider)]">
-                            <h2 className="text-sm font-medium">Machines</h2>
-                            <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                Machines connected to this organization.
-                            </p>
-                        </div>
-                        {machines.length === 0 ? (
-                            <div className="px-3 py-4 text-center text-sm text-[var(--app-hint)]">
-                                No machines connected yet.
+                    {/* ========== ORGANIZATION SETTINGS ========== */}
+                    {currentOrgId && (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between px-1">
+                                <h2 className="text-xs font-semibold text-[var(--app-hint)] uppercase tracking-wide">
+                                    Organization Settings
+                                </h2>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const currentOrg = orgs.find(o => o.id === currentOrgId)
+                                        if (currentOrg) {
+                                            navigate({ to: '/orgs/$orgId', params: { orgId: currentOrg.id } })
+                                        }
+                                    }}
+                                    className="text-[10px] px-2 py-1 rounded text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors"
+                                >
+                                    Manage Members →
+                                </button>
                             </div>
-                        ) : (
-                            <div className="divide-y divide-[var(--app-divider)]">
-                                {machines.map((machine) => (
-                                    <div key={machine.id} className="px-3 py-2.5">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="min-w-0 flex-1">
-                                                <div className="text-sm font-medium truncate">
-                                                    {machine.metadata?.host || machine.id.slice(0, 8)}
-                                                </div>
-                                                <div className="text-xs text-[var(--app-hint)] mt-1 space-y-0.5">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[10px] font-medium">Platform:</span>
-                                                        <span className="font-mono">{machine.metadata?.platform || '-'}</span>
+
+                            {/* Machines Section */}
+                            <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                                <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                                    <h3 className="text-sm font-medium">Machines</h3>
+                                    <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                        Machines connected to this organization
+                                    </p>
+                                </div>
+                                {machines.length === 0 ? (
+                                    <div className="px-3 py-4 text-center text-sm text-[var(--app-hint)]">
+                                        No machines connected yet.
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-[var(--app-divider)]">
+                                        {machines.map((machine) => (
+                                            <div key={machine.id} className="px-3 py-2.5">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-sm font-medium truncate">
+                                                            {machine.metadata?.host || machine.id.slice(0, 8)}
+                                                        </div>
+                                                        <div className="text-xs text-[var(--app-hint)] mt-1 space-y-0.5">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-medium">Platform:</span>
+                                                                <span className="font-mono">{machine.metadata?.platform || '-'}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-medium">Version:</span>
+                                                                <span className="font-mono text-[10px]">{machine.metadata?.yohoRemoteCliVersion || '-'}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-medium">ID:</span>
+                                                                <span className="font-mono text-[10px]">{machine.id}</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[10px] font-medium">Version:</span>
-                                                        <span className="font-mono text-[10px]">{machine.metadata?.yohoRemoteCliVersion || '-'}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[10px] font-medium">ID:</span>
-                                                        <span className="font-mono text-[10px]">{machine.id}</span>
+                                                    <div className={`shrink-0 px-2 py-1 rounded text-[10px] font-medium ${
+                                                        machine.active
+                                                            ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                                                            : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
+                                                    }`}>
+                                                        {machine.active ? 'Active' : 'Inactive'}
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className={`shrink-0 px-2 py-1 rounded text-[10px] font-medium ${
-                                                machine.active
-                                                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                                                    : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
-                                            }`}>
-                                                {machine.active ? 'Active' : 'Inactive'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Privacy Settings Section */}
-                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                        <div className="px-3 py-2 border-b border-[var(--app-divider)]">
-                            <h2 className="text-sm font-medium">Privacy</h2>
-                        </div>
-                        <div className="divide-y divide-[var(--app-divider)]">
-                            <div className="px-3 py-2.5 flex items-center justify-between gap-3">
-                                <div className="flex-1">
-                                    <div className="text-sm">Share My Sessions</div>
-                                    <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                        Allow team members to view and interact with your sessions
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={handleToggleShareAllSessions}
-                                    disabled={preferencesLoading || updatePreferencesMutation.isPending}
-                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                                        userPreferences?.shareAllSessions ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                                    }`}
-                                >
-                                    <span
-                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                            userPreferences?.shareAllSessions ? 'translate-x-5' : 'translate-x-0'
-                                        }`}
-                                    />
-                                </button>
-                            </div>
-                            <div className="px-3 py-2.5 flex items-center justify-between gap-3">
-                                <div className="flex-1">
-                                    <div className="text-sm">View Others' Sessions</div>
-                                    <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                        Show sessions shared by other team members
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={handleToggleViewOthersSessions}
-                                    disabled={preferencesLoading || updatePreferencesMutation.isPending}
-                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
-                                        userPreferences?.viewOthersSessions ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
-                                    }`}
-                                >
-                                    <span
-                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                            userPreferences?.viewOthersSessions ? 'translate-x-5' : 'translate-x-0'
-                                        }`}
-                                    />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Notifications Section */}
-                    {isNotificationSupported && (
-                        <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                            <div className="px-3 py-2 border-b border-[var(--app-divider)]">
-                                <h2 className="text-sm font-medium">Notifications</h2>
-                                <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                    Get notified when AI tasks complete.
-                                </p>
-                            </div>
-                            <div className="divide-y divide-[var(--app-divider)]">
-                                <div className="px-3 py-2.5 flex items-center justify-between gap-3">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm">Push Notifications</div>
-                                        <div className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                            {notificationPermission === 'denied'
-                                                ? 'Blocked by browser. Enable in system settings.'
-                                                : notificationPermission === 'default'
-                                                    ? 'Click to enable notifications.'
-                                                    : 'Receive alerts when tasks finish.'}
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleNotificationToggle}
-                                        disabled={notificationPermission === 'denied'}
-                                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
-                                            notificationPermission === 'granted' && notificationEnabled
-                                                ? 'bg-green-500'
-                                                : 'bg-gray-300 dark:bg-gray-600'
-                                        }`}
-                                    >
-                                        <span
-                                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                                notificationPermission === 'granted' && notificationEnabled ? 'translate-x-5' : 'translate-x-0'
-                                            }`}
-                                        />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Projects Section */}
-                    <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
-                        <div className="px-3 py-2 border-b border-[var(--app-divider)] flex items-center justify-between">
-                            <div>
-                                <h2 className="text-sm font-medium">Projects</h2>
-                                <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
-                                    Saved project paths for quick access.
-                                </p>
-                            </div>
-                            {!showAddProject && !editingProject && (
-                                <div className="flex items-center gap-2">
-                                    <select
-                                        value={selectedMachineId ?? ''}
-                                        onChange={(e) => setSelectedMachineId(e.target.value || null)}
-                                        className="text-xs px-2 py-1 rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
-                                    >
-                                        <option value="">All machines</option>
-                                        {machines.map((m) => (
-                                            <option key={m.id} value={m.id}>
-                                                {m.metadata?.displayName || m.metadata?.host || m.id.slice(0, 8)}
-                                            </option>
                                         ))}
-                                    </select>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowAddProject(true)}
-                                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] hover:opacity-90 transition-opacity"
-                                    >
-                                        <PlusIcon className="w-3 h-3" />
-                                        Add
-                                    </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Projects Section */}
+                            <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                                <div className="px-3 py-2 border-b border-[var(--app-divider)] flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-sm font-medium">Projects</h3>
+                                        <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                            Saved project paths for quick access
+                                        </p>
+                                    </div>
+                                    {!showAddProject && !editingProject && (
+                                        <div className="flex items-center gap-2">
+                                            <select
+                                                value={selectedMachineId ?? ''}
+                                                onChange={(e) => setSelectedMachineId(e.target.value || null)}
+                                                className="text-xs px-2 py-1 rounded border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--app-button)]"
+                                            >
+                                                <option value="">All machines</option>
+                                                {machines.map((m) => (
+                                                    <option key={m.id} value={m.id}>
+                                                        {m.metadata?.displayName || m.metadata?.host || m.id.slice(0, 8)}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAddProject(true)}
+                                                className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-[var(--app-button)] text-[var(--app-button-text)] hover:opacity-90 transition-opacity"
+                                            >
+                                                <PlusIcon className="w-3 h-3" />
+                                                Add
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
 
                         {/* Add Project Form */}
                         {showAddProject && (
@@ -894,7 +924,28 @@ export default function SettingsPage() {
                                 ))}
                             </div>
                         )}
-                    </div>
+                            </div>
+
+                            {/* API Keys Section - Only for owners */}
+                            {api && orgs.find(o => o.id === currentOrgId)?.myRole === 'owner' && (
+                                <div className="rounded-lg bg-[var(--app-subtle-bg)] overflow-hidden">
+                                    <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+                                        <h3 className="text-sm font-medium">API Keys</h3>
+                                        <p className="text-[11px] text-[var(--app-hint)] mt-0.5">
+                                            Manage Claude API keys and monitor token usage
+                                        </p>
+                                    </div>
+                                    <div className="p-3">
+                                        <CRSApiKeyManager
+                                            api={api}
+                                            orgId={currentOrgId}
+                                            orgSlug={orgs.find(o => o.id === currentOrgId)?.slug ?? ''}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                 </div>
             </div>
