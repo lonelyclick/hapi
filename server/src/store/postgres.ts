@@ -95,10 +95,19 @@ export class PostgresStore implements IStore {
                 creator_chat_id TEXT,
                 advisor_mode BOOLEAN DEFAULT FALSE,
                 advisor_prompt_injected BOOLEAN DEFAULT FALSE,
-                role_prompt_sent BOOLEAN DEFAULT FALSE
+                role_prompt_sent BOOLEAN DEFAULT FALSE,
+                permission_mode TEXT,
+                model_mode TEXT,
+                model_reasoning_effort TEXT,
+                fast_mode BOOLEAN
             );
             -- Add created_by column if not exists (migration)
             ALTER TABLE sessions ADD COLUMN IF NOT EXISTS created_by TEXT;
+            -- Add model mode columns if not exists (migration)
+            ALTER TABLE sessions ADD COLUMN IF NOT EXISTS permission_mode TEXT;
+            ALTER TABLE sessions ADD COLUMN IF NOT EXISTS model_mode TEXT;
+            ALTER TABLE sessions ADD COLUMN IF NOT EXISTS model_reasoning_effort TEXT;
+            ALTER TABLE sessions ADD COLUMN IF NOT EXISTS fast_mode BOOLEAN;
             CREATE INDEX IF NOT EXISTS idx_sessions_tag ON sessions(tag);
             CREATE INDEX IF NOT EXISTS idx_sessions_tag_namespace ON sessions(tag, namespace);
             -- OpenCode session 查询优化索引
@@ -745,6 +754,50 @@ export class PostgresStore implements IStore {
             UPDATE sessions SET active = $1, active_at = $2
             WHERE id = $3 AND namespace = $4
         `, [active, activeAt, id, namespace])
+        return (result.rowCount ?? 0) > 0
+    }
+
+    async setSessionModelConfig(id: string, config: {
+        permissionMode?: string
+        modelMode?: string
+        modelReasoningEffort?: string
+        fastMode?: boolean
+    }, namespace: string): Promise<boolean> {
+        const updates: string[] = []
+        const values: any[] = []
+        let paramIndex = 1
+
+        if (config.permissionMode !== undefined) {
+            updates.push(`permission_mode = $${paramIndex++}`)
+            values.push(config.permissionMode)
+        }
+        if (config.modelMode !== undefined) {
+            updates.push(`model_mode = $${paramIndex++}`)
+            values.push(config.modelMode)
+        }
+        if (config.modelReasoningEffort !== undefined) {
+            updates.push(`model_reasoning_effort = $${paramIndex++}`)
+            values.push(config.modelReasoningEffort)
+        }
+        if (config.fastMode !== undefined) {
+            updates.push(`fast_mode = $${paramIndex++}`)
+            values.push(config.fastMode)
+        }
+
+        if (updates.length === 0) {
+            return true  // Nothing to update
+        }
+
+        updates.push(`updated_at = $${paramIndex++}`)
+        values.push(Date.now())
+
+        values.push(id)
+        values.push(namespace)
+
+        const result = await this.pool.query(`
+            UPDATE sessions SET ${updates.join(', ')}
+            WHERE id = $${paramIndex++} AND namespace = $${paramIndex++}
+        `, values)
         return (result.rowCount ?? 0) > 0
     }
 
@@ -2865,7 +2918,11 @@ export class PostgresStore implements IStore {
             creatorChatId: row.creator_chat_id,
             advisorMode: row.advisor_mode === true,
             advisorPromptInjected: row.advisor_prompt_injected === true,
-            rolePromptSent: row.role_prompt_sent === true
+            rolePromptSent: row.role_prompt_sent === true,
+            permissionMode: row.permission_mode ?? null,
+            modelMode: row.model_mode ?? null,
+            modelReasoningEffort: row.model_reasoning_effort ?? null,
+            fastMode: row.fast_mode ?? null
         }
     }
 

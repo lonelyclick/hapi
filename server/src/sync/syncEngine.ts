@@ -809,23 +809,40 @@ export class SyncEngine {
         // Only update mode values from CLI heartbeat if server doesn't have authoritative values
         // This prevents CLI heartbeats with stale values from overwriting server-set values
         // (e.g., when Web UI just set a new mode via applySessionConfig but CLI hasn't synced yet)
+        let needsPersist = false
         if (payload.permissionMode !== undefined && session.permissionMode === undefined) {
             session.permissionMode = payload.permissionMode
+            needsPersist = true
         }
         if (payload.modelMode !== undefined && session.modelMode === undefined) {
             session.modelMode = payload.modelMode
+            needsPersist = true
         }
         if (payload.modelReasoningEffort !== undefined && session.modelReasoningEffort === undefined) {
             session.modelReasoningEffort = payload.modelReasoningEffort
+            needsPersist = true
         }
         if (payload.fastMode !== undefined && session.fastMode === undefined) {
             session.fastMode = payload.fastMode
+            needsPersist = true
         }
 
         // If session just became active, persist to database
         if (!wasActive) {
             this.store.setSessionActive(session.id, true, session.activeAt, session.namespace).catch(err => {
                 console.error(`[handleSessionAlive] Failed to persist active=true for session ${session.id}:`, err)
+            })
+        }
+
+        // Persist model config if updated from heartbeat
+        if (needsPersist) {
+            this.store.setSessionModelConfig(session.id, {
+                permissionMode: session.permissionMode,
+                modelMode: session.modelMode,
+                modelReasoningEffort: session.modelReasoningEffort,
+                fastMode: session.fastMode
+            }, session.namespace).catch(err => {
+                console.error(`[handleSessionAlive] Failed to persist model config for session ${session.id}:`, err)
             })
         }
 
@@ -1410,10 +1427,10 @@ export class SyncEngine {
             thinking: existing?.thinking ?? false,
             thinkingAt: existing?.thinkingAt ?? 0,
             todos,
-            permissionMode: existing?.permissionMode,
-            modelMode: existing?.modelMode,
-            modelReasoningEffort: existing?.modelReasoningEffort,
-            fastMode: existing?.fastMode
+            permissionMode: existing?.permissionMode ?? (stored.permissionMode as any) ?? undefined,
+            modelMode: existing?.modelMode ?? (stored.modelMode as any) ?? undefined,
+            modelReasoningEffort: existing?.modelReasoningEffort ?? (stored.modelReasoningEffort as any) ?? undefined,
+            fastMode: existing?.fastMode ?? stored.fastMode ?? undefined
         }
 
         this.sessions.set(sessionId, session)
@@ -1706,6 +1723,11 @@ export class SyncEngine {
             if (modelReasoningEffort !== undefined) {
                 session.modelReasoningEffort = modelReasoningEffort
             }
+            // Persist to database
+            await this.store.setSessionModelConfig(sessionId, {
+                modelMode: model,
+                modelReasoningEffort: modelReasoningEffort
+            }, session.namespace)
             this.emit({ type: 'session-updated', sessionId, data: session })
         }
     }
@@ -1754,6 +1776,15 @@ export class SyncEngine {
             if (applied.modelReasoningEffort === undefined && config.modelReasoningEffort !== undefined) {
                 session.modelReasoningEffort = config.modelReasoningEffort
             }
+
+            // Persist to database
+            await this.store.setSessionModelConfig(sessionId, {
+                permissionMode: session.permissionMode,
+                modelMode: session.modelMode,
+                modelReasoningEffort: session.modelReasoningEffort,
+                fastMode: session.fastMode
+            }, session.namespace)
+
             this.emit({ type: 'session-updated', sessionId, data: session })
             return {
                 permissionMode: session.permissionMode,

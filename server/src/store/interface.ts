@@ -66,6 +66,12 @@ export interface IStore {
     setSessionCreatedBy(id: string, email: string, namespace: string): Promise<boolean>
     setSessionOrgId(id: string, orgId: string, namespace: string): Promise<boolean>
     setSessionActive(id: string, active: boolean, activeAt: number, namespace: string): Promise<boolean>
+    setSessionModelConfig(id: string, config: {
+        permissionMode?: string
+        modelMode?: string
+        modelReasoningEffort?: string
+        fastMode?: boolean
+    }, namespace: string): Promise<boolean>
     getSession(id: string): Promise<StoredSession | null>
     getSessionByNamespace(id: string, namespace: string): Promise<StoredSession | null>
     getSessions(orgId?: string | null): Promise<StoredSession[]>

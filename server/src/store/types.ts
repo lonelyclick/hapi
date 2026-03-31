@@ -23,6 +23,10 @@ export type StoredSession = {
     advisorMode: boolean
     advisorPromptInjected: boolean
     rolePromptSent: boolean
+    permissionMode: string | null
+    modelMode: string | null
+    modelReasoningEffort: string | null
+    fastMode: boolean | null
 }
 
 export type StoredMachine = {
