@@ -7,8 +7,11 @@ const CLI_COMMAND_NAME_REGEX = /<command-name>/i
 const CLI_COMMAND_STDOUT_REGEX = /<local-command-stdout>/i
 
 // Calculate context size from usage data
+// NOTE: input_tokens already includes cache tokens (cache_creation + cache_read)
+// Cache tokens are reported separately only for cost tracking purposes
+// Reference: https://platform.claude.com/docs/en/agent-sdk/cost-tracking
 function calculateContextSize(usage: UsageData): number {
-    return (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0) + usage.input_tokens
+    return usage.input_tokens
 }
 
 function parseClaudeUsageLimit(text: string): number | null {

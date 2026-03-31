@@ -142,7 +142,7 @@ fi
 # 确保 systemd service 包含 EnvironmentFile（加载 .env 中的 LITELLM 等变量）
 YR_ENV_FILE="/home/guang/softwares/yoho-remote/.env"
 SERVICE_FILE="/etc/systemd/system/yoho-remote-server.service"
-if ! grep -q "EnvironmentFile=" "$SERVICE_FILE" 2>/dev/null; then
+if ! echo "guang" | sudo -S grep -q "EnvironmentFile=" "$SERVICE_FILE" 2>/dev/null; then
     echo "=== Adding EnvironmentFile to systemd service..."
     echo "guang" | sudo -S sed -i "/^ExecStart=/i EnvironmentFile=$YR_ENV_FILE" "$SERVICE_FILE"
     echo "guang" | sudo -S systemctl daemon-reload
