@@ -396,7 +396,7 @@ export function SessionList(props: {
                                         }
                                     `}
                                 >
-                                    🧠 子任务
+                                    🧠 Brain
                                 </button>
                             )}
                             {viewOthersSessions && (
