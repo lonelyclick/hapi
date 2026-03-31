@@ -5,7 +5,7 @@ import { LoadingState } from './LoadingState'
 
 // Filter types
 type ArchiveFilter = boolean  // true = show archived (offline) sessions only
-type OwnerFilter = 'mine' | 'openclaw' | 'others'
+type OwnerFilter = 'mine' | 'openclaw' | 'brain-child' | 'others'
 
 function getSessionPath(session: SessionSummary): string | null {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? null
@@ -57,11 +57,15 @@ function filterSessions(
 
         // Owner filter
         const isOpenClawSession = session.metadata?.source === 'openclaw'
+        const isBrainChildSession = session.metadata?.source === 'brain-child'
         if (ownerFilter === 'mine') {
             if (session.ownerEmail) return false
             if (isOpenClawSession) return false
+            if (isBrainChildSession) return false
         } else if (ownerFilter === 'openclaw') {
             if (!isOpenClawSession) return false
+        } else if (ownerFilter === 'brain-child') {
+            if (!isBrainChildSession) return false
         } else if (ownerFilter === 'others') {
             if (!session.ownerEmail) return false
         }
@@ -301,6 +305,12 @@ export function SessionList(props: {
         [props.sessions]
     )
 
+    // Check if there are any brain-child sessions
+    const hasBrainChildSessions = useMemo(() =>
+        props.sessions.some(s => s.metadata?.source === 'brain-child'),
+        [props.sessions]
+    )
+
     // Statistics
     const activeCount = filteredSessions.filter(s => s.active).length
 
@@ -341,10 +351,10 @@ export function SessionList(props: {
                         {archiveFilter ? 'Archive' : 'Active'}
                     </button>
                 </div>
-                {(viewOthersSessions || hasOpenClawSessions) && (
+                {(viewOthersSessions || hasOpenClawSessions || hasBrainChildSessions) && (
                     <div className="flex items-center gap-1.5 min-w-0">
                         <div className="flex items-center gap-1">
-                            {(viewOthersSessions || hasOpenClawSessions) && (
+                            {(viewOthersSessions || hasOpenClawSessions || hasBrainChildSessions) && (
                                 <button
                                     type="button"
                                     onClick={() => setOwnerFilter('mine')}
@@ -372,6 +382,21 @@ export function SessionList(props: {
                                     `}
                                 >
                                     OpenClaw
+                                </button>
+                            )}
+                            {hasBrainChildSessions && (
+                                <button
+                                    type="button"
+                                    onClick={() => setOwnerFilter('brain-child')}
+                                    className={`
+                                        px-2 py-1 text-xs rounded-md transition-colors whitespace-nowrap
+                                        ${ownerFilter === 'brain-child'
+                                            ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-sm'
+                                            : 'bg-[var(--app-subtle-bg)] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)]'
+                                        }
+                                    `}
+                                >
+                                    🧠 子任务
                                 </button>
                             )}
                             {viewOthersSessions && (
