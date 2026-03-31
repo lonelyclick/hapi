@@ -7,11 +7,13 @@ const CLI_COMMAND_NAME_REGEX = /<command-name>/i
 const CLI_COMMAND_STDOUT_REGEX = /<local-command-stdout>/i
 
 // Calculate context size from usage data
-// NOTE: input_tokens already includes cache tokens (cache_creation + cache_read)
-// Cache tokens are reported separately only for cost tracking purposes
-// Reference: https://platform.claude.com/docs/en/agent-sdk/cost-tracking
+// NOTE: Context size = input_tokens + cache_creation + cache_read
+// This matches Claude Code CLI's calculation (src/utils/context.ts:118)
+// Reference: Claude Code CLI source code analysis
 function calculateContextSize(usage: UsageData): number {
-    return usage.input_tokens
+    return usage.input_tokens +
+           (usage.cache_creation_input_tokens || 0) +
+           (usage.cache_read_input_tokens || 0)
 }
 
 function parseClaudeUsageLimit(text: string): number | null {
@@ -727,20 +729,41 @@ export function reduceChatBlocks(
         }
     }
 
-    // Calculate latest usage from messages (find the most recent message with usage data)
+    // Calculate cumulative usage from all messages
+    // NOTE: Each message's usage represents a single API call (per-step),
+    // so we need to accumulate them to get the total context size
     let latestUsage: LatestUsage | null = null
-    for (let i = normalized.length - 1; i >= 0; i--) {
-        const msg = normalized[i]
+    let cumulativeInputTokens = 0
+    let cumulativeOutputTokens = 0
+    let cumulativeCacheCreation = 0
+    let cumulativeCacheRead = 0
+    let latestTimestamp = 0
+
+    for (const msg of normalized) {
         if (msg.usage) {
-            latestUsage = {
-                inputTokens: msg.usage.input_tokens,
-                outputTokens: msg.usage.output_tokens,
-                cacheCreation: msg.usage.cache_creation_input_tokens ?? 0,
-                cacheRead: msg.usage.cache_read_input_tokens ?? 0,
-                contextSize: calculateContextSize(msg.usage),
-                timestamp: msg.createdAt
-            }
-            break
+            cumulativeInputTokens += msg.usage.input_tokens
+            cumulativeOutputTokens += msg.usage.output_tokens
+            cumulativeCacheCreation += msg.usage.cache_creation_input_tokens ?? 0
+            cumulativeCacheRead += msg.usage.cache_read_input_tokens ?? 0
+            latestTimestamp = Math.max(latestTimestamp, msg.createdAt)
+        }
+    }
+
+    if (cumulativeInputTokens > 0 || cumulativeCacheCreation > 0 || cumulativeCacheRead > 0) {
+        const cumulativeUsage: UsageData = {
+            input_tokens: cumulativeInputTokens,
+            output_tokens: cumulativeOutputTokens,
+            cache_creation_input_tokens: cumulativeCacheCreation || undefined,
+            cache_read_input_tokens: cumulativeCacheRead || undefined
+        }
+
+        latestUsage = {
+            inputTokens: cumulativeInputTokens,
+            outputTokens: cumulativeOutputTokens,
+            cacheCreation: cumulativeCacheCreation,
+            cacheRead: cumulativeCacheRead,
+            contextSize: calculateContextSize(cumulativeUsage),
+            timestamp: latestTimestamp
         }
     }
 
