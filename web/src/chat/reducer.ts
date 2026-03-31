@@ -736,7 +736,7 @@ export function reduceChatBlocks(
     let latestUsage: LatestUsage | null = null
 
     // DEBUG: Log all messages with usage data
-    const messagesWithUsage = normalized.filter(msg => msg.usage).map((msg, idx) => ({
+    const messagesWithUsage = normalized.filter(msg => msg.usage && (msg.usage.input_tokens > 0 || msg.usage.cache_creation_input_tokens > 0 || msg.usage.cache_read_input_tokens > 0)).map((msg, idx) => ({
         index: idx,
         role: msg.role,
         id: msg.id,
@@ -744,13 +744,14 @@ export function reduceChatBlocks(
     }))
 
     if (messagesWithUsage.length > 0) {
-        console.log('[Context Debug] Messages with usage:', messagesWithUsage.length)
+        console.log('[Context Debug] Messages with actual usage (>0):', messagesWithUsage.length)
         console.log('[Context Debug] All usage data:', messagesWithUsage)
     }
 
+    // Find the last message with actual usage data (not just zero/empty usage)
     for (let i = normalized.length - 1; i >= 0; i--) {
         const msg = normalized[i]
-        if (msg.usage) {
+        if (msg.usage && (msg.usage.input_tokens > 0 || (msg.usage.cache_creation_input_tokens || 0) > 0 || (msg.usage.cache_read_input_tokens || 0) > 0)) {
             const contextSize = calculateContextSize(msg.usage)
 
             console.log('[Context Debug] Latest usage found:')
