@@ -74,6 +74,12 @@ function getContextWarning(contextSize: number, maxContextSize: number): { text:
     const percentageUsed = (contextSize / maxContextSize) * 100
     const percentageRemaining = Math.max(0, 100 - percentageUsed)
 
+    console.log('[StatusBar Debug] Context calculation:')
+    console.log('  - contextSize:', contextSize)
+    console.log('  - maxContextSize:', maxContextSize)
+    console.log('  - percentageUsed:', percentageUsed.toFixed(2) + '%')
+    console.log('  - percentageRemaining:', percentageRemaining.toFixed(2) + '%')
+
     if (percentageRemaining <= 5) {
         return { text: `${Math.round(percentageRemaining)}% left`, color: 'text-red-500' }
     } else if (percentageRemaining <= 10) {

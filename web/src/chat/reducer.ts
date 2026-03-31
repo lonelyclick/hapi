@@ -729,42 +729,52 @@ export function reduceChatBlocks(
         }
     }
 
-    // Calculate cumulative usage from all messages
-    // NOTE: Each message's usage represents a single API call (per-step),
-    // so we need to accumulate them to get the total context size
+    // Calculate latest usage from messages (find the most recent message with usage data)
+    // NOTE: usage.input_tokens already represents the full context size for that API call,
+    // so we only need the latest value, not cumulative sum.
+    // This matches backend logic in server/src/sync/syncEngine.ts:getLastUsageForSession
     let latestUsage: LatestUsage | null = null
-    let cumulativeInputTokens = 0
-    let cumulativeOutputTokens = 0
-    let cumulativeCacheCreation = 0
-    let cumulativeCacheRead = 0
-    let latestTimestamp = 0
 
-    for (const msg of normalized) {
+    // DEBUG: Log all messages with usage data
+    const messagesWithUsage = normalized.filter(msg => msg.usage).map((msg, idx) => ({
+        index: idx,
+        role: msg.role,
+        id: msg.id,
+        usage: msg.usage
+    }))
+
+    if (messagesWithUsage.length > 0) {
+        console.log('[Context Debug] Messages with usage:', messagesWithUsage.length)
+        console.log('[Context Debug] All usage data:', messagesWithUsage)
+    }
+
+    for (let i = normalized.length - 1; i >= 0; i--) {
+        const msg = normalized[i]
         if (msg.usage) {
-            cumulativeInputTokens += msg.usage.input_tokens
-            cumulativeOutputTokens += msg.usage.output_tokens
-            cumulativeCacheCreation += msg.usage.cache_creation_input_tokens ?? 0
-            cumulativeCacheRead += msg.usage.cache_read_input_tokens ?? 0
-            latestTimestamp = Math.max(latestTimestamp, msg.createdAt)
+            const contextSize = calculateContextSize(msg.usage)
+
+            console.log('[Context Debug] Latest usage found:')
+            console.log('  - input_tokens:', msg.usage.input_tokens)
+            console.log('  - cache_creation:', msg.usage.cache_creation_input_tokens ?? 0)
+            console.log('  - cache_read:', msg.usage.cache_read_input_tokens ?? 0)
+            console.log('  - calculated contextSize:', contextSize)
+            console.log('  - message role:', msg.role)
+            console.log('  - message id:', msg.id)
+
+            latestUsage = {
+                inputTokens: msg.usage.input_tokens,
+                outputTokens: msg.usage.output_tokens,
+                cacheCreation: msg.usage.cache_creation_input_tokens ?? 0,
+                cacheRead: msg.usage.cache_read_input_tokens ?? 0,
+                contextSize: contextSize,
+                timestamp: msg.createdAt
+            }
+            break
         }
     }
 
-    if (cumulativeInputTokens > 0 || cumulativeCacheCreation > 0 || cumulativeCacheRead > 0) {
-        const cumulativeUsage: UsageData = {
-            input_tokens: cumulativeInputTokens,
-            output_tokens: cumulativeOutputTokens,
-            cache_creation_input_tokens: cumulativeCacheCreation || undefined,
-            cache_read_input_tokens: cumulativeCacheRead || undefined
-        }
-
-        latestUsage = {
-            inputTokens: cumulativeInputTokens,
-            outputTokens: cumulativeOutputTokens,
-            cacheCreation: cumulativeCacheCreation,
-            cacheRead: cumulativeCacheRead,
-            contextSize: calculateContextSize(cumulativeUsage),
-            timestamp: latestTimestamp
-        }
+    if (!latestUsage) {
+        console.log('[Context Debug] No usage data found in any message')
     }
 
     // Sort blocks by createdAt to ensure permission-only blocks appear in correct order.
