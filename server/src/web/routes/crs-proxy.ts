@@ -9,7 +9,7 @@ import type { IStore } from '../../store'
 export function createCRSProxyRoutes(store: IStore): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
-    const CRS_BASE_URL = process.env.ANTHROPIC_BASE_URL || 'https://token.yohomobile.dev/api'
+    const CRS_BASE_URL = process.env.CRS_BASE_URL || 'https://token.yohomobile.dev'
     const CRS_ADMIN_TOKEN = process.env.CRS_ADMIN_TOKEN || process.env.ANTHROPIC_AUTH_TOKEN
 
     if (!CRS_ADMIN_TOKEN) {
