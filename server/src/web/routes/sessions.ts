@@ -768,7 +768,8 @@ export function createSessionsRoutes(
                 shareAllUsersSet.delete(email)
             }
 
-            console.log(`[sessions-debug] email=${email}, viewOthersEnabled=${viewOthersEnabled}, shareAllUsers=[${[...shareAllUsersSet].join(',')}], storedCount=${storedSessions.length}`)
+            const reqOrgId = c.req.query('orgId') || null
+            console.log(`[sessions-debug] email=${email}, orgId=${reqOrgId}, viewOthersEnabled=${viewOthersEnabled}, shareAllUsers=[${[...shareAllUsersSet].join(',')}], storedCount=${storedSessions.length}`)
             storedSessions = storedSessions.filter(s => {
                 // Brain sessions should always be visible (飞书群创建的 session)
                 const meta = s.metadata as { source?: string } | null
