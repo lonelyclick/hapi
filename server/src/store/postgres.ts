@@ -553,9 +553,7 @@ export class PostgresStore implements IStore {
             UPDATE machines SET org_id = (SELECT id FROM organizations WHERE slug = 'yoho' LIMIT 1)
             WHERE id = 'e16b3653-ad9f-46a7-89fd-48a3d576cccb' AND org_id IS NULL;
 
-            -- Migration: Assign 腾讯云 machine to 'demoorg' org
-            UPDATE machines SET org_id = (SELECT id FROM organizations WHERE slug = 'demoorg' LIMIT 1)
-            WHERE id = '252095a0-73cb-4552-85bc-df11060b4972' AND org_id IS NULL;
+
         `)
     }
 
