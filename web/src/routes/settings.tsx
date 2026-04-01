@@ -230,6 +230,7 @@ export default function SettingsPage() {
     const [editingProject, setEditingProject] = useState<Project | null>(null)
     // 当前会话信息
     const currentSession = useMemo(() => ({
+        name: getCurrentUserSync()?.name || '-',
         email: getCurrentUserSync()?.email || '-',
         clientId: getClientId(),
         deviceType: getDeviceType()
@@ -550,6 +551,10 @@ export default function SettingsPage() {
                                 <h3 className="text-sm font-medium">Current Session</h3>
                             </div>
                             <div className="divide-y divide-[var(--app-divider)]">
+                                <div className="px-3 py-2 flex items-center justify-between gap-2">
+                                    <span className="text-sm text-[var(--app-hint)]">Name</span>
+                                    <span className="text-sm font-mono truncate">{currentSession.name}</span>
+                                </div>
                                 <div className="px-3 py-2 flex items-center justify-between gap-2">
                                     <span className="text-sm text-[var(--app-hint)]">Email</span>
                                     <span className="text-sm font-mono truncate">{currentSession.email}</span>
