@@ -546,9 +546,6 @@ export class PostgresStore implements IStore {
             ALTER TABLE machines ADD COLUMN IF NOT EXISTS org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL;
             CREATE INDEX IF NOT EXISTS idx_machines_org_id ON machines(org_id);
 
-            -- Migration: Assign ncu machine to 'yoho' org
-            UPDATE machines SET org_id = (SELECT id FROM organizations WHERE slug = 'yoho' LIMIT 1)
-            WHERE id = 'e16b3653-ad9f-46a7-89fd-48a3d576cccb' AND org_id IS NULL;
 
 
         `)
