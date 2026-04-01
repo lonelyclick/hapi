@@ -4,7 +4,8 @@ import { useNavigate } from '@tanstack/react-router'
 import { useAppContext } from '@/lib/app-context'
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { Spinner } from '@/components/Spinner'
-import { getClientId, getDeviceType, getStoredEmail } from '@/lib/client-identity'
+import { getClientId, getDeviceType } from '@/lib/client-identity'
+import { getCurrentUserSync } from '@/services/tokenStorage'
 import { useNotificationPermission, useWebPushSubscription } from '@/hooks/useNotification'
 import { useServerUrl } from '@/hooks/useServerUrl'
 import { getLogoutUrl, clearTokens } from '@/services/keycloak'
@@ -229,7 +230,7 @@ export default function SettingsPage() {
     const [editingProject, setEditingProject] = useState<Project | null>(null)
     // 当前会话信息
     const currentSession = useMemo(() => ({
-        email: getStoredEmail() || '-',
+        email: getCurrentUserSync()?.email || '-',
         clientId: getClientId(),
         deviceType: getDeviceType()
     }), [])

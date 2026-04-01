@@ -768,8 +768,6 @@ export function createSessionsRoutes(
                 shareAllUsersSet.delete(email)
             }
 
-            const reqOrgId = c.req.query('orgId') || null
-            console.log(`[sessions-debug] email=${email}, orgId=${reqOrgId}, viewOthersEnabled=${viewOthersEnabled}, shareAllUsers=[${[...shareAllUsersSet].join(',')}], storedCount=${storedSessions.length}`)
             storedSessions = storedSessions.filter(s => {
                 // Brain sessions should always be visible (飞书群创建的 session)
                 const meta = s.metadata as { source?: string } | null
@@ -797,7 +795,6 @@ export function createSessionsRoutes(
                     sessionOwnerMap.set(s.id, s.createdBy)
                     return true
                 }
-                console.log(`[sessions-debug] FILTERED OUT: id=${s.id}, createdBy=${s.createdBy}, source=${meta?.source}`)
                 return false
             })
         }
