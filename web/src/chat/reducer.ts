@@ -767,10 +767,11 @@ export function reduceChatBlocks(
                 continue
             }
 
-            // NOTE: For Claude Code SDK cumulative usage, input_tokens already includes
-            // all tokens (regular + cache). Adding cache tokens again causes 200%+ values.
-            // This matches the previous bug fix and SDK behavior.
-            const contextSize = inputTokens
+            // Context size = sum of all input token types
+            // Per Anthropic API spec: input_tokens, cache_creation_input_tokens, and
+            // cache_read_input_tokens are separate and must be summed for total context
+            // Example from actual data: input=6, cache_read=806111, cache_creation=4972 → total=811089
+            const contextSize = inputTokens + cacheCreation + cacheRead
             const usage = {
                 inputTokens,
                 outputTokens: msg.usage.output_tokens,
