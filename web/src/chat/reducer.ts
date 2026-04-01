@@ -748,8 +748,22 @@ export function reduceChatBlocks(
             const cacheCreation = msg.usage.cache_creation_input_tokens || 0
             const cacheRead = msg.usage.cache_read_input_tokens || 0
 
+            console.log('[Context Debug] Found message with usage:', {
+                index: i,
+                role: msg.role,
+                contentType: msg.content && typeof msg.content === 'object' && 'type' in msg.content ? msg.content.type : 'unknown',
+                usage: {
+                    input_tokens: inputTokens,
+                    cache_creation: cacheCreation,
+                    cache_read: cacheRead,
+                    output_tokens: msg.usage.output_tokens
+                },
+                rawUsage: msg.usage
+            })
+
             // Skip if all values are 0 (continue searching)
             if (inputTokens === 0 && cacheCreation === 0 && cacheRead === 0) {
+                console.log('[Context Debug] Skipping message with all zeros')
                 continue
             }
 
@@ -768,12 +782,14 @@ export function reduceChatBlocks(
 
             // Check if this is a result message (contains cumulative usage)
             if (msg.role === 'event' && msg.content && typeof msg.content === 'object' && 'type' in msg.content && msg.content.type === 'session-result') {
+                console.log('[Context Debug] Found result message (cumulative usage)')
                 resultUsage = usage
                 break // Result message found, use it immediately
             }
 
             // Store assistant message usage as fallback
             if (!assistantUsage && msg.role === 'agent') {
+                console.log('[Context Debug] Found assistant message (per-turn usage)')
                 assistantUsage = usage
             }
         }
@@ -781,6 +797,27 @@ export function reduceChatBlocks(
 
     // Prefer cumulative result usage over per-turn assistant usage
     latestUsage = resultUsage ?? assistantUsage
+
+    console.log('[Context Debug] Final usage decision:', {
+        resultUsage: resultUsage ? {
+            contextSize: resultUsage.contextSize,
+            inputTokens: resultUsage.inputTokens,
+            cacheCreation: resultUsage.cacheCreation,
+            cacheRead: resultUsage.cacheRead
+        } : null,
+        assistantUsage: assistantUsage ? {
+            contextSize: assistantUsage.contextSize,
+            inputTokens: assistantUsage.inputTokens,
+            cacheCreation: assistantUsage.cacheCreation,
+            cacheRead: assistantUsage.cacheRead
+        } : null,
+        chosen: latestUsage ? {
+            contextSize: latestUsage.contextSize,
+            inputTokens: latestUsage.inputTokens,
+            cacheCreation: latestUsage.cacheCreation,
+            cacheRead: latestUsage.cacheRead
+        } : null
+    })
 
     // Sort blocks by createdAt to ensure permission-only blocks appear in correct order.
     // We use a stable sort by adding original index as tiebreaker for equal createdAt values.
