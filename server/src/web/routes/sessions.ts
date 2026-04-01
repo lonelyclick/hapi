@@ -612,9 +612,10 @@ export function createSessionsRoutes(
         const email = c.get('email')
         const role = c.get('role')
         const userName = c.get('name')
+        const orgId = c.req.query('orgId')
 
-        // Find first online machine in this namespace
-        const machines = engine.getOnlineMachinesByNamespace(namespace)
+        // Find first online machine in this namespace (filtered by org if provided)
+        const machines = engine.getOnlineMachinesByNamespace(namespace, orgId ?? undefined)
         if (machines.length === 0) {
             return c.json({ type: 'error', message: 'No machines online' }, 503)
         }
@@ -643,7 +644,6 @@ export function createSessionsRoutes(
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
-                const orgId = c.req.query('orgId')
                 if (orgId) {
                     await store.setSessionOrgId(result.sessionId, orgId, namespace)
                 }
@@ -665,6 +665,7 @@ export function createSessionsRoutes(
         const email = c.get('email')
         const role = c.get('role')
         const userName = c.get('name')
+        const orgId = c.req.query('orgId')
 
         // Singleton: check if an active vijnapti session already exists
         const allSessions = engine.getSessionsByNamespace(namespace)
@@ -677,7 +678,8 @@ export function createSessionsRoutes(
             return c.json({ type: 'success', sessionId: existing.id, existing: true })
         }
 
-        const machines = engine.getOnlineMachinesByNamespace(namespace)
+        // Find first online machine in this namespace (filtered by org if provided)
+        const machines = engine.getOnlineMachinesByNamespace(namespace, orgId ?? undefined)
         if (machines.length === 0) {
             return c.json({ type: 'error', message: 'No machines online' }, 503)
         }
@@ -706,7 +708,6 @@ export function createSessionsRoutes(
                 if (email) {
                     await store.setSessionCreatedBy(result.sessionId, email, namespace)
                 }
-                const orgId = c.req.query('orgId')
                 if (orgId) {
                     await store.setSessionOrgId(result.sessionId, orgId, namespace)
                 }
