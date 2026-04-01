@@ -430,6 +430,15 @@ function normalizeAgentRecord(
             const cost = asNumber(data.total_cost_usd)
             const duration = asNumber(data.duration_ms)
             const turns = asNumber(data.num_turns)
+
+            // Extract cumulative usage from result message
+            // SDKResultMessage.usage contains cumulative values for the entire session
+            const usage = isObject(data.usage) ? (data.usage as Record<string, unknown>) : null
+            const inputTokens = usage ? asNumber(usage.input_tokens) : null
+            const outputTokens = usage ? asNumber(usage.output_tokens) : null
+            const cacheCreationTokens = usage ? asNumber(usage.cache_creation_input_tokens) : null
+            const cacheReadTokens = usage ? asNumber(usage.cache_read_input_tokens) : null
+
             if (cost === null && duration === null && turns === null) return null
             return {
                 id: messageId,
@@ -444,7 +453,14 @@ function normalizeAgentRecord(
                     isError: Boolean(data.is_error)
                 } as AgentEvent,
                 isSidechain: false,
-                meta
+                meta,
+                // Include cumulative usage for context percentage calculation
+                usage: (inputTokens !== null || outputTokens !== null) ? {
+                    input_tokens: inputTokens ?? 0,
+                    output_tokens: outputTokens ?? 0,
+                    cache_creation_input_tokens: cacheCreationTokens ?? 0,
+                    cache_read_input_tokens: cacheReadTokens ?? 0
+                } : undefined
             }
         }
 

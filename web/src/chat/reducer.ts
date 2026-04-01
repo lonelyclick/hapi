@@ -736,7 +736,11 @@ export function reduceChatBlocks(
     let latestUsage: LatestUsage | null = null
 
     // Find the last message with actual usage data
+    // Prioritize 'result' messages (cumulative usage) over 'assistant' messages (per-turn usage)
     // Skip messages where usage exists but all values are 0
+    let resultUsage: LatestUsage | null = null
+    let assistantUsage: LatestUsage | null = null
+
     for (let i = normalized.length - 1; i >= 0; i--) {
         const msg = normalized[i]
         if (msg.usage) {
@@ -750,8 +754,7 @@ export function reduceChatBlocks(
             }
 
             const contextSize = inputTokens + cacheCreation + cacheRead
-
-            latestUsage = {
+            const usage = {
                 inputTokens,
                 outputTokens: msg.usage.output_tokens,
                 cacheCreation,
@@ -759,9 +762,22 @@ export function reduceChatBlocks(
                 contextSize,
                 timestamp: msg.createdAt
             }
-            break
+
+            // Check if this is a result message (contains cumulative usage)
+            if (msg.role === 'event' && msg.content && typeof msg.content === 'object' && 'type' in msg.content && msg.content.type === 'session-result') {
+                resultUsage = usage
+                break // Result message found, use it immediately
+            }
+
+            // Store assistant message usage as fallback
+            if (!assistantUsage && msg.role === 'agent') {
+                assistantUsage = usage
+            }
         }
     }
+
+    // Prefer cumulative result usage over per-turn assistant usage
+    latestUsage = resultUsage ?? assistantUsage
 
     // Sort blocks by createdAt to ensure permission-only blocks appear in correct order.
     // We use a stable sort by adding original index as tiebreaker for equal createdAt values.
