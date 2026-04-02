@@ -117,6 +117,7 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
                     mcpServers: session.mcpServers,
                     allowedTools: session.allowedTools,
                     hookSettingsPath: session.hookSettingsPath,
+                    executableCommand: session.executableCommand,
                 });
 
                 // Consume one-time Claude flags after spawn

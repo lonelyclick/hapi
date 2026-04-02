@@ -31,6 +31,7 @@ export async function claudeRemote(opts: {
     claudeArgs?: string[],
     allowedTools: string[],
     hookSettingsPath: string,
+    executableCommand?: string,
     signal?: AbortSignal,
     canCallTool: (toolName: string, input: unknown, mode: EnhancedMode, options: { signal: AbortSignal }) => Promise<PermissionResult>,
 
@@ -160,7 +161,7 @@ export async function claudeRemote(opts: {
         disallowedTools: effectiveDisallowedTools.length > 0 ? effectiveDisallowedTools : undefined,
         canCallTool: (toolName: string, input: unknown, options: { signal: AbortSignal }) => opts.canCallTool(toolName, input, mode, options),
         abort: opts.signal,
-        pathToClaudeCodeExecutable: 'claude',
+        pathToClaudeCodeExecutable: opts.executableCommand ?? 'claude',
         settingsPath: opts.hookSettingsPath,
     }
 

@@ -20,6 +20,7 @@ export class Session extends AgentSessionBase<EnhancedMode> {
     readonly hookSettingsPath: string;
     readonly startedBy: 'daemon' | 'terminal';
     readonly startingMode: 'local' | 'remote';
+    readonly executableCommand: string;
     localLaunchFailure: LocalLaunchFailure | null = null;
     private runtimeModel: string | null = null;
 
@@ -41,6 +42,7 @@ export class Session extends AgentSessionBase<EnhancedMode> {
         hookSettingsPath: string;
         permissionMode?: PermissionMode;
         modelMode?: SessionModelMode;
+        executableCommand?: string;
     }) {
         super({
             api: opts.api,
@@ -68,6 +70,7 @@ export class Session extends AgentSessionBase<EnhancedMode> {
         this.hookSettingsPath = opts.hookSettingsPath;
         this.startedBy = opts.startedBy;
         this.startingMode = opts.startingMode;
+        this.executableCommand = opts.executableCommand ?? 'claude';
         this.permissionMode = opts.permissionMode;
         this.modelMode = opts.modelMode;
     }

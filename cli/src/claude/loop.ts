@@ -38,6 +38,7 @@ interface LoopOptions {
     allowedTools?: string[]
     onSessionReady?: (session: Session) => void
     hookSettingsPath: string
+    executableCommand?: string
 }
 
 export async function loop(opts: LoopOptions) {
@@ -66,7 +67,8 @@ export async function loop(opts: LoopOptions) {
         startingMode,
         hookSettingsPath: opts.hookSettingsPath,
         permissionMode: opts.permissionMode ?? 'bypassPermissions',
-        modelMode
+        modelMode,
+        executableCommand: opts.executableCommand
     });
 
     // Notify that session is ready

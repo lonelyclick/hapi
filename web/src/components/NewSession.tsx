@@ -9,7 +9,7 @@ import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 import { queryKeys } from '@/lib/query-keys'
 import { useAppContext } from '@/lib/app-context'
 
-type AgentType = 'claude' | 'codex' | 'droid'
+type AgentType = 'claude' | 'codex' | 'codez' | 'droid'
 type ClaudeModelMode = 'sonnet' | 'opus'
 
 /** 上次创建 session 时的偏好设置，存储在 localStorage */
@@ -413,7 +413,7 @@ export function NewSession(props: {
                     Agent
                 </label>
                 <div className="flex flex-wrap gap-x-3 gap-y-2">
-                    {(['claude', 'codex', 'droid'] as const).map((agentType) => (
+                    {(['claude', 'codex', 'codez', 'droid'] as const).map((agentType) => (
                         <label
                             key={agentType}
                             className="flex items-center gap-1 cursor-pointer"

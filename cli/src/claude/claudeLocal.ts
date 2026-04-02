@@ -17,6 +17,7 @@ export async function claudeLocal(opts: {
     claudeArgs?: string[]
     allowedTools?: string[]
     hookSettingsPath: string
+    executableCommand?: string
     /**
      * A function that registers an interrupt handler.
      * When called, it receives a function that sends SIGINT to the Claude process
@@ -86,18 +87,19 @@ export async function claudeLocal(opts: {
     logger.debug(`[ClaudeLocal] Spawning claude with args: ${JSON.stringify(args)}`);
 
     // Spawn the process
+    const cmd = opts.executableCommand ?? 'claude';
     try {
         process.stdin.pause();
         await spawnWithAbort({
-            command: 'claude',
+            command: cmd,
             args,
             cwd: opts.path,
             env: withBunRuntimeEnv(env, { allowBunBeBun: false }),
             signal: opts.abort,
             onInterruptRegistrar: opts.onInterruptRegistrar,
             logLabel: 'ClaudeLocal',
-            spawnName: 'claude',
-            installHint: 'Claude CLI',
+            spawnName: cmd,
+            installHint: cmd === 'codez' ? 'Codez CLI' : 'Claude CLI',
             includeCause: true,
             logExit: true,
             shell: process.platform === 'win32'
