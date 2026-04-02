@@ -667,7 +667,7 @@ export function YohoRemoteComposer(props: {
         const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
         const fileRefs = uploadedFiles.map(file => `[File: ${file.path}]`).join('\n')
         const attachmentRefs = [imageRefs, fileRefs].filter(Boolean).join('\n')
-        const currentText = (baseText ?? '').trim()
+        const currentText = String(baseText ?? '').trim()
         if (!attachmentRefs) {
             return currentText
         }

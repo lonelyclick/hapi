@@ -318,7 +318,7 @@ export function ComposerButtons(props: {
                             ? 'bg-black text-white'
                             : 'bg-[#C0C0C0] text-white'
                     } disabled:cursor-not-allowed`}
-                    onClick={props.onSendWithAttachments}
+                    onClick={() => props.onSendWithAttachments?.()}
                 >
                     <SendIcon />
                 </button>
