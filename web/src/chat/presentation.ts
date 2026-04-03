@@ -43,10 +43,7 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
     }
     if (event.type === 'turn-duration') {
         const ms = typeof event.durationMs === 'number' ? event.durationMs : 0
-        const numTurns = (event as Record<string, unknown>).numTurns
-        const parts = [`Turn: ${formatDuration(ms)}`]
-        if (typeof numTurns === 'number') parts.push(`${numTurns} turns`)
-        return { icon: '⏱️', text: parts.join(' · ') }
+        return { icon: '⏱️', text: `Turn: ${formatDuration(ms)}` }
     }
 
     // --- New SDK event types ---
