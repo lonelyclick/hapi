@@ -123,7 +123,7 @@ export async function claudeRemote(opts: {
 
     // All Claude Code built-in tools (non-MCP). Used to build disallowedTools for restricted sessions.
     const BUILTIN_TOOLS = [
-        'Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'ExitPlanMode', 'Read', 'Edit', 'Write',
+        'Task', 'Agent', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'ExitPlanMode', 'Read', 'Edit', 'Write',
         'NotebookEdit', 'WebFetch', 'TodoWrite', 'WebSearch', 'TaskStop', 'AskUserQuestion',
         'Skill', 'EnterPlanMode',
     ];

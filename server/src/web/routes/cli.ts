@@ -435,6 +435,98 @@ export function createCliRoutes(
         return c.json({ ok: true })
     })
 
+    // ==================== Project CRUD ====================
+
+    const addProjectSchema = z.object({
+        name: z.string().min(1).max(100),
+        path: z.string().min(1).max(500),
+        description: z.string().max(500).optional(),
+        machineId: z.string().nullable().optional()
+    })
+
+    const updateProjectSchema = z.object({
+        name: z.string().min(1).max(100),
+        path: z.string().min(1).max(500),
+        description: z.string().max(500).optional(),
+        machineId: z.string().nullable().optional()
+    })
+
+    // Helper: resolve orgId from sessionId
+    async function resolveOrgId(sessionId: string | undefined): Promise<string | null> {
+        if (!sessionId || !store) return null
+        const session = await store.getSession(sessionId)
+        return session?.orgId ?? null
+    }
+
+    // List projects (query: machineId, sessionId)
+    app.get('/projects', async (c) => {
+        if (!store) return c.json({ error: 'Store not available' }, 503)
+        const machineId = c.req.query('machineId')
+        const sessionId = c.req.query('sessionId')
+        const orgId = await resolveOrgId(sessionId)
+        const filterMachineId = machineId === '' ? null : machineId
+        const projects = await store.getProjects(filterMachineId, orgId)
+        return c.json({ projects })
+    })
+
+    // Create project (query: sessionId, body: name, path, description?, machineId?)
+    app.post('/projects', async (c) => {
+        if (!store) return c.json({ error: 'Store not available' }, 503)
+        const json = await c.req.json().catch(() => null)
+        const parsed = addProjectSchema.safeParse(json)
+        if (!parsed.success) return c.json({ error: 'Invalid project data' }, 400)
+
+        const sessionId = c.req.query('sessionId')
+        const orgId = await resolveOrgId(sessionId)
+        const project = await store.addProject(
+            parsed.data.name,
+            parsed.data.path,
+            parsed.data.description,
+            parsed.data.machineId,
+            orgId
+        )
+        if (!project) return c.json({ error: 'Failed to add project. Path may already exist.' }, 400)
+
+        const projects = await store.getProjects(undefined, orgId)
+        return c.json({ ok: true, project, projects })
+    })
+
+    // Update project (param: id, query: sessionId, body: name, path, description?, machineId?)
+    app.put('/projects/:id', async (c) => {
+        if (!store) return c.json({ error: 'Store not available' }, 503)
+        const id = c.req.param('id')
+        const json = await c.req.json().catch(() => null)
+        const parsed = updateProjectSchema.safeParse(json)
+        if (!parsed.success) return c.json({ error: 'Invalid project data' }, 400)
+
+        const project = await store.updateProject(
+            id,
+            parsed.data.name,
+            parsed.data.path,
+            parsed.data.description,
+            parsed.data.machineId
+        )
+        if (!project) return c.json({ error: 'Project not found or path already exists' }, 404)
+
+        const sessionId = c.req.query('sessionId')
+        const orgId = await resolveOrgId(sessionId)
+        const projects = await store.getProjects(undefined, orgId)
+        return c.json({ ok: true, project, projects })
+    })
+
+    // Delete project (param: id, query: sessionId)
+    app.delete('/projects/:id', async (c) => {
+        if (!store) return c.json({ error: 'Store not available' }, 503)
+        const id = c.req.param('id')
+        const success = await store.removeProject(id)
+        if (!success) return c.json({ error: 'Project not found' }, 404)
+
+        const sessionId = c.req.query('sessionId')
+        const orgId = await resolveOrgId(sessionId)
+        const projects = await store.getProjects(undefined, orgId)
+        return c.json({ ok: true, projects })
+    })
+
     // Brain: get session status with token stats
     app.get('/sessions/:id/status', async (c) => {
         const engine = getSyncEngine()
