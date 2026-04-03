@@ -76,6 +76,14 @@ function collectTitleChanges(messages: NormalizedMessage[]): Map<string, string>
 function dedupeResultTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
     const result: ChatBlock[] = []
 
+    // DEBUG: log all agent-text block IDs for diagnosis
+    const agentTextIds = blocks
+        .filter(b => b.kind === 'agent-text')
+        .map(b => ({ id: b.id, hasResultText: b.id.includes(':result-text:'), text: (b as { text?: string }).text?.slice(0, 50) }))
+    if (agentTextIds.length > 0) {
+        console.log('[dedupeResultText] agent-text blocks:', JSON.stringify(agentTextIds))
+    }
+
     for (let i = 0; i < blocks.length; i++) {
         const block = blocks[i]
 
@@ -90,6 +98,7 @@ function dedupeResultTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
                     break
                 }
             }
+            console.log('[dedupeResultText] result-text block:', block.id, 'hasPriorAgentText:', hasPriorAgentText)
             if (hasPriorAgentText) {
                 continue // skip this redundant result-text block
             }
@@ -300,6 +309,7 @@ function mergeAgentTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
             const currBaseId = block.id.split(':')[0]
             if (prevBaseId === currBaseId) {
                 // Merge consecutive agent-text blocks from the same message (for streaming deltas)
+                console.log('[mergeAgentText] merging same-base-id:', { prevId: prev.id, currId: block.id, prevBaseId })
                 merged[merged.length - 1] = { ...prev, text: prev.text + block.text }
                 continue
             }
@@ -308,6 +318,7 @@ function mergeAgentTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
             // This handles cases where each streaming chunk has a unique message ID
             const timeGap = block.createdAt - prev.createdAt
             if (timeGap >= 0 && timeGap < STREAMING_MERGE_GAP_MS) {
+                console.log('[mergeAgentText] merging by time gap:', { prevId: prev.id, currId: block.id, timeGap })
                 merged[merged.length - 1] = { ...prev, text: prev.text + block.text }
                 continue
             }
