@@ -18,6 +18,7 @@ const spawnBodySchema = z.object({
     claudeAgent: z.string().min(1).optional(),
     opencodeModel: z.string().min(1).optional(),
     opencodeVariant: z.string().min(1).optional(),
+    claudeModel: z.enum(['sonnet', 'opus']).optional(),
     codexModel: z.string().min(1).optional(),
     droidModel: z.string().min(1).optional(),
     droidReasoningEffort: z.string().min(1).optional(),
@@ -135,9 +136,11 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null, sto
         const rawSource = parsed.data.source?.trim()
         const source = rawSource ? rawSource : 'external-api'
 
-        // 将 codexModel 转换为 modelMode（如 'openai/gpt-5.3-codex' -> 'gpt-5.3-codex'）
+        // 将 claudeModel / codexModel 转换为 modelMode
         let modelMode: Session['modelMode'] | undefined
-        if (parsed.data.codexModel) {
+        if (parsed.data.claudeModel) {
+            modelMode = parsed.data.claudeModel
+        } else if (parsed.data.codexModel) {
             const maybeModelMode = parsed.data.codexModel.replace('openai/', '')
             if (isModelMode(maybeModelMode)) {
                 modelMode = maybeModelMode

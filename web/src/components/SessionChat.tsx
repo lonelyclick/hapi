@@ -67,7 +67,7 @@ export function SessionChat(props: {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const controlsDisabled = !props.session.active
-    const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
+    const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | NormalizedMessage[] | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
     const { abortSession, switchSession, setPermissionMode, setModelMode, setFastMode, deleteSession, refreshAccount, isPending } = useSessionActions(props.api, props.session.id)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -103,12 +103,24 @@ export function SessionChat(props: {
             seen.add(message.id)
             const cached = cache.get(message.id)
             if (cached && cached.source === message) {
-                if (cached.normalized) normalized.push(cached.normalized)
+                if (cached.normalized) {
+                    if (Array.isArray(cached.normalized)) {
+                        normalized.push(...cached.normalized)
+                    } else {
+                        normalized.push(cached.normalized)
+                    }
+                }
                 continue
             }
             const next = normalizeDecryptedMessage(message)
             cache.set(message.id, { source: message, normalized: next })
-            if (next) normalized.push(next)
+            if (next) {
+                if (Array.isArray(next)) {
+                    normalized.push(...next)
+                } else {
+                    normalized.push(next)
+                }
+            }
         }
         for (const id of cache.keys()) {
             if (!seen.has(id)) {

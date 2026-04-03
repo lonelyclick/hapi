@@ -236,7 +236,7 @@ function normalizeAgentRecord(
     createdAt: number,
     content: unknown,
     meta?: unknown
-): NormalizedMessage | null {
+): NormalizedMessage | NormalizedMessage[] | null {
     if (!isObject(content) || typeof content.type !== 'string') return null
 
     if (content.type === 'output') {
@@ -439,8 +439,7 @@ function normalizeAgentRecord(
             const cacheCreationTokens = usage ? asNumber(usage.cache_creation_input_tokens) : null
             const cacheReadTokens = usage ? asNumber(usage.cache_read_input_tokens) : null
 
-            if (cost === null && duration === null && turns === null) return null
-            return {
+            const resultEvent: NormalizedMessage | null = (cost === null && duration === null && turns === null) ? null : {
                 id: messageId,
                 localId,
                 createdAt,
@@ -462,6 +461,28 @@ function normalizeAgentRecord(
                     cache_read_input_tokens: cacheReadTokens ?? 0
                 } : undefined
             }
+
+            // codez (OpenAI) models may not emit a separate assistant text message;
+            // the reply text only appears in result.result.  Surface it as an
+            // agent text block so the user can see the response.
+            const resultText = typeof data.result === 'string' && data.result.trim() ? data.result as string : null
+            if (resultText) {
+                const uuid = asString(data.uuid) ?? messageId
+                const parentUUID = asString(data.parentUuid) ?? null
+                const textMsg: NormalizedMessage = {
+                    id: `${messageId}:result-text`,
+                    localId,
+                    createdAt,
+                    role: 'agent',
+                    isSidechain: false,
+                    content: [{ type: 'text', text: resultText, uuid, parentUUID }],
+                    meta
+                }
+                if (resultEvent) return [textMsg, resultEvent]
+                return textMsg
+            }
+
+            return resultEvent
         }
 
         if (data.type === 'rate_limit_event') {
@@ -773,7 +794,7 @@ function normalizeUserRecord(
     return null
 }
 
-export function normalizeDecryptedMessage(message: DecryptedMessage): NormalizedMessage | null {
+export function normalizeDecryptedMessage(message: DecryptedMessage): NormalizedMessage | NormalizedMessage[] | null {
     const record = unwrapRoleWrappedRecordEnvelope(message.content)
     if (!record) {
         return {
@@ -812,9 +833,8 @@ export function normalizeDecryptedMessage(message: DecryptedMessage): Normalized
         if (!normalized && isCodexContent(record.content)) {
             return null
         }
-        return normalized
-            ? { ...normalized, status: message.status, originalText: message.originalText }
-            : {
+        if (!normalized) {
+            return {
                 id: message.id,
                 localId: message.localId,
                 createdAt: message.createdAt,
@@ -825,6 +845,11 @@ export function normalizeDecryptedMessage(message: DecryptedMessage): Normalized
                 status: message.status,
                 originalText: message.originalText
             }
+        }
+        if (Array.isArray(normalized)) {
+            return normalized.map(n => ({ ...n, status: message.status, originalText: message.originalText }))
+        }
+        return { ...normalized, status: message.status, originalText: message.originalText }
     }
 
     return {

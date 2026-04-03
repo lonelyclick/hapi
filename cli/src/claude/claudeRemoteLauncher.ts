@@ -150,6 +150,14 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
     const toolProgressLastSent = new Map<string, number>();
     const TOOL_PROGRESS_THROTTLE_MS = 2000;
 
+    // Merge split assistant messages from codez (OpenAI reasoning models)
+    // codez outputs two assistant messages with the same response ID:
+    //   1st: content=[{type:"thinking",...}]  (reasoning, often empty text)
+    //   2nd: content=[{type:"text",...}]       (actual reply)
+    // We hold the first message and merge the second's content blocks into it.
+    let pendingAssistantMsg: SDKAssistantMessage | null = null;
+    let pendingAssistantResponseId: string | null = null;
+
     const appendTitleInstructionIfNeeded = (messageText: string): string => {
         if (!titleInstructionPending) {
             return messageText;
@@ -165,7 +173,56 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
         return `${messageText}\n\n${TITLE_INSTRUCTION}`;
     };
 
+    function flushPendingAssistant() {
+        if (pendingAssistantMsg) {
+            const msg = pendingAssistantMsg;
+            pendingAssistantMsg = null;
+            pendingAssistantResponseId = null;
+            processMessage(msg);
+        }
+    }
+
     function onMessage(message: SDKMessage) {
+        // Merge split assistant messages from codez (OpenAI reasoning models).
+        // codez emits two assistant messages with the same message.id:
+        //   1st: content=[{type:"thinking",...}]
+        //   2nd: content=[{type:"text",...}]
+        // We buffer the first and merge the second's content blocks into it.
+        if (message.type === 'assistant') {
+            const aMsg = message as SDKAssistantMessage;
+            const responseId = (aMsg.message as any)?.id as string | undefined;
+            if (responseId && pendingAssistantMsg && pendingAssistantResponseId === responseId) {
+                // Same response — merge content blocks
+                const mergedContent = [
+                    ...(pendingAssistantMsg.message.content ?? []),
+                    ...(aMsg.message.content ?? [])
+                ];
+                pendingAssistantMsg = {
+                    ...pendingAssistantMsg,
+                    message: { ...pendingAssistantMsg.message, content: mergedContent }
+                };
+                // Flush the merged message now (we've seen both parts)
+                flushPendingAssistant();
+                return;
+            }
+            // Different response or first assistant — flush any previous pending
+            flushPendingAssistant();
+            if (responseId) {
+                // Buffer this assistant message in case a continuation follows
+                pendingAssistantMsg = aMsg;
+                pendingAssistantResponseId = responseId;
+                return;
+            }
+            // No response ID — process immediately (shouldn't happen but be safe)
+        } else {
+            // Non-assistant message — flush any buffered assistant first
+            flushPendingAssistant();
+        }
+
+        processMessage(message);
+    }
+
+    function processMessage(message: SDKMessage) {
 
         // Throttle tool_progress to max 1 per 2s per tool_use_id
         if (message.type === 'tool_progress') {

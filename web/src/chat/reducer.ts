@@ -61,6 +61,46 @@ function collectTitleChanges(messages: NormalizedMessage[]): Map<string, string>
     return map
 }
 
+/**
+ * Remove result-text blocks when the same turn already has agent-text blocks.
+ *
+ * normalize.ts extracts result.result text as an extra agent-text message
+ * (id ending with ":result-text:0") so that codez responses are visible even
+ * when the separate assistant message was lost.  For claude sessions the
+ * assistant text message already exists, so we need to strip the duplicate.
+ *
+ * Strategy: walk backwards from each result-text block; if we find an
+ * agent-text block before hitting a user-text block (turn boundary), the
+ * result-text is redundant and can be removed.
+ */
+function dedupeResultTextBlocks(blocks: ChatBlock[]): ChatBlock[] {
+    const result: ChatBlock[] = []
+
+    for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i]
+
+        if (block.kind === 'agent-text' && block.id.includes(':result-text:')) {
+            // Walk backwards to check if this turn already has agent-text
+            let hasPriorAgentText = false
+            for (let j = result.length - 1; j >= 0; j--) {
+                const prev = result[j]
+                if (prev.kind === 'user-text') break // turn boundary
+                if (prev.kind === 'agent-text' && !prev.id.includes(':result-text:')) {
+                    hasPriorAgentText = true
+                    break
+                }
+            }
+            if (hasPriorAgentText) {
+                continue // skip this redundant result-text block
+            }
+        }
+
+        result.push(block)
+    }
+
+    return result
+}
+
 function dedupeAgentEvents(blocks: ChatBlock[]): ChatBlock[] {
     const result: ChatBlock[] = []
     let prevEventKey: string | null = null
@@ -832,5 +872,5 @@ export function reduceChatBlocks(
     })
     const sortedBlocks = indexedBlocks.map(({ block }) => block)
 
-    return { blocks: dedupeAgentEvents(sortedBlocks), hasReadyEvent, latestUsage }
+    return { blocks: dedupeResultTextBlocks(dedupeAgentEvents(sortedBlocks)), hasReadyEvent, latestUsage }
 }
