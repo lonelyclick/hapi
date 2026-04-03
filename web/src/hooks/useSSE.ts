@@ -190,10 +190,22 @@ export function useSSE(options: {
                                 }
                             )
                             // Update sessions list cache (only fields that exist in SessionSummary)
+                            // Only update if values actually changed to avoid unnecessary re-renders
                             queryClient.setQueriesData<SessionsResponse>(
                                 { queryKey: queryKeys.sessions },
                                 (prev) => {
                                     if (!prev?.sessions) return prev
+                                    const target = prev.sessions.find(s => s.id === event.sessionId)
+                                    if (!target) return prev
+                                    // Check if any value actually changed
+                                    const hasChange =
+                                        (data.active !== undefined && data.active !== target.active) ||
+                                        (data.activeAt !== undefined && data.activeAt !== target.activeAt) ||
+                                        (data.thinking !== undefined && data.thinking !== target.thinking) ||
+                                        (data.modelMode !== undefined && data.modelMode !== target.modelMode) ||
+                                        (data.modelReasoningEffort !== undefined && data.modelReasoningEffort !== target.modelReasoningEffort) ||
+                                        (data.fastMode !== undefined && data.fastMode !== target.fastMode)
+                                    if (!hasChange) return prev
                                     return {
                                         ...prev,
                                         sessions: prev.sessions.map((s) =>
