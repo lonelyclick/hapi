@@ -21,4 +21,5 @@ export const queryKeys = {
     orgMembers: (orgId: string) => ['org-members', orgId] as const,
     orgInvitations: (orgId: string) => ['org-invitations', orgId] as const,
     pendingInvitations: ['pending-invitations'] as const,
+    sessionDownloads: (sessionId: string) => ['session-downloads', sessionId] as const,
 }

@@ -15,6 +15,8 @@ import type { ApiClient } from "@/api/api";
 import { randomUUID } from "node:crypto";
 import { configuration } from "@/configuration";
 import packageJson from "../../../package.json";
+import { readFile } from "node:fs/promises";
+import { basename, extname } from "node:path";
 
 interface StartYohoRemoteServerOptions {
     sessionSource?: string
@@ -141,6 +143,69 @@ export async function startYohoRemoteServer(client: ApiSessionClient, options?: 
             }
         })
         toolNames.push('environment_info')
+    }
+
+    // Register push_download tool when apiClient is available
+    if (options?.apiClient && options.yohoRemoteSessionId) {
+        const api = options.apiClient
+        const sessionId = options.yohoRemoteSessionId
+        mcp.registerTool<any, any>('push_download', {
+            title: 'Push Download File',
+            description: 'Push a file to the remote frontend so the user can download it. Accepts either a disk file path or text content directly.',
+            inputSchema: z.object({
+                path: z.string().optional().describe('Absolute path to a file on disk. Takes priority over content if both are provided.'),
+                filename: z.string().optional().describe('Filename shown to user (required when using content, optional when using path).'),
+                content: z.string().optional().describe('Text content to push as a file (use with filename). Ignored if path is provided.'),
+                mimeType: z.string().optional().describe('MIME type override. Auto-detected from extension if omitted.'),
+            }),
+        }, async (args: { path?: string; filename?: string; content?: string; mimeType?: string }) => {
+            try {
+                let base64: string
+                let filename: string
+                let mimeType = args.mimeType
+
+                if (args.path) {
+                    const buf = await readFile(args.path)
+                    base64 = buf.toString('base64')
+                    filename = args.filename || basename(args.path)
+                } else if (args.content !== undefined && args.filename) {
+                    base64 = Buffer.from(args.content).toString('base64')
+                    filename = args.filename
+                } else {
+                    return {
+                        content: [{ type: 'text' as const, text: 'Error: provide either path, or both filename and content.' }],
+                        isError: true,
+                    }
+                }
+
+                if (!mimeType) {
+                    const ext = extname(filename).slice(1).toLowerCase()
+                    const mimeMap: Record<string, string> = {
+                        txt: 'text/plain', md: 'text/markdown', json: 'application/json',
+                        csv: 'text/csv', html: 'text/html', xml: 'application/xml',
+                        pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg',
+                        jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml',
+                        zip: 'application/zip', gz: 'application/gzip',
+                        js: 'text/javascript', ts: 'text/typescript', py: 'text/x-python',
+                        sh: 'text/x-sh', yaml: 'text/yaml', yml: 'text/yaml',
+                        toml: 'text/toml', sql: 'text/x-sql', log: 'text/plain',
+                    }
+                    mimeType = mimeMap[ext] ?? 'application/octet-stream'
+                }
+
+                const result = await api.pushDownloadFile(sessionId, { filename, content: base64, mimeType })
+                return {
+                    content: [{ type: 'text' as const, text: `File "${result.filename}" pushed successfully (${result.size} bytes, id: ${result.id}). The user can now download it from the interface.` }],
+                }
+            } catch (error: any) {
+                logger.debug('[yrMCP] push_download error:', error.message)
+                return {
+                    content: [{ type: 'text' as const, text: `Failed to push file: ${error.response?.data?.error ?? error.message}` }],
+                    isError: true,
+                }
+            }
+        })
+        toolNames.push('push_download')
     }
 
     // Register Brain tools when source is 'brain'

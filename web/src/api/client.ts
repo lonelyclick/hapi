@@ -946,6 +946,34 @@ export class ApiClient {
         )
     }
 
+    // ========== Downloads ==========
+
+    async getSessionDownloads(sessionId: string): Promise<{ files: import('@/types/api').SessionDownloadFile[] }> {
+        return await this.request<{ files: import('@/types/api').SessionDownloadFile[] }>(
+            `/api/sessions/${encodeURIComponent(sessionId)}/files`
+        )
+    }
+
+    async downloadFile(id: string, filename: string): Promise<void> {
+        const liveToken = this.getToken ? this.getToken() : null
+        const authToken = liveToken ?? this.token
+        const headers = new Headers()
+        if (authToken) headers.set('authorization', `Bearer ${authToken}`)
+
+        const res = await fetch(this.buildUrl(`/api/files/${encodeURIComponent(id)}`), { headers })
+        if (!res.ok) throw new Error(`Download failed: ${res.status}`)
+
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+    }
+
     async get<T>(path: string): Promise<{ data: T }> {
         const data = await this.request<T>(`/api${path}`)
         return { data }

@@ -325,6 +325,23 @@ export type TypingUser = {
     updatedAt: number
 }
 
+export type DownloadFileInfo = {
+    id: string
+    filename: string
+    size: number
+    mimeType: string
+}
+
+export type SessionDownloadFile = {
+    id: string
+    sessionId: string
+    orgId: string | null
+    filename: string
+    mimeType: string
+    size: number
+    createdAt: number
+}
+
 export type SyncEvent =
     | { type: 'session-added'; sessionId: string; data?: unknown; namespace?: string }
     | { type: 'session-updated'; sessionId: string; data?: unknown; namespace?: string }
@@ -335,6 +352,7 @@ export type SyncEvent =
     | { type: 'connection-changed'; data?: { status: string }; namespace?: string }
     | { type: 'online-users-changed'; users: OnlineUser[]; namespace?: string }
     | { type: 'typing-changed'; sessionId: string; typing: TypingUser; namespace?: string }
+    | { type: 'file-ready'; sessionId: string; fileInfo: DownloadFileInfo; namespace?: string }
 
 export type OnlineUsersResponse = { users: OnlineUser[] }
 

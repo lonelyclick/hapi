@@ -252,6 +252,10 @@ export function useSSE(options: {
                 void queryClient.invalidateQueries({ queryKey: queryKeys.machines })
             }
 
+            if (event.type === 'file-ready' && 'sessionId' in event) {
+                void queryClient.invalidateQueries({ queryKey: queryKeys.sessionDownloads(event.sessionId) })
+            }
+
             // 处理 typing-changed 事件，更新其他用户输入状态
             if (event.type === 'typing-changed' && 'sessionId' in event && 'typing' in event && event.sessionId && event.typing) {
                 queryClient.setQueryData(

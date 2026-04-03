@@ -472,6 +472,25 @@ export class ApiClient {
         return response.data.machines
     }
 
+    async pushDownloadFile(sessionId: string, opts: {
+        filename: string
+        content: string   // base64
+        mimeType: string
+    }): Promise<{ id: string; filename: string; size: number }> {
+        const response = await axios.post(
+            `${configuration.serverUrl}/cli/files`,
+            { sessionId, filename: opts.filename, content: opts.content, mimeType: opts.mimeType },
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30_000
+            }
+        )
+        return response.data
+    }
+
     async getFeishuChatMessages(chatId: string, limit?: number, before?: number): Promise<Array<{
         messageId: string
         senderOpenId: string

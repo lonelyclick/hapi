@@ -1,4 +1,5 @@
 import { ComposerPrimitive } from '@assistant-ui/react'
+import { DownloadButton } from './DownloadButton'
 
 function SettingsIcon() {
     return (
@@ -194,6 +195,7 @@ export function ComposerButtons(props: {
     abortDisabled: boolean
     isAborting: boolean
     onAbort: () => void
+    sessionId?: string
     showSwitchButton: boolean
     switchDisabled: boolean
     isSwitching: boolean
@@ -279,6 +281,8 @@ export function ComposerButtons(props: {
                         <TerminalIcon />
                     </button>
                 ) : null}
+
+                {props.sessionId ? <DownloadButton sessionId={props.sessionId} /> : null}
 
                 {props.showAbortButton ? (
                     <button

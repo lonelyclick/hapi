@@ -1755,6 +1755,7 @@ export function YohoRemoteComposer(props: {
                             abortDisabled={abortDisabled}
                             isAborting={isAborting}
                             onAbort={handleAbort}
+                            sessionId={sessionId}
                             showSwitchButton={showSwitchButton}
                             switchDisabled={switchDisabled}
                             isSwitching={isSwitching}
