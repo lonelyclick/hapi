@@ -2,8 +2,8 @@
  * Download Files Routes
  *
  * CLI: POST /cli/files - upload a file (CLI token auth)
- * API: GET /api/sessions/:sessionId/files - list files for a session
- * API: GET /api/files/:id - download file content
+ * API: GET /api/sessions/:sessionId/downloads - list download files for a session
+ * API: GET /api/downloads/:id - download file content
  */
 import { Hono } from 'hono'
 import { z } from 'zod'
@@ -94,15 +94,15 @@ export function createDownloadApiRoutes(
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
-    // GET /api/sessions/:sessionId/files - list files
-    app.get('/sessions/:sessionId/files', async (c) => {
+    // GET /api/sessions/:sessionId/downloads - list download files for a session
+    app.get('/sessions/:sessionId/downloads', async (c) => {
         const sessionId = c.req.param('sessionId')
         const files = await store.listDownloadFiles(sessionId)
         return c.json({ files })
     })
 
-    // GET /api/files/:id - download file
-    app.get('/files/:id', async (c) => {
+    // GET /api/downloads/:id - download file content
+    app.get('/downloads/:id', async (c) => {
         const id = c.req.param('id')
         const result = await store.getDownloadFile(id)
         if (!result) return c.json({ error: 'File not found' }, 404)

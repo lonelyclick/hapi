@@ -950,7 +950,7 @@ export class ApiClient {
 
     async getSessionDownloads(sessionId: string): Promise<{ files: import('@/types/api').SessionDownloadFile[] }> {
         return await this.request<{ files: import('@/types/api').SessionDownloadFile[] }>(
-            `/api/sessions/${encodeURIComponent(sessionId)}/files`
+            `/api/sessions/${encodeURIComponent(sessionId)}/downloads`
         )
     }
 
@@ -960,7 +960,7 @@ export class ApiClient {
         const headers = new Headers()
         if (authToken) headers.set('authorization', `Bearer ${authToken}`)
 
-        const res = await fetch(this.buildUrl(`/api/files/${encodeURIComponent(id)}`), { headers })
+        const res = await fetch(this.buildUrl(`/api/downloads/${encodeURIComponent(id)}`), { headers })
         if (!res.ok) throw new Error(`Download failed: ${res.status}`)
 
         const blob = await res.blob()
