@@ -90,6 +90,17 @@ export async function startYohoRemoteServer(client: ApiSessionClient, options?: 
         toolNames.push('change_title')
     }
 
+    // Register Project tools for all sessions with apiClient
+    if (options?.apiClient && options.yohoRemoteSessionId) {
+        const { registerProjectTools } = await import('./projectTools');
+        registerProjectTools(mcp, toolNames, {
+            apiClient: options.apiClient,
+            sessionId: options.yohoRemoteSessionId,
+            machineId: options.machineId,
+        });
+        logger.debug('[yrMCP] Project tools registered');
+    }
+
     // Register Brain tools when source is 'brain'
     if (options?.sessionSource === 'brain' && options.apiClient && options.machineId && options.yohoRemoteSessionId) {
         const { registerBrainTools } = await import('./brainTools');

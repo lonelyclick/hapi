@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { AgentState, CliMessagesResponse, CreateMachineResponse, CreateSessionResponse, DaemonState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
+import type { AgentState, CliMessagesResponse, CreateMachineResponse, CreateSessionResponse, DaemonState, Machine, MachineMetadata, Metadata, Project, Session } from '@/api/types'
 import { AgentStateSchema, CliMessagesResponseSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, DaemonStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
 import { configuration } from '@/configuration'
 import { getAuthToken } from '@/api/auth'
@@ -376,6 +376,81 @@ export class ApiClient {
             }
         )
         return response.data
+    }
+
+    // ===== Project API methods =====
+
+    async getProjects(sessionId: string, machineId?: string): Promise<Project[]> {
+        const params = new URLSearchParams({ sessionId })
+        if (machineId) params.set('machineId', machineId)
+        const response = await axios.get(
+            `${configuration.serverUrl}/cli/projects?${params}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15_000
+            }
+        )
+        return response.data.projects
+    }
+
+    async addProject(sessionId: string, opts: {
+        name: string
+        path: string
+        description?: string
+        machineId?: string | null
+    }): Promise<Project> {
+        const params = new URLSearchParams({ sessionId })
+        const response = await axios.post(
+            `${configuration.serverUrl}/cli/projects?${params}`,
+            opts,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15_000
+            }
+        )
+        return response.data.project
+    }
+
+    async updateProject(sessionId: string, id: string, opts: {
+        name: string
+        path: string
+        description?: string
+        machineId?: string | null
+    }): Promise<Project> {
+        const params = new URLSearchParams({ sessionId })
+        const response = await axios.put(
+            `${configuration.serverUrl}/cli/projects/${encodeURIComponent(id)}?${params}`,
+            opts,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15_000
+            }
+        )
+        return response.data.project
+    }
+
+    async removeProject(sessionId: string, id: string): Promise<boolean> {
+        const params = new URLSearchParams({ sessionId })
+        const response = await axios.delete(
+            `${configuration.serverUrl}/cli/projects/${encodeURIComponent(id)}?${params}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15_000
+            }
+        )
+        return response.data.ok === true
     }
 
     async getFeishuChatMessages(chatId: string, limit?: number, before?: number): Promise<Array<{

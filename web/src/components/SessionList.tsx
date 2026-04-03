@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Project, SessionSummary } from '@/types/api'
 import { ViewersBadge } from './ViewersBadge'
 import { LoadingState } from './LoadingState'
+import { useVibingMessage } from '@/hooks/useVibingMessage'
 
 // Filter types
 type ArchiveFilter = boolean  // true = show archived (offline) sessions only
@@ -190,6 +191,7 @@ function SessionItem(props: {
     const progress = getTodoProgress(s)
     const hasPending = s.pendingRequestsCount > 0
     const isThinking = s.thinking && !hasPending  // thinking but not waiting for permission
+    const vibingMessage = useVibingMessage(Boolean(isThinking))
     const runtimeAgent = s.metadata?.runtimeAgent?.trim()
     const sourceTag = getSourceTag(s)
 
@@ -270,7 +272,7 @@ function SessionItem(props: {
                     </span>
                 ) : isThinking ? (
                     <span className="text-[10px] font-medium text-[#007AFF]">
-                        thinking
+                        {vibingMessage}
                     </span>
                 ) : (
                     <span className="text-[10px] font-medium text-[#34C759]">

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { AgentState, ModelMode, PermissionMode, TypingUser } from '@/types/api'
 import { getContextBudgetTokens } from '@/chat/modelConfig'
+import { useVibingMessage } from '@/hooks/useVibingMessage'
 
 const PERMISSION_MODE_LABELS: Record<string, string> = {
     bypassPermissions: 'Yolo',
@@ -8,25 +9,6 @@ const PERMISSION_MODE_LABELS: Record<string, string> = {
     'safe-yolo': 'Safe Yolo',
     yolo: 'Yolo'
 }
-
-// Vibing messages for thinking state
-const VIBING_MESSAGES = [
-    "Accomplishing", "Actioning", "Actualizing", "Baking", "Booping", "Brewing",
-    "Calculating", "Cerebrating", "Channelling", "Churning", "Clauding", "Coalescing",
-    "Cogitating", "Computing", "Combobulating", "Concocting", "Conjuring", "Considering",
-    "Contemplating", "Cooking", "Crafting", "Creating", "Crunching", "Deciphering",
-    "Deliberating", "Determining", "Discombobulating", "Divining", "Doing", "Effecting",
-    "Elucidating", "Enchanting", "Envisioning", "Finagling", "Flibbertigibbeting",
-    "Forging", "Forming", "Frolicking", "Generating", "Germinating", "Hatching",
-    "Herding", "Honking", "Ideating", "Imagining", "Incubating", "Inferring",
-    "Manifesting", "Marinating", "Meandering", "Moseying", "Mulling", "Mustering",
-    "Musing", "Noodling", "Percolating", "Perusing", "Philosophising", "Pontificating",
-    "Pondering", "Processing", "Puttering", "Puzzling", "Reticulating", "Ruminating",
-    "Scheming", "Schlepping", "Shimmying", "Simmering", "Smooshing", "Spelunking",
-    "Spinning", "Stewing", "Sussing", "Synthesizing", "Thinking", "Tinkering",
-    "Transmuting", "Unfurling", "Unravelling", "Vibing", "Wandering", "Whirring",
-    "Wibbling", "Wizarding", "Working", "Wrangling"
-]
 
 function getConnectionStatus(
     active: boolean,
@@ -93,20 +75,6 @@ function getDisplayName(email: string): string {
     if (atIndex === -1) return email
     const name = email.slice(0, atIndex)
     return name.length > 0 ? name : email
-}
-
-function useVibingMessage(thinking: boolean): string {
-    const [index, setIndex] = useState(() => Math.floor(Math.random() * VIBING_MESSAGES.length))
-
-    useEffect(() => {
-        if (!thinking) return
-        const interval = setInterval(() => {
-            setIndex(Math.floor(Math.random() * VIBING_MESSAGES.length))
-        }, 3000)
-        return () => clearInterval(interval)
-    }, [thinking])
-
-    return VIBING_MESSAGES[index].toLowerCase() + '…'
 }
 
 export function StatusBar(props: {

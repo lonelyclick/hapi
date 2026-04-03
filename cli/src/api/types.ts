@@ -339,6 +339,17 @@ export const MessageContentSchema = z.union([UserMessageSchema, AgentMessageSche
 
 export type MessageContent = z.infer<typeof MessageContentSchema>
 
+export type Project = {
+    id: string
+    name: string
+    path: string
+    description: string | null
+    machineId: string | null
+    orgId: string | null
+    createdAt: number
+    updatedAt: number
+}
+
 export type SocketErrorReason = 'namespace-missing' | 'access-denied' | 'not-found'
 
 export interface ServerToClientEvents {
