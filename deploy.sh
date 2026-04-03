@@ -152,6 +152,7 @@ fi
 RESTART_SCRIPT=$(mktemp /tmp/yr-restart-XXXXXX.sh)
 cat > "$RESTART_SCRIPT" << 'RESTART_EOF'
 #!/bin/bash
+exec > /tmp/yr-restart.log 2>&1
 BUILD_DAEMON="$1"
 
 # 1. 停止服务（先 daemon 后 server）
@@ -224,5 +225,5 @@ else
     echo "    (daemon was NOT rebuilt - sessions should remain online)"
 fi
 # setsid 让重启脚本完全脱离当前进程树，避免 stop daemon 时把脚本也杀掉
-setsid bash "$RESTART_SCRIPT" "$BUILD_DAEMON" > /tmp/yr-restart.log 2>&1 &
+setsid bash "$RESTART_SCRIPT" "$BUILD_DAEMON" &
 echo "=== Restart dispatched (log: /tmp/yr-restart.log)"
