@@ -361,6 +361,8 @@ export function YohoRemoteComposer(props: {
     const sttPrefixRef = useRef<string>('')
     const [isUploadingImage, setIsUploadingImage] = useState(false)
     const [isUploadingFile, setIsUploadingFile] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
+    const dragCounterRef = useRef(0)
 
     const controlsDisabled = disabled || !active || threadIsDisabled
     const trimmed = composerText.trim()
@@ -1034,15 +1036,62 @@ export function YohoRemoteComposer(props: {
                 return
             }
         }
-    }, [uploadImageFile])
 
-    const handleFileChange = useCallback(async (e: ReactChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
+        // Check for non-image file attachments
+        for (const item of items) {
+            if (item.kind === 'file' && !item.type.startsWith('image/')) {
+                e.preventDefault()
+                const file = item.getAsFile()
+                if (file) {
+                    uploadFile(file)
+                }
+                return
+            }
+        }
+    }, [uploadImageFile, uploadFile])
 
-        // Reset input for next selection
-        e.target.value = ''
+    const handleDragEnter = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        dragCounterRef.current++
+        if (e.dataTransfer.types.includes('Files')) {
+            setIsDragging(true)
+        }
+    }, [])
 
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        dragCounterRef.current--
+        if (dragCounterRef.current === 0) {
+            setIsDragging(false)
+        }
+    }, [])
+
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+    }, [])
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        dragCounterRef.current = 0
+        setIsDragging(false)
+
+        const files = e.dataTransfer.files
+        if (!files.length) return
+
+        for (const file of files) {
+            if (file.type.startsWith('image/')) {
+                uploadImageFile(file)
+            } else {
+                uploadFile(file)
+            }
+        }
+    }, [uploadImageFile, uploadFile])
+
+    const uploadFile = useCallback(async (file: File) => {
         // Check max files limit
         if (uploadedFiles.length >= MAX_FILES) {
             haptic('error')
@@ -1089,6 +1138,13 @@ export function YohoRemoteComposer(props: {
             setIsUploadingFile(false)
         }
     }, [apiClient, sessionId, uploadedFiles.length, haptic, MAX_FILES, MAX_FILE_BYTES])
+
+    const handleFileChange = useCallback(async (e: ReactChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        e.target.value = ''
+        await uploadFile(file)
+    }, [uploadFile])
 
     const handleRemoveImage = useCallback((index: number) => {
         setUploadedImages(prev => prev.filter((_, i) => i !== index))
@@ -1592,7 +1648,13 @@ export function YohoRemoteComposer(props: {
                         otherUserTyping={otherUserTyping}
                     />
 
-                    <div className="overflow-hidden rounded-[20px] bg-[var(--app-secondary-bg)]">
+                    <div
+                        className={`overflow-hidden rounded-[20px] bg-[var(--app-secondary-bg)] transition-all ${isDragging ? 'ring-2 ring-emerald-500 ring-offset-1 ring-offset-[var(--app-bg)]' : ''}`}
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
+                    >
                         {/* Attachment Preview Area */}
                         {showAttachmentPreview ? (
                             <div className="px-3 pt-3 pb-2 space-y-2">
