@@ -189,7 +189,7 @@ function SessionItem(props: {
         : false
     const progress = getTodoProgress(s)
     const hasPending = s.pendingRequestsCount > 0
-    const isThinking = s.thinking || hasPending  // Use thinking flag or fallback to pendingRequestsCount
+    const isThinking = s.thinking && !hasPending  // thinking but not waiting for permission
     const runtimeAgent = s.metadata?.runtimeAgent?.trim()
     const sourceTag = getSourceTag(s)
 
@@ -210,7 +210,7 @@ function SessionItem(props: {
                 <span
                     className={`
                         block h-2 w-2 rounded-full
-                        ${hasPending ? 'bg-amber-500 animate-pulse' : s.active ? 'bg-emerald-500' : 'bg-gray-400'}
+                        ${!s.active ? 'bg-[#999]' : hasPending ? 'bg-[#FF9500] animate-pulse' : isThinking ? 'bg-[#007AFF] animate-pulse' : 'bg-[#34C759]'}
                     `}
                 />
             </div>
@@ -260,15 +260,23 @@ function SessionItem(props: {
 
             {/* Status and Time */}
             <div className="shrink-0 flex items-center gap-1.5">
-                {isThinking ? (
-                    <span className="text-[10px] font-medium text-amber-600">
-                        Thinking
+                {!s.active ? (
+                    <span className="text-[10px] font-medium text-[#999]">
+                        offline
                     </span>
-                ) : s.active ? (
-                    <span className="text-[10px] font-medium text-emerald-600">
-                        Idle
+                ) : hasPending ? (
+                    <span className="text-[10px] font-medium text-[#FF9500]">
+                        permission required
                     </span>
-                ) : null}
+                ) : isThinking ? (
+                    <span className="text-[10px] font-medium text-[#007AFF]">
+                        thinking
+                    </span>
+                ) : (
+                    <span className="text-[10px] font-medium text-[#34C759]">
+                        online
+                    </span>
+                )}
                 <span className="text-[11px] text-[var(--app-hint)]">
                     {formatRelativeTime(s.updatedAt)}
                 </span>
