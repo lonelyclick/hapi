@@ -853,6 +853,9 @@ export function createSessionsRoutes(
 
             // If session is in memory, enhance with live data
             if (memorySession) {
+                // Use memory's thinking state (live data, DB value is stale)
+                summary.thinking = memorySession.thinking
+
                 // Use memory's pending requests count (live data)
                 summary.pendingRequestsCount = memorySession.agentState?.requests
                     ? Object.keys(memorySession.agentState.requests).length
