@@ -53,10 +53,9 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
                     setUser(null)
                 }
             } catch (e) {
-                console.error('[KeycloakAuth] Auth check failed:', e)
-                setError(e instanceof Error ? e.message : 'Authentication check failed')
-                await keycloak.clearTokens()
-                setUser(null)
+                console.warn('[KeycloakAuth] Auth check failed (likely network issue), keeping tokens:', e)
+                // Network errors during init should not clear tokens
+                // The token refresh timer will retry later
             } finally {
                 if (!isCancelled) {
                     setStorageInitDone(true)
@@ -89,9 +88,8 @@ export function KeycloakAuthProvider({ children, baseUrl }: KeycloakAuthProvider
                         setUser(null)
                     }
                 } catch (e) {
-                    console.error('[KeycloakAuth] Token refresh failed:', e)
-                    await keycloak.clearTokens()
-                    setUser(null)
+                    // Network error — don't clear tokens, will retry next interval
+                    console.warn('[KeycloakAuth] Token refresh failed (network), will retry:', e)
                 }
             }
         }

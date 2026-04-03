@@ -90,8 +90,11 @@ export async function refreshToken(baseUrl: string): Promise<KeycloakAuthRespons
         })
 
         if (!response.ok) {
-            // Token refresh failed, clear tokens
-            clearTokens()
+            // 4xx = token truly invalid, clear tokens
+            // 5xx = server issue, keep tokens for retry
+            if (response.status >= 400 && response.status < 500) {
+                clearTokens()
+            }
             return null
         }
 
@@ -99,8 +102,9 @@ export async function refreshToken(baseUrl: string): Promise<KeycloakAuthRespons
         await saveTokensToDB(data)
         return data
     } catch (error) {
-        console.error('[Keycloak] Token refresh failed:', error)
-        clearTokens()
+        // Network error (server down, connection refused, etc.)
+        // Keep tokens — server may just be restarting
+        console.warn('[Keycloak] Token refresh failed (network), will retry:', error)
         return null
     }
 }
