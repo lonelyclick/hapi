@@ -154,26 +154,65 @@ cat > "$RESTART_SCRIPT" << 'RESTART_EOF'
 #!/bin/bash
 BUILD_DAEMON="$1"
 
+# 1. 停止服务（先 daemon 后 server）
 if [[ "$BUILD_DAEMON" == "true" ]]; then
     echo "guang" | sudo -S systemctl stop yoho-remote-daemon.service 2>/dev/null || true
-    sleep 2
 fi
 echo "guang" | sudo -S systemctl stop yoho-remote-server.service 2>/dev/null || true
 sleep 1
 
+# 2. 确保无残留进程（用完整路径 pkill 兜底，不会误杀脚本自身）
+EXE_DIR="/home/guang/softwares/yoho-remote/cli/dist-exe/bun-linux-x64"
 if [[ "$BUILD_DAEMON" == "true" ]]; then
-    echo "guang" | sudo -S systemctl start yoho-remote-daemon.service
+    pkill -f "$EXE_DIR/yoho-remote-daemon" 2>/dev/null || true
 fi
+pkill -f "$EXE_DIR/yoho-remote-server" 2>/dev/null || true
+sleep 1
+
+# 确认被停止的进程已全部退出
+REMAINING=$(pgrep -f "$EXE_DIR/yoho-remote-server" 2>/dev/null || true)
+if [[ "$BUILD_DAEMON" == "true" ]]; then
+    REMAINING="$REMAINING $(pgrep -f "$EXE_DIR/yoho-remote-daemon" 2>/dev/null || true)"
+fi
+REMAINING=$(echo "$REMAINING" | xargs)
+if [[ -n "$REMAINING" ]]; then
+    echo "WARNING: Remaining processes found (PIDs: $REMAINING), force killing..."
+    kill -9 $REMAINING 2>/dev/null || true
+    sleep 1
+fi
+
+# 3. 先启动 server（daemon 依赖 server）
 echo "guang" | sudo -S systemctl start yoho-remote-server.service
 
-sleep 2
-if systemctl is-active --quiet yoho-remote-server.service; then
-    echo "=== Done! Services restarted successfully."
-else
+# 等待 server 就绪
+for i in {1..10}; do
+    if systemctl is-active --quiet yoho-remote-server.service; then
+        echo "=== Server started (attempt $i)"
+        break
+    fi
+    sleep 1
+done
+
+if ! systemctl is-active --quiet yoho-remote-server.service; then
     echo "ERROR: yoho-remote-server.service failed to start"
     echo "guang" | sudo -S journalctl -u yoho-remote-server.service -n 20 --no-pager
+    rm -f "$0"
+    exit 1
 fi
 
+# 4. 再启动 daemon
+if [[ "$BUILD_DAEMON" == "true" ]]; then
+    echo "guang" | sudo -S systemctl start yoho-remote-daemon.service
+    sleep 2
+    if systemctl is-active --quiet yoho-remote-daemon.service; then
+        echo "=== Daemon started successfully"
+    else
+        echo "ERROR: yoho-remote-daemon.service failed to start"
+        echo "guang" | sudo -S journalctl -u yoho-remote-daemon.service -n 20 --no-pager
+    fi
+fi
+
+echo "=== Done! Services restarted successfully."
 rm -f "$0"
 RESTART_EOF
 chmod +x "$RESTART_SCRIPT"
