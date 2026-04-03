@@ -224,6 +224,8 @@ if [[ "$BUILD_DAEMON" == "true" ]]; then
 else
     echo "    (daemon was NOT rebuilt - sessions should remain online)"
 fi
-# setsid 让重启脚本完全脱离当前进程树，避免 stop daemon 时把脚本也杀掉
-setsid bash "$RESTART_SCRIPT" "$BUILD_DAEMON" &
+# systemd-run 在独立的 transient unit 中运行重启脚本，完全脱离 daemon 的 cgroup，
+# 避免 systemctl stop daemon 时把重启脚本也杀掉
+echo "guang" | sudo -S systemctl reset-failed yr-restart.service 2>/dev/null || true
+echo "guang" | sudo -S systemd-run --unit=yr-restart bash "$RESTART_SCRIPT" "$BUILD_DAEMON"
 echo "=== Restart dispatched (log: /tmp/yr-restart.log)"
