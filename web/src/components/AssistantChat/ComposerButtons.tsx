@@ -269,19 +269,6 @@ export function ComposerButtons(props: {
                     </button>
                 ) : null}
 
-                {props.showTerminalButton ? (
-                    <button
-                        type="button"
-                        aria-label="Terminal"
-                        title="Terminal"
-                        className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-fg)]/60 transition-colors hover:bg-[var(--app-bg)] hover:text-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-                        onClick={props.onTerminal}
-                        disabled={props.terminalDisabled}
-                    >
-                        <TerminalIcon />
-                    </button>
-                ) : null}
-
                 {props.sessionId ? <DownloadButton sessionId={props.sessionId} /> : null}
 
                 {props.showAbortButton ? (

@@ -156,6 +156,7 @@ export function DownloadButton({ sessionId }: { sessionId: string }) {
             await apiClient.downloadFile(file.id, file.filename)
         } finally {
             setDownloading(null)
+            setOpen(false)
         }
     }
 
