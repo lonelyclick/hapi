@@ -24,6 +24,7 @@ import { createYohoCredentialsRoutes } from './routes/yoho-credentials'
 import { createOrgsRoutes } from './routes/orgs'
 import { createCRSProxyRoutes } from './routes/crs-proxy'
 import { createCodexOpenAIRoutes } from './routes/codex-openai'
+import { createDownloadCliRoutes, createDownloadApiRoutes } from './routes/downloads'
 import type { SSEManager } from '../sse/sseManager'
 import type { Server as BunServer } from 'bun'
 import type { Server as SocketEngine } from '@socket.io/bun-engine'
@@ -93,6 +94,7 @@ function createWebApp(options: {
     app.use('/v1/*', corsMiddleware)
 
     app.route('/cli', createCliRoutes(options.getSyncEngine, options.getSseManager, options.store))
+    app.route('/cli', createDownloadCliRoutes(options.getSyncEngine, options.getSseManager, options.store))
 
     // OpenAI Compatible API for Codex CLI (public, no auth required)
     app.route('/v1', createCodexOpenAIRoutes())
@@ -116,6 +118,7 @@ function createWebApp(options: {
     app.route('/api', createYohoCredentialsRoutes())
     app.route('/api', createOrgsRoutes(options.store))
     app.route('/api', createCRSProxyRoutes(options.store))
+    app.route('/api', createDownloadApiRoutes(options.store))
 
     if (options.embeddedAssetMap) {
         const embeddedAssetMap = options.embeddedAssetMap

@@ -30,6 +30,7 @@ import type {
     StoredOrganization,
     StoredOrgMember,
     StoredOrgInvitation,
+    StoredDownloadFile,
     OrgRole,
     UserRole,
     VersionedUpdateResult,
@@ -546,7 +547,18 @@ export class PostgresStore implements IStore {
             ALTER TABLE machines ADD COLUMN IF NOT EXISTS org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL;
             CREATE INDEX IF NOT EXISTS idx_machines_org_id ON machines(org_id);
 
-
+            -- Session Downloads 表
+            CREATE TABLE IF NOT EXISTS session_downloads (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                session_id TEXT NOT NULL,
+                org_id TEXT,
+                filename TEXT NOT NULL,
+                mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+                content BYTEA NOT NULL,
+                size INTEGER NOT NULL,
+                created_at BIGINT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_downloads_session_id ON session_downloads(session_id);
 
         `)
     }
@@ -2787,6 +2799,63 @@ export class PostgresStore implements IStore {
         }))
 
         return { team, members }
+    }
+
+    // ========== Download Files 操作 ==========
+
+    async addDownloadFile(file: { sessionId: string; orgId: string | null; filename: string; mimeType: string; content: Buffer }): Promise<StoredDownloadFile> {
+        const now = Date.now()
+        const result = await this.pool.query(
+            `INSERT INTO session_downloads (session_id, org_id, filename, mime_type, content, size, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+            [file.sessionId, file.orgId, file.filename, file.mimeType, file.content, file.content.length, now]
+        )
+        return {
+            id: result.rows[0].id,
+            sessionId: file.sessionId,
+            orgId: file.orgId,
+            filename: file.filename,
+            mimeType: file.mimeType,
+            size: file.content.length,
+            createdAt: now,
+        }
+    }
+
+    async getDownloadFile(id: string): Promise<{ meta: StoredDownloadFile; content: Buffer } | null> {
+        const result = await this.pool.query(
+            'SELECT * FROM session_downloads WHERE id = $1',
+            [id]
+        )
+        if (result.rows.length === 0) return null
+        const row = result.rows[0]
+        return {
+            meta: {
+                id: row.id,
+                sessionId: row.session_id,
+                orgId: row.org_id,
+                filename: row.filename,
+                mimeType: row.mime_type,
+                size: Number(row.size),
+                createdAt: Number(row.created_at),
+            },
+            content: row.content as Buffer,
+        }
+    }
+
+    async listDownloadFiles(sessionId: string): Promise<StoredDownloadFile[]> {
+        const result = await this.pool.query(
+            'SELECT id, session_id, org_id, filename, mime_type, size, created_at FROM session_downloads WHERE session_id = $1 ORDER BY created_at DESC',
+            [sessionId]
+        )
+        return result.rows.map(row => ({
+            id: row.id,
+            sessionId: row.session_id,
+            orgId: row.org_id,
+            filename: row.filename,
+            mimeType: row.mime_type,
+            size: Number(row.size),
+            createdAt: Number(row.created_at),
+        }))
     }
 
     async close(): Promise<void> {

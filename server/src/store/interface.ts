@@ -4,6 +4,7 @@ import type {
     StoredMachine,
     StoredMessage,
     StoredUser,
+    StoredDownloadFile,
     StoredPushSubscription,
     StoredAdvisorState,
     StoredAgentSessionState,
@@ -455,6 +456,11 @@ export interface IStore {
     acceptOrgInvitation(id: string, userId: string, email: string): Promise<boolean>
     deleteOrgInvitation(id: string, orgId?: string): Promise<boolean>
 
+    // === Download Files 操作 ===
+    addDownloadFile(file: { sessionId: string; orgId: string | null; filename: string; mimeType: string; content: Buffer }): Promise<StoredDownloadFile>
+    getDownloadFile(id: string): Promise<{ meta: StoredDownloadFile; content: Buffer } | null>
+    listDownloadFiles(sessionId: string): Promise<StoredDownloadFile[]>
+
     // === 关闭连接 ===
     close(): Promise<void>
 }
@@ -487,6 +493,7 @@ export type {
     StoredOrganization,
     StoredOrgMember,
     StoredOrgInvitation,
+    StoredDownloadFile,
     OrgRole,
     UserRole,
     VersionedUpdateResult,

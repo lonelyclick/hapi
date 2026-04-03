@@ -53,6 +53,16 @@ export type StoredMessage = {
     localId: string | null
 }
 
+export type StoredDownloadFile = {
+    id: string
+    sessionId: string
+    orgId: string | null
+    filename: string
+    mimeType: string
+    size: number
+    createdAt: number
+}
+
 export type UserRole = 'developer' | 'operator'
 
 // Organization 相关类型

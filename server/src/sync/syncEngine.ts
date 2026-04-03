@@ -165,6 +165,7 @@ export type SyncEventType =
     | 'online-users-changed'
     | 'typing-changed'
     | 'group-message'
+    | 'file-ready'
 
 export type OnlineUser = {
     email: string
@@ -204,6 +205,7 @@ export interface SyncEvent {
     users?: OnlineUser[]
     typing?: TypingUser
     groupMessage?: GroupMessageData
+    fileInfo?: { id: string; filename: string; size: number; mimeType: string }
     // 任务完成通知的接收者列表（用于过滤 SSE 广播）
     notifyRecipientClientIds?: string[]
 }

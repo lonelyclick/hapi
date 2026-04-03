@@ -104,8 +104,21 @@ export function AskUserQuestionFooter(props: {
         setError(null)
     }, [props.tool.id])
 
-    if (!permission || permission.status !== 'pending') return null
     if (!isAskUserQuestionToolName(props.tool.name)) return null
+    if (permission && permission.status !== 'pending') return null
+
+    // Permission data hasn't arrived yet (message came before agentState update).
+    // Show a loading indicator instead of nothing, so the user knows the question is coming.
+    if (!permission) {
+        return (
+            <div className="mt-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] p-3">
+                <div className="flex items-center gap-2 text-sm text-[var(--app-hint)]">
+                    <Spinner size="sm" label={null} />
+                    <span>Loading question…</span>
+                </div>
+            </div>
+        )
+    }
 
     // AskUserQuestion should always be interactive when permission is pending,
     // even if the session is momentarily marked inactive (e.g. heartbeat gap after deploy).

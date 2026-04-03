@@ -341,7 +341,7 @@ function ToolCardInner(props: ToolCardProps) {
         permission.status === 'pending'
         || ((permission.status === 'denied' || permission.status === 'canceled') && Boolean(permission.reason))
     ))
-    const hasBody = showInline || taskSummary !== null || showsPermissionFooter
+    const hasBody = showInline || taskSummary !== null || showsPermissionFooter || isAskUserQuestion
     const stateColor = statusColorClass(props.block.tool.state)
     const { suppressFocusRing, onTriggerPointerDown, onTriggerKeyDown, onTriggerBlur } = usePointerFocusRing()
 
@@ -436,7 +436,7 @@ function ToolCardInner(props: ToolCardProps) {
                         </div>
                     ) : null}
 
-                    {showInline && !(isAskUserQuestion && permission?.status === 'pending') ? (
+                    {showInline && !isAskUserQuestion ? (
                         CompactToolView ? (
                             <div className="mt-3">
                                 <CompactToolView block={props.block} metadata={props.metadata} />
@@ -455,7 +455,7 @@ function ToolCardInner(props: ToolCardProps) {
                         )
                     ) : null}
 
-                    {isAskUserQuestion && permission?.status === 'pending' ? (
+                    {isAskUserQuestion ? (
                         <AskUserQuestionFooter
                             api={props.api}
                             sessionId={props.sessionId}
