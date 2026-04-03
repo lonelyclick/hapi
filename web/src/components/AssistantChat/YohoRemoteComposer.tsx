@@ -1022,6 +1022,54 @@ export function YohoRemoteComposer(props: {
         await uploadImageFile(file)
     }, [uploadImageFile])
 
+    const uploadFile = useCallback(async (file: File) => {
+        // Check max files limit
+        if (uploadedFiles.length >= MAX_FILES) {
+            haptic('error')
+            console.error(`Maximum ${MAX_FILES} files allowed`)
+            return
+        }
+
+        // Validate file size (max 100MB)
+        if (file.size > MAX_FILE_BYTES) {
+            haptic('error')
+            console.error('File too large (max 100MB)')
+            return
+        }
+
+        setIsUploadingFile(true)
+        haptic('light')
+
+        try {
+            const reader = new FileReader()
+            const dataUrlPromise = new Promise<string>((resolve, reject) => {
+                reader.onload = () => {
+                    resolve(reader.result as string)
+                }
+                reader.onerror = reject
+            })
+            reader.readAsDataURL(file)
+            const dataUrl = await dataUrlPromise
+            const base64Content = dataUrl.split(',')[1]
+            const mimeType = file.type || 'application/octet-stream'
+
+            const result = await apiClient.uploadFile(sessionId, file.name, base64Content, mimeType)
+
+            if (result.success && result.path) {
+                haptic('success')
+                setUploadedFiles(prev => [...prev, { path: result.path!, name: file.name, size: file.size }])
+            } else {
+                haptic('error')
+                console.error('Failed to upload file:', result.error)
+            }
+        } catch (error) {
+            haptic('error')
+            console.error('Failed to upload file:', error)
+        } finally {
+            setIsUploadingFile(false)
+        }
+    }, [apiClient, sessionId, uploadedFiles.length, haptic, MAX_FILES, MAX_FILE_BYTES])
+
     const handlePaste = useCallback((e: ReactClipboardEvent<HTMLTextAreaElement>) => {
         const items = e.clipboardData?.items
         if (!items) return
@@ -1090,54 +1138,6 @@ export function YohoRemoteComposer(props: {
             }
         }
     }, [uploadImageFile, uploadFile])
-
-    const uploadFile = useCallback(async (file: File) => {
-        // Check max files limit
-        if (uploadedFiles.length >= MAX_FILES) {
-            haptic('error')
-            console.error(`Maximum ${MAX_FILES} files allowed`)
-            return
-        }
-
-        // Validate file size (max 100MB)
-        if (file.size > MAX_FILE_BYTES) {
-            haptic('error')
-            console.error('File too large (max 100MB)')
-            return
-        }
-
-        setIsUploadingFile(true)
-        haptic('light')
-
-        try {
-            const reader = new FileReader()
-            const dataUrlPromise = new Promise<string>((resolve, reject) => {
-                reader.onload = () => {
-                    resolve(reader.result as string)
-                }
-                reader.onerror = reject
-            })
-            reader.readAsDataURL(file)
-            const dataUrl = await dataUrlPromise
-            const base64Content = dataUrl.split(',')[1]
-            const mimeType = file.type || 'application/octet-stream'
-
-            const result = await apiClient.uploadFile(sessionId, file.name, base64Content, mimeType)
-
-            if (result.success && result.path) {
-                haptic('success')
-                setUploadedFiles(prev => [...prev, { path: result.path!, name: file.name, size: file.size }])
-            } else {
-                haptic('error')
-                console.error('Failed to upload file:', result.error)
-            }
-        } catch (error) {
-            haptic('error')
-            console.error('Failed to upload file:', error)
-        } finally {
-            setIsUploadingFile(false)
-        }
-    }, [apiClient, sessionId, uploadedFiles.length, haptic, MAX_FILES, MAX_FILE_BYTES])
 
     const handleFileChange = useCallback(async (e: ReactChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
