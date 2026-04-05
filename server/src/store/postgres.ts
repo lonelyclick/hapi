@@ -817,7 +817,11 @@ export class PostgresStore implements IStore {
 
     async getSessions(orgId?: string | null): Promise<StoredSession[]> {
         if (orgId) {
-            const result = await this.pool.query('SELECT * FROM sessions WHERE org_id = $1 ORDER BY updated_at DESC', [orgId])
+            // Include brain/brain-child sessions regardless of org_id (they may have org_id=NULL)
+            const result = await this.pool.query(
+                `SELECT * FROM sessions WHERE org_id = $1 OR (metadata->>'source' IN ('brain', 'brain-child') AND org_id IS NULL) ORDER BY updated_at DESC`,
+                [orgId]
+            )
             return result.rows.map(row => this.toStoredSession(row))
         }
         const result = await this.pool.query('SELECT * FROM sessions ORDER BY updated_at DESC')
