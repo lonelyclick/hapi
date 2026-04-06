@@ -53,6 +53,7 @@ export class CodexPermissionHandler {
         options?: { approvalKind?: 'mcp_tool_call' | 'exec_command' | 'unknown' }
     ): Promise<PermissionResult> {
         const permissionMode = this.getPermissionMode?.();
+        logger.debug(`[Codex] handleToolCall called: id=${toolCallId} tool=${toolName} kind=${options?.approvalKind ?? 'unknown'} mode=${permissionMode ?? 'unknown'}`);
         if (
             options?.approvalKind === 'mcp_tool_call'
             && (permissionMode === 'yolo' || permissionMode === 'safe-yolo')
@@ -130,6 +131,7 @@ export class CodexPermissionHandler {
                     };
 
                 pending.resolve(result);
+                logger.debug(`[Codex] Permission RPC resolved: id=${response.id} tool=${pending.toolName} decision=${result.decision}`);
 
                 // Move request to completed in agent state
                 this.session.updateAgentState((currentState) => {

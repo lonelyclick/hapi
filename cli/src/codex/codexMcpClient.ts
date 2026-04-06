@@ -289,6 +289,14 @@ function truncateText(value: string, maxLen: number): string {
     return `${value.slice(0, maxLen)}...`;
 }
 
+function stringifyForLog(value: unknown, maxLen = 2000): string {
+    try {
+        return truncateText(JSON.stringify(value), maxLen);
+    } catch {
+        return truncateText(String(value), maxLen);
+    }
+}
+
 function pickEnumValue(
     values: string[],
     decision: 'approved' | 'approved_for_session' | 'denied' | 'abort',
@@ -585,6 +593,18 @@ export class CodexMcpClient {
                 const approvalKind = extractApprovalKind(params);
                 const toolDetails = extractApprovalToolDetails(params);
 
+                logger.debug(
+                    '[CodexMCP] Elicitation request received:',
+                    stringifyForLog({
+                        method: request.method,
+                        paramsKeys: Object.keys(params),
+                        nestedRequestKeys: isObject(params.request) ? Object.keys(params.request) : [],
+                        approvalKind,
+                        requestedSchema,
+                        toolDetails
+                    })
+                );
+
                 // Load params
                 const toolCallId = extractToolCallId(params) ?? randomUUID();
                 const command = extractCommand(params);
@@ -614,6 +634,16 @@ export class CodexMcpClient {
                         }
                     }
 
+                    logger.debug(
+                        '[CodexMCP] Elicitation approval request prepared:',
+                        stringifyForLog({
+                            toolCallId,
+                            toolName,
+                            approvalKind,
+                            input
+                        })
+                    );
+
                     // Request permission through the handler
                     const result = await this.permissionHandler.handleToolCall(
                         toolCallId,
@@ -622,12 +652,45 @@ export class CodexMcpClient {
                         { approvalKind }
                     );
 
-                    logger.debug('[CodexMCP] Permission result:', result);
-                    return buildElicitationResult(result.decision, requestedSchema, result.reason);
+                    logger.debug(
+                        '[CodexMCP] Permission result:',
+                        stringifyForLog({
+                            toolCallId,
+                            toolName,
+                            approvalKind,
+                            result
+                        })
+                    );
+
+                    const elicitationResult = buildElicitationResult(result.decision, requestedSchema, result.reason);
+                    logger.debug(
+                        '[CodexMCP] Elicitation response payload:',
+                        stringifyForLog({
+                            toolCallId,
+                            elicitationResult
+                        })
+                    );
+                    return elicitationResult;
                 } catch (error) {
-                    logger.debug('[CodexMCP] Error handling permission request:', error);
+                    logger.debug(
+                        '[CodexMCP] Error handling permission request:',
+                        stringifyForLog({
+                            toolCallId,
+                            toolName,
+                            approvalKind,
+                            error: error instanceof Error ? { message: error.message, stack: error.stack } : error
+                        })
+                    );
                     const reason = error instanceof Error ? error.message : 'Permission request failed';
-                    return buildElicitationResult('denied', requestedSchema, reason);
+                    const elicitationResult = buildElicitationResult('denied', requestedSchema, reason);
+                    logger.debug(
+                        '[CodexMCP] Elicitation denied payload after error:',
+                        stringifyForLog({
+                            toolCallId,
+                            elicitationResult
+                        })
+                    );
+                    return elicitationResult;
                 }
             }
         );
