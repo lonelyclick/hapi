@@ -490,14 +490,37 @@ export async function startDaemon(): Promise<void> {
           logger.debug('[DAEMON RUN] Child stderr tail', trimmed);
         };
 
+        const childEnv: NodeJS.ProcessEnv = {
+          ...process.env,
+          ...extraEnv
+        };
+
+        if (agent === 'codex') {
+          const removedEnvKeys = [
+            'OPENAI_API_KEY',
+            'OPENAI_BASE_URL',
+            'OPENAI_ORG',
+            'OPENAI_ORGANIZATION',
+            'OPENAI_PROJECT'
+          ].filter((key) => childEnv[key] !== undefined);
+
+          for (const key of removedEnvKeys) {
+            delete childEnv[key];
+          }
+
+          if (removedEnvKeys.length > 0) {
+            logger.debug('[DAEMON RUN] Cleared OpenAI env overrides for Codex session auth', {
+              removedEnvKeys
+            });
+            addLog('env', `Cleared OpenAI env overrides for Codex: ${removedEnvKeys.join(', ')}`, 'success');
+          }
+        }
+
         cliProcess = spawnYohoRemoteCLI(args, {
           cwd: spawnDirectory,
           detached: true,  // Sessions stay alive when daemon stops
           stdio: ['ignore', 'pipe', 'pipe'],  // Capture stdout/stderr for debugging
-          env: {
-            ...process.env,
-            ...extraEnv
-          }
+          env: childEnv
         });
 
         cliProcess.stderr?.on('data', (data) => {
