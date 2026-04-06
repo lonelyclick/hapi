@@ -4,11 +4,11 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { logger } from '@/ui/logger';
 import { isProcessAlive, killProcess } from '@/utils/process';
 import type { CodexSessionConfig, CodexToolResponse } from './types';
 import { z } from 'zod';
-import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { CodexPermissionHandler } from './utils/permissionHandler';
 import { randomUUID } from 'node:crypto';
 import { resolveCodexBinary } from './codexBinary';
@@ -584,9 +584,19 @@ export class CodexMcpClient {
     }
 
     private registerPermissionHandlers(): void {
+        const codexElicitationRequestSchema = z.object({
+            method: z.literal('elicitation/create'),
+            params: z.record(z.string(), z.unknown())
+        }).passthrough();
+
         // Register handler for exec command approval requests
-        this.client.setRequestHandler(
-            ElicitRequestSchema,
+        (Protocol.prototype.setRequestHandler as unknown as (
+            this: Client,
+            requestSchema: z.ZodTypeAny,
+            handler: (request: { method: 'elicitation/create'; params: Record<string, unknown> }) => Promise<unknown>
+        ) => void).call(
+            this.client,
+            codexElicitationRequestSchema,
             async (request) => {
                 const params = request.params as Record<string, unknown>;
                 const requestedSchema = extractRequestedSchema(params);
