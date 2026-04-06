@@ -1,6 +1,7 @@
 import { logger } from '@/ui/logger';
 import { restoreTerminalState } from '@/ui/terminalState';
 import { spawnWithAbort } from '@/utils/spawnWithAbort';
+import { resolveCodexBinary } from './codexBinary';
 
 /**
  * Filter out 'resume' subcommand which is managed internally by yoho-remote.
@@ -59,11 +60,12 @@ export async function codexLocal(opts: {
 
     process.stdin.pause();
     try {
+        const resolvedCodex = resolveCodexBinary(process.env);
         await spawnWithAbort({
-            command: 'codex',
+            command: resolvedCodex.command,
             args,
             cwd: opts.path,
-            env: process.env,
+            env: resolvedCodex.env,
             signal: opts.abort,
             logLabel: 'CodexLocal',
             spawnName: 'codex',

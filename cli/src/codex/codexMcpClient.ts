@@ -10,8 +10,8 @@ import type { CodexSessionConfig, CodexToolResponse } from './types';
 import { z } from 'zod';
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { CodexPermissionHandler } from './utils/permissionHandler';
-import { execSync } from 'child_process';
 import { randomUUID } from 'node:crypto';
+import { resolveCodexBinary } from './codexBinary';
 
 type ElicitResponseValue = string | number | boolean | string[];
 type ElicitContent = ElicitResponseValue | Record<string, ElicitResponseValue>;
@@ -432,7 +432,8 @@ const DEFAULT_TIMEOUT = 14 * 24 * 60 * 60 * 1000; // 14 days, which is the half 
  */
 function getCodexMcpCommand(): string {
     try {
-        const version = execSync('codex --version', { encoding: 'utf8' }).trim();
+        const resolvedCodex = resolveCodexBinary(process.env);
+        const version = resolvedCodex.version ? `codex-cli ${resolvedCodex.version}` : '';
         const match = version.match(/codex-cli\s+(\d+\.\d+\.\d+(?:-alpha\.\d+)?)/);
         if (!match) return 'mcp-server'; // Default to newer command if we can't parse
 
@@ -506,14 +507,15 @@ export class CodexMcpClient {
     async connect(): Promise<void> {
         if (this.connected) return;
 
+        const resolvedCodex = resolveCodexBinary(process.env);
         const mcpCommand = getCodexMcpCommand();
-        logger.debug(`[CodexMCP] Connecting to Codex MCP server using command: codex ${mcpCommand}`);
+        logger.debug(`[CodexMCP] Connecting to Codex MCP server using command: ${resolvedCodex.command} ${mcpCommand}`);
 
         this.transport = new StdioClientTransport({
-            command: 'codex',
+            command: resolvedCodex.command,
             args: [mcpCommand],
-            env: Object.keys(process.env).reduce((acc, key) => {
-                const value = process.env[key];
+            env: Object.keys(resolvedCodex.env).reduce((acc, key) => {
+                const value = resolvedCodex.env[key];
                 if (typeof value === 'string') acc[key] = value;
                 return acc;
             }, {} as Record<string, string>)
