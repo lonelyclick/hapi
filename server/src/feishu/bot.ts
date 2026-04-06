@@ -1212,6 +1212,65 @@ export class FeishuBot {
     }
 
     /**
+     * Strip thinking blocks (with signatures) from a Claude session JSONL file before resume.
+     * Thinking block signatures become invalid across sessions/restarts, causing API errors.
+     * Replaces thinking blocks with a text placeholder to preserve the UUID chain.
+     */
+    private stripThinkingBlocksFromJsonl(claudeSessionId: string, homeDir: string): void {
+        try {
+            const claudeProjectsDir = `${homeDir}/.claude/projects`
+            let jsonlPath: string
+            try {
+                jsonlPath = execSync(
+                    `find "${claudeProjectsDir}" -maxdepth 3 -name "${claudeSessionId}.jsonl" 2>/dev/null | head -1`,
+                    { encoding: 'utf-8' }
+                ).trim()
+            } catch {
+                return
+            }
+            if (!jsonlPath) return
+
+            const raw = readFileSync(jsonlPath, 'utf-8')
+            const lines = raw.split('\n')
+            let modified = false
+
+            const newLines = lines.map(line => {
+                if (!line.trim()) return line
+                let record: Record<string, unknown>
+                try {
+                    record = JSON.parse(line) as Record<string, unknown>
+                } catch {
+                    return line
+                }
+
+                const msg = record.message as Record<string, unknown> | undefined
+                if (!msg) return line
+                const content = msg.content as Array<Record<string, unknown>> | undefined
+                if (!Array.isArray(content)) return line
+
+                const hasThinking = content.some(c => c.type === 'thinking' && c.signature)
+                if (!hasThinking) return line
+
+                modified = true
+                // Replace thinking blocks with a placeholder to preserve the UUID chain
+                msg.content = content.map(c =>
+                    (c.type === 'thinking' && c.signature)
+                        ? { type: 'text', text: '[thinking]' }
+                        : c
+                )
+                return JSON.stringify(record)
+            })
+
+            if (modified) {
+                writeFileSync(jsonlPath, newLines.join('\n'))
+                console.log(`[FeishuBot] Stripped thinking blocks from JSONL for session ${claudeSessionId.slice(0, 8)}`)
+            }
+        } catch (err) {
+            console.error(`[FeishuBot] stripThinkingBlocksFromJsonl failed:`, err)
+        }
+    }
+
+    /**
      * Try to resume a dead brain session by spawning a new CLI process
      * that reuses the same yoho-remote session ID and Claude conversation.
      */
@@ -1225,6 +1284,10 @@ export class FeishuBot {
             const machine = machines.find(m => m.id === NCU_MACHINE_ID) || machines[0]
             const homeDir = (machine.metadata as Record<string, unknown>)?.homeDir as string || '/tmp'
             const brainDirectory = `${homeDir}/.yoho-remote/brain-workspace`
+
+            // Strip thinking blocks before resume to avoid "Invalid signature in thinking block" errors.
+            // Thinking block signatures expire across sessions; replacing with placeholders preserves the chain.
+            this.stripThinkingBlocksFromJsonl(claudeSessionId, homeDir)
 
             const result = await this.syncEngine.spawnSession(
                 machine.id,
