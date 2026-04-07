@@ -258,35 +258,39 @@ export async function startWebServer(options: {
         : 0
     const maxHttpBodySize = Math.max(socketBodySize, 150 * 1024 * 1024)  // 150MB to support 100MB file uploads with base64 overhead
 
+    // Use max possible idleTimeout (255s) for WebSocket connections to allow Engine.IO ping/pong to manage keepalive
+    const wsIdleTimeout = 255
+
     let wsCounter = 0
     const origWs = socketHandler.websocket
     const debugWs = {
         ...origWs,
+        idleTimeout: wsIdleTimeout,
+        sendPings: true,
         open(ws: any) {
             const id = ++wsCounter
             ws.data._dbgId = id
-            console.log(`[ws-debug] #${id} open`)
+            console.log(`[ws-debug] #${id} open remoteAddress=${ws.remoteAddress}`)
             return origWs.open(ws)
         },
         message(ws: any, message: any) {
             const id = ws.data?._dbgId ?? '?'
             const preview = typeof message === 'string' ? message.substring(0, 50) : `[binary ${(message as any).byteLength}b]`
-            // Only log Engine.IO control packets (type 0-6) not Socket.IO data
             if (typeof message === 'string' && message.length <= 1) {
-                console.log(`[ws-debug] #${id} ctrl: "${preview}" transport=${!!ws.data?.transport}`)
+                console.log(`[ws-debug] #${id} ctrl: "${preview}"`)
             }
             return origWs.message(ws, message)
         },
         close(ws: any, code: number, message: string) {
             const id = ws.data?._dbgId ?? '?'
-            console.log(`[ws-debug] #${id} close: code=${code}`)
+            console.log(`[ws-debug] #${id} close: code=${code} remoteAddress=${ws.remoteAddress}`)
             return origWs.close(ws, code, message)
         },
     }
 
     const server = Bun.serve({
         port: configuration.webappPort,
-        idleTimeout: Math.max(30, socketHandler.idleTimeout),
+        idleTimeout: 255,
         maxRequestBodySize: maxHttpBodySize,
         websocket: debugWs,
         fetch: (req, server) => {
