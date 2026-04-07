@@ -1,33 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import type { ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
+import type { ModelMode, ModelReasoningEffort } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 
-type PermissionModeValue = 'bypassPermissions' | 'read-only' | 'safe-yolo' | 'yolo'
-type ModelModeValue = 'default' | 'sonnet' | 'opus' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
 type ModelConfig = { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }
-
-function toPermissionMode(mode: PermissionMode): PermissionModeValue {
-    if (mode === 'bypassPermissions' || mode === 'read-only' || mode === 'safe-yolo' || mode === 'yolo') {
-        return mode
-    }
-    return 'bypassPermissions'
-}
-
-function toModelMode(mode: ModelMode): ModelModeValue {
-    if (mode === 'sonnet' || mode === 'opus') {
-        return mode
-    }
-    if (mode === 'gpt-5.3-codex' || mode === 'gpt-5.2-codex' || mode === 'gpt-5.1-codex-max' || mode === 'gpt-5.1-codex-mini' || mode === 'gpt-5.2') {
-        return mode
-    }
-    return 'default'
-}
 
 export function useSessionActions(api: ApiClient | null, sessionId: string | null): {
     abortSession: () => Promise<void>
     switchSession: () => Promise<void>
-    setPermissionMode: (mode: PermissionMode) => Promise<void>
     setModelMode: (config: ModelConfig) => Promise<void>
     setFastMode: (fastMode: boolean) => Promise<void>
     deleteSession: () => Promise<void>
@@ -62,23 +42,13 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
         onSuccess: () => void invalidateSession(),
     })
 
-    const permissionMutation = useMutation({
-        mutationFn: async (mode: PermissionMode) => {
-            if (!api || !sessionId) {
-                throw new Error('Session unavailable')
-            }
-            await api.setPermissionMode(sessionId, toPermissionMode(mode))
-        },
-        onSuccess: () => void invalidateSession(),
-    })
-
     const modelMutation = useMutation({
         mutationFn: async (config: ModelConfig) => {
             if (!api || !sessionId) {
                 throw new Error('Session unavailable')
             }
             await api.setModelMode(sessionId, {
-                model: toModelMode(config.model),
+                model: config.model,
                 reasoningEffort: config.reasoningEffort ?? undefined
             })
         },
@@ -123,14 +93,12 @@ export function useSessionActions(api: ApiClient | null, sessionId: string | nul
     return {
         abortSession: abortMutation.mutateAsync,
         switchSession: switchMutation.mutateAsync,
-        setPermissionMode: permissionMutation.mutateAsync,
         setModelMode: modelMutation.mutateAsync,
         setFastMode: fastModeMutation.mutateAsync,
         deleteSession: deleteMutation.mutateAsync,
         refreshAccount: refreshAccountMutation.mutateAsync,
         isPending: abortMutation.isPending
             || switchMutation.isPending
-            || permissionMutation.isPending
             || modelMutation.isPending
             || fastModeMutation.isPending
             || deleteMutation.isPending

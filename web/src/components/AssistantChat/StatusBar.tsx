@@ -1,14 +1,8 @@
 import { useMemo } from 'react'
-import type { AgentState, ModelMode, PermissionMode, TypingUser } from '@/types/api'
+import type { AgentState, ModelMode, TypingUser } from '@/types/api'
 import { getContextBudgetTokens } from '@/chat/modelConfig'
 import { useVibingMessage } from '@/hooks/useVibingMessage'
 
-const PERMISSION_MODE_LABELS: Record<string, string> = {
-    bypassPermissions: 'Yolo',
-    'read-only': 'Read Only',
-    'safe-yolo': 'Safe Yolo',
-    yolo: 'Yolo'
-}
 
 function getConnectionStatus(
     active: boolean,
@@ -83,7 +77,6 @@ export function StatusBar(props: {
     agentState: AgentState | null | undefined
     contextSize?: number
     modelMode?: ModelMode
-    permissionMode?: PermissionMode
     agentFlavor?: string | null
     otherUserTyping?: TypingUser | null
 }) {
@@ -105,15 +98,6 @@ export function StatusBar(props: {
         },
         [props.contextSize, props.modelMode, props.agentFlavor]
     )
-
-    const permissionMode = props.permissionMode
-    // Only show permission mode for non-Claude non-gemini sessions (Codex modes)
-    const shouldShowPermissionMode = props.agentFlavor !== 'gemini'
-        && props.agentFlavor !== 'claude'
-        && props.agentFlavor !== null
-        && props.agentFlavor !== undefined
-        && permissionMode
-        && permissionMode !== 'bypassPermissions'
 
     return (
         <div className="flex items-center justify-between px-2 pb-1">
@@ -138,16 +122,6 @@ export function StatusBar(props: {
                 ) : null}
             </div>
 
-            {shouldShowPermissionMode ? (
-                <span className={`text-xs ${
-                    permissionMode === 'read-only' ? 'text-amber-500' :
-                    permissionMode === 'safe-yolo' ? 'text-amber-500' :
-                    permissionMode === 'yolo' ? 'text-red-500' :
-                    'text-[var(--app-hint)]'
-                }`}>
-                    {PERMISSION_MODE_LABELS[permissionMode]}
-                </span>
-            ) : null}
         </div>
     )
 }

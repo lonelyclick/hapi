@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
-import type { DecryptedMessage, ModelMode, ModelReasoningEffort, PermissionMode, Session, SessionViewer, TypingUser } from '@/types/api'
+import type { DecryptedMessage, ModelMode, ModelReasoningEffort, Session, SessionViewer, TypingUser } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
@@ -69,7 +69,7 @@ export function SessionChat(props: {
     const controlsDisabled = !props.session.active
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | NormalizedMessage[] | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
-    const { abortSession, switchSession, setPermissionMode, setModelMode, setFastMode, deleteSession, refreshAccount, isPending } = useSessionActions(props.api, props.session.id)
+    const { abortSession, switchSession, setModelMode, setFastMode, deleteSession, refreshAccount, isPending } = useSessionActions(props.api, props.session.id)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [isResuming, setIsResuming] = useState(false)
     const [resumeError, setResumeError] = useState<string | null>(null)
@@ -142,18 +142,6 @@ export function SessionChat(props: {
     useEffect(() => {
         blocksByIdRef.current = reconciled.byId
     }, [reconciled.byId])
-
-    // Permission mode change handler
-    const handlePermissionModeChange = useCallback(async (mode: PermissionMode) => {
-        try {
-            await setPermissionMode(mode)
-            haptic.notification('success')
-            props.onRefresh()
-        } catch (e) {
-            haptic.notification('error')
-            console.error('Failed to set permission mode:', e)
-        }
-    }, [setPermissionMode, props.onRefresh, haptic])
 
     // Model mode change handler
     const handleModelModeChange = useCallback(async (config: { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }) => {
@@ -402,7 +390,6 @@ export function SessionChat(props: {
                         apiClient={props.api}
                         sessionId={props.session.id}
                         disabled={props.isSending || isResuming || controlsDisabled}
-                        permissionMode={props.session.permissionMode}
                         modelMode={resolvedModelMode}
                         modelReasoningEffort={resolvedReasoningEffort}
                         fastMode={props.session.fastMode}
@@ -415,7 +402,6 @@ export function SessionChat(props: {
                         onRequestResume={handleResumeRequest}
                         resumePending={isResuming}
                         resumeError={resumeError}
-                        onPermissionModeChange={handlePermissionModeChange}
                         onModelModeChange={handleModelModeChange}
                         onFastModeChange={handleFastModeChange}
                         onSwitchToRemote={handleSwitchToRemote}

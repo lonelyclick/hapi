@@ -29,11 +29,6 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
         const title = typeof event.title === 'string' ? event.title : ''
         return { icon: null, text: title ? `Title changed to "${title}"` : 'Title changed' }
     }
-    if (event.type === 'permission-mode-changed') {
-        const modeValue = (event as Record<string, unknown>).mode
-        const mode = typeof modeValue === 'string' ? modeValue : 'default'
-        return { icon: '🔐', text: `Permission mode: ${mode}` }
-    }
     if (event.type === 'limit-reached') {
         const endsAt = typeof event.endsAt === 'number' ? event.endsAt : null
         return { icon: '⏳', text: endsAt ? `Usage limit reached until ${formatUnixTimestamp(endsAt)}` : 'Usage limit reached' }

@@ -464,13 +464,6 @@ export class ApiClient {
         })
     }
 
-    async setPermissionMode(sessionId: string, mode: 'bypassPermissions' | 'read-only' | 'safe-yolo' | 'yolo'): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/permission-mode`, {
-            method: 'POST',
-            body: JSON.stringify({ mode })
-        })
-    }
-
     async setModelMode(sessionId: string, payload: { model: string; reasoningEffort?: string | null }): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/model`, {
             method: 'POST',

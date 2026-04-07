@@ -16,7 +16,7 @@ import {
 import type { TypingUser } from '@/types/api'
 import { useSessionDraft } from '@/hooks/useSessionDraft'
 import { useInputHistory } from '@/hooks/useInputHistory'
-import type { AgentState, ModelMode, ModelReasoningEffort, PermissionMode } from '@/types/api'
+import type { AgentState, ModelMode, ModelReasoningEffort } from '@/types/api'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { useActiveWord } from '@/hooks/useActiveWord'
 import { useActiveSuggestions } from '@/hooks/useActiveSuggestions'
@@ -36,14 +36,6 @@ export interface TextInputState {
     selection: { start: number; end: number }
 }
 
-const CLAUDE_PERMISSION_MODES = ['bypassPermissions'] as const
-const CODEX_PERMISSION_MODES = ['read-only', 'safe-yolo', 'yolo'] as const
-const PERMISSION_MODE_LABELS: Record<string, string> = {
-    bypassPermissions: 'Yolo',
-    'read-only': 'Read Only',
-    'safe-yolo': 'Safe Yolo',
-    yolo: 'Yolo'
-}
 
 const MODEL_MODES = ['default', 'sonnet', 'opus'] as const
 const MODEL_MODE_LABELS: Record<string, string> = {
@@ -279,7 +271,6 @@ export function YohoRemoteComposer(props: {
     apiClient: ApiClient
     sessionId: string
     disabled?: boolean
-    permissionMode?: PermissionMode
     modelMode?: ModelMode
     modelReasoningEffort?: ModelReasoningEffort
     active?: boolean
@@ -291,7 +282,6 @@ export function YohoRemoteComposer(props: {
     onRequestResume?: () => void
     resumePending?: boolean
     resumeError?: string | null
-    onPermissionModeChange?: (mode: PermissionMode) => void
     onModelModeChange?: (config: { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }) => void
     fastMode?: boolean
     onFastModeChange?: (fastMode: boolean) => Promise<void>
@@ -306,7 +296,6 @@ export function YohoRemoteComposer(props: {
         apiClient,
         sessionId,
         disabled = false,
-        permissionMode: rawPermissionMode,
         modelMode: rawModelMode,
         modelReasoningEffort,
         active = true,
@@ -318,7 +307,6 @@ export function YohoRemoteComposer(props: {
         onRequestResume,
         resumePending = false,
         resumeError = null,
-        onPermissionModeChange,
         onModelModeChange,
         fastMode: rawFastMode,
         onFastModeChange,
@@ -330,7 +318,6 @@ export function YohoRemoteComposer(props: {
     } = props
 
     // Use ?? so missing values fall back to default (destructuring defaults only handle undefined)
-    const permissionMode = rawPermissionMode ?? 'bypassPermissions'
     const modelMode = rawModelMode ?? 'default'
     const serverFastMode = rawFastMode ?? false
     const [optimisticFastMode, setOptimisticFastMode] = useState<boolean | null>(null)
@@ -670,16 +657,6 @@ export function YohoRemoteComposer(props: {
         }
     }, [switchDisabled, onSwitchToRemote, haptic])
 
-    const permissionModes = useMemo(() => {
-        if (agentFlavor === 'codex') {
-            return CODEX_PERMISSION_MODES as readonly PermissionMode[]
-        }
-        if (agentFlavor === 'gemini') {
-            return [] as readonly PermissionMode[]
-        }
-        return CLAUDE_PERMISSION_MODES as readonly PermissionMode[]
-    }, [agentFlavor])
-
     const buildMessageWithAttachments = useCallback((baseText: string) => {
         const imageRefs = uploadedImages.map(img => `[Image: ${img.path}]`).join('\n')
         const fileRefs = uploadedFiles.map(file => `[File: ${file.path}]`).join('\n')
@@ -783,16 +760,6 @@ export function YohoRemoteComposer(props: {
             return
         }
 
-        if (key === 'Tab' && e.shiftKey && onPermissionModeChange && permissionModes.length > 1) {
-            e.preventDefault()
-            const currentIndex = permissionModes.indexOf(permissionMode)
-            const nextIndex = (currentIndex + 1) % permissionModes.length
-            const nextMode = permissionModes[nextIndex] ?? 'bypassPermissions'
-            onPermissionModeChange(nextMode)
-            haptic('light')
-            return
-        }
-
         if (key === 'Enter' && !e.shiftKey && !controlsDisabled && !threadIsRunning && !isUploadingImage && !isUploadingFile) {
             if (hasAttachments) {
                 e.preventDefault()
@@ -808,9 +775,6 @@ export function YohoRemoteComposer(props: {
         handleSuggestionSelect,
         threadIsRunning,
         handleAbort,
-        onPermissionModeChange,
-        permissionMode,
-        permissionModes,
         haptic,
         hasAttachments,
         isUploadingImage,
@@ -880,13 +844,6 @@ export function YohoRemoteComposer(props: {
             setUploadedFiles([])
         }
     }, [trimmed, addToHistory, clearDraft, resetNavigation, uploadedImages, uploadedFiles])
-
-    const handlePermissionChange = useCallback((mode: PermissionMode) => {
-        if (!onPermissionModeChange || controlsDisabled) return
-        onPermissionModeChange(mode)
-        setShowSettings(false)
-        haptic('light')
-    }, [onPermissionModeChange, controlsDisabled, haptic])
 
     const handleModelChange = useCallback((config: { model: ModelMode; reasoningEffort?: ModelReasoningEffort | null }) => {
         if (!onModelModeChange || controlsDisabled) return
@@ -1171,9 +1128,8 @@ export function YohoRemoteComposer(props: {
         haptic('light')
     }, [haptic])
 
-    const showPermissionSettings = Boolean(onPermissionModeChange && permissionModes.length > 1)
     const showModelSettings = Boolean(onModelModeChange && agentFlavor !== 'gemini')
-    const showSettingsButton = showPermissionSettings || showModelSettings
+    const showSettingsButton = showModelSettings
     const showAbortButton = true
     const isCodex = agentFlavor === 'codex'
     const isGrok = agentFlavor === 'grok'
@@ -1182,7 +1138,7 @@ export function YohoRemoteComposer(props: {
     const grokModel = isGrok ? (modelMode as string || 'grok-code-fast-1') : 'grok-code-fast-1'
     const openrouterModel = isOpenRouter ? (modelMode as string || 'anthropic/claude-sonnet-4') : 'anthropic/claude-sonnet-4'
     const codexReasoningEffort: ModelReasoningEffort = modelReasoningEffort ?? 'medium'
-    const shouldShowCodexReasoning = isCodex && (codexModel === 'gpt-5.3-codex' || codexModel === 'gpt-5.2-codex')
+    const shouldShowCodexReasoning = isCodex
     const speechToText = useSpeechToText({
         onPartial: (text) => {
             const prefix = sttPrefixRef.current
@@ -1342,48 +1298,7 @@ export function YohoRemoteComposer(props: {
                             </>
                         ) : null}
 
-                        {showPermissionSettings ? (
-                            <div className="mx-3 h-px bg-[var(--app-divider)]" />
-                        ) : null}
-
-                        {showPermissionSettings ? (
-                            <div className="py-2">
-                                <div className="px-3 pb-1 text-xs font-semibold text-[var(--app-hint)]">
-                                    Permission Mode
-                                </div>
-                                {permissionModes.map((mode) => (
-                                    <button
-                                        key={mode}
-                                        type="button"
-                                        disabled={controlsDisabled}
-                                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                                            controlsDisabled
-                                                ? 'cursor-not-allowed opacity-50'
-                                                : 'cursor-pointer hover:bg-[var(--app-secondary-bg)]'
-                                        }`}
-                                        onClick={() => handlePermissionChange(mode)}
-                                        onMouseDown={(e) => e.preventDefault()}
-                                    >
-                                        <div
-                                            className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                                                permissionMode === mode
-                                                    ? 'border-[var(--app-link)]'
-                                                    : 'border-[var(--app-hint)]'
-                                            }`}
-                                        >
-                                            {permissionMode === mode && (
-                                                <div className="h-2 w-2 rounded-full bg-[var(--app-link)]" />
-                                            )}
-                                        </div>
-                                        <span className={permissionMode === mode ? 'text-[var(--app-link)]' : ''}>
-                                            {PERMISSION_MODE_LABELS[mode]}
-                                        </span>
-                                    </button>
-                                ))}
-                            </div>
-                        ) : null}
-
-                        {(showPermissionSettings && showModelSettings) || (!showPermissionSettings && showModelSettings && isClaude) ? (
+                        {showModelSettings ? (
                             <div className="mx-3 h-px bg-[var(--app-divider)]" />
                         ) : null}
 
@@ -1611,7 +1526,6 @@ export function YohoRemoteComposer(props: {
         suggestions,
         selectedIndex,
         controlsDisabled,
-        permissionMode,
         modelMode,
         isCodex,
         codexModel,
@@ -1619,8 +1533,6 @@ export function YohoRemoteComposer(props: {
         shouldShowCodexReasoning,
         isGrok,
         grokModel,
-        permissionModes,
-        handlePermissionChange,
         handleModelChange,
         handleSuggestionSelect,
         apiClient,
@@ -1658,7 +1570,6 @@ export function YohoRemoteComposer(props: {
                         agentState={agentState}
                         contextSize={contextSize}
                         modelMode={modelMode}
-                        permissionMode={permissionMode}
                         agentFlavor={agentFlavor}
                         otherUserTyping={otherUserTyping}
                     />
