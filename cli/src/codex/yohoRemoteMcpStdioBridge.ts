@@ -17,6 +17,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
     CallToolRequestSchema,
     ListToolsRequestSchema,
+    ListResourcesRequestSchema,
+    ListResourceTemplatesRequestSchema,
     type CallToolRequest,
     type ListToolsRequest,
     type ListToolsResult
@@ -91,7 +93,7 @@ export async function runYohoRemoteMcpStdioBridge(argv: string[]): Promise<void>
         const handlers = createYohoRemoteMcpBridgeHandlers(ensureHttpClient);
         const server = new Server(
             { name: 'YR MCP Bridge', version: '1.0.0' },
-            { capabilities: { tools: { listChanged: true } } }
+            { capabilities: { tools: { listChanged: true }, resources: {} } }
         );
 
         server.setRequestHandler(ListToolsRequestSchema, async (request) => {
@@ -100,6 +102,17 @@ export async function runYohoRemoteMcpStdioBridge(argv: string[]): Promise<void>
 
         server.setRequestHandler(CallToolRequestSchema, async (request) => {
             return await handlers.callTool(request.params);
+        });
+
+        // Return empty resources/templates to prevent Codex from hanging
+        // on list_mcp_resources / list_mcp_resource_templates calls.
+        // See https://github.com/openai/codex/issues/14242
+        server.setRequestHandler(ListResourcesRequestSchema, async () => {
+            return { resources: [] };
+        });
+
+        server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+            return { resourceTemplates: [] };
         });
 
         const stdio = new StdioServerTransport();

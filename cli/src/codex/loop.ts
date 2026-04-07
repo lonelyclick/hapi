@@ -3,7 +3,7 @@ import { logger } from '@/ui/logger';
 import { runLocalRemoteLoop } from '@/agent/loopBase';
 import { CodexSession } from './session';
 import { codexLocalLauncher } from './codexLocalLauncher';
-import { codexRemoteLauncher } from './codexRemoteLauncher';
+import { codexExecLauncher } from './codexExecLauncher';
 import { ApiClient, ApiSessionClient } from '@/lib';
 import type { CodexCliOverrides } from './utils/codexCliOverrides';
 
@@ -59,6 +59,6 @@ export async function loop(opts: LoopOptions): Promise<void> {
         startingMode: opts.startingMode,
         logTag: 'codex-loop',
         runLocal: codexLocalLauncher,
-        runRemote: codexRemoteLauncher
+        runRemote: codexExecLauncher
     });
 }
