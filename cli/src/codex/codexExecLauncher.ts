@@ -433,6 +433,10 @@ async function spawnCodexExec(opts: SpawnCodexExecOptions): Promise<SpawnCodexEx
 
     let resultThreadId: string | null = threadId;
 
+    // Generate a unique prefix per turn so callIds (item_0, item_1, ...) don't
+    // collide across turns in the frontend's toolBlocksById map.
+    const turnPrefix = randomUUID().slice(0, 8);
+
     return new Promise<SpawnCodexExecResult>((resolve, reject) => {
         const child = spawn(codexBin.command, args, {
             cwd: session.path,
@@ -498,6 +502,7 @@ async function spawnCodexExec(opts: SpawnCodexExecOptions): Promise<SpawnCodexEx
             handleExecEvent(event, {
                 session,
                 messageBuffer,
+                turnPrefix,
                 onThreadId: (id) => {
                     resultThreadId = id;
                     onThreadId(id);
@@ -541,6 +546,7 @@ async function spawnCodexExec(opts: SpawnCodexExecOptions): Promise<SpawnCodexEx
 interface EventHandlerContext {
     session: CodexSession;
     messageBuffer: MessageBuffer;
+    turnPrefix: string;
     onThreadId: (id: string) => void;
 }
 
@@ -594,7 +600,8 @@ function handleExecEvent(event: ExecEvent, ctx: EventHandlerContext): void {
 }
 
 function handleItemStarted(item: ExecItem, ctx: EventHandlerContext): void {
-    const { session, messageBuffer } = ctx;
+    const { session, messageBuffer, turnPrefix } = ctx;
+    const callId = `${turnPrefix}-${item.id}`;
 
     switch (item.type) {
         case 'mcp_tool_call': {
@@ -603,7 +610,7 @@ function handleItemStarted(item: ExecItem, ctx: EventHandlerContext): void {
             session.sendCodexMessage({
                 type: 'tool-call',
                 name: `${mcpItem.server}__${mcpItem.tool}`,
-                callId: mcpItem.id,
+                callId,
                 input: mcpItem.arguments,
                 id: randomUUID()
             });
@@ -616,7 +623,7 @@ function handleItemStarted(item: ExecItem, ctx: EventHandlerContext): void {
             session.sendCodexMessage({
                 type: 'tool-call',
                 name: 'CodexBash',
-                callId: cmdItem.id,
+                callId,
                 input: { command: cmdItem.command },
                 id: randomUUID()
             });
@@ -630,7 +637,7 @@ function handleItemStarted(item: ExecItem, ctx: EventHandlerContext): void {
             session.sendCodexMessage({
                 type: 'tool-call',
                 name: 'CodexPatch',
-                callId: editItem.id,
+                callId,
                 input: { file_path: editItem.file_path },
                 id: randomUUID()
             });
@@ -650,7 +657,8 @@ function handleItemStarted(item: ExecItem, ctx: EventHandlerContext): void {
 }
 
 function handleItemCompleted(item: ExecItem, ctx: EventHandlerContext): void {
-    const { session, messageBuffer } = ctx;
+    const { session, messageBuffer, turnPrefix } = ctx;
+    const callId = `${turnPrefix}-${item.id}`;
 
     switch (item.type) {
         case 'agent_message': {
@@ -673,7 +681,7 @@ function handleItemCompleted(item: ExecItem, ctx: EventHandlerContext): void {
             messageBuffer.addMessage(`Result: ${truncated}${(resultStr?.length ?? 0) > 200 ? '...' : ''}`, 'result');
             session.sendCodexMessage({
                 type: 'tool-call-result',
-                callId: mcpItem.id,
+                callId,
                 output: mcpItem.result,
                 id: randomUUID()
             });
@@ -687,7 +695,7 @@ function handleItemCompleted(item: ExecItem, ctx: EventHandlerContext): void {
             messageBuffer.addMessage(`Result: ${truncated}${output.length > 200 ? '...' : ''}`, 'result');
             session.sendCodexMessage({
                 type: 'tool-call-result',
-                callId: cmdItem.id,
+                callId,
                 output: {
                     output: cmdItem.output,
                     exit_code: cmdItem.exit_code,
@@ -706,7 +714,7 @@ function handleItemCompleted(item: ExecItem, ctx: EventHandlerContext): void {
             );
             session.sendCodexMessage({
                 type: 'tool-call-result',
-                callId: editItem.id,
+                callId,
                 output: {
                     file_path: editItem.file_path,
                     diff: editItem.diff,
