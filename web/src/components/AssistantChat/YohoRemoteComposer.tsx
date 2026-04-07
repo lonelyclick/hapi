@@ -54,29 +54,44 @@ const MODEL_MODE_LABELS: Record<string, string> = {
 
 const CODEX_MODELS = [
     {
+        id: 'gpt-5.4',
+        label: 'gpt-5.4',
+        description: 'Latest frontier agentic coding model.'
+    },
+    {
+        id: 'gpt-5.4-mini',
+        label: 'gpt-5.4-mini',
+        description: 'Smaller frontier agentic coding model.'
+    },
+    {
         id: 'gpt-5.3-codex',
         label: 'gpt-5.3-codex',
-        description: 'Latest frontier agentic coding model.'
+        description: 'Frontier Codex-optimized agentic coding model.'
+    },
+    {
+        id: 'gpt-5.3-codex-spark',
+        label: 'gpt-5.3-codex-spark',
+        description: 'Ultra-fast coding model.'
     },
     {
         id: 'gpt-5.2-codex',
         label: 'gpt-5.2-codex',
-        description: 'Previous generation agentic coding model.'
+        description: 'Frontier agentic coding model.'
+    },
+    {
+        id: 'gpt-5.2',
+        label: 'gpt-5.2',
+        description: 'Optimized for professional work and long-running agents.'
     },
     {
         id: 'gpt-5.1-codex-max',
         label: 'gpt-5.1-codex-max',
-        description: 'Codex-optimized flagship for deep and fast reasoning.'
+        description: 'Codex-optimized model for deep and fast reasoning.'
     },
     {
         id: 'gpt-5.1-codex-mini',
         label: 'gpt-5.1-codex-mini',
         description: 'Optimized for codex. Cheaper, faster, but less capable.'
-    },
-    {
-        id: 'gpt-5.2',
-        label: 'gpt-5.2',
-        description: 'Latest frontier model with improvements across knowledge, reasoning and coding.'
     }
 ] as const
 

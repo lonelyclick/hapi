@@ -26,7 +26,7 @@ const spawnBodySchema = z.object({
     source: z.string().min(1).max(100).optional()
 })
 
-const modelModeValues = ['default', 'sonnet', 'opus', 'glm-5.1', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini', 'gpt-5.2'] as const
+const modelModeValues = ['default', 'sonnet', 'opus', 'glm-5.1', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.2', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'] as const
 const isModelMode = (value: string): value is NonNullable<Session['modelMode']> => {
     return (modelModeValues as readonly string[]).includes(value)
 }

@@ -18,7 +18,8 @@ interface SpawnPrefs {
     projectPath?: string
     agent?: AgentType
     claudeModel?: ClaudeModelMode
-    codexReasoningEffort?: 'medium' | 'high' | 'xhigh'
+    codexModel?: string
+    codexReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     droidModel?: string
     droidReasoningEffort?: string
 }
@@ -52,11 +53,21 @@ const CLAUDE_MODES: { value: ClaudeModelMode; label: string; description: string
     { value: 'glm-5.1', label: 'GLM 5.1', description: '智谱 GLM-5.1 (思考模式)' },
 ]
 
-// Codex 固定使用 gpt-5.3-codex
-const CODEX_MODEL = 'openai/gpt-5.3-codex'
+// Codex 模型选项
+const CODEX_MODELS: { value: string; label: string }[] = [
+    { value: 'openai/gpt-5.4', label: 'GPT-5.4 (Latest)' },
+    { value: 'openai/gpt-5.4-mini', label: 'GPT-5.4 Mini' },
+    { value: 'openai/gpt-5.3-codex', label: 'GPT-5.3 Codex' },
+    { value: 'openai/gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark (Ultra-fast)' },
+    { value: 'openai/gpt-5.2-codex', label: 'GPT-5.2 Codex' },
+    { value: 'openai/gpt-5.2', label: 'GPT-5.2' },
+    { value: 'openai/gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
+    { value: 'openai/gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini' },
+]
 
 // Codex reasoning effort levels
 const CODEX_REASONING_EFFORTS = [
+    { value: 'low' as const, label: 'Low (快速)' },
     { value: 'medium' as const, label: 'Medium (默认)' },
     { value: 'high' as const, label: 'High (更强推理)' },
     { value: 'xhigh' as const, label: 'X-High (最强推理)' },
@@ -160,7 +171,8 @@ export function NewSession(props: {
     const [projectPath, setProjectPath] = useState(savedPrefs.projectPath ?? '')
     const [agent, setAgent] = useState<AgentType>(savedPrefs.agent ?? 'claude')
     const [claudeModel, setClaudeModel] = useState<ClaudeModelMode>(savedPrefs.claudeModel ?? 'sonnet')
-    const [codexReasoningEffort, setCodexReasoningEffort] = useState<'medium' | 'high' | 'xhigh'>(savedPrefs.codexReasoningEffort ?? 'medium')
+    const [codexModel, setCodexModel] = useState(savedPrefs.codexModel ?? CODEX_MODELS[0].value)
+    const [codexReasoningEffort, setCodexReasoningEffort] = useState<'low' | 'medium' | 'high' | 'xhigh'>(savedPrefs.codexReasoningEffort ?? 'medium')
     const [droidModel, setDroidModel] = useState(savedPrefs.droidModel ?? DROID_MODELS[0].value)
     const [droidReasoningEffort, setDroidReasoningEffort] = useState(savedPrefs.droidReasoningEffort ?? DROID_MODELS[0].defaultEffort)
     const [error, setError] = useState<string | null>(null)
@@ -286,7 +298,7 @@ export function NewSession(props: {
                 yolo: true,
                 sessionType: 'simple',
                 claudeModel: agent === 'claude' ? claudeModel : undefined,
-                codexModel: agent === 'codex' ? CODEX_MODEL : undefined,
+                codexModel: agent === 'codex' ? codexModel : undefined,
                 modelReasoningEffort: agent === 'codex' ? codexReasoningEffort : undefined,
                 droidModel: agent === 'droid' ? droidModel : undefined,
                 droidReasoningEffort: agent === 'droid' ? droidReasoningEffort : undefined,
@@ -305,6 +317,7 @@ export function NewSession(props: {
                     projectPath: directory,
                     agent,
                     claudeModel,
+                    codexModel,
                     codexReasoningEffort,
                     droidModel,
                     droidReasoningEffort,
@@ -455,15 +468,30 @@ export function NewSession(props: {
                 </div>
             ) : null}
 
-            {/* Codex Reasoning Effort Selector */}
+            {/* Codex Model + Reasoning Effort Selector */}
             {agent === 'codex' ? (
                 <div className="flex flex-col gap-1.5 px-3 pb-3">
                     <label className="text-xs font-medium text-[var(--app-hint)]">
-                        Reasoning Effort (Codex)
+                        Model (Codex)
+                    </label>
+                    <select
+                        value={codexModel}
+                        onChange={(e) => setCodexModel(e.target.value)}
+                        disabled={isFormDisabled}
+                        className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
+                    >
+                        {CODEX_MODELS.map((model) => (
+                            <option key={model.value} value={model.value}>
+                                {model.label}
+                            </option>
+                        ))}
+                    </select>
+                    <label className="text-xs font-medium text-[var(--app-hint)] mt-2">
+                        Reasoning Effort
                     </label>
                     <select
                         value={codexReasoningEffort}
-                        onChange={(e) => setCodexReasoningEffort(e.target.value as 'medium' | 'high' | 'xhigh')}
+                        onChange={(e) => setCodexReasoningEffort(e.target.value as 'low' | 'medium' | 'high' | 'xhigh')}
                         disabled={isFormDisabled}
                         className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)] disabled:opacity-50"
                     >
@@ -473,9 +501,6 @@ export function NewSession(props: {
                             </option>
                         ))}
                     </select>
-                    <div className="text-[11px] text-[var(--app-hint)]">
-                        Codex 固定使用 GPT-5.3，可选择推理强度。
-                    </div>
                 </div>
             ) : null}
 
