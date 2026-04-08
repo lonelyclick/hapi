@@ -95,6 +95,8 @@ export interface Session {
     modelMode?: 'default' | 'sonnet' | 'opus' | 'glm-5.1' | 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'gpt-5.1-codex-max' | 'gpt-5.1-codex-mini' | 'gpt-5.2'
     modelReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
     fastMode?: boolean
+    /** Timestamp of the last abort request; heartbeats within the grace window won't override thinking=false */
+    abortedAt?: number
 }
 
 export interface Machine {
@@ -802,8 +804,21 @@ export class SyncEngine {
         // payload.thinking 是可选字段：未提供时不要覆盖已有 thinking 状态。
         // 否则会把 session 误判为 thinking=false，导致 wasThinking 误触发。
         if (payload.thinking !== undefined) {
-            session.thinking = payload.thinking
-            session.thinkingAt = t
+            // After an abort, ignore thinking=true heartbeats for a grace period (5s)
+            // to prevent stale CLI heartbeats from overriding the abort
+            const ABORT_GRACE_MS = 5_000
+            const inAbortGrace = session.abortedAt && (t - session.abortedAt < ABORT_GRACE_MS)
+            if (inAbortGrace && payload.thinking === true) {
+                // Stale heartbeat during abort grace period — ignore thinking=true
+                session.thinkingAt = t
+            } else {
+                if (payload.thinking === true && session.abortedAt) {
+                    // CLI confirmed it's thinking again after grace period — clear abort state
+                    session.abortedAt = undefined
+                }
+                session.thinking = payload.thinking
+                session.thinkingAt = t
+            }
         } else {
             // 仍然更新 thinkingAt 以反映最近一次心跳时间（但不改变 thinking 状态）
             session.thinkingAt = t
@@ -1688,6 +1703,7 @@ export class SyncEngine {
         if (session) {
             // Only stop thinking, keep session active so user can continue
             session.thinking = false
+            session.abortedAt = Date.now()
 
             // Notify clients that thinking stopped (session remains active)
             this.emit({ type: 'session-updated', sessionId, data: { thinking: false } })

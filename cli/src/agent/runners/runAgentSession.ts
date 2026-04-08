@@ -226,10 +226,20 @@ export async function runAgentSession(opts: {
 
     const handleAbort = async () => {
         logger.debug('[ACP] Abort requested');
-        await backend.cancelPrompt(agentSessionId);
-        await permissionAdapter.cancelAll('User aborted');
+        // Set thinking=false FIRST so heartbeats immediately reflect the abort,
+        // preventing race where CLI heartbeat re-sets thinking=true before cancelPrompt finishes
         thinking = false;
         session.keepAlive(thinking, 'remote');
+        try {
+            await backend.cancelPrompt(agentSessionId);
+        } catch (error) {
+            logger.debug('[ACP] cancelPrompt failed during abort:', error);
+        }
+        try {
+            await permissionAdapter.cancelAll('User aborted');
+        } catch (error) {
+            logger.debug('[ACP] cancelAll failed during abort:', error);
+        }
         sendReady();
         if (waitAbortController) {
             waitAbortController.abort();
