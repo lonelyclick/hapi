@@ -16,27 +16,10 @@ export type FeishuBrainInitPromptOptions = InitPromptOptions & {
     feishuChatName?: string | null
 }
 
-export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptions): Promise<string> {
-    const lines: string[] = []
-    const userName = options?.userName || null
+function appendWorkspaceRules(lines: string[], options?: InitPromptOptions): void {
     const projectRoot = options?.projectRoot || null
     const worktree = options?.worktree || null
 
-    // 标识头
-    lines.push('#InitPrompt-Yoho开发规范（最高优先级）')
-    lines.push('')
-
-    // 1) 最高优先级规则
-    lines.push('1) 最高优先级规则（不可违背）')
-    lines.push('- 始终使用中文沟通')
-    lines.push('- 安装软件和依赖时，永远不使用 docker')
-    if (userName) {
-        lines.push(`- 称呼当前用户为：${userName}`)
-    }
-    lines.push('- 当前运行环境信息（机器名、公网 IP、别名、平台等）请调用 `mcp__yoho_remote__environment_info` 获取，不要依赖提示词中的静态信息')
-    lines.push('')
-
-    // 2) Yoho Remote 工作空间
     lines.push('2) Yoho Remote 工作空间')
     lines.push('Yoho Remote 在数据库中维护一份 Project 列表，每个 Project 对应一个代码目录（path），可绑定到特定机器（machineId）或设为全局（machineId = null）。')
     lines.push('')
@@ -64,6 +47,27 @@ export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptio
     lines.push('- 可以切换到其他 Project 的目录去工作，用完再切回来')
     lines.push('- 可以用 `project_create` / `project_update` / `project_delete` 管理 Project 列表（注册新项目、修改名称描述、删除废弃项目）')
     lines.push('')
+}
+
+export async function buildInitPrompt(_role: UserRole, options?: InitPromptOptions): Promise<string> {
+    const lines: string[] = []
+    const userName = options?.userName || null
+
+    // 标识头
+    lines.push('#InitPrompt-Yoho开发规范（最高优先级）')
+    lines.push('')
+
+    // 1) 最高优先级规则
+    lines.push('1) 最高优先级规则（不可违背）')
+    lines.push('- 始终使用中文沟通')
+    lines.push('- 安装软件和依赖时，永远不使用 docker')
+    if (userName) {
+        lines.push(`- 称呼当前用户为：${userName}`)
+    }
+    lines.push('- 当前运行环境信息（机器名、公网 IP、别名、平台等）请调用 `mcp__yoho_remote__environment_info` 获取，不要依赖提示词中的静态信息')
+    lines.push('')
+
+    appendWorkspaceRules(lines, options)
 
     // 3) 凭证系统
     lines.push('3) 凭证系统')
@@ -92,6 +96,8 @@ export async function buildBrainInitPrompt(_role: UserRole, options?: InitPrompt
     lines.push('你是编排中枢，不直接写代码。通过 yoho-remote MCP 的 session 工具创建和控制工作 session，分发任务并汇总结果。')
     lines.push('')
 
+    appendWorkspaceRules(lines, options)
+
     lines.push('## 编排机制')
     lines.push('')
     lines.push('- 发送任务后**立即返回**，子 session 后台执行，完成后结果**自动推送**（以 `[子 session 任务完成]` 开头，含 token 用量统计）')
@@ -117,6 +123,9 @@ export async function buildBrainInitPrompt(_role: UserRole, options?: InitPrompt
     if (userName) {
         lines.push(`- 称呼用户为：${userName}`)
     }
+    lines.push('- 如果目标是 dev 环境，部署前必须确认待部署代码已经合入 `dev-release`；禁止从 feature 分支、worktree 分支或其他临时分支直接部署 dev')
+    lines.push('- 如果目标是线上环境，部署前必须确认待部署代码已经合入 `main`；禁止从 feature 分支、worktree 分支、`dev-release` 或其他非 `main` 分支直接部署线上')
+    lines.push('- 如果当前改动只存在于 worktree / feature 分支，先合并到目标发布分支，再执行部署')
     lines.push('- 每个 session 专注一个任务，指令要具体清晰，让子 session 能独立完成')
     lines.push('- **每次发任务末尾附加：「完成后请输出执行报告：步骤、修改的文件、关键细节、结论。」**')
 
