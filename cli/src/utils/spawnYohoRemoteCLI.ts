@@ -122,6 +122,34 @@ export function getYohoRemoteCliCommand(args: string[]): YohoRemoteCliCommand {
   };
 }
 
+/**
+ * Workaround for Bun compiled binary spawn bug on macOS:
+ * When a compiled Bun binary spawns another compiled Bun binary with `detached: true`,
+ * the child process crashes immediately with "An unknown error occurred (Unexpected)".
+ * Wrapping the spawn through /bin/bash avoids the crash.
+ */
+function wrapCommandForMacOSBunBug(
+  command: string,
+  args: string[]
+): { command: string; args: string[] } {
+  if (process.platform !== 'darwin' || !isBunCompiled()) {
+    return { command, args };
+  }
+
+  const shellArgs = [command, ...args].map(shellEscape).join(' ');
+  return {
+    command: '/bin/bash',
+    args: ['-c', `exec ${shellArgs}`]
+  };
+}
+
+function shellEscape(arg: string): string {
+  if (/^[a-zA-Z0-9_./:=@-]+$/.test(arg)) {
+    return arg;
+  }
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 export function spawnYohoRemoteCLI(args: string[], options: SpawnOptions = {}): ChildProcess {
 
   let directory: string | URL | undefined;
@@ -132,8 +160,8 @@ export function spawnYohoRemoteCLI(args: string[], options: SpawnOptions = {}): 
   }
   const fullCommand = `cli ${args.join(' ')}`;
   logger.debug(`[SPAWN CLI] Spawning: ${fullCommand} in ${directory}`);
-  
-  const { command: spawnCommand, args: spawnArgs } = getYohoRemoteCliCommand(args);
+
+  let { command: spawnCommand, args: spawnArgs } = getYohoRemoteCliCommand(args);
 
   // Sanity check that the entrypoint path exists
   if (!isBunCompiled()) {
@@ -144,6 +172,14 @@ export function spawnYohoRemoteCLI(args: string[], options: SpawnOptions = {}): 
       throw new Error(errorMessage);
     }
   }
-  
+
+  // Apply macOS Bun-to-Bun detached spawn workaround
+  if (options.detached) {
+    const wrapped = wrapCommandForMacOSBunBug(spawnCommand, spawnArgs);
+    spawnCommand = wrapped.command;
+    spawnArgs = wrapped.args;
+  }
+
+  logger.debug(`[SPAWN CLI] Resolved: ${spawnCommand} ${spawnArgs.join(' ')}`);
   return spawn(spawnCommand, spawnArgs, options);
 }
